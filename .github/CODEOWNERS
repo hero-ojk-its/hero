@@ -1,33 +1,32 @@
 # CODEOWNERS — HERO
 #
 # Menentukan siapa yang otomatis diminta me-review perubahan pada tiap bagian.
+# Memakai team organisasi, bukan username, agar tidak perlu diubah saat anggota berganti.
 #
-# CATATAN SETUP: ganti placeholder di bawah dengan username GitHub tiap anggota,
-# lalu undang mereka ke organisasi hero-ojk-its. Selama masih placeholder,
-# GitHub akan mengabaikan baris yang usernamenya tidak dikenal.
+#   @hero-ojk-its/pm-and-business-analyst   Ahmad Zaky Ash Shidqi
+#   @hero-ojk-its/backend                   Moh. Rafli Gusti Saputra
+#   @hero-ojk-its/frontend-and-ui-ux        Muhammad Ikhwan
+#   @hero-ojk-its/data-and-ml               Mirza Syahrizal Fathir
+#   @hero-ojk-its/infra-and-qa              Ahmad Izzul Hamdan
 #
-#   @cashewwww14        Ahmad Zaky Ash Shidqi   — PM / Business Analyst
-#   @<username-rafli>   Moh. Rafli Gusti Saputra — Backend
-#   @<username-ikhwan>  Muhammad Ikhwan          — Frontend / UI-UX
-#   @<username-fathir>  Mirza Syahrizal Fathir   — Data / ML
-#   @<username-hamdan>  Ahmad Izzul Hamdan       — Platform / Infra & QA
+# CATATAN: undang tiap anggota ke organisasi dan masukkan ke team-nya masing-masing
+# agar permintaan review otomatis benar-benar terkirim.
 
 # Default — PM/BA melihat semua perubahan
-*                       @cashewwww14
+*                       @hero-ojk-its/pm-and-business-analyst
 
-# Dokumentasi proyek — dimiliki PM/BA
-/docs/                  @cashewwww14
-/README.md              @cashewwww14
-/HERO_FLOW.md           @cashewwww14
+# Dokumentasi proyek
+/docs/                  @hero-ojk-its/pm-and-business-analyst
+/README.md              @hero-ojk-its/pm-and-business-analyst
+/HERO_FLOW.md           @hero-ojk-its/pm-and-business-analyst
 
-# Konfigurasi repositori & CI — Infra/QA
-/.github/               @cashewwww14
-# /.github/workflows/   @<username-hamdan>
+# Konfigurasi repositori & CI
+/.github/               @hero-ojk-its/infra-and-qa @hero-ojk-its/pm-and-business-analyst
 
-# Contoh pemetaan setelah struktur kode dibuat — aktifkan saat foldernya ada:
-# /backend/             @<username-rafli>
-# /frontend/            @<username-ikhwan>
-# /scraper/             @<username-fathir>
-# /pipeline/            @<username-fathir>
-# /infra/               @<username-hamdan>
-# /tests/               @<username-hamdan>
+# Pemetaan kode — aktifkan tiap baris saat foldernya sudah dibuat
+# /backend/             @hero-ojk-its/backend
+# /frontend/            @hero-ojk-its/frontend-and-ui-ux
+# /scraper/             @hero-ojk-its/data-and-ml
+# /pipeline/            @hero-ojk-its/data-and-ml
+# /infra/               @hero-ojk-its/infra-and-qa
+# /tests/               @hero-ojk-its/infra-and-qa
