@@ -1,0 +1,45 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+dist/
+build/
+.next/
+*.log
+
+# Env & secrets — JANGAN pernah di-commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+
+# Data & artefak proses — dokumen peraturan tunduk NDA, tidak masuk repo
+data/
+dataset/
+corpus/
+storage/
+*.pdf
+!docs/**/*.pdf
+
+# Output sementara
+tmp/
+temp/
+scratch/

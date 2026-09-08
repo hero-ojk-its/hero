@@ -1,0 +1,57 @@
+name: "Spike / Investigasi Teknis"
+description: "Penyelidikan berbatas waktu untuk menjawab pertanyaan teknis sebelum membangun"
+title: "[SPIKE] "
+labels: ["type: spike"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Spike menghasilkan **jawaban dan rekomendasi**, bukan fitur. Selalu berbatas waktu.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: "Pertanyaan yang harus terjawab"
+      placeholder: "Apakah penomoran pasal pada dokumen peraturan OJK cukup baku untuk di-parsing dengan aturan?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: "Mengapa perlu dijawab sekarang"
+      description: "Apa yang terblokir, dan apa konsekuensinya kalau jawabannya baru diketahui belakangan"
+    validations:
+      required: true
+
+  - type: input
+    id: timebox
+    attributes:
+      label: "Batas waktu"
+      placeholder: "5 SP / 1 minggu"
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: "Keluaran yang diharapkan"
+      value: |
+        - [ ] Laporan temuan
+        - [ ] Rekomendasi beserta alasannya
+        - [ ] Dampak terhadap backlog / estimasi
+    validations:
+      required: true
+
+  - type: dropdown
+    id: role
+    attributes:
+      label: "Peran penanggung jawab"
+      options:
+        - "PM / Business Analyst"
+        - "Backend"
+        - "Frontend / UI-UX"
+        - "Data / ML"
+        - "Platform / Infra & QA"
+    validations:
+      required: true

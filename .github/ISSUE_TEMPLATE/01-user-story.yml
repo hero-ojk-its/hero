@@ -1,0 +1,117 @@
+name: "User Story"
+description: "Kebutuhan dari sudut pandang pengguna, siap dikerjakan dalam satu sprint"
+title: "[US-___] "
+labels: ["type: user-story"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Isi sesuai **Definition of Ready** ([dok. 06 §2](../blob/main/docs/06-product-backlog-user-stories.md)).
+        Story tanpa kriteria penerimaan yang dapat diuji tidak boleh masuk sprint.
+
+  - type: input
+    id: story_id
+    attributes:
+      label: "ID Story"
+      description: "Nomor dari Product Backlog, mis. US-13a"
+      placeholder: "US-__"
+    validations:
+      required: true
+
+  - type: textarea
+    id: story
+    attributes:
+      label: "User Story"
+      description: "Tulis dari sudut pandang pengguna, sertakan manfaatnya"
+      placeholder: |
+        Sebagai Admin Knowledge Base,
+        saya ingin menentukan kedalaman penelusuran per situs sumber,
+        agar scraper tidak menelusuri terlalu dalam sejak awal.
+    validations:
+      required: true
+
+  - type: textarea
+    id: ac
+    attributes:
+      label: "Kriteria Penerimaan"
+      description: "Harus dapat diuji. Satu baris per kriteria."
+      value: |
+        - [ ] 
+        - [ ] 
+        - [ ] 
+    validations:
+      required: true
+
+  - type: dropdown
+    id: role
+    attributes:
+      label: "Peran penanggung jawab"
+      options:
+        - "PM / Business Analyst"
+        - "Backend"
+        - "Frontend / UI-UX"
+        - "Data / ML"
+        - "Platform / Infra & QA"
+        - "Lintas peran"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: phase
+    attributes:
+      label: "Fase"
+      options:
+        - "Fase 0 — Inception & Setup"
+        - "Fase 1 — Scraping & Ingest"
+        - "Fase 2 — Analisa & Summary"
+        - "Fase 3 — Harmonisasi"
+        - "Fase 4 — Tanggapan PoV"
+        - "Fase 5 — Stabilisasi & UAT"
+        - "Backlog pasca-MVP"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "Prioritas (MoSCoW)"
+      options: ["Must", "Should", "Could", "Won't (MVP)"]
+    validations:
+      required: true
+
+  - type: dropdown
+    id: points
+    attributes:
+      label: "Story Point"
+      description: "1 SP ≈ 4 jam efektif. Kapasitas tim ± 44 SP per sprint."
+      options: ["1", "2", "3", "5", "8", "13", "belum diestimasi"]
+    validations:
+      required: true
+
+  - type: input
+    id: traceability
+    attributes:
+      label: "Kebutuhan yang ditelusuri"
+      description: "Kode FR/NFR dari SRS — wajib, agar RTM tetap utuh"
+      placeholder: "FR-SCR-02a, NFR-15"
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: "Dependensi & catatan"
+      description: "Story lain yang harus selesai lebih dulu, atau hal dari mitra yang ditunggu"
+
+  - type: checkboxes
+    id: dod
+    attributes:
+      label: "Definition of Done"
+      options:
+        - label: "Seluruh kriteria penerimaan terpenuhi dan diverifikasi"
+        - label: "Kode di-review minimal satu anggota lain"
+        - label: "Pengujian fungsional terkait lulus"
+        - label: "Berjalan pada mode Deterministik tanpa layanan AI (bila menyentuh alur analisa)"
+        - label: "Terintegrasi ke lingkungan staging"
+        - label: "Audit log tercatat untuk aksi yang relevan"
+        - label: "Dokumentasi terkait diperbarui"

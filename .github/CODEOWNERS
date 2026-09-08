@@ -1,0 +1,33 @@
+# CODEOWNERS — HERO
+#
+# Menentukan siapa yang otomatis diminta me-review perubahan pada tiap bagian.
+#
+# CATATAN SETUP: ganti placeholder di bawah dengan username GitHub tiap anggota,
+# lalu undang mereka ke organisasi hero-ojk-its. Selama masih placeholder,
+# GitHub akan mengabaikan baris yang usernamenya tidak dikenal.
+#
+#   @cashewwww14        Ahmad Zaky Ash Shidqi   — PM / Business Analyst
+#   @<username-rafli>   Moh. Rafli Gusti Saputra — Backend
+#   @<username-ikhwan>  Muhammad Ikhwan          — Frontend / UI-UX
+#   @<username-fathir>  Mirza Syahrizal Fathir   — Data / ML
+#   @<username-hamdan>  Ahmad Izzul Hamdan       — Platform / Infra & QA
+
+# Default — PM/BA melihat semua perubahan
+*                       @cashewwww14
+
+# Dokumentasi proyek — dimiliki PM/BA
+/docs/                  @cashewwww14
+/README.md              @cashewwww14
+/HERO_FLOW.md           @cashewwww14
+
+# Konfigurasi repositori & CI — Infra/QA
+/.github/               @cashewwww14
+# /.github/workflows/   @<username-hamdan>
+
+# Contoh pemetaan setelah struktur kode dibuat — aktifkan saat foldernya ada:
+# /backend/             @<username-rafli>
+# /frontend/            @<username-ikhwan>
+# /scraper/             @<username-fathir>
+# /pipeline/            @<username-fathir>
+# /infra/               @<username-hamdan>
+# /tests/               @<username-hamdan>
