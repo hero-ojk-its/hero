@@ -59,8 +59,13 @@ flowchart LR
     B --> C["04 Flow AS-IS/TO-BE"]
     C --> D["03 SRS + 05 Use Case"]
     D --> E["08 Data Model"]
+    D --> K["13 DFD"]
+    E --> L["16 Arsitektur Sistem"]
+    K --> L
+    L --> M["Pengembangan"]
     D --> F["06 Backlog"]
     F --> G["07 WBS & Sprint Plan"]
+    D --> N["15 UI Spec per Fase"]
     D --> H["09 RTM"]
     H --> I["11 Test Plan & UAT"]
     A --> J["10 Risk Register<br/>hidup sepanjang proyek"]
@@ -70,7 +75,10 @@ flowchart LR
 
 ## Catatan Penting bagi PM/BA
 
-**Diperbarui 8 September 2026 setelah [Weekly Update #1](14-mom-weekly-update-01.md).**
+**Diperbarui 9 September 2026.** Perubahan terakhir: [Dokumen Arsitektur Sistem](16-arsitektur-sistem.md)
+disusun (deliverable WBS 1.2.5), dan kepemilikan modul scraping dipecah menjadi **algoritma
+penelusuran (Data/ML)** dan **pipeline ingest (Backend)** — sebelumnya tiga dokumen menyatakan
+hal yang berbeda. Kontrak antarkeduanya ada di [dok. 16 §4.3](16-arsitektur-sistem.md).
 
 ### Sudah Terjawab
 

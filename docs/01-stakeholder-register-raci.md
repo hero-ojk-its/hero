@@ -1,5 +1,5 @@
 # STAKEHOLDER REGISTER, RACI & COMMUNICATION PLAN
-**Proyek:** HERO | **Versi:** 1.1 | **Tanggal:** 8 September 2026
+**Proyek:** HERO | **Versi:** 1.2 | **Tanggal:** 9 September 2026
 
 ---
 
@@ -89,7 +89,8 @@ bekerja, bukan sekadar catatan administratif.
 | Product Backlog & prioritisasi | R | **A** | C | C | C | C | C | I | I |
 | Desain arsitektur sistem | C | I | C | **R/A** | C | C | C | I | C |
 | Desain UI/UX & purwarupa | C | C | I | I | **R/A** | I | C | C | I |
-| Modul Scraping & Ingest (D-01) | C | A | I | **R** | I | C | C | I | I |
+| Algoritma penelusuran — WBS 1.4.A | C | A | I | C | I | **R** | C | I | I |
+| Pipeline ingest — WBS 1.4.B | C | A | I | **R** | I | C | C | I | I |
 | Knowledge Base terstruktur (D-02) | C | A | I | **R** | I | C | C | I | I |
 | Modul Analisa & Summary (D-03) | C | A | C | C | I | **R** | C | C | I |
 | Modul Harmonisasi (D-04) | C | A | C | C | I | **R** | C | **C** | I |

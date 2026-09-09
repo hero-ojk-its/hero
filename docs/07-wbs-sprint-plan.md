@@ -1,5 +1,5 @@
 # WORK BREAKDOWN STRUCTURE, SPRINT PLAN & MILESTONE
-**Proyek:** HERO | **Versi:** 1.1 | **Tanggal:** 8 September 2026 | **Penyusun:** Project Manager
+**Proyek:** HERO | **Versi:** 1.2 | **Tanggal:** 9 September 2026 | **Penyusun:** Project Manager
 
 ---
 
@@ -33,15 +33,22 @@
 │   └── 1.3.5 Lingkungan staging & CI
 │
 ├── 1.4 Modul Scraping & Ingest  ..................... [EP-01 / D-01]
-│   ├── 1.4.1 Manajemen daftar situs sumber
-│   ├── 1.4.2 Mesin scraping & pengunduhan PDF
-│   ├── 1.4.3 Unggah manual dokumen
-│   ├── 1.4.4 Konektor folder lokal
-│   ├── 1.4.5 Konektor folder OneDrive public
-│   ├── 1.4.6 Validasi format & deteksi duplikat
-│   ├── 1.4.7 Ekstraksi teks & OCR
-│   ├── 1.4.8 Ekstraksi & koreksi metadata
-│   └── 1.4.9 Antrian penanganan dokumen gagal
+│   │
+│   ├── 1.4.A Algoritma penelusuran ................. [Data/ML]
+│   │   ├── 1.4.A.1 Penelusuran situs & kontrol kedalaman
+│   │   ├── 1.4.A.2 Penanganan situs ber-anti-bot
+│   │   ├── 1.4.A.3 Pengunduhan berkas PDF
+│   │   ├── 1.4.A.4 Ekstraksi teks & OCR
+│   │   └── 1.4.A.5 Ekstraksi metadata & penamaan baku
+│   │
+│   └── 1.4.B Pipeline ingest ....................... [Backend]
+│       ├── 1.4.B.1 Manajemen daftar sumber
+│       ├── 1.4.B.2 Job runner & pemantauan status
+│       ├── 1.4.B.3 Unggah manual dokumen
+│       ├── 1.4.B.4 Konektor folder lokal & OneDrive
+│       ├── 1.4.B.5 Validasi format & deteksi duplikat
+│       ├── 1.4.B.6 Penyimpanan berkas & metadata
+│       └── 1.4.B.7 Antrian penanganan dokumen gagal
 │
 ├── 1.5 Knowledge Base  .............................. [EP-02 / D-02]
 │   ├── 1.5.1 Skema penyimpanan dokumen & metadata
@@ -95,12 +102,24 @@
 | 1.1 | Dokumen manajemen proyek | PM | Charter disetujui; laporan rutin terkirim; proyek ditutup resmi |
 | 1.2 | Dokumen analisis & desain | BA + Arsitek | BRD, SRS, use case, model data, purwarupa di-*review* PO |
 | 1.3 | Fondasi platform | Backend + Infra | Login, mode orchestrator, audit log, CI berfungsi |
-| 1.4 | Modul Scraping & Ingest (D-01) | Backend | ≥ 3 situs, unggah manual, 1 folder lokal, 1 OneDrive berfungsi |
-| 1.5 | Knowledge Base (D-02) | Backend + Data | ≥ 20 dokumen tersimpan terstruktur & dapat dicari |
+| 1.4.A | Algoritma penelusuran | **Data/ML** | Dokumen tertarik dari ≥ 3 situs; kedalaman crawling dapat diatur |
+| 1.4.B | Pipeline ingest | **Backend** | Unggah manual, folder lokal, deduplikasi, dan antrian gagal berfungsi |
+| 1.5 | Knowledge Base (D-02) | **Backend**, aturan klasifikasi oleh Data/ML | ≥ 20 dokumen tersimpan terstruktur & dapat dicari |
 | 1.6 | Modul Analisa & Summary (D-03) | Data/ML | Summary & Key Takeaways untuk ≥ 10 dokumen, < 5 menit/dokumen |
 | 1.7 | Modul Harmonisasi (D-04) | Data/ML | ≥ 5 pasang dokumen dibandingkan; recall ≥ 70% |
 | 1.8 | Modul Tanggapan PoV (D-05) | Data/ML + Frontend | ≥ 3 draft tanggapan; template tervalidasi pilot user |
 | 1.9 | Pengujian & dokumentasi (D-06) | QA + PM/BA | 4 fitur lulus UAT; dokumentasi 100%; fallback test lulus |
+
+> **Catatan pembagian 1.4.** Modul ini dipecah menjadi dua kepemilikan karena sifat pekerjaannya
+> berbeda. **1.4.A** adalah algoritma: menelusuri kedalaman URL, menangani situs ber-anti-bot,
+> dan mengekstraksi isi dokumen — pekerjaan yang tingkat ketidakpastiannya tinggi dan menuntut
+> percobaan berulang terhadap situs nyata. **1.4.B** adalah pipeline: siklus hidup pekerjaan,
+> penyimpanan, dan penanganan kegagalan — pekerjaan yang polanya sudah baku.
+>
+> Kontrak antarkeduanya ditetapkan pada [Dokumen Arsitektur §4.3](16-arsitektur-sistem.md).
+> Pemisahan ini memungkinkan 1.4.A dikerjakan tanpa menunggu skema basis data selesai, dan
+> 1.4.B dikerjakan dengan penelusur tiruan — sehingga kedua peran berjalan sejak hari pertama
+> Sprint 1.
 
 ---
 
@@ -302,4 +321,5 @@ flowchart LR
 | Versi | Tanggal | Perubahan | Penyusun |
 | --- | --- | --- | --- |
 | 1.0 | 7 Sep 2026 | Draft awal: WBS, peta fase-sprint, Gantt, 9 sprint, 6 milestone, jalur kritis | PM |
+| 1.2 | 9 Sep 2026 | WBS 1.4 dipecah menjadi 1.4.A (algoritma, Data/ML) dan 1.4.B (pipeline, Backend); kepemilikan 1.5 diperjelas | PM |
 | 1.1 | 8 Sep 2026 | Kadens rapat menjadi mingguan + format laporan mitra; M1 menyertakan uji coba mitra 8 Okt; OneDrive digeser ke Fase 2; tambah §5.1 prasyarat uji coba | PM |

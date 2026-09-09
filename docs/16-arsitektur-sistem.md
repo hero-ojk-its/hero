@@ -1,6 +1,6 @@
 # DOKUMEN ARSITEKTUR SISTEM
 **Proyek:** HERO — Harmonisasi & Analisa Regulasi Otomatis
-**Versi:** 1.0 (Draft) | **Tanggal:** 9 September 2026 | **Penyusun:** Business Analyst
+**Versi:** 1.1 (Draft) | **Tanggal:** 9 September 2026 | **Penyusun:** Business Analyst
 **Deliverable WBS:** 1.2.5 Perancangan arsitektur sistem
 
 ---
@@ -65,7 +65,8 @@ flowchart TB
     end
 
     subgraph L3["Lapisan Domain"]
-        ING["Ingest Service"]
+        CRW["Crawler"]
+        ING["Ingest Pipeline"]
         PRS["Document Parser"]
         ANL["Analysis Engine"]
         HRM["Harmonization Engine"]
@@ -89,10 +90,13 @@ flowchart TB
     API --> JOB
     ORC --> ANL & HRM & POV
     JOB --> ING
+    ING -- "memanggil" --> CRW
+    CRW -- "berkas PDF" --> ING
     ING --> PRS
     PRS --> DB & FS
     ANL & HRM & POV --> DB & IDX
-    ING --> WEB & DRV
+    CRW --> WEB
+    ING --> DRV
     ORC -. "hanya bila diaktifkan<br/>dan dokumen berklasifikasi publik" .-> AI
     DB --> IDX
 
@@ -118,7 +122,8 @@ AI* dihapus dari diagram, sistem tetap utuh — inilah bentuk visual dari batasa
 | API Gateway | Titik masuk tunggal, autentikasi, otorisasi peran | **Backend** | Infra/QA (pengujian keamanan) |
 | Mode Orchestrator | Urutan eksekusi deterministik → AI, penanganan *fallback*, pemeriksaan klasifikasi akses | **Backend** | Data/ML |
 | Job Runner | Antrian dan pemantauan pekerjaan latar | **Backend** | Infra/QA |
-| Ingest Service | Penelusuran situs, pengunduhan, validasi format, deduplikasi | **Data/ML** | Backend (penyimpanan) |
+| **Crawler** | Penelusuran situs per kedalaman, penanganan anti-bot, pengunduhan berkas | **Data/ML** | — |
+| **Ingest Pipeline** | Manajemen sumber, siklus hidup pekerjaan, validasi format, deduplikasi, penyimpanan, antrian kegagalan | **Backend** | Data/ML (kebutuhan masukan) |
 | Document Parser | OCR, ekstraksi metadata, penguraian struktur bab-pasal-ayat | **Data/ML** | — |
 | Analysis Engine | Peringkasan, Key Takeaways, identifikasi topik | **Data/ML** | — |
 | Harmonization Engine | Pemilihan kandidat, pencocokan rujukan, klasifikasi temuan | **Data/ML** | BA (perumusan aturan) |
@@ -147,6 +152,40 @@ Tiga pekerjaan berikut kerap keliru ditempatkan pada Infra/QA. Penegasannya:
 > Aturan pemilah yang dipakai dokumen ini: **jika pekerjaan itu tetap ada meskipun aplikasi
 > dijalankan langsung tanpa kontainer, maka pekerjaan itu bukan milik Infra/QA.** Skema basis
 > data tetap dibutuhkan tanpa Docker; berkas komposisi kontainer tidak.
+
+### 4.3 Kontrak Antara Crawler dan Ingest Pipeline
+
+Pemisahan pada §4.1 hanya bermanfaat bila batas antarkeduanya tegas. Kontrak berikut mengikat
+kedua peran dan disepakati pada Sprint Planning Sprint 1.
+
+**Antarmuka:**
+
+```
+crawl(alamat_sumber, kedalaman) -> daftar[ { url_asal, nama_berkas_asli, konten } ]
+```
+
+**Yang menjadi tanggung jawab Crawler:**
+
+| Ya | Tidak |
+| --- | --- |
+| Menelusuri halaman sampai kedalaman yang diminta | Menyentuh basis data |
+| Menangani situs ber-anti-bot | Memutuskan apakah dokumen duplikat |
+| Menemukan dan mengunduh berkas PDF | Menerapkan penamaan baku |
+| Melaporkan sumber yang tidak dapat diakses | Mengelola siklus hidup pekerjaan |
+| Mengembalikan konten berkas apa adanya | Menyimpan berkas ke penyimpanan permanen |
+
+**Alasan pemisahan:**
+
+| No. | Alasan |
+| --- | --- |
+| 1 | Crawler dapat dikembangkan dan diuji terhadap situs nyata **tanpa menunggu skema basis data selesai** — skema masih berstatus usulan (ADR-08) |
+| 2 | Ingest Pipeline dapat dibangun memakai penelusur tiruan, sehingga kedua peran berjalan sejak hari pertama Sprint 1 |
+| 3 | Ketidakpastian tertinggi pada modul ini terletak pada penelusuran — kedalaman URL dan anti-bot (RSK-20). Mengurungnya dalam satu komponen membatasi dampak kegagalannya |
+| 4 | Beban Data/ML memuncak tanpa jeda pada Fase 2 s.d. 4 ([dok. 07 §7](07-wbs-sprint-plan.md)). Jalur kritis peran tersebut adalah parser struktur pasal yang menopang tiga fitur, bukan penulisan siklus hidup pekerjaan |
+
+**Konsekuensi bila kontrak dilanggar.** Bila Crawler mulai menulis ke basis data, ia menjadi
+tidak dapat diuji secara mandiri, dan setiap perubahan skema memaksa perubahan pada komponen
+yang paling sering direvisi.
 
 ---
 
@@ -361,7 +400,8 @@ karena berkas tersebut memuat inisialisasi skema.
 
 | Komponen | Kebutuhan yang direalisasikan |
 | --- | --- |
-| Ingest Service | FR-SCR-01 s.d. FR-SCR-08, FR-SCR-12 |
+| Crawler | FR-SCR-02, FR-SCR-02a, FR-SCR-02b |
+| Ingest Pipeline | FR-SCR-01, FR-SCR-03 s.d. FR-SCR-08, FR-SCR-12 |
 | Document Parser | FR-SCR-09, FR-SCR-09a, FR-SCR-09b, FR-SCR-11, FR-ANL-01 |
 | Basis Data & Object Store | FR-KB-01 s.d. FR-KB-09, FR-KB-04a |
 | Analysis Engine | FR-ANL-02 s.d. FR-ANL-09 |
@@ -384,6 +424,7 @@ karena berkas tersebut memuat inisialisasi skema.
 | RA-02 | Penyimpanan ganda menjadi tidak konsisten | Validasi mitra gagal karena PDF tidak sesuai blok | Penulisan keduanya dilakukan dalam satu transaksi ingest; ketidaksesuaian dicatat pada log kegagalan |
 | RA-03 | Ketergantungan tersembunyi pada layanan AI | Melanggar BA-01 | Layanan AI hanya boleh dipanggil dari Mode Orchestrator, tidak dari komponen domain mana pun. Diverifikasi lewat *fallback test* TC-53 |
 | RA-04 | Dokumen non-publik terkirim ke layanan eksternal | Melanggar NDA | Pemeriksaan `klasifikasi_akses` ditempatkan pada Mode Orchestrator, sebelum pemanggilan keluar. Diverifikasi lewat TC-58 |
+| RA-06 | Batas antara Crawler dan Ingest Pipeline kabur seiring waktu | Crawler tidak lagi dapat diuji mandiri; perubahan skema merembet ke komponen paling sering direvisi | Kontrak §4.3 ditegakkan pada *code review*; Crawler tidak boleh mengimpor modul basis data |
 | RA-05 | Aturan domain tertanam di kode | Sistem tidak dapat dipakai ulang sektor lain (BA-04) | Aturan dimuat dari basis data saat eksekusi, bukan dari berkas sumber |
 
 ---
@@ -392,4 +433,5 @@ karena berkas tersebut memuat inisialisasi skema.
 
 | Versi | Tanggal | Perubahan | Penyusun |
 | --- | --- | --- | --- |
+| 1.1 | 9 Sep 2026 | Ingest Service dipecah menjadi Crawler (Data/ML) dan Ingest Pipeline (Backend); tambah §4.3 kontrak antarkomponen dan risiko RA-06 | BA |
 | 1.0 | 9 Sep 2026 | Draft awal: batasan arsitektur, arsitektur berlapis, matriks komponen terhadap peran, 7 keputusan ditetapkan dan 3 diusulkan, realisasi skema basis data, rancangan lingkungan | BA |
