@@ -1,6 +1,6 @@
 # DOKUMEN ARSITEKTUR SISTEM
 **Proyek:** HERO — Harmonisasi & Analisa Regulasi Otomatis
-**Versi:** 1.1 (Draft) | **Tanggal:** 9 September 2026 | **Penyusun:** Business Analyst
+**Versi:** 1.2 (Draft) | **Tanggal:** 9 September 2026 | **Penyusun:** Business Analyst
 **Deliverable WBS:** 1.2.5 Perancangan arsitektur sistem
 
 ---
@@ -116,6 +116,16 @@ AI* dihapus dari diagram, sistem tetap utuh — inilah bentuk visual dari batasa
 
 ### 4.1 Matriks Komponen terhadap Peran
 
+> **Matriks ini adalah acuan tunggal penetapan peran dalam proyek.** Bila dokumen lain —
+> WBS, RACI, Product Backlog, atau label issue — menyatakan pemilik yang berbeda, yang berlaku
+> adalah matriks ini, dan dokumen tersebut yang harus diperbaiki.
+>
+> **Cara menurunkan peran sebuah user story:** tentukan komponen yang menanggung bagian
+> terbesar pekerjaannya, lalu ambil Peran Pelaksana komponen itu. Story yang menyentuh lebih
+> dari satu komponen tetap dimiliki **satu** peran — yakni peran yang bertanggung jawab
+> menyatakan story tersebut selesai. Peran lain dicatat sebagai pendukung di badan issue,
+> bukan sebagai pemilik kedua.
+
 | Komponen | Tanggung Jawab | Peran Pelaksana | Peran Pendukung |
 | --- | --- | --- | --- |
 | Aplikasi Web | Antarmuka pengguna, alur layar, penyajian hasil | **Frontend / UI-UX** | BA (spesifikasi layar) |
@@ -125,6 +135,7 @@ AI* dihapus dari diagram, sistem tetap utuh — inilah bentuk visual dari batasa
 | **Crawler** | Penelusuran situs per kedalaman, penanganan anti-bot, pengunduhan berkas | **Data/ML** | — |
 | **Ingest Pipeline** | Manajemen sumber, siklus hidup pekerjaan, validasi format, deduplikasi, penyimpanan, antrian kegagalan | **Backend** | Data/ML (kebutuhan masukan) |
 | Document Parser | OCR, ekstraksi metadata, penguraian struktur bab-pasal-ayat | **Data/ML** | — |
+| Classification Engine | Aturan klasifikasi kategori peraturan dan penentuan folder tujuan | **Data/ML** | Backend (penempatan berkas) |
 | Analysis Engine | Peringkasan, Key Takeaways, identifikasi topik | **Data/ML** | — |
 | Harmonization Engine | Pemilihan kandidat, pencocokan rujukan, klasifikasi temuan | **Data/ML** | BA (perumusan aturan) |
 | Response Generator | Penyusunan narasi tanggapan berbasis profil PoV | **Data/ML** | Frontend (penyuntingan) |
@@ -402,6 +413,7 @@ karena berkas tersebut memuat inisialisasi skema.
 | --- | --- |
 | Crawler | FR-SCR-02, FR-SCR-02a, FR-SCR-02b |
 | Ingest Pipeline | FR-SCR-01, FR-SCR-03 s.d. FR-SCR-08, FR-SCR-12 |
+| Classification Engine | FR-KB-01 |
 | Document Parser | FR-SCR-09, FR-SCR-09a, FR-SCR-09b, FR-SCR-11, FR-ANL-01 |
 | Basis Data & Object Store | FR-KB-01 s.d. FR-KB-09, FR-KB-04a |
 | Analysis Engine | FR-ANL-02 s.d. FR-ANL-09 |
@@ -433,5 +445,6 @@ karena berkas tersebut memuat inisialisasi skema.
 
 | Versi | Tanggal | Perubahan | Penyusun |
 | --- | --- | --- | --- |
+| 1.2 | 9 Sep 2026 | §4.1 ditetapkan sebagai acuan tunggal penetapan peran, disertai aturan penurunan peran untuk user story; tambah komponen Classification Engine | BA |
 | 1.1 | 9 Sep 2026 | Ingest Service dipecah menjadi Crawler (Data/ML) dan Ingest Pipeline (Backend); tambah §4.3 kontrak antarkomponen dan risiko RA-06 | BA |
 | 1.0 | 9 Sep 2026 | Draft awal: batasan arsitektur, arsitektur berlapis, matriks komponen terhadap peran, 7 keputusan ditetapkan dan 3 diusulkan, realisasi skema basis data, rancangan lingkungan | BA |

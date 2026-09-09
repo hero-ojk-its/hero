@@ -1,5 +1,5 @@
 # PRODUCT BACKLOG & USER STORIES
-**Proyek:** HERO | **Versi:** 1.0 | **Tanggal:** 7 September 2026 | **Penyusun:** PM / Business Analyst
+**Proyek:** HERO | **Versi:** 1.2 | **Tanggal:** 9 September 2026 | **Penyusun:** PM / Business Analyst
 
 ---
 
@@ -50,103 +50,108 @@ Sebuah story dinyatakan selesai bila:
 
 Legenda prioritas: **M** = Must, **S** = Should, **C** = Could, **W** = Won't (MVP).
 
+> **Kolom Peran diturunkan dari [Dokumen Arsitektur §4.1](16-arsitektur-sistem.md)**, bukan
+> ditetapkan sendiri di dokumen ini. Peran yang tercantum adalah pihak yang bertanggung jawab
+> menyatakan story selesai; peran pendukung dicatat di badan issue. Bila kolom ini berbeda
+> dengan label issue di GitHub, matriks komponen yang berlaku.
+
 ### EP-06 — Platform, Mode & Antarmuka
 
-| ID | User Story | AC Ringkas | FR | Pri | SP | Sprint |
-| --- | --- | --- | --- | --- | --- | --- |
-| US-01 | Sebagai **Admin Sistem**, saya ingin mengelola akun pengguna dan perannya, agar akses fitur sesuai tanggung jawab | Peran Analis/Admin KB/Admin Sistem/Pilot User dapat dibuat; akses fitur mengikuti peran | FR-SYS-08 | M | 5 | S1 |
-| US-02 | Sebagai **pengguna**, saya ingin login ke sistem, agar aktivitas saya terekam atas nama saya | Login berhasil/gagal ditangani; tidak ada fitur yang dapat diakses tanpa autentikasi | FR-SYS-08, NFR-06 | M | 3 | S1 |
-| US-03 | Sebagai **Analis**, saya ingin melihat satu halaman beranda berisi ringkasan KB dan pekerjaan terakhir, agar tahu kondisi sistem | Jumlah dokumen, job terakhir, dan hasil analisa terbaru tampil | FR-SYS-06 | S | 3 | S2 |
-| US-04 | Sebagai **Analis**, saya ingin mengaktifkan/menonaktifkan AI-Assisted lewat *toggle*, agar dapat memilih mode sesuai kebutuhan | Toggle tersimpan; default Deterministik; status mode tampil pada hasil | FR-SYS-02 | M | 5 | S3 |
-| US-05 | Sebagai **Analis**, saya ingin hasil deterministik dan hasil AI disimpan terpisah, agar dapat membandingkan keduanya | Kedua versi dapat ditampilkan berdampingan; substansi hasil dasar tidak berubah | FR-SYS-03 | M | 5 | S3 |
-| US-06 | Sebagai **Analis**, saya ingin proses tetap selesai saat layanan AI mati, agar pekerjaan saya tidak terhenti | Simulasi AI mati: proses selesai dengan hasil deterministik + notifikasi | FR-SYS-04, NFR-04 | M | 5 | S4 |
-| US-07 | Sebagai **Analis**, saya ingin setiap output diberi label "Draft / Rekomendasi", agar tidak disalahartikan sebagai keputusan final | Label tampil di UI dan pada hasil ekspor | FR-SYS-05 | M | 2 | S3 |
-| US-08 | Sebagai **Admin Sistem**, saya ingin melihat audit log, agar dapat menelusuri siapa melakukan apa | Log memuat pengguna, waktu, aksi, dokumen, mode; dapat difilter | FR-SYS-07, NFR-10 | M | 5 | S2 |
-| US-09 | Sebagai **Analis**, saya ingin melihat status pekerjaan yang sedang berjalan, agar tidak menebak progres | Status antrian/proses/selesai/gagal tampil dan diperbarui | FR-SYS-09 | S | 3 | S2 |
-| US-10 | Sebagai **Analis**, saya ingin setiap eksekusi analisa tersimpan riwayatnya, agar hasil dapat diulang dan ditelusuri | Riwayat memuat input, mode, versi aturan, output | FR-SYS-10, NFR-11 | M | 5 | S4 |
-| US-11 | Sebagai **tim**, kami ingin lingkungan staging & CI siap, agar setiap perubahan teruji otomatis | Pipeline build & test berjalan pada setiap perubahan | — | M | 4 | S0 |
+| ID | **Peran** | User Story | AC Ringkas | FR | Pri | SP | Sprint |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| US-01 | Backend | Sebagai **Admin Sistem**, saya ingin mengelola akun pengguna dan perannya, agar akses fitur sesuai tanggung jawab | Peran Analis/Admin KB/Admin Sistem/Pilot User dapat dibuat; akses fitur mengikuti peran | FR-SYS-08 | M | 5 | S1 |
+| US-02 | Backend | Sebagai **pengguna**, saya ingin login ke sistem, agar aktivitas saya terekam atas nama saya | Login berhasil/gagal ditangani; tidak ada fitur yang dapat diakses tanpa autentikasi | FR-SYS-08, NFR-06 | M | 3 | S1 |
+| US-03 | Frontend | Sebagai **Analis**, saya ingin melihat satu halaman beranda berisi ringkasan KB dan pekerjaan terakhir, agar tahu kondisi sistem | Jumlah dokumen, job terakhir, dan hasil analisa terbaru tampil | FR-SYS-06 | S | 3 | S2 |
+| US-04 | Backend | Sebagai **Analis**, saya ingin mengaktifkan/menonaktifkan AI-Assisted lewat *toggle*, agar dapat memilih mode sesuai kebutuhan | Toggle tersimpan; default Deterministik; status mode tampil pada hasil | FR-SYS-02 | M | 5 | S3 |
+| US-05 | Backend | Sebagai **Analis**, saya ingin hasil deterministik dan hasil AI disimpan terpisah, agar dapat membandingkan keduanya | Kedua versi dapat ditampilkan berdampingan; substansi hasil dasar tidak berubah | FR-SYS-03 | M | 5 | S3 |
+| US-06 | Backend | Sebagai **Analis**, saya ingin proses tetap selesai saat layanan AI mati, agar pekerjaan saya tidak terhenti | Simulasi AI mati: proses selesai dengan hasil deterministik + notifikasi | FR-SYS-04, NFR-04 | M | 5 | S4 |
+| US-07 | Frontend | Sebagai **Analis**, saya ingin setiap output diberi label "Draft / Rekomendasi", agar tidak disalahartikan sebagai keputusan final | Label tampil di UI dan pada hasil ekspor | FR-SYS-05 | M | 2 | S3 |
+| US-08 | Backend | Sebagai **Admin Sistem**, saya ingin melihat audit log, agar dapat menelusuri siapa melakukan apa | Log memuat pengguna, waktu, aksi, dokumen, mode; dapat difilter | FR-SYS-07, NFR-10 | M | 5 | S2 |
+| US-09 | Frontend | Sebagai **Analis**, saya ingin melihat status pekerjaan yang sedang berjalan, agar tidak menebak progres | Status antrian/proses/selesai/gagal tampil dan diperbarui | FR-SYS-09 | S | 3 | S2 |
+| US-10 | Backend | Sebagai **Analis**, saya ingin setiap eksekusi analisa tersimpan riwayatnya, agar hasil dapat diulang dan ditelusuri | Riwayat memuat input, mode, versi aturan, output | FR-SYS-10, NFR-11 | M | 5 | S4 |
+| US-11 | Infra/QA | Sebagai **tim**, kami ingin lingkungan staging & CI siap, agar setiap perubahan teruji otomatis | Pipeline build & test berjalan pada setiap perubahan | — | M | 4 | S0 |
 
 ### EP-01 — Scraping & Ingest Dokumen
 
-| ID | User Story | AC Ringkas | FR | Pri | SP | Sprint |
-| --- | --- | --- | --- | --- | --- | --- |
-| US-12 | Sebagai **Admin KB**, saya ingin menambah/mengubah/menonaktifkan daftar URL situs sumber, agar sumber dokumen terkelola | CRUD situs berfungsi; minimal 3 situs dikelola; URL divalidasi & unik | FR-SCR-01 | M | 5 | S1 |
-| US-13 | Sebagai **Admin KB**, saya ingin menjalankan scraping atas situs terpilih, agar dokumen PDF tertarik otomatis | Dokumen PDF pada halaman target terunduh & tercatat sumbernya | FR-SCR-02 | M | 8 | S1 |
-| US-14 | Sebagai **Admin KB**, saya ingin melihat ringkasan hasil setiap job scraping, agar tahu apa yang berhasil dan gagal | Jumlah berhasil/duplikat/gagal + alasan gagal tampil & tersimpan | FR-SCR-03 | M | 3 | S1 |
-| US-15 | Sebagai **Analis**, saya ingin mengunggah dokumen PDF secara manual (satu atau banyak), agar dokumen di luar situs sumber tetap bisa masuk | Unggah tunggal & jamak berhasil; notifikasi hasil per berkas | FR-SCR-04 | M | 5 | S1 |
-| US-16 | Sebagai **Admin KB**, saya ingin sistem membaca dokumen dari folder lokal yang dikonfigurasi, agar arsip yang sudah ada dapat dimanfaatkan | Minimal 1 folder lokal terbaca; dokumen baru terdeteksi saat job dijalankan | FR-SCR-05 | M | 5 | S2 |
-| US-17 | Sebagai **Admin KB**, saya ingin sistem membaca dokumen dari folder OneDrive *public*, agar arsip daring ikut terkumpul | Minimal 1 folder OneDrive public terbaca | FR-SCR-06 | M | 8 | S2 |
-| US-18 | Sebagai **sistem**, saya harus menolak berkas non-PDF disertai alasan, agar KB tetap bersih | Berkas non-PDF ditolak, tidak masuk KB, tercatat di log | FR-SCR-07 | M | 3 | S1 |
-| US-19 | Sebagai **sistem**, saya harus mendeteksi dokumen duplikat, agar tidak ada penyimpanan ganda | Dokumen identik (hash/nomor peraturan) tidak tersimpan ganda; ada notifikasi | FR-SCR-08 | S | 5 | S2 |
-| US-20 | Sebagai **sistem**, saya harus mengekstraksi judul, nomor peraturan, dan tanggal terbit, agar dokumen dapat diidentifikasi | Ketiga metadata terisi otomatis pada dokumen berstruktur baku | FR-SCR-09 | M | 8 | S1 |
-| US-21 | Sebagai **Analis**, saya ingin mengoreksi metadata hasil ekstraksi, agar data KB akurat | Perubahan tersimpan & tercatat di audit log | FR-SCR-10 | M | 3 | S2 |
-| US-22 | Sebagai **sistem**, saya harus memproses PDF hasil pindai melalui OCR, agar dokumen lama tetap dapat dianalisa | Teks dokumen hasil pindai terekstraksi & terindeks | FR-SCR-11 | S | 8 | S2 |
-| US-23 | Sebagai **Analis**, saya ingin melihat daftar dokumen yang gagal diproses dan memprosesnya ulang, agar tidak ada dokumen hilang diam-diam | Daftar gagal dapat dilihat & di-*retry* | FR-SCR-12 | M | 3 | S2 |
+| ID | **Peran** | User Story | AC Ringkas | FR | Pri | SP | Sprint |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| US-12 | Backend | Sebagai **Admin KB**, saya ingin menambah/mengubah/menonaktifkan daftar URL situs sumber, agar sumber dokumen terkelola | CRUD situs berfungsi; minimal 3 situs dikelola; URL divalidasi & unik | FR-SCR-01 | M | 5 | S1 |
+| US-13 | Data/ML | Sebagai **Admin KB**, saya ingin menjalankan scraping atas situs terpilih, agar dokumen PDF tertarik otomatis | Dokumen PDF pada halaman target terunduh & tercatat sumbernya | FR-SCR-02 | M | 8 | S1 |
+| US-14 | Backend | Sebagai **Admin KB**, saya ingin melihat ringkasan hasil setiap job scraping, agar tahu apa yang berhasil dan gagal | Jumlah berhasil/duplikat/gagal + alasan gagal tampil & tersimpan | FR-SCR-03 | M | 3 | S1 |
+| US-15 | Backend | Sebagai **Analis**, saya ingin mengunggah dokumen PDF secara manual (satu atau banyak), agar dokumen di luar situs sumber tetap bisa masuk | Unggah tunggal & jamak berhasil; notifikasi hasil per berkas | FR-SCR-04 | M | 5 | S1 |
+| US-16 | Backend | Sebagai **Admin KB**, saya ingin sistem membaca dokumen dari folder lokal yang dikonfigurasi, agar arsip yang sudah ada dapat dimanfaatkan | Minimal 1 folder lokal terbaca; dokumen baru terdeteksi saat job dijalankan | FR-SCR-05 | M | 5 | S2 |
+| US-17 | Backend | Sebagai **Admin KB**, saya ingin sistem membaca dokumen dari folder OneDrive *public*, agar arsip daring ikut terkumpul | Minimal 1 folder OneDrive public terbaca | FR-SCR-06 | M | 8 | S2 |
+| US-18 | Backend | Sebagai **sistem**, saya harus menolak berkas non-PDF disertai alasan, agar KB tetap bersih | Berkas non-PDF ditolak, tidak masuk KB, tercatat di log | FR-SCR-07 | M | 3 | S1 |
+| US-19 | Backend | Sebagai **sistem**, saya harus mendeteksi dokumen duplikat, agar tidak ada penyimpanan ganda | Dokumen identik (hash/nomor peraturan) tidak tersimpan ganda; ada notifikasi | FR-SCR-08 | S | 5 | S2 |
+| US-20 | Data/ML | Sebagai **sistem**, saya harus mengekstraksi judul, nomor peraturan, dan tanggal terbit, agar dokumen dapat diidentifikasi | Ketiga metadata terisi otomatis pada dokumen berstruktur baku | FR-SCR-09 | M | 8 | S1 |
+| US-21 | Frontend | Sebagai **Analis**, saya ingin mengoreksi metadata hasil ekstraksi, agar data KB akurat | Perubahan tersimpan & tercatat di audit log | FR-SCR-10 | M | 3 | S2 |
+| US-22 | Data/ML | Sebagai **sistem**, saya harus memproses PDF hasil pindai melalui OCR, agar dokumen lama tetap dapat dianalisa | Teks dokumen hasil pindai terekstraksi & terindeks | FR-SCR-11 | S | 8 | S2 |
+| US-23 | Backend | Sebagai **Analis**, saya ingin melihat daftar dokumen yang gagal diproses dan memprosesnya ulang, agar tidak ada dokumen hilang diam-diam | Daftar gagal dapat dilihat & di-*retry* | FR-SCR-12 | M | 3 | S2 |
 
 ### EP-02 — Knowledge Base Terstruktur
 
-| ID | User Story | AC Ringkas | FR | Pri | SP | Sprint |
-| --- | --- | --- | --- | --- | --- | --- |
-| US-24 | Sebagai **sistem**, saya harus mengklasifikasikan dokumen ke kategori berdasarkan aturan yang dapat dikonfigurasi | Dokumen uji terklasifikasi sesuai kategori; aturan dapat diubah tanpa ubah kode | FR-KB-01, NFR-15 | M | 8 | S2 |
-| US-25 | Sebagai **sistem**, saya harus menempatkan dokumen ke folder eksisting bila kategori sudah ada, dan membuat folder baru bila belum | Tidak ada duplikasi folder; folder baru mengikuti konvensi penamaan | FR-KB-02, FR-KB-03 | M | 5 | S2 |
-| US-26 | Sebagai **sistem**, saya harus menyimpan dokumen beserta metadata, teks, dan struktur pasal | Seluruh atribut wajib pada Data Dictionary terisi | FR-KB-04 | M | 5 | S1 |
-| US-27 | Sebagai **Analis**, saya ingin mencari dokumen berdasarkan kata kunci, nomor, kategori, tanggal, dan status keberlakuan | Hasil relevan, dapat difilter; respons < 3 detik pada skala MVP | FR-KB-05, NFR-02 | M | 8 | S2 |
-| US-28 | Sebagai **Analis**, saya ingin melihat detail dokumen beserta struktur bab/pasal/ayat | Struktur tampil hierarkis & dapat dinavigasi | FR-KB-06 | M | 5 | S2 |
-| US-29 | Sebagai **Admin KB**, saya ingin dokumen yang diunggah ulang tersimpan sebagai versi baru, agar riwayat tidak hilang | Versi lama tetap dapat diakses | FR-KB-07 | S | 5 | S3 |
-| US-30 | Sebagai **Admin KB**, saya ingin memindahkan/mengubah kategori/menonaktifkan dokumen | Perubahan tercatat di audit log | FR-KB-08 | S | 3 | S3 |
-| US-31 | Sebagai **Analis**, saya ingin peraturan yang dicabut tetap tersimpan dan ditandai jelas, agar riwayat regulasi utuh | Status "dicabut" terlihat di UI & hasil pencarian; dokumen tidak dihapus | FR-KB-09 | M | 3 | S2 |
+| ID | **Peran** | User Story | AC Ringkas | FR | Pri | SP | Sprint |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| US-24 | Data/ML | Sebagai **sistem**, saya harus mengklasifikasikan dokumen ke kategori berdasarkan aturan yang dapat dikonfigurasi | Dokumen uji terklasifikasi sesuai kategori; aturan dapat diubah tanpa ubah kode | FR-KB-01, NFR-15 | M | 8 | S2 |
+| US-25 | Backend | Sebagai **sistem**, saya harus menempatkan dokumen ke folder eksisting bila kategori sudah ada, dan membuat folder baru bila belum | Tidak ada duplikasi folder; folder baru mengikuti konvensi penamaan | FR-KB-02, FR-KB-03 | M | 5 | S2 |
+| US-26 | Backend | Sebagai **sistem**, saya harus menyimpan dokumen beserta metadata, teks, dan struktur pasal | Seluruh atribut wajib pada Data Dictionary terisi | FR-KB-04 | M | 5 | S1 |
+| US-27 | Backend | Sebagai **Analis**, saya ingin mencari dokumen berdasarkan kata kunci, nomor, kategori, tanggal, dan status keberlakuan | Hasil relevan, dapat difilter; respons < 3 detik pada skala MVP | FR-KB-05, NFR-02 | M | 8 | S2 |
+| US-28 | Frontend | Sebagai **Analis**, saya ingin melihat detail dokumen beserta struktur bab/pasal/ayat | Struktur tampil hierarkis & dapat dinavigasi | FR-KB-06 | M | 5 | S2 |
+| US-29 | Backend | Sebagai **Admin KB**, saya ingin dokumen yang diunggah ulang tersimpan sebagai versi baru, agar riwayat tidak hilang | Versi lama tetap dapat diakses | FR-KB-07 | S | 5 | S3 |
+| US-30 | Backend | Sebagai **Admin KB**, saya ingin memindahkan/mengubah kategori/menonaktifkan dokumen | Perubahan tercatat di audit log | FR-KB-08 | S | 3 | S3 |
+| US-31 | Backend | Sebagai **Analis**, saya ingin peraturan yang dicabut tetap tersimpan dan ditandai jelas, agar riwayat regulasi utuh | Status "dicabut" terlihat di UI & hasil pencarian; dokumen tidak dihapus | FR-KB-09 | M | 3 | S2 |
 
 ### EP-03 — Analisa, Summary & Key Takeaways
 
-| ID | User Story | AC Ringkas | FR | Pri | SP | Sprint |
-| --- | --- | --- | --- | --- | --- | --- |
-| US-32 | Sebagai **sistem**, saya harus mengekstraksi struktur bab/pasal/ayat berdasarkan pola penomoran baku | Struktur benar pada ≥ 80% dokumen uji berstruktur baku | FR-ANL-01 | M | 13 | S3 |
-| US-33 | Sebagai **Analis**, saya ingin melihat dasar hukum yang dirujuk dokumen | Daftar dasar hukum tampil & tertaut ke dokumen KB bila tersedia | FR-ANL-02 | M | 5 | S3 |
-| US-34 | Sebagai **Analis**, saya ingin mengetahui status keberlakuan dokumen | Status terisi; sumber penetapan status dapat ditelusuri | FR-ANL-03 | M | 5 | S3 |
-| US-35 | Sebagai **Analis**, saya ingin sistem menghasilkan ringkasan isi peraturan | Summary dihasilkan untuk ≥ 10 dokumen uji | FR-ANL-04 | M | 8 | S4 |
-| US-36 | Sebagai **Analis**, saya ingin sistem menyusun Key Takeaways | Minimal 3 poin per dokumen, tertaut ke pasal sumbernya | FR-ANL-05 | M | 8 | S4 |
-| US-37 | Sebagai **Analis**, saya ingin melompat dari poin ringkasan ke teks pasal aslinya, agar dapat memverifikasi | Setiap butir memiliki rujukan pasal yang dapat diklik | FR-ANL-06, NFR-11 | M | 5 | S4 |
-| US-38 | Sebagai **Analis**, saya ingin melihat topik/klausul utama dokumen, agar dapat menyaring yang relevan bagi unit saya | Daftar topik dapat difilter | FR-ANL-07 | S | 3 | S4 |
-| US-39 | Sebagai **Analis**, saya ingin proses summary selesai di bawah 5 menit per dokumen | Terukur dari timestamp mulai–selesai job | FR-ANL-08, NFR-01 | M | 3 | S4 |
-| US-40 | Sebagai **Analis**, saya ingin mengekspor hasil analisa | Ekspor memuat summary, Key Takeaways, dan rujukan pasal | FR-ANL-09 | S | 5 | S4 |
+| ID | **Peran** | User Story | AC Ringkas | FR | Pri | SP | Sprint |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| US-32 | Data/ML | Sebagai **sistem**, saya harus mengekstraksi struktur bab/pasal/ayat berdasarkan pola penomoran baku | Struktur benar pada ≥ 80% dokumen uji berstruktur baku | FR-ANL-01 | M | 13 | S3 |
+| US-33 | Data/ML | Sebagai **Analis**, saya ingin melihat dasar hukum yang dirujuk dokumen | Daftar dasar hukum tampil & tertaut ke dokumen KB bila tersedia | FR-ANL-02 | M | 5 | S3 |
+| US-34 | Data/ML | Sebagai **Analis**, saya ingin mengetahui status keberlakuan dokumen | Status terisi; sumber penetapan status dapat ditelusuri | FR-ANL-03 | M | 5 | S3 |
+| US-35 | Data/ML | Sebagai **Analis**, saya ingin sistem menghasilkan ringkasan isi peraturan | Summary dihasilkan untuk ≥ 10 dokumen uji | FR-ANL-04 | M | 8 | S4 |
+| US-36 | Data/ML | Sebagai **Analis**, saya ingin sistem menyusun Key Takeaways | Minimal 3 poin per dokumen, tertaut ke pasal sumbernya | FR-ANL-05 | M | 8 | S4 |
+| US-37 | Frontend | Sebagai **Analis**, saya ingin melompat dari poin ringkasan ke teks pasal aslinya, agar dapat memverifikasi | Setiap butir memiliki rujukan pasal yang dapat diklik | FR-ANL-06, NFR-11 | M | 5 | S4 |
+| US-38 | Data/ML | Sebagai **Analis**, saya ingin melihat topik/klausul utama dokumen, agar dapat menyaring yang relevan bagi unit saya | Daftar topik dapat difilter | FR-ANL-07 | S | 3 | S4 |
+| US-39 | Data/ML | Sebagai **Analis**, saya ingin proses summary selesai di bawah 5 menit per dokumen | Terukur dari timestamp mulai–selesai job | FR-ANL-08, NFR-01 | M | 3 | S4 |
+| US-40 | Backend | Sebagai **Analis**, saya ingin mengekspor hasil analisa | Ekspor memuat summary, Key Takeaways, dan rujukan pasal | FR-ANL-09 | S | 5 | S4 |
 
 ### EP-04 — Harmonisasi Draft vs Eksisting
 
-| ID | User Story | AC Ringkas | FR | Pri | SP | Sprint |
-| --- | --- | --- | --- | --- | --- | --- |
-| US-41 | Sebagai **Analis**, saya ingin memilih draft peraturan dan menjalankan harmonisasi terhadap KB | Proses berjalan & menghasilkan laporan | FR-HRM-01 | M | 5 | S5 |
-| US-42 | Sebagai **sistem**, saya harus memilih kandidat peraturan eksisting yang relevan untuk dibandingkan | Kandidat relevan; dasar pemilihan dapat dijelaskan ke pengguna | FR-HRM-02 | M | 8 | S5 |
-| US-43 | Sebagai **sistem**, saya harus mencocokkan rujukan pasal eksplisit antar dokumen | Rujukan eksplisit terdeteksi & terpetakan | FR-HRM-03 | M | 8 | S5 |
-| US-44 | Sebagai **Analis**, saya ingin tahu bila draft merujuk peraturan yang telah dicabut | Rujukan ke peraturan dicabut muncul sebagai temuan | FR-HRM-04 | M | 5 | S5 |
-| US-45 | Sebagai **sistem**, saya harus menganalisis kesesuaian makna antar pasal, bukan sekadar kecocokan kata | Pasal beda redaksi tapi bermakna sama terdeteksi | FR-HRM-05 | M | 13 | S5 |
-| US-46 | Sebagai **Analis**, saya ingin melihat temuan berlabel konflik / duplikasi / gap | Ketiga jenis temuan dapat dihasilkan & dibedakan | FR-HRM-06..08 | M | 8 | S6 |
-| US-47 | Sebagai **Analis**, saya ingin setiap temuan memuat pasal draft, pasal pembanding, jenis, dan tingkat keyakinan | Keempat atribut terisi pada setiap temuan | FR-HRM-09 | M | 3 | S6 |
-| US-48 | Sebagai **Analis**, saya ingin membaca ringkasan hasil harmonisasi beserta rekomendasi awal | Laporan memuat ringkasan + daftar temuan + rekomendasi | FR-HRM-10 | M | 5 | S6 |
-| US-49 | Sebagai **SME/Analis**, saya ingin menandai temuan sebagai valid atau tidak relevan disertai catatan | Penandaan tersimpan sebagai umpan balik & bahan evaluasi recall | FR-HRM-11 | S | 5 | S6 |
-| US-50 | Sebagai **Analis**, saya ingin mengekspor laporan harmonisasi | Laporan dapat diunduh sesuai format yang disepakati | FR-HRM-13 | S | 3 | S6 |
+| ID | **Peran** | User Story | AC Ringkas | FR | Pri | SP | Sprint |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| US-41 | Data/ML | Sebagai **Analis**, saya ingin memilih draft peraturan dan menjalankan harmonisasi terhadap KB | Proses berjalan & menghasilkan laporan | FR-HRM-01 | M | 5 | S5 |
+| US-42 | Data/ML | Sebagai **sistem**, saya harus memilih kandidat peraturan eksisting yang relevan untuk dibandingkan | Kandidat relevan; dasar pemilihan dapat dijelaskan ke pengguna | FR-HRM-02 | M | 8 | S5 |
+| US-43 | Data/ML | Sebagai **sistem**, saya harus mencocokkan rujukan pasal eksplisit antar dokumen | Rujukan eksplisit terdeteksi & terpetakan | FR-HRM-03 | M | 8 | S5 |
+| US-44 | Data/ML | Sebagai **Analis**, saya ingin tahu bila draft merujuk peraturan yang telah dicabut | Rujukan ke peraturan dicabut muncul sebagai temuan | FR-HRM-04 | M | 5 | S5 |
+| US-45 | Data/ML | Sebagai **sistem**, saya harus menganalisis kesesuaian makna antar pasal, bukan sekadar kecocokan kata | Pasal beda redaksi tapi bermakna sama terdeteksi | FR-HRM-05 | M | 13 | S5 |
+| US-46 | Data/ML | Sebagai **Analis**, saya ingin melihat temuan berlabel konflik / duplikasi / gap | Ketiga jenis temuan dapat dihasilkan & dibedakan | FR-HRM-06..08 | M | 8 | S6 |
+| US-47 | Data/ML | Sebagai **Analis**, saya ingin setiap temuan memuat pasal draft, pasal pembanding, jenis, dan tingkat keyakinan | Keempat atribut terisi pada setiap temuan | FR-HRM-09 | M | 3 | S6 |
+| US-48 | Data/ML | Sebagai **Analis**, saya ingin membaca ringkasan hasil harmonisasi beserta rekomendasi awal | Laporan memuat ringkasan + daftar temuan + rekomendasi | FR-HRM-10 | M | 5 | S6 |
+| US-49 | Frontend | Sebagai **SME/Analis**, saya ingin menandai temuan sebagai valid atau tidak relevan disertai catatan | Penandaan tersimpan sebagai umpan balik & bahan evaluasi recall | FR-HRM-11 | S | 5 | S6 |
+| US-50 | Backend | Sebagai **Analis**, saya ingin mengekspor laporan harmonisasi | Laporan dapat diunduh sesuai format yang disepakati | FR-HRM-13 | S | 3 | S6 |
 
 ### EP-05 — Draft Tanggapan Berbasis PoV
 
-| ID | User Story | AC Ringkas | FR | Pri | SP | Sprint |
-| --- | --- | --- | --- | --- | --- | --- |
-| US-51 | Sebagai **Admin KB**, saya ingin mengelola profil PoV unit fungsi (tugas, fungsi, keilmuan, kata kunci) | Minimal 1 profil (Unit Bisnis IT) tersimpan & dapat dipilih | FR-POV-01 | M | 8 | S6 |
-| US-52 | Sebagai **Admin KB**, saya ingin mengelola template tanggapan baku dan checklist pasal wajib | Template & checklist dapat dikonfigurasi tanpa ubah kode | FR-POV-02, NFR-15 | M | 5 | S6 |
-| US-53 | Sebagai **Analis**, saya ingin sistem memeriksa kelengkapan pasal yang wajib ditanggapi | Pasal wajib yang belum ditanggapi ditandai jelas | FR-POV-03 | M | 5 | S7 |
-| US-54 | Sebagai **Analis**, saya ingin sistem menyusun narasi draft tanggapan sesuai PoV terpilih | Draft tersusun untuk ≥ 3 draft peraturan uji | FR-POV-04 | M | 13 | S7 |
-| US-55 | Sebagai **Analis**, saya ingin melihat pasal yang berdampak pada tugas & fungsi unit beserta alasan relevansinya | Daftar pasal berdampak tampil terpisah dengan alasan | FR-POV-05 | S | 5 | S7 |
-| US-56 | Sebagai **Analis**, saya ingin menyunting draft tanggapan sebelum diekspor | Perubahan tersimpan sebagai versi baru | FR-POV-06 | M | 5 | S7 |
-| US-57 | Sebagai **Admin Sistem**, saya ingin struktur data PoV mendukung banyak profil meski MVP hanya satu | Penambahan profil kedua tidak memerlukan perubahan skema | FR-POV-07 | M | 3 | S6 |
-| US-58 | Sebagai **Analis**, saya ingin mengekspor draft tanggapan sesuai format template unit | Hasil ekspor sesuai format yang divalidasi pilot user | FR-POV-08 | M | 3 | S7 |
+| ID | **Peran** | User Story | AC Ringkas | FR | Pri | SP | Sprint |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| US-51 | Backend | Sebagai **Admin KB**, saya ingin mengelola profil PoV unit fungsi (tugas, fungsi, keilmuan, kata kunci) | Minimal 1 profil (Unit Bisnis IT) tersimpan & dapat dipilih | FR-POV-01 | M | 8 | S6 |
+| US-52 | Backend | Sebagai **Admin KB**, saya ingin mengelola template tanggapan baku dan checklist pasal wajib | Template & checklist dapat dikonfigurasi tanpa ubah kode | FR-POV-02, NFR-15 | M | 5 | S6 |
+| US-53 | Data/ML | Sebagai **Analis**, saya ingin sistem memeriksa kelengkapan pasal yang wajib ditanggapi | Pasal wajib yang belum ditanggapi ditandai jelas | FR-POV-03 | M | 5 | S7 |
+| US-54 | Data/ML | Sebagai **Analis**, saya ingin sistem menyusun narasi draft tanggapan sesuai PoV terpilih | Draft tersusun untuk ≥ 3 draft peraturan uji | FR-POV-04 | M | 13 | S7 |
+| US-55 | Data/ML | Sebagai **Analis**, saya ingin melihat pasal yang berdampak pada tugas & fungsi unit beserta alasan relevansinya | Daftar pasal berdampak tampil terpisah dengan alasan | FR-POV-05 | S | 5 | S7 |
+| US-56 | Frontend | Sebagai **Analis**, saya ingin menyunting draft tanggapan sebelum diekspor | Perubahan tersimpan sebagai versi baru | FR-POV-06 | M | 5 | S7 |
+| US-57 | Backend | Sebagai **Admin Sistem**, saya ingin struktur data PoV mendukung banyak profil meski MVP hanya satu | Penambahan profil kedua tidak memerlukan perubahan skema | FR-POV-07 | M | 3 | S6 |
+| US-58 | Backend | Sebagai **Analis**, saya ingin mengekspor draft tanggapan sesuai format template unit | Hasil ekspor sesuai format yang divalidasi pilot user | FR-POV-08 | M | 3 | S7 |
 
 ### EP-07 — Dokumentasi, Pengujian & UAT
 
-| ID | User Story | AC Ringkas | FR | Pri | SP | Sprint |
-| --- | --- | --- | --- | --- | --- | --- |
-| US-59 | Sebagai **tim**, kami ingin *fallback test* tanpa layanan AI dijalankan pada seluruh fitur | Seluruh fitur lulus tanpa kegagalan proses | NFR-04, FR-SYS-04 | M | 5 | S7 |
-| US-60 | Sebagai **PO**, saya ingin UAT dijalankan dengan minimal 1 pilot user per fitur | 4 fitur lulus UAT; berita acara ditandatangani | CSF-01 | M | 8 | S8 |
-| US-61 | Sebagai **pengguna**, saya ingin panduan pengguna berbahasa Indonesia | Panduan mencakup alur unggah → analisa → hasil → ekspor | NFR-18 | M | 5 | S8 |
-| US-62 | Sebagai **tim**, kami ingin dokumentasi teknis (arsitektur, API, deployment) lengkap | Dokumentasi selesai 100%, di-*review* PO | NFR-18 | M | 5 | S8 |
-| US-63 | Sebagai **PM**, saya ingin evaluasi recall deteksi harmonisasi terdokumentasi | Perhitungan recall ≥ 70% terhadap ground truth SME | FR-HRM-12, M-07 | M | 3 | S7 |
+| ID | **Peran** | User Story | AC Ringkas | FR | Pri | SP | Sprint |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| US-59 | Infra/QA | Sebagai **tim**, kami ingin *fallback test* tanpa layanan AI dijalankan pada seluruh fitur | Seluruh fitur lulus tanpa kegagalan proses | NFR-04, FR-SYS-04 | M | 5 | S7 |
+| US-60 | Infra/QA | Sebagai **PO**, saya ingin UAT dijalankan dengan minimal 1 pilot user per fitur | 4 fitur lulus UAT; berita acara ditandatangani | CSF-01 | M | 8 | S8 |
+| US-61 | PM/BA | Sebagai **pengguna**, saya ingin panduan pengguna berbahasa Indonesia | Panduan mencakup alur unggah → analisa → hasil → ekspor | NFR-18 | M | 5 | S8 |
+| US-62 | PM/BA | Sebagai **tim**, kami ingin dokumentasi teknis (arsitektur, API, deployment) lengkap | Dokumentasi selesai 100%, di-*review* PO | NFR-18 | M | 5 | S8 |
+| US-63 | PM/BA | Sebagai **PM**, saya ingin evaluasi recall deteksi harmonisasi terdokumentasi | Perhitungan recall ≥ 70% terhadap ground truth SME | FR-HRM-12, M-07 | M | 3 | S7 |
 
 ---
 
@@ -185,15 +190,15 @@ Sumber: [MoM Weekly Update #1](14-mom-weekly-update-01.md).
 
 ### 5A.1 Story Baru
 
-| ID | User Story | AC Ringkas | FR | Pri | SP | Sprint |
-| --- | --- | --- | --- | --- | --- | --- |
-| **US-13a** | Sebagai **Admin KB**, saya ingin menentukan kedalaman penelusuran per situs sumber, agar scraper tidak menelusuri terlalu dalam sejak awal | Kedalaman dapat diatur per sumber; nilai awal `1`; kedalaman > 1 menelusuri tautan di dalam halaman | FR-SCR-02 | M | 5 | S1 |
-| **US-15a** | Sebagai **Analis**, saya ingin memilih apakah berkas yang saya unggah adalah **draft peraturan baru** atau **peraturan eksisting**, agar draft yang dikaji tidak mengotori corpus pembanding | Pilihan tampil **sebelum** unggah; draft tidak masuk daftar kandidat pembanding harmonisasi | FR-SCR-04 | M | 3 | S1 |
-| **US-20a** | Sebagai **sistem**, saya harus meng-OCR halaman pertama untuk mengambil nomor peraturan, tanggal, dan judul, lalu menerapkannya sebagai penamaan berkas baku sebelum masuk folder | Ketiga unsur terbaca dari halaman 1; nama berkas mengikuti konvensi; gagal baca → antrian koreksi manual | FR-SCR-09 | M | 5 | S2 |
-| **US-26a** | Sebagai **sistem**, saya harus menyimpan **PDF asli** dan **blok terstruktur di basis data** sekaligus, agar dokumen tetap dapat diverifikasi manual sekaligus terindeks | PDF asli dapat dibuka dari detail dokumen; blok pasal tersimpan & terindeks | FR-KB-04 | M | 5 | S3 |
-| **US-49a** | Sebagai **Validator DPEA**, saya ingin membuka PDF asli peraturan yang dikutip langsung dari sebuah temuan, agar dapat memeriksa apakah pasalnya benar berbunyi demikian | Tautan "Buka PDF Asli" tersedia di setiap temuan & butir Key Takeaway | FR-HRM-09, NFR-11 | M | 2 | S6 |
-| **US-64** | Sebagai **BA**, saya ingin merumuskan aturan klasifikasi harmonisasi bersama mitra, agar ambang "menggantikan / memperjelas / pasal baru" terdefinisi sebelum dibangun | Aturan tertulis & disetujui PO; mencakup ambang kemiripan yang belum dijawab di rapat | FR-HRM-06..08 | M | 5 | S3 |
-| **US-32a** | Sebagai **tim Data**, kami ingin membuat purwarupa parser struktur pasal atas 20 dokumen nyata, agar asumsi penomoran baku teruji lebih awal | Laporan tingkat keberhasilan parsing per dokumen; pola kegagalan teridentifikasi | FR-ANL-01 | M | 5 | S2 |
+| ID | **Peran** | User Story | AC Ringkas | FR | Pri | SP | Sprint |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **US-13a** | Data/ML | Sebagai **Admin KB**, saya ingin menentukan kedalaman penelusuran per situs sumber, agar scraper tidak menelusuri terlalu dalam sejak awal | Kedalaman dapat diatur per sumber; nilai awal `1`; kedalaman > 1 menelusuri tautan di dalam halaman | FR-SCR-02 | M | 5 | S1 |
+| **US-15a** | Backend | Sebagai **Analis**, saya ingin memilih apakah berkas yang saya unggah adalah **draft peraturan baru** atau **peraturan eksisting**, agar draft yang dikaji tidak mengotori corpus pembanding | Pilihan tampil **sebelum** unggah; draft tidak masuk daftar kandidat pembanding harmonisasi | FR-SCR-04 | M | 3 | S1 |
+| **US-20a** | Data/ML | Sebagai **sistem**, saya harus meng-OCR halaman pertama untuk mengambil nomor peraturan, tanggal, dan judul, lalu menerapkannya sebagai penamaan berkas baku sebelum masuk folder | Ketiga unsur terbaca dari halaman 1; nama berkas mengikuti konvensi; gagal baca → antrian koreksi manual | FR-SCR-09 | M | 5 | S2 |
+| **US-26a** | Backend | Sebagai **sistem**, saya harus menyimpan **PDF asli** dan **blok terstruktur di basis data** sekaligus, agar dokumen tetap dapat diverifikasi manual sekaligus terindeks | PDF asli dapat dibuka dari detail dokumen; blok pasal tersimpan & terindeks | FR-KB-04 | M | 5 | S3 |
+| **US-49a** | Frontend | Sebagai **Validator DPEA**, saya ingin membuka PDF asli peraturan yang dikutip langsung dari sebuah temuan, agar dapat memeriksa apakah pasalnya benar berbunyi demikian | Tautan "Buka PDF Asli" tersedia di setiap temuan & butir Key Takeaway | FR-HRM-09, NFR-11 | M | 2 | S6 |
+| **US-64** | PM/BA | Sebagai **BA**, saya ingin merumuskan aturan klasifikasi harmonisasi bersama mitra, agar ambang "menggantikan / memperjelas / pasal baru" terdefinisi sebelum dibangun | Aturan tertulis & disetujui PO; mencakup ambang kemiripan yang belum dijawab di rapat | FR-HRM-06..08 | M | 5 | S3 |
+| **US-32a** | Data/ML | Sebagai **tim Data**, kami ingin membuat purwarupa parser struktur pasal atas 20 dokumen nyata, agar asumsi penomoran baku teruji lebih awal | Laporan tingkat keberhasilan parsing per dokumen; pola kegagalan teridentifikasi | FR-ANL-01 | M | 5 | S2 |
 
 ### 5A.2 Story yang Kriteria Penerimaannya Direvisi
 
