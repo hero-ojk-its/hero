@@ -73,6 +73,7 @@ Seluruh dokumen proyek ada di **[`docs/`](docs/README.md)**.
 | **Mulai dari sini** | [Indeks dokumen](docs/README.md) |
 | Manajemen proyek | [Charter](docs/00-project-charter-hero.md) · [Stakeholder & RACI](docs/01-stakeholder-register-raci.md) · [WBS & Sprint Plan](docs/07-wbs-sprint-plan.md) · [Risk Register](docs/10-risk-register.md) |
 | Analisis | [BRD](docs/02-brd-business-requirements.md) · [SRS](docs/03-srs-functional-spec.md) · [Process Flow](docs/04-process-flow-asis-tobe.md) · [Use Case](docs/05-use-case-spec.md) · [DFD](docs/13-dfd-data-flow-diagram.md) · [Data Model](docs/08-data-model-dictionary.md) · [RTM](docs/09-rtm-traceability-matrix.md) |
+| Arsitektur | [Dokumen Arsitektur Sistem](docs/16-arsitektur-sistem.md) |
 | Eksekusi | [Product Backlog](docs/06-product-backlog-user-stories.md) · [UI Spec Fase 1](docs/15-ui-spec-fase-1.md) · [Test Plan & UAT](docs/11-test-plan-uat.md) |
 | Rapat | [MoM Weekly Update #1](docs/14-mom-weekly-update-01.md) |
 | Referensi | [Glossary](docs/12-glossary.md) · [Template operasional](docs/templates/) |
