@@ -1,6 +1,6 @@
 # DOKUMEN ARSITEKTUR SISTEM
 **Proyek:** HERO — Harmonisasi & Analisa Regulasi Otomatis
-**Versi:** 1.2 (Draft) | **Tanggal:** 9 September 2026 | **Penyusun:** Business Analyst
+**Versi:** 1.3 (Draft) | **Tanggal:** 14 September 2026 | **Penyusun:** Business Analyst
 **Deliverable WBS:** 1.2.5 Perancangan arsitektur sistem
 
 ---
@@ -308,7 +308,19 @@ dibahas pada rapat mingguan, sesuai peran tim sebagai konsultan sejak 12 Oktober
 | **Konsekuensi** | Kebutuhan sumber daya komputasi lokal meningkat. Kualitas naturalisasi berpotensi di bawah model berbayar — dapat diterima karena AI hanya lapisan penyempurna (ADR-02) |
 | **Status** | Menutup sebagian TD-03; keputusan akhir bersama mentor |
 
-#### ADR-11 — Keputusan Teknis yang Masih Terbuka
+#### ADR-11 — Pemisahan Hosting: Frontend di Vercel, Backend di Server Terkontainer *(usulan)*
+
+| Aspek | Uraian |
+| --- | --- |
+| **Konteks** | Tim menginginkan Vercel (gratis) untuk deployment. Vercel Hobby tidak dapat terhubung ke repo private milik organisasi, dan repo `hero-ojk-its/hero` termasuk kategori itu. Selain itu, komponen inti HERO — crawler, OCR, job runner, basis data, penyimpanan PDF — bersifat proses berjalan lama dengan penyimpanan persisten, yang tidak dapat dijalankan pada platform *serverless* |
+| **Usulan** | **Frontend** di Vercel Hobby, dideploy lewat GitHub Actions + Vercel CLI memakai token akun personal — bukan integrasi Git bawaan Vercel. **Seluruh komponen lain** pada satu server virtual (VPS) yang menjalankan berkas komposisi kontainer sesuai ADR-09 |
+| **Alasan** | Pola Actions + CLI menjaga repo tetap private di organisasi tanpa biaya. VPS tunggal memberi lingkungan yang sama dengan pengembangan lokal (ADR-09), tidak tidur saat tidak diakses, dan dapat dibuka untuk uji coba mitra. Mitra menyatakan pendanaan tersedia dan dapat diajukan sesuai kebutuhan (MoM §4) |
+| **Alternatif ditolak** | Menjadikan repo public — dokumen memuat informasi mitra dan tunduk NDA. Memindahkan repo ke akun personal — menghilangkan struktur team dan CODEOWNERS organisasi. Berlangganan Vercel Pro — biaya berulang untuk masalah yang memiliki jalan keluar tanpa biaya. Free tier layanan PaaS untuk backend — instans tidur saat tidak diakses, berisiko saat uji coba mitra 8 Oktober |
+| **Konsekuensi** | Frontend dan backend berada di dua tempat; alamat API backend menjadi konfigurasi frontend. Perlu satu akun Vercel personal sebagai pemilik proyek. Biaya VPS diajukan ke pendanaan |
+| **Berkas terkait** | `.github/workflows/deploy-frontend-vercel.yml` — sudah tersedia, terpicu hanya bila folder `frontend/` ada |
+| **Pelaksana** | Infra/QA (#22) |
+
+#### ADR-12 — Keputusan Teknis yang Masih Terbuka
 
 | Kode | Keputusan | Memblokir | Tenggat |
 | --- | --- | --- | --- |
@@ -369,7 +381,7 @@ menetapkan pengelompokan tabel dan indeks yang wajib ada; rancangan fisik diteta
 | --- | --- | --- | --- |
 | **Lokal** | Pengembangan harian setiap anggota | Infra/QA menyiapkan, semua peran memakai | 27 Sep 2026 |
 | **Staging** | Integrasi dan pengujian fungsional | Infra/QA | 28 Sep 2026 |
-| **Uji coba mitra** | Dicoba langsung Faris & Andika | Infra/QA | **28 Sep 2026** |
+| **Uji coba mitra** | Dicoba langsung Faris & Andika — frontend di Vercel, backend di VPS (ADR-11) | Infra/QA | **28 Sep 2026** |
 
 > **Catatan.** Mitra menyatakan akan mencoba aplikasinya sendiri pada 8 Oktober 2026. Aplikasi
 > yang hanya berjalan di mesin anggota tim tidak dapat diuji mitra, sehingga milestone Fase 1
@@ -445,6 +457,7 @@ karena berkas tersebut memuat inisialisasi skema.
 
 | Versi | Tanggal | Perubahan | Penyusun |
 | --- | --- | --- | --- |
+| 1.3 | 14 Sep 2026 | Tambah ADR-11 usulan pemisahan hosting (frontend Vercel via Actions, backend VPS); daftar keputusan terbuka menjadi ADR-12 | BA |
 | 1.2 | 9 Sep 2026 | §4.1 ditetapkan sebagai acuan tunggal penetapan peran, disertai aturan penurunan peran untuk user story; tambah komponen Classification Engine | BA |
 | 1.1 | 9 Sep 2026 | Ingest Service dipecah menjadi Crawler (Data/ML) dan Ingest Pipeline (Backend); tambah §4.3 kontrak antarkomponen dan risiko RA-06 | BA |
 | 1.0 | 9 Sep 2026 | Draft awal: batasan arsitektur, arsitektur berlapis, matriks komponen terhadap peran, 7 keputusan ditetapkan dan 3 diusulkan, realisasi skema basis data, rancangan lingkungan | BA |
