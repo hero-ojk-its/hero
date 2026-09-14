@@ -1,0 +1,58 @@
+name: "Menunggu Mitra"
+description: "Item yang terblokir karena menunggu masukan, data, atau keputusan dari DPEA"
+title: "[MITRA] "
+labels: ["type: blocker", "status: menunggu-mitra"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gunakan ini untuk apa pun yang tim **tidak bisa selesaikan sendiri**.
+        Setiap item di sini wajib ditagih pada rapat mingguan — jangan menunggu sampai fasenya tiba.
+
+  - type: input
+    id: item_id
+    attributes:
+      label: "Kode item"
+      description: "Dari MoM atau Open Items, mis. AI-M3 atau OI-07"
+      placeholder: "AI-M__"
+
+  - type: textarea
+    id: needed
+    attributes:
+      label: "Apa yang dibutuhkan dari mitra"
+    validations:
+      required: true
+
+  - type: textarea
+    id: blocks
+    attributes:
+      label: "Apa yang terblokir karenanya"
+      description: "Sebut story / fase / milestone yang terdampak"
+    validations:
+      required: true
+
+  - type: input
+    id: pic
+    attributes:
+      label: "PIC di sisi mitra"
+      placeholder: "Faris Budi"
+
+  - type: input
+    id: deadline
+    attributes:
+      label: "Target diterima"
+      placeholder: "11 Okt 2026"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: impact
+    attributes:
+      label: "Dampak bila terlambat"
+      options:
+        - "Kritis — milestone gagal diverifikasi"
+        - "Tinggi — satu fitur tidak dapat dibangun"
+        - "Sedang — satu story tertunda"
+        - "Rendah — dapat dikerjakan dengan asumsi sementara"
+    validations:
+      required: true

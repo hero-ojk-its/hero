@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: "Product Backlog & User Story"
+    url: https://github.com/hero-ojk-its/hero/blob/main/docs/06-product-backlog-user-stories.md
+    about: "Daftar lengkap story, estimasi, dan usulan komitmen per sprint"
+  - name: "SRS — daftar kebutuhan fungsional"
+    url: https://github.com/hero-ojk-its/hero/blob/main/docs/03-srs-functional-spec.md
+    about: "Cari kode FR/NFR sebelum membuat issue baru"
+  - name: "Risk Register & Issue Log"
+    url: https://github.com/hero-ojk-its/hero/blob/main/docs/10-risk-register.md
+    about: "Risiko dan isu yang sedang berjalan"

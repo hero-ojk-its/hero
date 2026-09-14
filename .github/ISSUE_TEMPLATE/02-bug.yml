@@ -1,0 +1,76 @@
+name: "Bug"
+description: "Sesuatu tidak berjalan sebagaimana mestinya"
+title: "[BUG] "
+labels: ["type: bug"]
+body:
+  - type: dropdown
+    id: severity
+    attributes:
+      label: "Severity"
+      description: "Sesuai klasifikasi pada Test Plan §1.3"
+      options:
+        - "Kritis — fitur utama tidak dapat dipakai / data hilang / kebocoran data (SLA 1 hari)"
+        - "Tinggi — fitur berjalan salah / hasil analisa keliru substansial (SLA 2 hari)"
+        - "Sedang — tidak sesuai spesifikasi, ada workaround (SLA sprint berjalan)"
+        - "Rendah — kosmetik, penulisan, ketidaknyamanan minor (backlog)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: "Yang seharusnya terjadi"
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: "Yang benar-benar terjadi"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Langkah reproduksi"
+      value: |
+        1. 
+        2. 
+        3. 
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: "Mode pemrosesan saat bug muncul"
+      options: ["Deterministik", "AI-Assisted", "Keduanya", "Tidak relevan"]
+    validations:
+      required: true
+
+  - type: dropdown
+    id: role
+    attributes:
+      label: "Peran yang menangani"
+      options:
+        - "PM / Business Analyst"
+        - "Backend"
+        - "Frontend / UI-UX"
+        - "Data / ML"
+        - "Platform / Infra & QA"
+        - "Belum diketahui"
+    validations:
+      required: true
+
+  - type: input
+    id: testcase
+    attributes:
+      label: "Test case terkait"
+      placeholder: "TC-09"
+
+  - type: textarea
+    id: context
+    attributes:
+      label: "Konteks tambahan"
+      description: "Dokumen contoh, log, tangkapan layar. **Jangan lampirkan dokumen peraturan internal DPEA** — cukup sebut nomor peraturannya."
