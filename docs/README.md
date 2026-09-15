@@ -31,6 +31,7 @@
 | **14** | **[MoM Weekly Update #1](14-mom-weekly-update-01.md)** | PM | Final | Konfirmasi tanggal rapat |
 | **15** | **[UI Specification Fase 1](15-ui-spec-fase-1.md)** | BA | Draft v1.0 | Mockup Figma oleh Ikhwan |
 | **16** | **[Dokumen Arsitektur Sistem](16-arsitektur-sistem.md)** | BA | Draft v1.0 | Persetujuan ADR-08 s.d. ADR-10 oleh PO |
+| **17** | **[MoM Weekly Update #2](17-mom-weekly-update-02.md)** | PM | Final | — |
 
 ### Template Operasional
 
