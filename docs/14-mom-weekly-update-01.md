@@ -4,6 +4,7 @@
 **Media:** Online | **Durasi:** ± 1 jam
 **Notulis:** Ahmad Zaky Ash Shidqi (PM/BA)
 **Sumber:** Transkrip rekaman rapat (izin rekam diberikan oleh mitra di menit awal)
+**Rekaman:** https://youtu.be/AhZWzkvjnYA
 
 ---
 

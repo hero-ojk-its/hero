@@ -4,6 +4,7 @@
 **Hadir DPEA:** Pak Faris Budi (Product Owner + Agile Coach), Pak Andika Prihandoko (Mentor)
 **Hadir Tim:** Zaky (PM/BA), Rafli (Backend), Ikhwan (Frontend), Hamdan (Infra/QA), Fathir (Data/ML — menyusul)
 **Notulis:** Zaky
+**Rekaman:** https://youtu.be/xzhvollNlpo
 
 ---
 
