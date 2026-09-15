@@ -1,7 +1,7 @@
 # MoM — Weekly Update #2 (Minggu 1 Fase 1)
 
 **Tanggal:** Senin, 15 September 2026, 14.19 WIB · ± 32 menit · Zoom
-**Hadir DPEA:** Faris Budi (Product Owner + Agile Coach), Andika Prihandoko (Mentor)
+**Hadir DPEA:** Pak Faris Budi (Product Owner + Agile Coach), Pak Andika Prihandoko (Mentor)
 **Hadir Tim:** Zaky (PM/BA), Rafli (Backend), Ikhwan (Frontend), Hamdan (Infra/QA), Fathir (Data/ML — menyusul)
 **Notulis:** Zaky
 
@@ -10,7 +10,7 @@
 ## 1. Ringkasan singkat
 
 - Minggu pertama Fase 1 (14 Sep – 11 Okt). Semua peran sudah punya progres yang bisa ditunjukkan.
-- Mitra puas — Andika bilang kelompok ini "jauh lebih baik dari capstone sebelumnya".
+- Mitra puas — Pak Andika bilang kelompok ini "jauh lebih baik dari capstone sebelumnya".
 - NDA lengkap 5 orang. Minggu depan mitra mulai taruh dokumen di OneDrive.
 - Tiga hal yang harus berubah mulai minggu depan: (1) format laporan PM, (2) mekanisme screening sebelum download di scraper, (3) target tanggal desain Figma.
 
@@ -46,7 +46,7 @@
 - Struktur knowledge base: Source → Sektor → Jenis/Kategori → Tahun → Status (berlaku/dicabut).
 - OneDrive belum dieksplor — belum ada datanya.
 - Penyimpanan sekarang PDF; rencana diubah ke bentuk tabular setelah OCR.
-- Laptop: MacBook Pro M4, 24 GB — Faris bilang cukup untuk lab sementara.
+- Laptop: MacBook Pro M4, 24 GB — Pak Faris bilang cukup untuk lab sementara.
 
 ### Hamdan — Infra/QA
 - Coba Vercel (rekomendasi OJK) → Pro trial cuma 14 hari.
@@ -59,23 +59,23 @@
 
 ### Untuk Zaky (PM)
 
-**Dari Andika:**
+**Dari Pak Andika:**
 - Minta satu slide rekap per pertemuan: apa yang dikerjakan tiap orang, apa yang pending, status selesai/belum, persentase milestone. Supaya PM bisa lihat keseluruhan dan mitra bisa cek status tiap minggu.
 - Kalau ada kendala, sampaikan di awal. "Kami lebih senang tahu kendala di awal daripada update bagus di depan tapi kendala baru muncul di belakang."
 
-**Dari Faris:**
+**Dari Pak Faris:**
 - Mulai minggu depan, setiap sesi dibuka oleh PM dengan summary 2–3 halaman berisi:
   1. Backlog Fase 0 — apa yang sudah selesai, apa yang carry-over ke Fase 1
   2. Posisi minggu ini
   3. Tiga minggu ke depan mau kerjain apa
 - Alasan: mitra perlu hitung kapan harus kasih approval — minggu ke berapa September / Oktober.
 - Bentuk bebas — Kanban, Excel, GitHub — yang paling nyaman dipakai.
-- Ada 3 pertemuan lagi sebelum 11 Oktober (Andika koreksi: 3, bukan 4).
+- Ada 3 pertemuan lagi sebelum 11 Oktober (Pak Andika koreksi: 3, bukan 4).
 - Mitra akan bantu review desain, tapi masukan disalurkan lewat PM.
 
 ### Untuk Rafli (Backend)
 
-**Dari Faris:**
+**Dari Pak Faris:**
 - Tambahkan mekanisme screening sebelum download. Sekarang scraper langsung tarik semua begitu di-run.
 - Cara kerjanya: scan URL dulu tanpa download → hitung ada berapa PDF → cek duplikat (ukuran / nama / hash) → baru tarik yang benar-benar beda.
 - Alasan: satu file yang sama bisa ada di banyak URL. Kalau scan 1000 dan 500 sama, cukup tarik 500 — hemat bandwidth.
@@ -84,34 +84,34 @@
 
 ### Untuk Ikhwan (Frontend)
 
-**Dari Faris:**
+**Dari Pak Faris:**
 - Prinsip: desain harus selesai semua di awal — mockup dan flow lengkap — baru di-develop belakangan.
 - Prinsip: aplikasi harus bisa dipahami tanpa manual dan tanpa sosialisasi, seperti sosmed. Model/menu bebas, tidak diatur.
 - Upload manual sifatnya beda dari 2 jalur lain: itu dokumen yang langsung mau ditanggapi, bisa ditaruh di bawah fitur Analisa, bukan di Ingest.
 - Untuk scraping dan folder, yang ditunggu mitra adalah progress bar / animasi yang jelas: proses lagi jalan, lagi di tahap apa, atau stuck.
 - Deadline disepakati: 21 September share link Figma → 22 September mitra kasih feedback. Kalau ada revisi, waktunya seminggu.
 
-**Dari Andika:**
+**Dari Pak Andika:**
 - Struktur halaman Analisa Regulasi sudah kelihatan, bagus.
 
 ### Untuk Fathir (Data/ML)
 
-**Dari Faris:**
-- Dokumen sama di banyak sumber — yang disimpan yang mana? Fathir jawab: yang pertama di-scan. Faris OK.
-- Folder per sumber URL atau per tipe dokumen? Faris cenderung per tipe (UU, PP, POJK, SE) karena peraturan punya hierarki. Fathir jelaskan strukturnya: Source → Sektor → Jenis → Tahun → Status. Faris OK, "diskusi saja".
+**Dari Pak Faris:**
+- Dokumen sama di banyak sumber — yang disimpan yang mana? Fathir jawab: yang pertama di-scan. Pak Faris OK.
+- Folder per sumber URL atau per tipe dokumen? Pak Faris cenderung per tipe (UU, PP, POJK, SE) karena peraturan punya hierarki. Fathir jelaskan strukturnya: Source → Sektor → Jenis → Tahun → Status. Pak Faris OK, "diskusi saja".
 - Pengalaman DPEA soal penyimpanan: dulu simpan PDF dan harus OCR dulu (ada yang protected / hasil scan). Begitu ribuan dokumen, proses melambat karena tiap kali harus buka satu per satu. Solusinya konversi ke vektor — retrieval jauh lebih cepat. Tapi jadi susah saat surat resmi harus melampirkan PDF asli peraturan.
 - Minta tim explore dan usulkan cara menjawab dua kebutuhan itu sekaligus.
-- Fathir tanya prioritasnya mana. Faris: tahap awal vektor dulu, tapi pastikan yang dikutip memang ada dokumennya — jangan fabrikasi seperti LLM. Fitur simpan lokal tetap dibuat.
+- Fathir tanya prioritasnya mana. Pak Faris: tahap awal vektor dulu, tapi pastikan yang dikutip memang ada dokumennya — jangan fabrikasi seperti LLM. Fitur simpan lokal tetap dibuat.
 - Untuk Fase 1: yang penting jadi dulu. PDF juga boleh sesuai desain tim. Perbandingan kecepatan PDF vs vektor bisa diuji di akhir.
-- Fathir usul: simpan PDF asli hanya untuk yang sering dipakai. Faris: bisa.
+- Fathir usul: simpan PDF asli hanya untuk yang sering dipakai. Pak Faris: bisa.
 - Kalau butuh langganan cloud, masukkan ke pengajuan dana.
 
-**Dari Andika:**
+**Dari Pak Andika:**
 - Bikin UI kecil untuk mempermudah penjelasan scraping — itu improvement, yang lain bisa ikuti.
 
 ### Untuk Hamdan (Infra/QA)
 
-**Dari Faris:**
+**Dari Pak Faris:**
 - Pengalaman capstone sebelumnya pakai Vercel: limit ± 50 request/hari, dibagi antara tim develop dan mitra menguji → timeline mundur karena harus gantian.
 - Minta explore limit free tier GitHub Pages: ada meteran traffic? Cukup untuk MVP dipakai develop dan diuji bersamaan?
 - Selama belum berbayar, harus tetap bisa dipakai — pengajuan anggaran butuh proposal dan turunnya lama.
@@ -133,9 +133,9 @@
 ## 5. Action item
 
 ### Zaky
-- [ ] Bikin grup WhatsApp, undang Faris dan Andika — hari ini
-- [ ] Siapkan summary 2–3 halaman format Faris untuk sesi minggu depan (22 Sep)
-- [ ] Siapkan satu slide rekap per orang (permintaan Andika)
+- [ ] Bikin grup WhatsApp, undang Pak Faris dan Pak Andika — hari ini
+- [ ] Siapkan summary 2–3 halaman format Pak Faris untuk sesi minggu depan (22 Sep)
+- [ ] Siapkan satu slide rekap per orang (permintaan Pak Andika)
 - [ ] Konfirmasi ke dosen: format laporan Excel atau GitHub Project
 - [ ] Teruskan link Figma Ikhwan ke mitra — 21 Sep
 
@@ -159,7 +159,7 @@
 - [ ] Cek limit free tier GitHub Pages: traffic, request per hari, cukup untuk develop + pengujian bersamaan?
 - [ ] Laporkan hasilnya minggu depan
 
-### Mitra (Faris)
+### Mitra (Pak Faris)
 - [ ] Mulai taruh dokumen peraturan internal di folder OneDrive — minggu depan
 - [ ] Feedback desain Figma — 22 Sep
 
@@ -169,6 +169,6 @@
 
 - Angka penting yang baru muncul: **peraturan internal ± 500, scraping ± 1000, total ± 2000 dokumen** target knowledge base. Sebelumnya indikator Fase 1 cuma "minimal 20". Angka 20 tetap jadi ambang lulus, tapi 2000 itu ukuran sebenarnya.
 - Klarifikasi penting yang menguatkan dokumen kita: upload manual memang bukan pengisi KB (sudah ada di ADR-03 dan US-15a). Ikhwan perlu tahu ini karena mockup Ingest-nya masih menaruh upload manual sejajar dengan scraping.
-- Soal penyimpanan: yang Faris minta itu persis ADR-01 (PDF asli + blok terstruktur berdampingan). Fathir belum baca dokumennya — tunjukkan.
+- Soal penyimpanan: yang Pak Faris minta itu persis ADR-01 (PDF asli + blok terstruktur berdampingan). Fathir belum baca dokumennya — tunjukkan.
 - Hamdan sudah pindah ke GitHub Pages tanpa lewat keputusan tim. Itu cuma bisa hosting frontend statis, sama seperti Vercel. Backend, DB, OCR tetap butuh server. ADR-11 masih relevan — bahas di checkpoint internal.
-- Andika koreksi sisa pertemuan: 3 kali, bukan 4 — 22 Sep, 29 Sep, 6 Okt. Uji coba mitra 8 Okt jatuh setelah pertemuan terakhir.
+- Pak Andika koreksi sisa pertemuan: 3 kali, bukan 4 — 22 Sep, 29 Sep, 6 Okt. Uji coba mitra 8 Okt jatuh setelah pertemuan terakhir.
