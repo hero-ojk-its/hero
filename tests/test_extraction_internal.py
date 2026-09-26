@@ -295,3 +295,61 @@ def test_e12_get_internal_document_pdf(client, seed_claimable_docs):
     resp_ok = client.get(f"/api/v1/internal/documents/{doc_id}/pdf", headers=INTERNAL_HEADERS)
     assert resp_ok.status_code == 200
     assert resp_ok.headers["content-type"] == "application/pdf"
+
+
+def test_e13_extraction_engine_mapping(client, seed_claimable_docs, db_session):
+    """
+    E13 (§1.3): Pemetaan extraction_method bebas ke enum dan extraction_engine.
+    - Kirim surya_ocr -> extraction_method=ocr, extraction_engine=surya_ocr
+    - Kirim pdfplumber -> extraction_method=teks_langsung, extraction_engine=pdfplumber
+    - Verifikasi GET /documents/{id} dan GET /documents/{id}/text menampilkan extraction_engine.
+    """
+    resp_claim = client.post("/api/v1/internal/extraction/claim?limit=2", headers=INTERNAL_HEADERS)
+    items = resp_claim.json()
+    doc1_id = items[0]["document_id"]
+    doc2_id = items[1]["document_id"]
+
+    # 1. Kirim surya_ocr
+    payload1 = {
+        "title": "Regulasi Ekstraksi Surya OCR",
+        "regulation_number": "13/POJK.03/2023",
+        "regulation_type": "POJK",
+        "release_date": "2023-08-10",
+        "extraction_method": "surya_ocr",
+        "full_text": "Teks hasil ekstraksi surya_ocr",
+        "confidence": {"title": 0.95, "regulation_number": 0.95},
+    }
+    resp1 = client.patch(f"/api/v1/internal/documents/{doc1_id}/extraction", json=payload1, headers=INTERNAL_HEADERS)
+    assert resp1.status_code == 200
+
+    # 2. Kirim pdfplumber
+    payload2 = {
+        "title": "Regulasi Ekstraksi PDF Plumber",
+        "regulation_number": "14/POJK.03/2023",
+        "regulation_type": "POJK",
+        "release_date": "2023-08-11",
+        "extraction_method": "pdfplumber",
+        "full_text": "Teks hasil ekstraksi pdfplumber",
+        "confidence": {"title": 0.95, "regulation_number": 0.95},
+    }
+    resp2 = client.patch(f"/api/v1/internal/documents/{doc2_id}/extraction", json=payload2, headers=INTERNAL_HEADERS)
+    assert resp2.status_code == 200
+
+    # Verifikasi doc1
+    detail1 = client.get(f"/api/v1/documents/{doc1_id}").json()
+    assert detail1["extraction_method"] == "ocr"
+    assert detail1["extraction_engine"] == "surya_ocr"
+
+    text1 = client.get(f"/api/v1/documents/{doc1_id}/text").json()
+    assert text1["extraction_method"] == "ocr"
+    assert text1["extraction_engine"] == "surya_ocr"
+
+    # Verifikasi doc2
+    detail2 = client.get(f"/api/v1/documents/{doc2_id}").json()
+    assert detail2["extraction_method"] == "teks_langsung"
+    assert detail2["extraction_engine"] == "pdfplumber"
+
+    text2 = client.get(f"/api/v1/documents/{doc2_id}/text").json()
+    assert text2["extraction_method"] == "teks_langsung"
+    assert text2["extraction_engine"] == "pdfplumber"
+

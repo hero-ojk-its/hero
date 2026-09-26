@@ -16,6 +16,7 @@ Penggunaan:
 """
 import io
 import os
+from pathlib import Path
 import sys
 import time
 from typing import List, Tuple
@@ -289,6 +290,76 @@ def run_smoke_test(base_url: str = "http://127.0.0.1:8000") -> int:
         has_failure = True
         results.append(("POST", "8b. /ingest/upload-pdf (Non-PDF Check)", 0, f"FAIL ({type(exc).__name__})"))
 
+    # 9. Uji Sumber Folder Lokal (Langkah 6: US-16, FR-SCR-05)
+    local_source_id = None
+    subfolder_name = f"smoke_folder_{ts}"
+    sources_base = Path("./sources")
+    sources_base.mkdir(parents=True, exist_ok=True)
+    smoke_subfolder = sources_base / subfolder_name
+    smoke_subfolder.mkdir(parents=True, exist_ok=True)
+
+    try:
+        # Salin 2 PDF sintetis ke dalamnya
+        (smoke_subfolder / "smoke_pdf_1.pdf").write_bytes(make_minimal_pdf(f"Konten Regulasi Folder Lokal 1 {ts}"))
+        (smoke_subfolder / "smoke_pdf_2.pdf").write_bytes(make_minimal_pdf(f"Konten Regulasi Folder Lokal 2 {ts}"))
+
+        # Daftarkan sumber folder lokal
+        folder_url_candidate = str(smoke_subfolder.resolve())
+        create_payload = {
+            "name": f"Smoke Test Folder {ts}",
+            "url": folder_url_candidate,
+            "source_type": "folder_lokal",
+            "recursive": True,
+        }
+        res_src = client.post("/api/v1/scraping-sources/", json=create_payload)
+        if res_src.status_code != 201:
+            # Jika di Docker, path lokal host mungkin tidak dikenali; coba path /app/sources/<subfolder>
+            create_payload["url"] = f"/app/sources/{subfolder_name}"
+            res_src = client.post("/api/v1/scraping-sources/", json=create_payload)
+
+        if res_src.status_code == 201:
+            src_data = res_src.json()
+            local_source_id = src_data["id"]
+            results.append(("POST", "9a. /scraping-sources/ (Daftar Folder Lokal)", res_src.status_code, f"OK (source_id={local_source_id})"))
+
+            # Jalankan run?wait=true (Run 1 -> 2 success)
+            res_run1 = client.post(f"/api/v1/scraping-sources/{local_source_id}/run?wait=true")
+            if res_run1.status_code == 200 and res_run1.json().get("success_count") == 2:
+                results.append(("POST", f"9b. /scraping-sources/{local_source_id}/run (Run 1)", res_run1.status_code, "OK (2 success)"))
+            else:
+                has_failure = True
+                results.append(("POST", f"9b. /scraping-sources/{local_source_id}/run (Run 1)", res_run1.status_code, f"FAIL ({res_run1.text})"))
+
+            # Jalankan run?wait=true (Run 2 -> 2 skipped)
+            res_run2 = client.post(f"/api/v1/scraping-sources/{local_source_id}/run?wait=true")
+            if res_run2.status_code == 200 and res_run2.json().get("skipped_count") == 2:
+                results.append(("POST", f"9c. /scraping-sources/{local_source_id}/run (Run 2 Idempoten)", res_run2.status_code, "OK (2 skipped)"))
+            else:
+                has_failure = True
+                results.append(("POST", f"9c. /scraping-sources/{local_source_id}/run (Run 2 Idempoten)", res_run2.status_code, f"FAIL ({res_run2.text})"))
+
+            # Hapus sumber uji
+            res_del_src = client.delete(f"/api/v1/scraping-sources/{local_source_id}")
+            if res_del_src.status_code == 200:
+                results.append(("DELETE", f"9d. /scraping-sources/{local_source_id} (Hapus Sumber)", res_del_src.status_code, "OK"))
+            else:
+                has_failure = True
+                results.append(("DELETE", f"9d. /scraping-sources/{local_source_id} (Hapus Sumber)", res_del_src.status_code, "FAIL"))
+        else:
+            has_failure = True
+            results.append(("POST", "9a. /scraping-sources/ (Daftar Folder Lokal)", res_src.status_code, f"FAIL ({res_src.text})"))
+    except Exception as exc:
+        has_failure = True
+        results.append(("POST", "9. /scraping-sources/ (Folder Lokal)", 0, f"FAIL ({type(exc).__name__})"))
+    finally:
+        # Bersihkan folder lokal uji
+        try:
+            for f in smoke_subfolder.glob("*"):
+                f.unlink(missing_ok=True)
+            smoke_subfolder.rmdir()
+        except Exception:
+            pass
+
     # Cetak tabel ringkas hasil smoke test
     print(f"{'METHOD':<8} | {'ENDPOINT / PATH':<50} | {'STATUS':<7} | {'HASIL'}")
     print("-" * 80)
@@ -301,7 +372,7 @@ def run_smoke_test(base_url: str = "http://127.0.0.1:8000") -> int:
         print("[FAIL] HASIL: SMOKE TEST GAGAL - Terdapat endpoint yang tidak lulus.")
         return 1
     else:
-        print("[OK] HASIL: SMOKE TEST SUKSES - Seluruh pemeriksaan (Langkah 0-5) lulus 100%.")
+        print("[OK] HASIL: SMOKE TEST SUKSES - Seluruh pemeriksaan (Langkah 0-6) lulus 100%.")
         return 0
 
 

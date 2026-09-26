@@ -63,6 +63,13 @@ def setup_test_database():
     yield
 
 
+@pytest.fixture(autouse=True)
+def bind_test_session_local(monkeypatch):
+    """Pastikan SessionLocal yang dibuat oleh background task/service selalu memakai test database."""
+    monkeypatch.setattr("app.database.SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr("app.services.source_runner.SessionLocal", TestingSessionLocal)
+
+
 @pytest.fixture
 def db_session() -> Generator[Session, None, None]:
     """Truncate seluruh tabel data, seed kategori, dan sediakan session DB baru untuk tiap test."""
@@ -76,6 +83,7 @@ def db_session() -> Generator[Session, None, None]:
                 articles,
                 documents,
                 ingest_failures,
+                source_files,
                 job_ingest,
                 scraping_sources,
                 audit_logs,
