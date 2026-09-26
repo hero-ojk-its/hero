@@ -31,11 +31,13 @@ services:
       - DATABASE_URL=postgresql+psycopg://hero_user:hero_password@db:5432/hero_db
       - STORAGE_PATH=/app/storage
       - AUTH_ENABLED=false
+      - LOCAL_SOURCE_ROOTS=/app/sources
     volumes:
       - ./app:/app/app
       - ./alembic:/app/alembic
       - ./alembic.ini:/app/alembic.ini
       - ./storage:/app/storage
+      - ./sources:/app/sources:ro
 
 volumes:
   pgdata:

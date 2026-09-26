@@ -19,6 +19,9 @@ env/
 # ===== Storage & Backups =====
 storage/
 backups/
+sources/*
+!sources/.gitkeep
+!sources/README.md
 
 # ===== Docker =====
 *.log

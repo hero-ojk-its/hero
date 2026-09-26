@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     extraction_claim_timeout_minutes: int = 30
     extraction_max_attempts: int = 3
 
+    # Sumber Folder Lokal (Langkah 6)
+    local_source_roots: str = "./sources"
+    local_source_max_files_per_run: int = 5000
+    job_progress_commit_every: int = 10
+
     @field_validator("category_path_template")
     @classmethod
     def validate_category_path_template(cls, v: str) -> str:

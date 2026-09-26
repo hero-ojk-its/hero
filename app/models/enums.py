@@ -48,6 +48,13 @@ class JenisJobIngest(str, enum.Enum):
     sinkron_folder = "sinkron_folder"
 
 
+class JenisSumber(str, enum.Enum):
+    """Jenis situs atau folder sumber dokumen"""
+    situs_web = "situs_web"
+    folder_lokal = "folder_lokal"
+    onedrive_public = "onedrive_public"
+
+
 class StatusJobIngest(str, enum.Enum):
     """Status eksekusi batch/job ingest"""
     antrian = "antrian"

@@ -64,7 +64,12 @@ class JobIngest(Base):
     success_count = Column(Integer, default=0, nullable=False, comment="Jumlah dokumen berhasil diproses")
     duplicate_count = Column(Integer, default=0, nullable=False, comment="Jumlah dokumen duplikat yang diabaikan")
     failed_count = Column(Integer, default=0, nullable=False, comment="Jumlah dokumen yang gagal diproses")
+    total_found = Column(Integer, nullable=True, comment="Total berkas yang ditemukan pada sumber")
+    processed_count = Column(Integer, default=0, nullable=False, comment="Jumlah berkas yang telah diproses")
+    skipped_count = Column(Integer, default=0, nullable=False, comment="Jumlah berkas yang dilewati tanpa perubahan (skipped_unchanged)")
 
+    # Relasi ke sumber scraping
+    source = relationship("ScrapingSource", foreign_keys=[source_id])
     # Relasi ke dokumen yang dihasilkan dari job ini
     documents = relationship("Document", back_populates="job")
     # Relasi ke failures

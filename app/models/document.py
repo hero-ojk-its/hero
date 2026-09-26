@@ -103,6 +103,11 @@ class Document(Base):
         nullable=True,
         comment="Metode ekstraksi teks: teks_langsung | ocr"
     )
+    extraction_engine = Column(
+        String(100),
+        nullable=True,
+        comment="Nama engine/model ekstraksi spesifik (misal: surya_ocr, pdfplumber, llm_v1)"
+    )
     full_text = Column(
         Text,
         nullable=True,
