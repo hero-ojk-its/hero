@@ -213,6 +213,7 @@ POST     | /api/v1/documents/place-pending                  | 200     | OK
 ## 9. Git Log Branch `feat/step2-3-failures-naming`
 
 ```text
+920719e docs: add step 2-3 report and update README and env example
 ad97fff test: add comprehensive test suite for failures, naming, categories, and placement
 fc6328a feat: implement standard naming and category placement (Step 3)
 f52e889 feat: implement failure logging and retry queue (Step 2)
