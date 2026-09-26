@@ -32,10 +32,16 @@ class Document(Base):
         Index("ix_documents_reg_num_trgm", "regulation_number", postgresql_using="gin", postgresql_ops={"regulation_number": "gin_trgm_ops"}),
         Index("ix_documents_title_trgm", "title", postgresql_using="gin", postgresql_ops={"title": "gin_trgm_ops"}),
         Index("ix_documents_release_date", "release_date"),
+        Index("ix_documents_source_url_hash", "source_url", postgresql_using="hash"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(255), nullable=False, comment="Judul lengkap dokumen regulasi")
+    original_filename = Column(
+        String(255),
+        nullable=True,
+        comment="Nama file asli dokumen saat diunggah/diingest"
+    )
     regulation_number = Column(
         String(100),
         unique=False,

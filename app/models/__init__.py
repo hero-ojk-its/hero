@@ -10,6 +10,9 @@ from app.models.enums import (  # noqa: F401
     JenisKegagalan,
     StatusTindakLanjut,
     JenisSumber,
+    StatusPindai,
+    TujuanTarik,
+    StatusKandidat,
 )
 from app.models.category import Category  # noqa: F401
 from app.models.job_ingest import JobIngest  # noqa: F401
@@ -20,4 +23,6 @@ from app.models.audit_log import AuditLog  # noqa: F401
 from app.models.scraping_source import ScrapingSource  # noqa: F401
 from app.models.source_file import SourceFile  # noqa: F401
 from app.models.ingest_failure import IngestFailure  # noqa: F401
+from app.models.scan_session import ScanSession  # noqa: F401
+from app.models.scan_candidate import ScanCandidate  # noqa: F401
 

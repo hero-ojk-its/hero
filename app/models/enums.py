@@ -88,3 +88,27 @@ class StatusTindakLanjut(str, enum.Enum):
     diproses_ulang = "diproses_ulang"
     diabaikan = "diabaikan"
 
+
+class StatusPindai(str, enum.Enum):
+    """Status tahapan sesi pemindaian situs web (Langkah 7)"""
+    antrian = "antrian"
+    memindai = "memindai"
+    siap_dipilih = "siap_dipilih"
+    menarik = "menarik"
+    selesai = "selesai"
+    gagal = "gagal"
+    dibatalkan = "dibatalkan"
+
+
+class TujuanTarik(str, enum.Enum):
+    """Tujuan penarikan dokumen dari sesi pemindaian"""
+    knowledge_base = "knowledge_base"
+    unduh_folder = "unduh_folder"
+
+
+class StatusKandidat(str, enum.Enum):
+    """Status kecocokan kandidat berkas terhadap basis pengetahuan (KB)"""
+    baru = "baru"
+    sudah_ada = "sudah_ada"
+    mungkin_ada = "mungkin_ada"
+
