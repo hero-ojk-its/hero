@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  db:
+    image: ankane/pgvector:v0.5.0
+    container_name: hero_postgres
+    environment:
+      POSTGRES_USER: hero_user
+      POSTGRES_PASSWORD: hero_password
+      POSTGRES_DB: hero_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hero_user"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: .
+    container_name: hero_fastapi
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+psycopg://hero_user:hero_password@db:5432/hero_db
+    volumes:
+      - ./app:/app/app
+      - ./storage:/app/storage
+
+volumes:
+  pgdata:

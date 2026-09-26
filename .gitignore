@@ -1,0 +1,27 @@
+# ===== ENV =====
+.env
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# ===== Storage =====
+storage/
+
+# ===== Docker =====
+*.log
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.DS_Store

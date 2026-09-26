@@ -1,0 +1,246 @@
+"""
+Router: /api/v1/documents
+Endpoint untuk membaca daftar dokumen regulasi dan detail pasal-pasalnya.
+"""
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.models.document import Document
+from app.models.article import Article, LegalReference
+from app.models.enums import KlasifikasiAkses, PeranDokumen, StatusKeberlakuan, JenisRujukan
+from app.schemas.article import UpdateDocumentStatusIn, UpdateDocumentStatusResponse
+
+router = APIRouter()
+
+
+@router.get("/", summary="Daftar semua dokumen regulasi")
+def list_documents(
+    skip: int = 0,
+    limit: int = 20,
+    access_classification: Optional[KlasifikasiAkses] = Query(
+        None, description="Filter berdasarkan klasifikasi akses (publik / non_publik)"
+    ),
+    document_role: Optional[PeranDokumen] = Query(
+        None, description="Filter berdasarkan peran dokumen (corpus_eksisting / draft_kajian)"
+    ),
+    category_id: Optional[int] = Query(
+        None, description="Filter berdasarkan ID kategori folder KB"
+    ),
+    status_keberlakuan: Optional[StatusKeberlakuan] = Query(
+        None, description="Filter berdasarkan status keberlakuan regulasi"
+    ),
+    db: Session = Depends(get_db)
+):
+    """Mengembalikan daftar dokumen regulasi dengan pagination dan filter opsional."""
+    query = db.query(Document)
+
+    if access_classification:
+        query = query.filter(Document.access_classification == access_classification)
+    if document_role:
+        query = query.filter(Document.document_role == document_role)
+    if category_id:
+        query = query.filter(Document.category_id == category_id)
+    if status_keberlakuan:
+        query = query.filter(Document.status_keberlakuan == status_keberlakuan)
+
+    total = query.count()
+    docs = query.order_by(Document.id.desc()).offset(skip).limit(limit).all()
+
+    return {
+        "total": total,
+        "items": [
+            {
+                "id": d.id,
+                "title": d.title,
+                "regulation_number": d.regulation_number,
+                "regulation_type": getattr(d, "regulation_type", None),
+                "release_date": d.release_date,
+                "access_classification": d.access_classification,
+                "document_role": d.document_role,
+                "category_id": d.category_id,
+                "status_keberlakuan": d.status_keberlakuan,
+                "processing_status": d.processing_status,
+                "created_at": d.created_at,
+            }
+            for d in docs
+        ]
+    }
+
+
+@router.get("/{document_id}", summary="Detail satu dokumen beserta pasalnya")
+def get_document(document_id: int, db: Session = Depends(get_db)):
+    """Mengembalikan detail lengkap dokumen beserta pasal level teratas dan rujukan hukum."""
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
+
+    top_articles = (
+        db.query(Article)
+        .filter(Article.document_id == document_id, Article.parent_id == None)  # noqa: E711
+        .order_by(Article.order_index)
+        .all()
+    )
+
+    legal_refs = (
+        db.query(LegalReference)
+        .filter(LegalReference.document_id == document_id)
+        .all()
+    )
+
+    return {
+        "id": doc.id,
+        "title": doc.title,
+        "regulation_number": doc.regulation_number,
+        "regulation_type": getattr(doc, "regulation_type", None),
+        "release_date": doc.release_date,
+        "source_url": doc.source_url,
+        "file_path_pdf": doc.file_path_pdf,
+        "standardized_filename": doc.standardized_filename,
+        "access_classification": doc.access_classification,
+        "document_role": doc.document_role,
+        "status_keberlakuan": doc.status_keberlakuan,
+        "processing_status": doc.processing_status,
+        "extraction_method": getattr(doc, "extraction_method", None),
+        "category_id": doc.category_id,
+        "job_id": doc.job_id,
+        "created_at": doc.created_at,
+        "updated_at": doc.updated_at,
+        "articles": [
+            {
+                "id": a.id,
+                "level": a.level,
+                "chapter_title": a.chapter_title,
+                "article_number": a.article_number,
+                "content_text": a.content_text[:300] + "..." if a.content_text and len(a.content_text) > 300 else a.content_text,
+                "order_index": a.order_index,
+            }
+            for a in top_articles
+        ],
+        "legal_references": [
+            {
+                "id": lr.id,
+                "cited_text": lr.cited_text,
+                "reference_type": lr.reference_type,
+                "referenced_document_id": lr.referenced_document_id,
+                "referenced_document_status": lr.referenced_document_status,
+                "created_at": lr.created_at,
+            }
+            for lr in legal_refs
+        ],
+    }
+
+
+@router.put(
+    "/{document_id}/status",
+    response_model=UpdateDocumentStatusResponse,
+    summary="Update status keberlakuan dokumen regulasi",
+    description=(
+        "Memperbarui kolom `status_keberlakuan` pada dokumen yang dipilih. "
+        "Jika status diubah menjadi **`dicabut`** atau **`diubah`** dan "
+        "`revoking_document_id` disertakan, endpoint akan otomatis membuat "
+        "entri baru di tabel `legal_references` yang mencatat hubungan "
+        "pencabutan/perubahan antar dokumen."
+    ),
+)
+def update_document_status(
+    document_id: int,
+    payload: UpdateDocumentStatusIn,
+    db: Session = Depends(get_db),
+) -> UpdateDocumentStatusResponse:
+    """
+    Langkah:
+    1. Cari dokumen; 404 jika tidak ada.
+    2. Jika revoking_document_id disertakan, validasi dokumen pencabut ada.
+    3. Update status_keberlakuan.
+    4. Jika status dicabut/diubah + revoking_document_id ada → buat LegalReference.
+    5. db.commit() dan kembalikan detail.
+    """
+    # 1. Cari dokumen target
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"Dokumen dengan id={document_id} tidak ditemukan")
+
+    # 2. Validasi dokumen pencabut jika diberikan
+    revoking_doc = None
+    if payload.revoking_document_id is not None:
+        revoking_doc = db.query(Document).filter(
+            Document.id == payload.revoking_document_id
+        ).first()
+        if not revoking_doc:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Dokumen pencabut/pengubah dengan id={payload.revoking_document_id} tidak ditemukan",
+            )
+
+    try:
+        # 3. Update status keberlakuan
+        doc.status_keberlakuan = payload.status_keberlakuan
+
+        # 4. Buat LegalReference jika status dicabut/diubah dan revoking_document_id ada
+        legal_ref: LegalReference | None = None
+        statuses_needing_ref = {StatusKeberlakuan.dicabut, StatusKeberlakuan.diubah}
+
+        if payload.status_keberlakuan in statuses_needing_ref and revoking_doc is not None:
+            # Tentukan tipe rujukan berdasarkan status
+            ref_type = (
+                JenisRujukan.pencabutan
+                if payload.status_keberlakuan == StatusKeberlakuan.dicabut
+                else JenisRujukan.perubahan
+            )
+
+            # Teks sitiran deskriptif: "[Nomor/judul revoking] mencabut/mengubah [nomor/judul target]"
+            revoking_label = revoking_doc.regulation_number or revoking_doc.title
+            target_label = doc.regulation_number or doc.title
+            action_word = "mencabut" if ref_type == JenisRujukan.pencabutan else "mengubah"
+            cited_text = f"{revoking_label} {action_word} {target_label}"
+
+            legal_ref = LegalReference(
+                # legal_references.document_id = dokumen yang DIRUJUK (target yang dicabut/diubah)
+                document_id=document_id,
+                cited_text=cited_text,
+                # FK ke dokumen pencabut/pengubah
+                referenced_document_id=payload.revoking_document_id,
+                referenced_document_status=payload.status_keberlakuan,
+                reference_type=ref_type,
+            )
+            db.add(legal_ref)
+
+        db.commit()
+        db.refresh(doc)
+        if legal_ref is not None:
+            db.refresh(legal_ref)
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Gagal memperbarui status dokumen: {str(exc)}",
+        )
+
+    # 5. Susun response
+    ref_created = legal_ref is not None
+    status_label = payload.status_keberlakuan.value
+    doc_label = doc.regulation_number or doc.title
+
+    if ref_created:
+        revoking_label = revoking_doc.regulation_number or revoking_doc.title  # type: ignore[union-attr]
+        action_word = "dicabut" if payload.status_keberlakuan == StatusKeberlakuan.dicabut else "diubah"
+        message = (
+            f"Dokumen '{doc_label}' berhasil ditandai sebagai '{status_label}' "
+            f"oleh '{revoking_label}'. LegalReference id={legal_ref.id} dibuat."
+        )
+    else:
+        message = f"Status dokumen '{doc_label}' berhasil diperbarui menjadi '{status_label}'."
+
+    return UpdateDocumentStatusResponse(
+        status="ok",
+        document_id=doc.id,
+        status_keberlakuan=status_label,
+        legal_reference_created=ref_created,
+        legal_reference_id=legal_ref.id if legal_ref else None,
+        message=message,
+    )
