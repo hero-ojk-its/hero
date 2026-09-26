@@ -31,39 +31,38 @@ def get_db():
         db.close()
 
 
-# Nama-nama kategori default yang akan di-seed saat tabel kosong
+# Nama-nama kategori default root yang akan di-seed (7 root KB skeleton)
 _DEFAULT_CATEGORIES = [
     "POJK",
     "SEOJK",
     "UU",
     "PP",
     "Peraturan Internal DPEA",
+    "Lainnya",
+    "Draft Kajian",
 ]
 
 
 def seed_initial_categories(db) -> None:
     """
     Seeder kategori Knowledge Base.
-
-    Dipanggil sekali saat startup aplikasi. Mengecek apakah tabel `categories`
-    masih kosong; jika ya, insert 5 kategori default. Jika sudah ada isi,
-    fungsi ini tidak melakukan apa-apa (idempotent).
-
-    Args:
-        db: SQLAlchemy Session — diambil langsung dari SessionLocal() di caller.
+    Idempoten per nama root: memastikan 7 root folder KB selalu ada.
     """
-    # Import di sini untuk menghindari circular import saat module di-load
     from app.models.category import Category  # noqa: PLC0415
 
-    existing_count = db.query(Category).count()
-    if existing_count > 0:
-        logger.info("Seeder dilewati: tabel categories sudah berisi %d baris.", existing_count)
-        return
+    created_names = []
+    for name in _DEFAULT_CATEGORIES:
+        existing = db.query(Category).filter(
+            Category.parent_id.is_(None),
+            Category.name == name,
+        ).first()
+        if not existing:
+            cat = Category(name=name, parent_id=None, auto_created=False)
+            db.add(cat)
+            created_names.append(name)
 
-    categories = [
-        Category(name=name, auto_created=False)
-        for name in _DEFAULT_CATEGORIES
-    ]
-    db.add_all(categories)
-    db.commit()
-    logger.info("Seeder: %d kategori default berhasil diinsert -> %s", len(categories), _DEFAULT_CATEGORIES)
+    if created_names:
+        db.commit()
+        logger.info("Seeder: %d kategori root baru berhasil di-insert -> %s", len(created_names), created_names)
+    else:
+        logger.info("Seeder: seluruh %d kategori root sudah lengkap.", len(_DEFAULT_CATEGORIES))

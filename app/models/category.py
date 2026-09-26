@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, Integer, String, Text, Boolean, DateTime, ForeignKey
+    Column, Integer, String, Text, Boolean, DateTime, ForeignKey, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -14,6 +14,9 @@ class Category(Base):
     """
 
     __tablename__ = "categories"
+    __table_args__ = (
+        UniqueConstraint("parent_id", "name", name="uq_categories_parent_name", postgresql_nulls_not_distinct=True),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False, index=True, comment="Nama kategori")

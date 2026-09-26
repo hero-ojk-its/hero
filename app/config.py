@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,6 +25,43 @@ class Settings(BaseSettings):
     # Storage & Upload
     storage_path: str = "./storage"
     max_upload_mb: int = 100
+
+    # Naming & Category Placement (Langkah 3)
+    naming_template: str = "{nomor} {judul} {tahun}"
+    naming_wildcard: str = "NA"
+    naming_max_length: int = 150
+    category_path_template: str = "{jenis}/{tahun}"
+    category_unknown_type: str = "Lainnya"
+    category_unknown_year: str = "Tanpa Tahun"
+    draft_category_root: str = "Draft Kajian"
+
+    @field_validator("category_path_template")
+    @classmethod
+    def validate_category_path_template(cls, v: str) -> str:
+        import re
+        placeholders = re.findall(r"\{([^}]+)\}", v)
+        allowed = {"jenis", "tahun"}
+        for p in placeholders:
+            if p not in allowed:
+                raise ValueError(
+                    f"category_path_template memuat placeholder tidak dikenal: '{{{p}}}'. "
+                    f"Placeholder yang diizinkan: {', '.join('{' + a + '}' for a in allowed)}."
+                )
+        return v
+
+    @field_validator("naming_template")
+    @classmethod
+    def validate_naming_template(cls, v: str) -> str:
+        import re
+        placeholders = re.findall(r"\{([^}]+)\}", v)
+        allowed = {"nomor", "judul", "tahun", "jenis"}
+        for p in placeholders:
+            if p not in allowed:
+                raise ValueError(
+                    f"naming_template memuat placeholder tidak dikenal: '{{{p}}}'. "
+                    f"Placeholder yang diizinkan: {', '.join('{' + a + '}' for a in allowed)}."
+                )
+        return v
 
     @property
     def max_upload_bytes(self) -> int:
