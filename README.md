@@ -1,219 +1,190 @@
 # HERO Backend
 
-Backend API untuk sistem **HERO (Harmonisasi & Analisa Regulasi Otomatis)** — pengelolaan dokumen regulasi, pencarian semantik, klasifikasi akses kepatuhan NDA, dan cross-reference pasal.
+Backend API untuk sistem **HERO (Harmonisasi & Analisa Regulasi Otomatis)** — platform analisa kepatuhan regulasi OJK (DPEA), pencarian semantik, klasifikasi akses kepatuhan NDA, dan pipeline ingest dokumen terpadu.
 
-**Stack**: FastAPI (Python 3.11/3.13) + PostgreSQL + pgvector
-
----
-
-## 🚀 Cara Menjalankan (Lokal)
-
-### Prasyarat
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) sudah terinstall dan berjalan
-
-### Langkah 1 — Masuk Folder
-
-```bash
-cd hero-backend
-```
-
-### Langkah 2 — Jalankan Semua Service
-
-```bash
-docker-compose up -d --build
-```
-
-Perintah ini akan otomatis:
-- Download image PostgreSQL + pgvector
-- Membuat container `hero_postgres` (database)
-- Membuat container `hero_backend` (API FastAPI)
-- Mengaktifkan ekstensi pgvector di database
-- Menginisialisasi semua tabel database
-
-### Langkah 3 — Cek Status
-
-```bash
-docker-compose ps
-```
-
-Semua container harus berstatus `Up`.
-
-### Langkah 4 — Akses API
-
-Buka browser dan akses: **http://localhost:8000/docs**
-
-Tersedia Swagger UI interaktif dengan seluruh endpoint dan dokumentasi skema request/response.
+**Stack**: FastAPI 0.115+ (Python 3.11 Docker / Python 3.13 Lokal) · SQLAlchemy 2.0+ · Alembic 1.13+ · PostgreSQL 15 + pgvector · psycopg 3.
 
 ---
 
-## 📁 Struktur Folder
+## 🚀 Cara Menjalankan
+
+### Opsi A — Menjalankan Lewat Docker (Rekomendasi)
+
+1. **Salin environment template:**
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Build dan jalankan container:**
+   ```bash
+   docker compose up -d --build
+   ```
+   *Container backend akan otomatis mengeksekusi `alembic upgrade head` saat startup sebelum uvicorn berjalan.*
+
+3. **Cek status & log:**
+   ```bash
+   docker compose ps
+   docker compose logs -f backend
+   ```
+
+4. **Akses Swagger UI API:**
+   Buka browser pada: **http://localhost:8000/docs**
+
+---
+
+### Opsi B — Menjalankan Secara Lokal (Python Venv)
+
+1. **Aktifkan Virtual Environment:**
+   ```powershell
+   # Windows PowerShell
+   .\venv\Scripts\Activate.ps1
+   ```
+
+2. **Install Dependensi:**
+   ```bash
+   pip install -r requirements.txt
+   pip install -r requirements-dev.txt
+   ```
+
+3. **Konfigurasi `.env`:**
+   Pastikan variabel `DATABASE_URL` dan `STORAGE_PATH=./storage` sudah sesuai.
+
+4. **Jalankan Migrasi Database:**
+   ```bash
+   alembic upgrade head
+   ```
+
+5. **Jalankan Server Uvicorn:**
+   ```bash
+   python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+   ```
+
+---
+
+## 🔒 Konfigurasi Otentikasi (`AUTH_ENABLED`)
+
+Berdasarkan keputusan **MoM 22 Sep 2026**, otentikasi login ditunda untuk mempermudah pengujian awal frontend dan mitra:
+- **`AUTH_ENABLED=false` (Default):** Seluruh endpoint terbuka tanpa memerlukan JWT bearer token. `get_current_user` mengembalikan `None` (pengguna anonim / sistem).
+- **`AUTH_ENABLED=true`:** Proteksi JWT aktif. Endpoint yang memerlukan otentikasi akan menolak request tanpa token dengan status HTTP 401.
+
+Untuk membuat/mereset akun admin:
+```bash
+python -m app.create_admin
+```
+
+---
+
+## 🧪 Pengujian Otomatis
+
+### 1. Menjalankan Pytest (Unit & Integrasi T01–T25)
+Suite pengujian menggunakan database uji terpisah `hero_test`:
+```bash
+python -m pytest -q
+```
+
+### 2. Menjalankan Smoke Test
+Smoke test memvalidasi end-to-end server yang sedang berjalan:
+```bash
+# Terhadap server lokal / docker
+python scripts/smoke_test.py http://127.0.0.1:8000
+```
+
+---
+
+## 🗄️ Skema Database & Keputusan Arsitektur
+
+### Perubahan Skema Fase 1 (Langkah 0):
+1. **Deduplikasi (ADR-05 / KEP-06):**
+   - Kolom `regulation_number` **tidak unik** (tetap berindeks) agar tidak memicu kegagalan saat versi berbeda menggunakan nomor yang sama.
+   - Kolom `file_hash` (SHA-256) dan `file_size_bytes` (BIGINT, `nullable=False`) diikat dengan constraint unik komposit:
+     `UniqueConstraint("file_hash", "file_size_bytes", name="uq_documents_hash_size")`.
+2. **Peran Dokumen (ADR-03 / FR-SCR-04a):**
+   - Kolom `document_role` bernilai `corpus_eksisting` atau `draft_kajian`, **wajib dinyatakan** saat unggah (`nullable=False`, tanpa default Python).
+3. **Penyimpanan Berkas (ADR-01):**
+   - `file_path_pdf` menyimpan **path relatif terhadap `STORAGE_PATH`** (contoh: `pdf/3fa1c2d4e5f6_nama.pdf`) untuk portabilitas antara lokal, Docker, dan VPS.
+   - Penyimpanan fisik bersifat atomik dan **tidak pernah menimpa** berkas yang sudah ada (menambahkan sufiks `-1`, `-2`, dst.).
+4. **Indeks Performa:**
+   - Ditambahkan indeks pada `status_keberlakuan`, `document_role`, dan `processing_status`.
+
+---
+
+## 📡 Daftar Endpoint API (v0.2.0)
+
+### 1. Health & Sistem
+| Method | Endpoint | Deskripsi |
+|---|---|---|
+| `GET` | `/` | Status ringkas service |
+| `GET` | `/health` | Health check database (`SELECT 1`) & flag auth |
+| `GET` | `/debug-routes` | Daftar semua rute (khusus `APP_ENV=development`) |
+
+### 2. Ingest Pipeline (`/api/v1/ingest`)
+| Method | Endpoint | Deskripsi |
+|---|---|---|
+| `POST` | `/upload-pdf` | Upload PDF regulasi / draft kajian (tunggal/jamak). `document_role` & `access_classification` WAJIB. |
+| `GET` | `/check-duplicate` | Screening deduplikasi sebelum upload |
+| `GET` | `/jobs` | Riwayat job ingest dengan pagination & filter |
+| `GET` | `/status` | Statistik ringkasan dokumen & job pipeline |
+| *~~POST~~* | *~~`/scrape-url`~~* | *[DIHAPUS] Digantikan pipeline terpadu pada Langkah 7* |
+
+### 3. Dokumen Regulasi (`/api/v1/documents`)
+| Method | Endpoint | Deskripsi |
+|---|---|---|
+| `GET` | `/` | Daftar dokumen regulasi (filter: klasifikasi akses, peran, kategori, status keberlakuan) |
+| `GET` | `/{document_id}` | Detail dokumen regulasi beserta pasal & rujukan hukum |
+| `PUT` | `/{document_id}/status` | Update status keberlakuan (membuat `legal_references` jika dicabut/diubah) |
+
+### 4. Situs Sumber Scraping (`/api/v1/scraping-sources`)
+| Method | Endpoint | Deskripsi |
+|---|---|---|
+| `POST` | `/` | Tambah situs sumber scraping baru (Audit: `CREATE_SOURCE`) |
+| `GET` | `/` | Daftar semua situs sumber scraping |
+| `GET` | `/{source_id}` | Detail situs sumber scraping |
+| `PUT` / `PATCH` | `/{source_id}` | Update nama/URL/status aktif (Audit: `UPDATE_SOURCE`) |
+| `DELETE` | `/{source_id}` | Hapus situs sumber scraping (Audit: `DELETE_SOURCE`) |
+
+### 5. Kategori Knowledge Base (`/api/v1/categories`)
+| Method | Endpoint | Deskripsi |
+|---|---|---|
+| `GET` | `/` | Daftar 5 kategori default KB (`POJK`, `SEOJK`, `UU`, `PP`, `Peraturan Internal DPEA`) |
+
+### 6. Otentikasi & Jejak Audit
+| Method | Endpoint | Deskripsi |
+|---|---|---|
+| `POST` | `/api/v1/auth/login` | Login form OAuth2 untuk memperoleh token JWT Bearer |
+| `GET` | `/api/v1/audit-logs/` | Daftar jejak audit aktivitas sistem (filter: `action`, `user_id`) |
+
+### 7. Internal Pipeline (`/api/v1/internal`)
+| Method | Endpoint | Deskripsi |
+|---|---|---|
+| `POST` | `/articles` | Bulk insert chunk pasal & embedding 1536-dim (proteksi `X-Internal-API-Key`) |
+
+---
+
+## 📁 Struktur Folder Proyek
 
 ```
 hero-backend/
+├── alembic/                 # Skrip migrasi database Alembic
+│   ├── versions/            # Riwayat revisi migrasi skema
+│   └── env.py               # Konfigurasi environment migrasi
 ├── app/
-│   ├── main.py          # Entry point FastAPI & lifespan
-│   ├── config.py        # Konfigurasi dari .env
-│   ├── database.py      # Engine SQLAlchemy & init_db
-│   ├── models/
-│   │   ├── __init__.py  # Export semua model & enum
-│   │   ├── enums.py     # Definisi enum status, klasifikasi akses, dll.
-│   │   ├── category.py  # ORM: tabel categories (hierarki folder KB)
-│   │   ├── job_ingest.py# ORM: tabel job_ingest (tracking batch ingest)
-│   │   ├── document.py  # ORM: tabel documents
-│   │   └── article.py   # ORM: articles, article_references, legal_references
-│   └── routers/
-│       ├── documents.py # GET /api/v1/documents (list & detail)
-│       └── ingest.py    # POST /api/v1/ingest/upload-pdf, /jobs, /status
-├── init_db/
-│   └── 01_enable_pgvector.sql  # Auto-run saat DB pertama dibuat
-├── storage/             # Folder penyimpanan PDF (auto-created)
-├── .env                 # Konfigurasi environment
-├── docker-compose.yml
-├── Dockerfile
-└── requirements.txt
+│   ├── models/              # ORM SQLAlchemy & Enums
+│   ├── routers/             # Endpoint FastAPI per modul
+│   ├── schemas/             # Pydantic validation & response models
+│   ├── services/            # Logika bisnis (File validation, Storage, Ingest, Audit)
+│   ├── config.py            # Pydantic Settings & environment loader
+│   ├── database.py          # SQLAlchemy Session & Base
+│   ├── main.py              # Inisialisasi FastAPI & Middleware
+│   └── create_admin.py      # Utilitas CLI pembuatan admin
+├── backups/                 # Direktori backup SQL & storage pra-reset
+├── init_db/                 # Skrip inisialisasi awal container PostgreSQL
+├── scripts/                 # Skrip smoke test & Docker entrypoint
+│   ├── entrypoint.sh        # Entrypoint Docker (Alembic upgrade + Uvicorn)
+│   └── smoke_test.py        # Skrip otomatis smoke test
+├── tests/                   # Suite pengujian otomatis Pytest (T01–T25)
+├── .env.example             # Template variabel lingkungan
+├── docker-compose.yml       # Definisi service PostgreSQL + Backend
+├── Dockerfile               # Image build backend Python 3.11-slim
+├── requirements.txt         # Dependensi produksi
+└── requirements-dev.txt     # Dependensi pengembangan & pengujian
 ```
-
----
-
-## 🗄️ Skema Database
-
-Skema diselaraskan 1:1 dengan `docs/08-data-model-dictionary.md`.
-
-### 1. `categories` (KATEGORI)
-Menyimpan struktur hierarki folder Knowledge Base.
-
-| Kolom | Tipe | Keterangan |
-|-------|------|------------|
-| `id` | SERIAL PK | Primary key |
-| `name` | VARCHAR(255) | Nama kategori/folder |
-| `parent_id` | FK → categories.id (NULL) | Parent kategori (self-referential) |
-| `auto_created` | BOOLEAN | Dibuat otomatis oleh aturan klasifikasi |
-| `classification_rule` | TEXT | Aturan/regex klasifikasi otomatis |
-| `created_at` / `updated_at` | TIMESTAMPTZ | Waktu pembuatan & pembaruan |
-
-### 2. `job_ingest` (JOB_INGEST)
-Tracking proses ingest / upload dokumen.
-
-| Kolom | Tipe | Keterangan |
-|-------|------|------------|
-| `id` | SERIAL PK | Primary key |
-| `job_type` | ENUM | `scraping`, `unggah_manual`, `sinkron_folder` |
-| `source_ref` | VARCHAR(255) | Nama file atau sumber rujukan |
-| `triggered_by` | VARCHAR(100) | Pemicu ingest |
-| `started_at` | TIMESTAMPTZ | Waktu mulai |
-| `finished_at` | TIMESTAMPTZ (NULL) | Waktu selesai |
-| `status` | ENUM | `antrian`, `berjalan`, `selesai`, `gagal` |
-| `success_count` | INT | Jumlah dokumen berhasil |
-| `duplicate_count` | INT | Jumlah dokumen duplikat |
-| `failed_count` | INT | Jumlah dokumen gagal |
-
-### 3. `documents` (DOKUMEN)
-Menyimpan metadata regulasi, path PDF asli, klasifikasi akses kepatuhan NDA, dan status pemrosesan.
-
-| Kolom | Tipe | Keterangan |
-|-------|------|------------|
-| `id` | SERIAL PK | Primary key |
-| `title` | VARCHAR(255) | Judul lengkap regulasi/kajian |
-| `regulation_number` | VARCHAR(100) (NULL, UNIQUE) | Nomor regulasi unik (mis: PP-24-2005) |
-| `regulation_type` | VARCHAR(100) (NULL) | Jenis regulasi (UU, PP, Permen, dll.) |
-| `release_date` | DATE (NULL) | Tanggal terbit |
-| `source_url` | TEXT (NULL) | URL sumber dokumen |
-| `file_path_pdf` | TEXT | Path file PDF fisik |
-| `file_hash` | VARCHAR(64) UNIQUE | SHA-256 hash untuk deduplikasi |
-| `file_size_bytes` | BIGINT (NULL) | Ukuran file PDF (bytes) |
-| `standardized_filename` | VARCHAR(255) (NULL) | Nama file terstandarisasi |
-| `access_classification` | ENUM (NOT NULL) | `publik` / `non_publik` (kepatuhan NDA) |
-| `document_role` | ENUM (NOT NULL) | `corpus_eksisting` / `draft_kajian` |
-| `status_keberlakuan` | ENUM (NOT NULL) | `berlaku`, `diubah`, `dicabut`, `tidak_diketahui` |
-| `processing_status` | ENUM (NOT NULL) | `diterima`, `diproses`, `perlu_koreksi`, `terindeks`, `gagal`, `ditolak` |
-| `extraction_method` | ENUM (NULL) | `teks_langsung` / `ocr` |
-| `full_text` | TEXT (NULL) | Teks lengkap dokumen |
-| `category_id` | FK → categories.id (NULL) | Kategori/folder KB |
-| `job_id` | FK → job_ingest.id (NULL) | Job ingest terkait |
-| `created_at` / `updated_at` | TIMESTAMPTZ | Timestamp |
-
-### 4. `articles` (PASAL)
-Struktur hierarkis pasal (Bab → Pasal → Ayat → Huruf) dengan pgvector.
-
-| Kolom | Tipe | Keterangan |
-|-------|------|------------|
-| `id` | SERIAL PK | Primary key |
-| `document_id` | FK → documents.id | Dokumen pemilik pasal |
-| `parent_id` | FK → articles.id (NULL) | Hierarki rekursif bab/pasal/ayat |
-| `chapter_title` | VARCHAR(255) (NULL) | Judul bab (misal: BAB II) |
-| `article_number` | VARCHAR(50) | Nomor pasal/ayat (misal: Pasal 5) |
-| `content_text` | TEXT | Isi teks pasal/ayat |
-| `level` | VARCHAR(20) | `bab`, `pasal`, `ayat`, `huruf` |
-| `order_index` | INT (NULL) | Urutan tampil dalam dokumen |
-| `embedding` | vector(1536) (NULL) | Vektor embedding semantic search |
-
-### 5. `article_references` (RUJUKAN_PASAL)
-Relasi antar pasal (misal: amandemen pasal spesifik).
-
-| Kolom | Tipe | Keterangan |
-|-------|------|------------|
-| `id` | SERIAL PK | Primary key |
-| `source_article_id` | FK → articles.id | Pasal yang merujuk |
-| `target_article_id` | FK → articles.id (NULL) | Pasal yang dirujuk (SET NULL jika target belum di KB) |
-| `target_citation_text` | VARCHAR(255) (NULL) | Teks sitiran target fallback |
-| `relation_type` | VARCHAR(50) | `MENGUBAH`, `MENCABUT`, `MERUJUK`, `MELENGKAPI` |
-
-### 6. `legal_references` (RUJUKAN_HUKUM)
-Rujukan hukum level dokumen (Dasar Hukum, Konsideran, Pencabutan).
-
-| Kolom | Tipe | Keterangan |
-|-------|------|------------|
-| `id` | SERIAL PK | Primary key |
-| `document_id` | FK → documents.id | Dokumen sumber rujukan |
-| `cited_text` | TEXT | Teks kutipan rujukan hukum |
-| `referenced_document_id` | FK → documents.id (NULL) | Dokumen yang dirujuk jika ada di KB |
-| `referenced_document_status` | ENUM (NULL) | Status keberlakuan regulasi yang dirujuk |
-| `reference_type` | ENUM | `dasar_hukum`, `rujukan_pasal`, `pencabutan`, `perubahan` |
-
----
-
-## 📡 API Endpoints
-
-| Method | Endpoint | Deskripsi |
-|--------|----------|-----------|
-| GET | `/` | Health check & info service |
-| GET | `/health` | Health check detail |
-| GET | `/api/v1/documents/` | Daftar dokumen regulasi (filter: `access_classification`, `document_role`, `category_id`, `status_keberlakuan`) |
-| GET | `/api/v1/documents/{id}` | Detail dokumen lengkap beserta pasal level teratas & rujukan hukum |
-| POST | `/api/v1/ingest/upload-pdf` | Upload PDF regulasi/kajian baru (wajib form `access_classification`, tracking otomatis ke `JobIngest`) |
-| GET | `/api/v1/ingest/jobs` | Riwayat job ingest dengan pagination & filter status/tipe |
-| GET | `/api/v1/ingest/status` | Ringkasan statistik pipeline ingest & penyimpanan |
-
----
-
-## 🔧 Perintah Berguna
-
-```bash
-# Jalankan semua service
-docker-compose up -d --build
-
-# Lihat log backend
-docker-compose logs -f backend
-
-# Lihat log database
-docker-compose logs -f db
-
-# Stop semua service
-docker-compose down
-
-# Stop + hapus data DB lama jika ingin rebuild skema dari awal (HATI-HATI: data lokal terhapus!)
-docker-compose down -v
-
-# Masuk ke PostgreSQL langsung
-docker exec -it hero_postgres psql -U hero_user -d hero_db
-```
-
----
-
-## 👥 Tim
-
-| Role | Nama | Tanggung Jawab |
-|------|------|----------------|
-| Backend | (kamu) | Database schema, Docker setup, API |
-| Data/ML | Fathir | Scraping, preprocessing, embedding |
-| Lead | Personil_A | Arsitektur & koordinasi |
