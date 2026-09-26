@@ -15,8 +15,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy source code
 COPY . .
 
+# Set execution permission for entrypoint script
+RUN chmod +x scripts/entrypoint.sh
+
 # Expose port
 EXPOSE 8000
 
-# Run command menggunakan 'python -m' agar modul 'app' terbaca dengan benar
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run entrypoint script
+CMD ["sh", "scripts/entrypoint.sh"]

@@ -1,12 +1,14 @@
+import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from app.config import settings
-from sqlalchemy import create_engine, text
+
+logger = logging.getLogger("hero")
 
 # SQLAlchemy engine
 engine = create_engine(
     settings.database_url,
-    pool_pre_ping=True,        # cek koneksi sebelum dipakai
+    pool_pre_ping=True,  # cek koneksi sebelum dipakai
     pool_size=10,
     max_overflow=20,
 )
@@ -27,14 +29,6 @@ def get_db():
         yield db
     finally:
         db.close()
-
-def init_db():
-    # Aktifkan ekstensi pgvector secara otomatis sebelum tabel dibuat
-    with engine.connect() as conn:
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
-        conn.commit()
-
-    Base.metadata.create_all(bind=engine)
 
 
 # Nama-nama kategori default yang akan di-seed saat tabel kosong
@@ -63,7 +57,7 @@ def seed_initial_categories(db) -> None:
 
     existing_count = db.query(Category).count()
     if existing_count > 0:
-        print(f"ℹ️  Seeder dilewati: tabel categories sudah berisi {existing_count} baris.")
+        logger.info("Seeder dilewati: tabel categories sudah berisi %d baris.", existing_count)
         return
 
     categories = [
@@ -72,4 +66,4 @@ def seed_initial_categories(db) -> None:
     ]
     db.add_all(categories)
     db.commit()
-    print(f"✅ Seeder: {len(categories)} kategori default berhasil diinsert → {_DEFAULT_CATEGORIES}")
+    logger.info("Seeder: %d kategori default berhasil diinsert -> %s", len(categories), _DEFAULT_CATEGORIES)

@@ -15,9 +15,9 @@ class AuditLog(Base):
     Kolom:
         id              → Primary key
         user_id         → FK ke users.id (nullable — bisa NULL untuk aksi anonim/sistem)
-        action          → Kode aksi singkat: 'LOGIN', 'DOWNLOAD_PDF', 'DELETE_DOC', dsb.
+        action          → Kode aksi singkat: 'LOGIN', 'UPLOAD_DOCUMENT', dsb.
         target_resource → Nama atau ID resource yang dikenai aksi (nullable)
-        ip_address      → Alamat IP klien (nullable)_
+        ip_address      → Alamat IP klien (nullable)
         timestamp       → Waktu kejadian (UTC, default saat baris dibuat)
     """
 
@@ -36,7 +36,7 @@ class AuditLog(Base):
         String(100),
         nullable=False,
         index=True,
-        comment="Kode aksi: LOGIN | DOWNLOAD_PDF | DELETE_DOC | dsb.",
+        comment="Kode aksi: LOGIN | UPLOAD_DOCUMENT | dsb.",
     )
     target_resource = Column(
         String(255),
@@ -62,19 +62,3 @@ class AuditLog(Base):
             f"<AuditLog id={self.id} user_id={self.user_id} "
             f"action='{self.action}' ts={self.timestamp}>"
         )
-
-
-
-# FUNGSI HELPER UNTUK MENCATAT LOG
-def create_audit_log(db, user_id: int, action: str, target_resource: str = None, ip_address: str = None):
-    """Helper untuk mencatat aktivitas ke tabel audit_logs."""
-    new_log = AuditLog(
-        user_id=user_id,
-        action=action,
-        target_resource=target_resource,
-        ip_address=ip_address
-    )
-    db.add(new_log)
-    db.commit()
-    db.refresh(new_log)
-    return new_log

@@ -14,9 +14,11 @@ build/
 .venv/
 venv/
 env/
+.pytest_cache/
 
-# ===== Storage =====
+# ===== Storage & Backups =====
 storage/
+backups/
 
 # ===== Docker =====
 *.log

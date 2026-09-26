@@ -23,18 +23,11 @@ from app.config import settings  # noqa: E402
 config.set_main_option("sqlalchemy.url", settings.database_url)
 
 # ---------------------------------------------------------------------------
-# Import Base dan semua model agar Alembic mendeteksi skema tabel secara
-# otomatis saat --autogenerate dijalankan.
-# PENTING: semua model wajib diimport di sini sebelum target_metadata diset.
+# Import Base dan semua model via app.models agar Alembic mendeteksi skema
+# tabel secara otomatis saat --autogenerate dijalankan.
 # ---------------------------------------------------------------------------
 from app.database import Base  # noqa: E402
-from app.models.enums import *  # noqa: F401, F403, E402
-from app.models.category import Category  # noqa: F401, E402
-from app.models.job_ingest import JobIngest  # noqa: F401, E402
-from app.models.document import Document  # noqa: F401, E402
-from app.models.article import Article, ArticleReference, LegalReference  # noqa: F401, E402
-from app.models.user import User  # noqa: F401, E402
-from app.models.audit_log import AuditLog  # noqa: F401, E402
+import app.models  # noqa: F401, E402
 
 # Target metadata untuk autogenerate
 target_metadata = Base.metadata

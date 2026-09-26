@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, Integer, String, Text, Date, DateTime, BigInteger, ForeignKey, Enum as SQLEnum
+    Column, Integer, String, Text, Date, DateTime, BigInteger, ForeignKey, Enum as SQLEnum, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -19,20 +19,23 @@ class Document(Base):
     Menyimpan metadata dokumen regulasi/peraturan dan path file-nya.
 
     Strategi penyimpanan ganda:
-    - file_path_pdf  → path file PDF asli (untuk validasi manual DPEA)
+    - file_path_pdf  → path file PDF asli relatif terhadap STORAGE_PATH
     - Blok teks ada di tabel Article (untuk indexing & semantic search)
     """
 
     __tablename__ = "documents"
+    __table_args__ = (
+        UniqueConstraint("file_hash", "file_size_bytes", name="uq_documents_hash_size"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(255), nullable=False, comment="Judul lengkap dokumen regulasi")
     regulation_number = Column(
         String(100),
-        unique=True,
+        unique=False,
         nullable=True,
         index=True,
-        comment="Nomor regulasi unik, misal: PP-24-2005"
+        comment="Nomor regulasi, misal: PP-24-2005"
     )
     regulation_type = Column(
         String(100),
@@ -44,16 +47,20 @@ class Document(Base):
     file_path_pdf = Column(
         Text,
         nullable=False,
-        comment="Path relatif file PDF asli, misal: /storage/pdf/PP-24-2005.pdf"
+        comment="Path relatif file PDF asli terhadap STORAGE_PATH, misal: pdf/3fa1c2d4e5f6_nama.pdf"
     )
     file_hash = Column(
         String(64),
-        unique=True,
+        unique=False,
         nullable=False,
         index=True,
-        comment="SHA-256 hash file untuk deduplikasi (sesuai instruksi mitra)"
+        comment="SHA-256 hash file untuk deduplikasi (sesuai ADR-05 / KEP-06)"
     )
-    file_size_bytes = Column(BigInteger, nullable=True, comment="Ukuran file PDF dalam bytes")
+    file_size_bytes = Column(
+        BigInteger,
+        nullable=False,
+        comment="Ukuran file PDF dalam bytes (pasangan pembanding wajib bersama file_hash)"
+    )
     standardized_filename = Column(
         String(255),
         nullable=True,
@@ -68,19 +75,21 @@ class Document(Base):
     document_role = Column(
         SQLEnum(PeranDokumen, native_enum=False),
         nullable=False,
-        default=PeranDokumen.corpus_eksisting,
-        comment="Peran dokumen: corpus_eksisting | draft_kajian"
+        index=True,
+        comment="Peran dokumen: corpus_eksisting | draft_kajian (FR-SCR-04a: wajib dinyatakan)"
     )
     status_keberlakuan = Column(
         SQLEnum(StatusKeberlakuan, native_enum=False),
         default=StatusKeberlakuan.tidak_diketahui,
         nullable=False,
+        index=True,
         comment="Status keberlakuan: berlaku | diubah | dicabut | tidak_diketahui"
     )
     processing_status = Column(
         SQLEnum(StatusPemrosesan, native_enum=False),
         default=StatusPemrosesan.diterima,
         nullable=False,
+        index=True,
         comment="Status pemrosesan pipeline: diterima | diproses | perlu_koreksi | terindeks | gagal | ditolak"
     )
     extraction_method = Column(
@@ -124,4 +133,4 @@ class Document(Base):
     )
 
     def __repr__(self):
-        return f"<Document id={self.id} reg={self.regulation_number} status={self.status_keberlakuan} access={self.access_classification}>"
+        return f"<Document id={self.id} reg={self.regulation_number} status={self.status_keberlakuan} role={self.document_role}>"
