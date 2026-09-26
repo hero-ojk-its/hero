@@ -18,9 +18,10 @@ if config.config_file_name is not None:
 # ---------------------------------------------------------------------------
 from app.config import settings  # noqa: E402
 
-# Timpa sqlalchemy.url dengan nilai dinamis dari settings,
-# sehingga tidak perlu hardcode di alembic.ini.
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Timpa sqlalchemy.url dengan nilai dinamis dari settings jika belum diset atau masih placeholder
+current_url = config.get_main_option("sqlalchemy.url")
+if not current_url or "driver://user:pass" in current_url:
+    config.set_main_option("sqlalchemy.url", settings.database_url)
 
 # ---------------------------------------------------------------------------
 # Import Base dan semua model via app.models agar Alembic mendeteksi skema

@@ -3,7 +3,7 @@ Router: /api/v1/documents
 Endpoint untuk membaca daftar dokumen regulasi dan detail pasal-pasalnya.
 """
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -11,6 +11,8 @@ from app.models.document import Document
 from app.models.article import Article, LegalReference
 from app.models.enums import KlasifikasiAkses, PeranDokumen, StatusKeberlakuan, JenisRujukan
 from app.schemas.article import UpdateDocumentStatusIn, UpdateDocumentStatusResponse
+from app.routers.auth import get_current_user
+from app.services.audit_service import record_audit, UPDATE_DOCUMENT_STATUS
 
 router = APIRouter()
 
@@ -147,7 +149,9 @@ def get_document(document_id: int, db: Session = Depends(get_db)):
 def update_document_status(
     document_id: int,
     payload: UpdateDocumentStatusIn,
+    request: Request,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ) -> UpdateDocumentStatusResponse:
     """
     Langkah:
@@ -206,6 +210,17 @@ def update_document_status(
                 reference_type=ref_type,
             )
             db.add(legal_ref)
+
+        actor_user_id = current_user.id if current_user and getattr(current_user, "id", None) else None
+        client_ip = request.client.host if request.client else None
+        record_audit(
+            db,
+            action=UPDATE_DOCUMENT_STATUS,
+            user_id=actor_user_id,
+            target_resource=f"document:{doc.id}",
+            ip_address=client_ip,
+            commit=False,
+        )
 
         db.commit()
         db.refresh(doc)

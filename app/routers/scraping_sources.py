@@ -3,7 +3,7 @@ Router: /api/v1/scraping-sources
 [US-12] CRUD untuk mengelola daftar URL situs sumber scraping regulasi.
 """
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -13,6 +13,13 @@ from app.schemas.scraping_source import (
     ScrapingSourceUpdate,
     ScrapingSourceResponse,
     validate_http_url,
+)
+from app.routers.auth import get_current_user
+from app.services.audit_service import (
+    record_audit,
+    CREATE_SOURCE,
+    UPDATE_SOURCE,
+    DELETE_SOURCE,
 )
 
 router = APIRouter()
@@ -26,7 +33,9 @@ router = APIRouter()
 )
 def create_scraping_source(
     payload: ScrapingSourceCreate,
+    request: Request,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     """
     [US-12] Menambah situs sumber baru.
@@ -66,6 +75,19 @@ def create_scraping_source(
         is_active=payload.is_active,
     )
     db.add(source)
+    db.flush()
+
+    actor_user_id = current_user.id if current_user and getattr(current_user, "id", None) else None
+    client_ip = request.client.host if request.client else None
+    record_audit(
+        db,
+        action=CREATE_SOURCE,
+        user_id=actor_user_id,
+        target_resource=f"scraping_source:{source.id}",
+        ip_address=client_ip,
+        commit=False,
+    )
+
     db.commit()
     db.refresh(source)
     return source
@@ -112,7 +134,9 @@ def get_scraping_source(
 def _process_update(
     source_id: int,
     payload: ScrapingSourceUpdate,
+    request: Request,
     db: Session,
+    current_user=None,
 ) -> ScrapingSource:
     """Helper untuk update data situs sumber (digunakan oleh PUT dan PATCH)"""
     source = db.query(ScrapingSource).filter(ScrapingSource.id == source_id).first()
@@ -159,6 +183,17 @@ def _process_update(
     if payload.is_active is not None:
         source.is_active = payload.is_active
 
+    actor_user_id = current_user.id if current_user and getattr(current_user, "id", None) else None
+    client_ip = request.client.host if request.client else None
+    record_audit(
+        db,
+        action=UPDATE_SOURCE,
+        user_id=actor_user_id,
+        target_resource=f"scraping_source:{source.id}",
+        ip_address=client_ip,
+        commit=False,
+    )
+
     db.commit()
     db.refresh(source)
     return source
@@ -172,10 +207,12 @@ def _process_update(
 def update_scraping_source_put(
     source_id: int,
     payload: ScrapingSourceUpdate,
+    request: Request,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     """[US-12] Mengubah nama, URL, atau menonaktifkan situs (is_active = False) via PUT."""
-    return _process_update(source_id, payload, db)
+    return _process_update(source_id, payload, request, db, current_user)
 
 
 @router.patch(
@@ -186,10 +223,12 @@ def update_scraping_source_put(
 def update_scraping_source_patch(
     source_id: int,
     payload: ScrapingSourceUpdate,
+    request: Request,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     """[US-12] Mengubah nama, URL, atau menonaktifkan situs (is_active = False) via PATCH."""
-    return _process_update(source_id, payload, db)
+    return _process_update(source_id, payload, request, db, current_user)
 
 
 @router.delete(
@@ -198,7 +237,9 @@ def update_scraping_source_patch(
 )
 def delete_scraping_source(
     source_id: int,
+    request: Request,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     """
     [US-12] Menghapus situs sumber scraping berdasarkan ID.
@@ -210,9 +251,22 @@ def delete_scraping_source(
             detail=f"Situs sumber scraping dengan ID {source_id} tidak ditemukan.",
         )
 
+    source_name = source.name
     db.delete(source)
+
+    actor_user_id = current_user.id if current_user and getattr(current_user, "id", None) else None
+    client_ip = request.client.host if request.client else None
+    record_audit(
+        db,
+        action=DELETE_SOURCE,
+        user_id=actor_user_id,
+        target_resource=f"scraping_source:{source_id}",
+        ip_address=client_ip,
+        commit=False,
+    )
+
     db.commit()
     return {
-        "message": f"Situs sumber scraping '{source.name}' berhasil dihapus.",
+        "message": f"Situs sumber scraping '{source_name}' berhasil dihapus.",
         "id": source_id,
     }
