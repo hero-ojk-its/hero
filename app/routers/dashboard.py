@@ -15,12 +15,14 @@ from app.models.document import Document
 from app.models.ingest_failure import IngestFailure
 from app.models.job_ingest import JobIngest
 from app.models.scraping_source import ScrapingSource
+from app.models.scan_session import ScanSession
 from app.models.enums import (
     JenisSumber,
     PeranDokumen,
     StatusKeberlakuan,
     StatusPemrosesan,
     StatusTindakLanjut,
+    StatusPindai,
 )
 
 router = APIRouter()
@@ -99,10 +101,23 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
         {"year": int(y), "count": cnt} for y, cnt in year_query if y is not None
     ]
 
-    # 7. Ingest metrics: open failures & needs review
+    # 7. Ingest metrics: open failures, needs review, active scans
     open_failures_cnt = (
         db.query(func.count(IngestFailure.id))
         .filter(IngestFailure.follow_up_status == StatusTindakLanjut.belum_ditangani)
+        .scalar()
+        or 0
+    )
+
+    active_scans_cnt = (
+        db.query(func.count(ScanSession.id))
+        .filter(
+            ScanSession.status.in_([
+                StatusPindai.memindai,
+                StatusPindai.siap_dipilih,
+                StatusPindai.menarik,
+            ])
+        )
         .scalar()
         or 0
     )
@@ -182,6 +197,7 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
         "ingest": {
             "open_failures": open_failures_cnt,
             "needs_review": needs_review_cnt,
+            "active_scans": active_scans_cnt,
             "recent_jobs": recent_jobs,
         },
         "sources": {

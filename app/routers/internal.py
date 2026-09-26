@@ -35,6 +35,7 @@ from app.models.enums import (
     StatusJobIngest,
 )
 from app.schemas.article import BulkArticleIn, BulkArticleResponse
+from app.schemas.scan import InternalCandidatesBatchIn, InternalScanClaimItem
 from app.services.audit_service import (
     record_audit,
     EXTRACTION_RESULT,
@@ -460,4 +461,66 @@ def requeue_document_extraction(
     return {
         "status": "requeued",
         "document_id": doc.id,
+    }
+
+
+# ==================== PUSH MODE SCAN ENDPOINTS (Langkah 7) ====================
+
+
+@router.post(
+    "/scans/claim",
+    summary="[Internal Data/ML] Mengklaim antrean sesi pemindaian mode push",
+    dependencies=[Depends(verify_internal_api_key)],
+)
+def claim_push_scans_endpoint(
+    limit: int = Query(1, ge=1, le=5, description="Jumlah sesi yang ingin diklaim (1-5)"),
+    db: Session = Depends(get_db),
+):
+    """
+    [Langkah 7 - Opsi B Data/ML] Mengambil sesi pemindaian antrean dengan mode='push'.
+    """
+    from app.services.scan_service import ScanService
+    from app.schemas.scan import InternalScanClaimItem
+
+    svc = ScanService(db)
+    sessions = svc.claim_push_scans(limit=limit)
+
+    return [
+        InternalScanClaimItem(
+            scan_id=s.id,
+            start_url=s.start_url,
+            crawl_depth=s.crawl_depth,
+            max_pages=settings.crawl_max_pages,
+            max_candidates=settings.crawl_max_candidates,
+        )
+        for s in sessions
+    ]
+
+
+@router.post(
+    "/scans/{scan_id}/candidates",
+    summary="[Internal Data/ML] Mengirim batch kandidat PDF hasil pemindaian",
+    dependencies=[Depends(verify_internal_api_key)],
+)
+def push_scan_candidates_endpoint(
+    scan_id: int,
+    payload: "InternalCandidatesBatchIn",
+    db: Session = Depends(get_db),
+):
+    """
+    [Langkah 7 - Opsi B Data/ML] Menerima kandidat PDF yang ditemukan oleh crawler eksternal.
+    Saat done=true, sistem otomatis menjalankan perbandingan dengan basis pengetahuan.
+    """
+    from app.services.scan_service import ScanService
+    svc = ScanService(db)
+    session = svc.push_candidates(scan_id, payload)
+    return {
+        "scan_id": session.id,
+        "status": session.status.value,
+        "pages_visited": session.pages_visited,
+        "candidates_total": session.candidates_total,
+        "candidates_new": session.candidates_new,
+        "candidates_existing": session.candidates_existing,
+        "candidates_uncertain": session.candidates_uncertain,
+        "done": payload.done,
     }

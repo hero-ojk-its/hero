@@ -18,6 +18,7 @@ from app.routers.documents import router as documents_router
 from app.routers.internal import router as internal_router  
 from app.routers.scraping_sources import router as scraping_sources_router
 from app.routers.dashboard import router as dashboard_router
+from app.routers.scans import router as scans_router
 
 logger = logging.getLogger("hero")
 
@@ -46,6 +47,12 @@ async def lifespan(app: FastAPI):
             recover_stuck_folder_jobs(db)
         except Exception as exc:
             logger.warning("Gagal memulihkan job sinkron_folder saat startup: %s", exc)
+
+        try:
+            from app.services.scan_service import recover_stuck_scan_sessions
+            recover_stuck_scan_sessions(db, stuck_minutes=settings.scan_stuck_minutes)
+        except Exception as exc:
+            logger.warning("Gagal memulihkan sesi pemindaian saat startup: %s", exc)
     finally:
         db.close()
     yield
@@ -78,7 +85,8 @@ app.include_router(ingest_router, prefix="/api/v1/ingest", tags=["Ingest"])
 app.include_router(documents_router, prefix="/api/v1/documents", tags=["Documents"])
 app.include_router(internal_router, prefix="/api/v1/internal", tags=["Internal"])  
 app.include_router(scraping_sources_router, prefix="/api/v1/scraping-sources", tags=["Scraping Sources"])  
-app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["Dashboard"])  
+app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["Dashboard"])
+app.include_router(scans_router)  
 
 
 @app.get("/", tags=["Health"])

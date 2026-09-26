@@ -279,6 +279,7 @@ def _format_single_document_response(doc: Document, db: Session) -> Dict[str, An
         "regulation_type": getattr(doc, "regulation_type", None),
         "release_date": doc.release_date,
         "source_url": doc.source_url,
+        "original_filename": getattr(doc, "original_filename", None),
         "file_path_pdf": doc.file_path_pdf,
         "standardized_filename": doc.standardized_filename,
         "access_classification": doc.access_classification,
