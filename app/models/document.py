@@ -1,6 +1,8 @@
 from sqlalchemy import (
-    Column, Integer, String, Text, Date, DateTime, BigInteger, ForeignKey, Enum as SQLEnum, UniqueConstraint
+    Column, Integer, String, Text, Date, DateTime, BigInteger, ForeignKey, Enum as SQLEnum, UniqueConstraint,
+    Computed, Index
 )
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -26,6 +28,10 @@ class Document(Base):
     __tablename__ = "documents"
     __table_args__ = (
         UniqueConstraint("file_hash", "file_size_bytes", name="uq_documents_hash_size"),
+        Index("ix_documents_search_vector", "search_vector", postgresql_using="gin"),
+        Index("ix_documents_reg_num_trgm", "regulation_number", postgresql_using="gin", postgresql_ops={"regulation_number": "gin_trgm_ops"}),
+        Index("ix_documents_title_trgm", "title", postgresql_using="gin", postgresql_ops={"title": "gin_trgm_ops"}),
+        Index("ix_documents_release_date", "release_date"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -101,6 +107,18 @@ class Document(Base):
         Text,
         nullable=True,
         comment="Teks mentah hasil ekstraksi dokumen lengkap"
+    )
+    search_vector = Column(
+        TSVECTOR,
+        Computed(
+            "setweight(to_tsvector('simple'::regconfig, coalesce(regulation_number, '')), 'A') || "
+            "setweight(to_tsvector('simple'::regconfig, coalesce(title, '')), 'A') || "
+            "setweight(to_tsvector('simple'::regconfig, coalesce(regulation_type, '')), 'B') || "
+            "setweight(to_tsvector('simple'::regconfig, left(coalesce(full_text, ''), 300000)), 'C')",
+            persisted=True
+        ),
+        nullable=True,
+        comment="TSVector computed untuk full-text search"
     )
 
     category_id = Column(

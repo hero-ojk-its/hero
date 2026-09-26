@@ -12,68 +12,97 @@ from app.database import get_db
 from app.models.document import Document
 from app.models.category import Category
 from app.models.article import Article, LegalReference
-from app.models.enums import KlasifikasiAkses, PeranDokumen, StatusKeberlakuan, JenisRujukan
+from datetime import date
+from app.models.enums import KlasifikasiAkses, PeranDokumen, StatusKeberlakuan, StatusPemrosesan, JenisRujukan
 from app.schemas.article import UpdateDocumentStatusIn, UpdateDocumentStatusResponse
 from app.routers.auth import get_current_user
 from app.services.audit_service import record_audit, UPDATE_DOCUMENT_STATUS
 from app.services.storage_service import StorageService, get_storage_service
 from app.services.category_service import CategoryService
 from app.services.placement_service import PlacementService
+from app.services.search_service import SearchService, SearchParams, SearchMode, SearchSort
 
 router = APIRouter()
 
 
-@router.get("/", summary="Daftar semua dokumen regulasi")
+@router.get("/", summary="Daftar & pencarian dokumen regulasi")
 def list_documents(
-    skip: int = 0,
-    limit: int = 20,
-    access_classification: Optional[KlasifikasiAkses] = Query(
-        None, description="Filter berdasarkan klasifikasi akses (publik / non_publik)"
-    ),
-    document_role: Optional[PeranDokumen] = Query(
-        None, description="Filter berdasarkan peran dokumen (corpus_eksisting / draft_kajian)"
-    ),
-    category_id: Optional[int] = Query(
-        None, description="Filter berdasarkan ID kategori folder KB"
-    ),
-    status_keberlakuan: Optional[StatusKeberlakuan] = Query(
-        None, description="Filter berdasarkan status keberlakuan regulasi"
-    ),
-    db: Session = Depends(get_db)
+    q: Optional[str] = Query(None, description="Kata kunci pencarian"),
+    mode: SearchMode = Query(SearchMode.phrase, description="Mode pencarian teks: phrase, all, web"),
+    regulation_number: Optional[str] = Query(None, description="Filter nomor regulasi"),
+    regulation_type: Optional[str] = Query(None, description="Filter jenis regulasi"),
+    category_id: Optional[int] = Query(None, description="Filter ID kategori folder KB"),
+    include_subcategories: bool = Query(True, description="Sertakan subkategori jika category_id diisi"),
+    status_keberlakuan: Optional[List[StatusKeberlakuan]] = Query(None, description="Filter status keberlakuan (bisa berulang)"),
+    document_role: Optional[PeranDokumen] = Query(None, description="Filter peran dokumen"),
+    access_classification: Optional[KlasifikasiAkses] = Query(None, description="Filter klasifikasi akses"),
+    processing_status: Optional[StatusPemrosesan] = Query(None, description="Filter status pemrosesan"),
+    date_from: Optional[date] = Query(None, description="Filter tanggal rilis awal (inklusif)"),
+    date_to: Optional[date] = Query(None, description="Filter tanggal rilis akhir (inklusif)"),
+    year: Optional[int] = Query(None, description="Filter tahun rilis"),
+    sort: Optional[SearchSort] = Query(None, description="Pengurutan hasil pencarian"),
+    skip: int = Query(0, ge=0, description="Offset pagination"),
+    limit: int = Query(20, ge=1, description="Batas dokumen per halaman (maks 100)"),
+    db: Session = Depends(get_db),
 ):
-    """Mengembalikan daftar dokumen regulasi dengan pagination dan filter opsional."""
-    query = db.query(Document)
+    """
+    Mengembalikan daftar dokumen regulasi dengan pagination dan pencarian full-text / multi-filter.
+    """
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(status_code=422, detail="date_from tidak boleh lebih besar dari date_to")
 
-    if access_classification:
-        query = query.filter(Document.access_classification == access_classification)
-    if document_role:
-        query = query.filter(Document.document_role == document_role)
-    if category_id:
-        query = query.filter(Document.category_id == category_id)
-    if status_keberlakuan:
-        query = query.filter(Document.status_keberlakuan == status_keberlakuan)
+    effective_sort = sort
+    if effective_sort is None:
+        effective_sort = SearchSort.relevance if (q and q.strip()) else SearchSort.release_date_desc
 
-    total = query.count()
-    docs = query.order_by(Document.id.desc()).offset(skip).limit(limit).all()
+    clamped_limit = min(max(1, limit), 100)
+
+    params = SearchParams(
+        q=q,
+        mode=mode,
+        regulation_number=regulation_number,
+        regulation_type=regulation_type,
+        category_id=category_id,
+        include_subcategories=include_subcategories,
+        status_keberlakuan=status_keberlakuan,
+        document_role=document_role,
+        access_classification=access_classification,
+        processing_status=processing_status,
+        date_from=date_from,
+        date_to=date_to,
+        year=year,
+        sort=sort,
+        skip=skip,
+        limit=clamped_limit,
+    )
+
+    search_svc = SearchService(db)
+    try:
+        total, items = search_svc.search(params)
+    except ValueError as ve:
+        raise HTTPException(status_code=422, detail=str(ve))
 
     return {
         "total": total,
-        "items": [
-            {
-                "id": d.id,
-                "title": d.title,
-                "regulation_number": d.regulation_number,
-                "regulation_type": getattr(d, "regulation_type", None),
-                "release_date": d.release_date,
-                "access_classification": d.access_classification,
-                "document_role": d.document_role,
-                "category_id": d.category_id,
-                "status_keberlakuan": d.status_keberlakuan,
-                "processing_status": d.processing_status,
-                "created_at": d.created_at,
-            }
-            for d in docs
-        ]
+        "items": items,
+        "query": {
+            "q": q,
+            "mode": mode.value if hasattr(mode, "value") else str(mode),
+            "regulation_number": regulation_number,
+            "regulation_type": regulation_type,
+            "category_id": category_id,
+            "include_subcategories": include_subcategories,
+            "status_keberlakuan": [s.value if hasattr(s, "value") else str(s) for s in status_keberlakuan] if status_keberlakuan else None,
+            "document_role": document_role.value if document_role and hasattr(document_role, "value") else document_role,
+            "access_classification": access_classification.value if access_classification and hasattr(access_classification, "value") else access_classification,
+            "processing_status": processing_status.value if processing_status and hasattr(processing_status, "value") else processing_status,
+            "date_from": date_from.isoformat() if date_from else None,
+            "date_to": date_to.isoformat() if date_to else None,
+            "year": year,
+            "sort": effective_sort.value if hasattr(effective_sort, "value") else str(effective_sort),
+            "skip": skip,
+            "limit": clamped_limit,
+        },
     }
 
 
