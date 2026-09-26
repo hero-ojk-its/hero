@@ -1,6 +1,6 @@
 # MoM — Weekly Update #2 (Minggu 1 Fase 1)
 
-**Tanggal:** Senin, 15 September 2026, 14.19 WIB · ± 32 menit · Zoom
+**Tanggal:** Selasa, 15 September 2026, 14.19 WIB · ± 32 menit · Zoom
 **Hadir DPEA:** Pak Faris Budi (Product Owner + Agile Coach), Pak Andika Prihandoko (Mentor)
 **Hadir Tim:** Zaky (PM/BA), Rafli (Backend), Ikhwan (Frontend), Hamdan (Infra/QA), Fathir (Data/ML — menyusul)
 **Notulis:** Zaky
