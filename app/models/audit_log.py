@@ -4,6 +4,7 @@ Merekam jejak aktivitas pengguna (siapa melakukan apa, kapan, dari mana).
 """
 from datetime import datetime, timezone
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -17,6 +18,7 @@ class AuditLog(Base):
         user_id         → FK ke users.id (nullable — bisa NULL untuk aksi anonim/sistem)
         action          → Kode aksi singkat: 'LOGIN', 'UPLOAD_DOCUMENT', dsb.
         target_resource → Nama atau ID resource yang dikenai aksi (nullable)
+        detail          → Keterangan / diff perubahan (nullable JSONB)
         ip_address      → Alamat IP klien (nullable)
         timestamp       → Waktu kejadian (UTC, default saat baris dibuat)
     """
@@ -42,6 +44,11 @@ class AuditLog(Base):
         String(255),
         nullable=True,
         comment="Nama atau ID resource yang dikenai aksi, misal: 'document:42'",
+    )
+    detail = Column(
+        JSONB,
+        nullable=True,
+        comment="Keterangan / diff perubahan JSONB",
     )
     ip_address = Column(
         String(45),  # cukup untuk IPv4 (15) maupun IPv6 (39) + padding

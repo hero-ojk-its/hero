@@ -73,6 +73,13 @@ class IngestFailure(Base):
         index=True,
         comment="Wajib terisi bila failure_type=duplikat",
     )
+    document_id = Column(
+        Integer,
+        ForeignKey("documents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="FK ke dokumen untuk kegagalan pasca-ingest (ekstraksi/OCR)",
+    )
     ingest_options = Column(
         JSONB,
         nullable=False,
@@ -136,6 +143,7 @@ class IngestFailure(Base):
     # Relasi
     job = relationship("JobIngest", foreign_keys=[job_id], back_populates="failures")
     duplicate_of_document = relationship("Document", foreign_keys=[duplicate_of_document_id])
+    document = relationship("Document", foreign_keys=[document_id])
     resolved_document = relationship("Document", foreign_keys=[resolved_document_id])
     last_retry_job = relationship("JobIngest", foreign_keys=[last_retry_job_id])
     handled_by_user = relationship("User", foreign_keys=[handled_by_user_id])

@@ -358,6 +358,59 @@ class FailureService:
                 "Kegagalan ini tidak dapat diproses ulang (tidak retryable atau sudah diproses ulang)."
             )
 
+        from app.models.document import Document
+        from app.models.enums import StatusPemrosesan
+        from app.services.ingest_service import (
+            IngestService,
+            IngestItem,
+            IngestOptions,
+            DocumentMetadataInput,
+            ItemOutcome,
+        )
+
+        # Kasus khusus retry kegagalan ekstraksi Data/ML
+        if failure.failure_type in (JenisKegagalan.ekstraksi_gagal, JenisKegagalan.ocr_gagal) and failure.document_id is not None:
+            doc = self.db.query(Document).filter(Document.id == failure.document_id).first()
+            if not doc:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Dokumen ID {failure.document_id} terkait kegagalan ini tidak ditemukan.",
+                )
+
+            # Requeue dokumen
+            doc.processing_status = StatusPemrosesan.diterima
+            doc.extraction_claimed_at = None
+
+            failure.follow_up_status = StatusTindakLanjut.diproses_ulang
+            failure.attempt_count += 1
+            failure.last_retry_at = datetime.now(timezone.utc)
+            if actor_user_id is not None:
+                failure.handled_by_user_id = actor_user_id
+
+            record_audit(
+                self.db,
+                action=RETRY_FAILURE,
+                user_id=actor_user_id,
+                target_resource=f"ingest_failure:{failure.id}",
+                detail={"outcome": "requeued", "document_id": doc.id},
+                ip_address=ip_address,
+                commit=False,
+            )
+            self.db.commit()
+            self.db.refresh(failure)
+
+            @dataclass
+            class RequeueResult:
+                outcome: ItemOutcome = ItemOutcome.requeued
+                document_id: int = doc.id
+                message: str = f"Dokumen ID {doc.id} berhasil di-antrekan ulang untuk ekstraksi."
+
+            return RetryResult(
+                failure=failure,
+                item_result=RequeueResult(),
+                job=failure.job,
+            )
+
         if not failure.quarantine_path or not self.storage.exists(failure.quarantine_path):
             failure.is_retryable = False
             self.db.commit()

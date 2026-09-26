@@ -20,7 +20,12 @@ RETRY_FAILURE = "RETRY_FAILURE"
 UPDATE_FAILURE = "UPDATE_FAILURE"
 PLACE_DOCUMENT = "PLACE_DOCUMENT"
 CREATE_CATEGORY = "CREATE_CATEGORY"
-
+OPEN_PDF = "OPEN_PDF"
+DOWNLOAD_PDF = "DOWNLOAD_PDF"
+UPDATE_METADATA = "UPDATE_METADATA"
+EXTRACTION_RESULT = "EXTRACTION_RESULT"
+EXTRACTION_FAILED = "EXTRACTION_FAILED"
+EXTRACTION_REQUEUED = "EXTRACTION_REQUEUED"
 
 
 def record_audit(
@@ -29,6 +34,7 @@ def record_audit(
     *,
     user_id: Optional[int] = None,
     target_resource: Optional[str] = None,
+    detail: Optional[dict] = None,
     ip_address: Optional[str] = None,
     commit: bool = True,
 ) -> Optional[AuditLog]:
@@ -40,6 +46,7 @@ def record_audit(
         action: Kode aksi wajib (contoh: LOGIN, UPLOAD_DOCUMENT, dsb.).
         user_id: ID pengguna yang melakukan aksi (None untuk aksi anonim/sistem).
         target_resource: Nama/ID resource yang dikenai aksi, misal: 'document:42'.
+        detail: Keterangan / metadata / diff perubahan (dict).
         ip_address: Alamat IP klien.
         commit: Jika True, lakukan commit langsung dan telan exception bila gagal.
                 Jika False, hanya db.add() agar ikut transaksi pemanggil.
@@ -51,6 +58,7 @@ def record_audit(
         user_id=user_id,
         action=action,
         target_resource=target_resource,
+        detail=detail,
         ip_address=ip_address,
     )
 

@@ -541,11 +541,12 @@ def retry_failure(
             detail=str(err),
         )
 
+    job_id_val = retry_res.job.id if retry_res.job else retry_res.failure.job_id
     return FailureRetryResponse(
         failure=_format_failure_response(retry_res.failure),
         outcome=retry_res.item_result.outcome.value,
         document_id=retry_res.item_result.document_id,
-        job_id=retry_res.job.id,
+        job_id=job_id_val,
         message=retry_res.item_result.message,
     )
 

@@ -2,7 +2,7 @@ from sqlalchemy import (
     Column, Integer, String, Text, Date, DateTime, BigInteger, ForeignKey, Enum as SQLEnum, UniqueConstraint,
     Computed, Index
 )
-from sqlalchemy.dialects.postgresql import TSVECTOR
+from sqlalchemy.dialects.postgresql import TSVECTOR, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -136,12 +136,47 @@ class Document(Base):
         comment="FK ke job ingest terkait"
     )
 
+    extraction_confidence = Column(
+        JSONB,
+        nullable=True,
+        comment="Keyakinan ekstraksi per field"
+    )
+    metadata_corrected_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Waktu koreksi metadata manual"
+    )
+    metadata_corrected_by = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="ID pengguna yang melakukan koreksi metadata manual"
+    )
+    extraction_claimed_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Waktu pengambilan klaim ekstraksi ML"
+    )
+    extraction_attempts = Column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        comment="Jumlah upaya pemrosesan ekstraksi ML"
+    )
+    extracted_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Waktu hasil ekstraksi ML diterima"
+    )
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relasi
     category = relationship("Category", back_populates="documents")
     job = relationship("JobIngest", back_populates="documents")
+    corrected_by_user = relationship("User", foreign_keys=[metadata_corrected_by])
     articles = relationship("Article", back_populates="document", cascade="all, delete-orphan")
     legal_references = relationship(
         "LegalReference",

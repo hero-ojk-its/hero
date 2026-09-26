@@ -17,12 +17,23 @@ from app.routers.ingest import router as ingest_router
 from app.routers.documents import router as documents_router
 from app.routers.internal import router as internal_router  
 from app.routers.scraping_sources import router as scraping_sources_router
+from app.routers.dashboard import router as dashboard_router
 
 logger = logging.getLogger("hero")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Peringatan keamanan untuk internal_api_key jika bukan mode development
+    if settings.app_env != "development":
+        default_keys = ("change-me", "ganti-dengan", "change-me-internal-key")
+        if any(settings.internal_api_key.lower().startswith(prefix) for prefix in default_keys):
+            logger.critical(
+                "PERINGATAN KEAMANAN KRITIS: 'INTERNAL_API_KEY' masih menggunakan nilai default di environment non-development (%s)! "
+                "Harap segera perbarui kunci API internal ini sebelum rilis ke production.",
+                settings.app_env,
+            )
+
     db = SessionLocal()
     try:
         try:
@@ -61,6 +72,7 @@ app.include_router(ingest_router, prefix="/api/v1/ingest", tags=["Ingest"])
 app.include_router(documents_router, prefix="/api/v1/documents", tags=["Documents"])
 app.include_router(internal_router, prefix="/api/v1/internal", tags=["Internal"])  
 app.include_router(scraping_sources_router, prefix="/api/v1/scraping-sources", tags=["Scraping Sources"])  
+app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["Dashboard"])  
 
 
 @app.get("/", tags=["Health"])

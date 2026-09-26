@@ -42,6 +42,7 @@ class ItemOutcome(str, enum.Enum):
     success = "success"
     duplicate = "duplicate"
     failed = "failed"
+    requeued = "requeued"
 
 
 @dataclass

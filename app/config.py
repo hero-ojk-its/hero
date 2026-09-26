@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     category_unknown_year: str = "Tanpa Tahun"
     draft_category_root: str = "Draft Kajian"
 
+    # Ekstraksi Data/ML & Metadata (Langkah 5)
+    metadata_confidence_threshold: float = 0.7
+    extraction_claim_timeout_minutes: int = 30
+    extraction_max_attempts: int = 3
+
     @field_validator("category_path_template")
     @classmethod
     def validate_category_path_template(cls, v: str) -> str:
