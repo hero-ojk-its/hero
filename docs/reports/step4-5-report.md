@@ -266,9 +266,12 @@ Rincian lengkap tertuang pada berkas: [ingest-extraction-contract.md](file:///c:
 ## 10. Riwayat Git Log Branch `feat/step4-5-search-detail`
 
 ```
-63c86e1 feat: implement full-text search with tsvector and trgm (Step 4)
-c8ba584 docs: update git log in final report
-920719e docs: add step 2-3 report and update README and env example
-ad97fff test: add comprehensive test suite for failures, naming, categories, and placement
-fc6328a feat: implement standard naming and category placement (Step 3)
+* 747d1ed docs: add Step 4-5 documentation, API contracts, and completion report
+* 65a58fc test: add comprehensive test suite for Step 5 detail, correction, extraction, and dashboard
+* 5c37378 feat: implement document detail, metadata correction, and ML extraction integration (Step 5)
+* 63c86e1 feat: implement full-text search with tsvector and trgm (Step 4)
+* c8ba584 docs: update git log in final report
+* 920719e docs: add step 2-3 report and update README and env example
+* ad97fff test: add comprehensive test suite for failures, naming, categories, and placement
+* fc6328a feat: implement standard naming and category placement (Step 3)
 ```
