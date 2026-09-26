@@ -75,6 +75,7 @@ def db_session() -> Generator[Session, None, None]:
                 legal_references,
                 articles,
                 documents,
+                ingest_failures,
                 job_ingest,
                 scraping_sources,
                 audit_logs,

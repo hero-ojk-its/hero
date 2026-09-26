@@ -25,17 +25,20 @@ def test_t01_health_and_root(client: TestClient):
 
 
 def test_t02_categories_seeded(client: TestClient):
-    """T02: GET /api/v1/categories/ -> 200, berisi 5 kategori seed."""
+    """T02: GET /api/v1/categories/ -> 200, berisi 7 kategori seed root KB."""
     res = client.get("/api/v1/categories/")
     assert res.status_code == 200
     categories = res.json()
-    assert len(categories) == 5
+    assert len(categories) == 7
     names = [c["name"] for c in categories]
     assert "POJK" in names
     assert "SEOJK" in names
     assert "UU" in names
     assert "PP" in names
     assert "Peraturan Internal DPEA" in names
+    assert "Lainnya" in names
+    assert "Draft Kajian" in names
+
 
 
 def test_t03_list_endpoints_status_200(client: TestClient):
