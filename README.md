@@ -174,14 +174,49 @@ Format penamaan baku: `{nomor} {judul} {tahun}` (contoh: `11-POJK.03-2022 Penyel
 
 ---
 
-## 📡 Daftar Endpoint API (v0.5.0)
+## 📂 Sumber Dokumen & Sinkronisasi Folder Lokal (Langkah 6)
+
+### 1. Jenis Sumber Dokumen
+Sistem mendukung 3 jenis sumber dokumen (`JenisSumber`):
+1. `situs_web`: Perayap web regulasi publik (dieksekusi melalui alur pemindaian Langkah 7).
+2. `folder_lokal`: Sinkronisasi direktori berkas PDF lokal pada server.
+3. `onedrive_public`: Tautan folder OneDrive/SharePoint publik (Fase 1: disinkronkan ke folder lokal terlebih dahulu).
+
+### 2. Konfigurasi Akar Folder Lokal (`LOCAL_SOURCE_ROOTS`)
+Demi keamanan, backend dibatasi hanya membaca direktori di bawah akar yang diizinkan:
+- **Environment:** `LOCAL_SOURCE_ROOTS` (daftar jalur dipisahkan titik koma `;`, default: `./sources`).
+- **Di Lingkungan Docker:** `./sources` di-mount ke `/app/sources:ro`. Folder yang didaftarkan ke API adalah `/app/sources/<subfolder>`.
+- **Di Lingkungan Lokal:** Folder ditaruh di `./sources/<subfolder>` dan didaftarkan menggunakan jalur absolut atau relatif yang berada di bawah `./sources`.
+
+### 3. Idempotensi & `skipped_unchanged`
+Tabel `source_files` mengindeks berkas per sumber dengan mencatat `size_bytes`, `mtime`, dan `file_hash`:
+- Jika ukuran berkas (`size_bytes`) dan waktu modifikasi (`mtime`) tidak berubah dari hasil sukses sebelumnya, isi berkas **tidak dibaca ulang dari disk**, dan ditandai sebagai `skipped_unchanged`.
+- Fitur ini menghemat I/O dan menjaga proses sinkronisasi tetap cepat walau terdapat ribuan dokumen.
+
+### 4. Klasifikasi Akses Default `non_publik`
+Dokumen dari `folder_lokal` dan `onedrive_public` secara default diberi klasifikasi `non_publik`. Hal ini dikarenakan folder lokal pada institusi perbankan/regulator umumnya memuat draft kajian, peraturan internal yang tunduk pada NDA, atau dokumen rahasia sebelum dipublikasikan secara resmi ke publik. Dokumen dari `situs_web` tetap default `publik`.
+
+### 5. Panduan OneDrive pada Fase 1
+Pada Fase 1, konektor langsung OneDrive API belum diimplementasikan. Untuk menggunakan OneDrive:
+1. Sinkronkan folder OneDrive ke subfolder `./sources/onedrive/` pada host.
+2. Daftarkan folder tersebut sebagai `folder_lokal` melalui API dengan jalur `/app/sources/onedrive` (di Docker) atau `./sources/onedrive` (di lokal).
+
+---
+
+## 🔐 Keamanan Kunci API Internal
+Kunci API internal (`INTERNAL_API_KEY`) digunakan untuk autentikasi worker Data/ML pada endpoint `/api/v1/internal/*`.
+> **PENTING:** Kunci API internal wajib diganti dengan nilai rahasia yang kuat sebelum dideploy ke environment staging/production. Kunci ini dibagikan ke tim Data/ML melalui kanal privat yang aman, bukan dicantumkan dalam dokumentasi publik atau repository.
+
+---
+
+## 📡 Daftar Endpoint API (v0.6.0)
 
 ### 1. Health & Dashboard
 | Method | Endpoint | Deskripsi |
 |---|---|---|
 | `GET` | `/` | Status ringkas service |
 | `GET` | `/health` | Health check database (`SELECT 1`) & flag auth |
-| `GET` | `/api/v1/dashboard/summary` | Statistik ringkasan Knowledge Base, Ingest, dan Scraping Sources |
+| `GET` | `/api/v1/dashboard/summary` | Statistik ringkasan Knowledge Base, Ingest, dan Scraping Sources (termasuk `sources.by_type`) |
 | `GET` | `/debug-routes` | Daftar semua rute (khusus `APP_ENV=development`) |
 
 ### 2. Ingest Pipeline & Log Kegagalan (`/api/v1/ingest`)
@@ -189,8 +224,8 @@ Format penamaan baku: `{nomor} {judul} {tahun}` (contoh: `11-POJK.03-2022 Penyel
 |---|---|---|
 | `POST` | `/upload-pdf` | Upload PDF regulasi / draft kajian (tunggal/jamak). |
 | `GET` | `/check-duplicate` | Screening deduplikasi sebelum upload |
-| `GET` | `/jobs` | Riwayat job ingest |
-| `GET` | `/jobs/{job_id}` | Detail lengkap job ingest beserta dokumen dan kegagalan |
+| `GET` | `/jobs` | Riwayat job ingest (filter `source_id`, `status`, `job_type`) |
+| `GET` | `/jobs/{job_id}` | Detail lengkap job ingest beserta progres, dokumen, dan kegagalan |
 | `GET` | `/status` | Statistik ringkasan dokumen, job, dan `open_failures` |
 | `GET` | `/failures` | Daftar log kegagalan & antrian retry |
 | `GET` | `/failures/{failure_id}` | Detail satu baris kegagalan |
@@ -228,10 +263,19 @@ Format penamaan baku: `{nomor} {judul} {tahun}` (contoh: `11-POJK.03-2022 Penyel
 | `POST` | `/extraction/requeue/{id}` | Kembalikan dokumen ke antrean `diterima` |
 | `POST` | `/articles` | Bulk insert chunk pasal & embedding 1536-dim |
 
-### 6. Situs Sumber Scraping & Jejak Audit
+### 6. Sumber Scraping & Sinkronisasi Folder (`/api/v1/scraping-sources`)
 | Method | Endpoint | Deskripsi |
 |---|---|---|
-| `GET` / `POST` | `/api/v1/scraping-sources/` | Kelola situs sumber scraping |
+| `GET` / `POST` | `/api/v1/scraping-sources/` | Kelola sumber dokumen (situs web, folder lokal, OneDrive) |
+| `GET` | `/api/v1/scraping-sources/{id}` | Detail satu sumber dokumen (termasuk `address`, status run terakhir) |
+| `PUT` / `PATCH` | `/api/v1/scraping-sources/{id}` | Ubah properti sumber dokumen |
+| `DELETE` | `/api/v1/scraping-sources/{id}` | Hapus sumber dokumen (cascade ke `source_files`) |
+| `POST` | `/api/v1/scraping-sources/{id}/run` | Jalankan sinkronisasi sumber folder (202 async / 200 via `?wait=true`) |
+| `GET` | `/api/v1/scraping-sources/{id}/files` | Daftar berkas terindeks per sumber (pagination & filter status) |
+
+### 7. Jejak Audit & Autentikasi
+| Method | Endpoint | Deskripsi |
+|---|---|---|
 | `GET` | `/api/v1/audit-logs/` | Daftar jejak audit aktivitas (filter `action`, `user_id`, `target_resource`) |
 | `POST` | `/api/v1/auth/login` | Login form OAuth2 untuk memperoleh token JWT Bearer |
 

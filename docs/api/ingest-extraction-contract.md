@@ -104,7 +104,8 @@ Mengirim hasil ekstraksi teks, metadata, dan skor keyakinan (confidence), atau m
 | `regulation_number` | `nomor_peraturan` | string | Opsional | Nomor regulasi (misal `11/POJK.03/2022`) |
 | `regulation_type` | `jenis_peraturan` | string | Opsional | Jenis regulasi (misal `POJK`, `SEOJK`, `UU`) |
 | `release_date` | `tanggal_terbit` | string (YYYY-MM-DD) | Opsional | Tanggal pengundangan / penetapan |
-| `extraction_method` | `metode_ekstraksi` | string | Opsional | Contoh: `surya_ocr`, `pdfplumber`, `llm_v1` |
+| `extraction_method` | `metode_ekstraksi` | string | Opsional | Enum: `teks_langsung` \| `ocr`. Bila dikirim nama bebas (misal `surya_ocr`), otomatis dipetakan ke enum & disimpan ke `extraction_engine` |
+| `extraction_engine` | `mesin_ekstraksi` | string | Opsional | Nama mesin/librari ekstraksi (contoh: `surya_ocr`, `pdfplumber`, `llm_v1`) |
 | `full_text` | `teks_lengkap` | string | Opsional | Teks lengkap dokumen |
 | `confidence` | `confidence` | object | Opsional | Skor confidence 0.0 – 1.0 per field metadata |
 | `error` | `error` | object | Opsional | `{ "code": "ekstraksi_gagal" | "ocr_gagal", "message": "..." }` |
