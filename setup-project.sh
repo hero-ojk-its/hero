@@ -4,7 +4,8 @@
 #
 # Struktur papan — acuan: docs/07-wbs-sprint-plan.md, docs/06-product-backlog-user-stories.md
 #   Status      : Backlog · To Do · In Progress · In Review / Testing · Menunggu Mitra · Done
-#   Sprint      : iteration Sprint 1–8 sesuai PRD, sejajar dengan fase (Sprint 6 = 3 minggu, Sprint 8 = 11 hari)
+#   Sprint      : iteration Inception (31 Agu–15 Sep) + Sprint 1–7, 2 minggu Rabu–Selasa;
+#                 Sprint Review di rapat mingguan Selasa terakhir tiap sprint
 #   Peran       : PM/BA · Backend · Frontend · Data/ML · Infra/QA   (Data/ML belum bisa di-assign)
 #   Prioritas   : Must · Should · Could   (sama dengan label prio:)
 #   Story Point : angka, dari tabel "Rincian" di badan issue
@@ -53,16 +54,16 @@ echo "✓ Status"
 gh api graphql -f query='
 mutation($p:ID!){ createProjectV2Field(input:{projectId:$p, dataType:ITERATION, name:"Sprint",
   iterationConfiguration:{startDate:"2026-08-31", duration:14, iterations:[
-    {title:"Sprint 1 · Inception & Setup",     startDate:"2026-08-31", duration:14},
-    {title:"Sprint 2 · Scraping & Ingest",     startDate:"2026-09-14", duration:14},
-    {title:"Sprint 3 · Scraping & Ingest",     startDate:"2026-09-28", duration:14},
-    {title:"Sprint 4 · Analisa & Summary",     startDate:"2026-10-12", duration:14},
-    {title:"Sprint 5 · Analisa & Summary",     startDate:"2026-10-26", duration:14},
-    {title:"Sprint 6 · Harmonisasi",           startDate:"2026-11-09", duration:21},
-    {title:"Sprint 7 · Tanggapan PoV",         startDate:"2026-11-30", duration:14},
-    {title:"Sprint 8 · Stabilisasi & UAT",     startDate:"2026-12-14", duration:11}
+    {title:"Inception · pra-sprint (Fase 0)", startDate:"2026-08-31", duration:16},
+    {title:"Sprint 1 · Scraping & Ingest",    startDate:"2026-09-16", duration:14},
+    {title:"Sprint 2 · Scraping & Ingest",    startDate:"2026-09-30", duration:14},
+    {title:"Sprint 3 · Analisa & Summary",    startDate:"2026-10-14", duration:14},
+    {title:"Sprint 4 · Analisa & Summary",    startDate:"2026-10-28", duration:14},
+    {title:"Sprint 5 · Harmonisasi",          startDate:"2026-11-11", duration:14},
+    {title:"Sprint 6 · Tanggapan PoV",        startDate:"2026-11-25", duration:14},
+    {title:"Sprint 7 · Stabilisasi & UAT",    startDate:"2026-12-09", duration:14}
 ]}}){ clientMutationId } }' -f p="$PID" >/dev/null
-echo "✓ Sprint 1–8"
+echo "✓ Inception + Sprint 1–7"
 
 # ---------- Field kustom ----------
 gh project field-create "$NUM" --owner "$OWNER" --name "Peran" --data-type SINGLE_SELECT \
