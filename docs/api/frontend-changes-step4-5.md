@@ -21,7 +21,7 @@ Endpoint `GET /api/v1/documents/` telah diperluas dengan kemampuan full-text sea
 | `include_subcategories` | boolean | `true` | Jika `true`, otomatis mencakup seluruh dokumen di subfolder turunannya |
 | `status_keberlakuan` | list[string] | `None` | Filter status regulasi. **Mendukung multi-select** dengan mengulang parameter: `?status_keberlakuan=berlaku&status_keberlakuan=diubah`. Bila tidak dikirim, **dokumen dicabut tetap ikut muncul** |
 | `document_role` | string | `None` | `corpus_eksisting` atau `draft_kajian` |
-| `access_classification`| string | `None` | `publik` atau `rahasia` |
+| `access_classification`| string | `None` | `publik` atau `non_publik` |
 | `processing_status` | string | `None` | `diterima`, `diproses`, `perlu_koreksi`, `terindeks`, `gagal`, `ditolak` |
 | `date_from` | YYYY-MM-DD | `None` | Batas awal `release_date` (inklusif) |
 | `date_to` | YYYY-MM-DD | `None` | Batas akhir `release_date` (inklusif) |

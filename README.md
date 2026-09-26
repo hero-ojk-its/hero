@@ -131,6 +131,7 @@ Backend menyediakan API terpadu untuk worker Data/ML (Fathir) di `/api/v1/intern
 ### Aturan Bisnis Ekstraksi & Koreksi
 - **Penentuan Status:** Dokumen dengan metadata lengkap dan confidence ≥ threshold (`0.7`) otomatis berstatus `terindeks` dan ditempatkan ke `kb/{jenis}/{tahun}/`. Dokumen dengan confidence < 0.7 atau metadata tidak lengkap masuk status `perlu_koreksi`.
 - **Preservasi Koreksi Manual:** Jika reviewer telah mengoreksi metadata secara manual (`metadata_corrected_at` terisi), hasil ekstraksi ML tidak akan menimpa metadata manual tersebut.
+- **Keamanan Kunci Internal:** Kunci API internal (`INTERNAL_API_KEY`) dibagikan ke tim Data/ML melalui kanal privat yang aman, bukan melalui repositori dokumen terbuka.
 
 ---
 

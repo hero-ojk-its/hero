@@ -132,15 +132,19 @@ def run_smoke_test(base_url: str = "http://127.0.0.1:8000") -> int:
     claimed_doc_found = False
     try:
         headers = {"X-Internal-API-Key": internal_api_key}
-        res_claim = client.post("/api/v1/internal/extraction/claim?limit=10", headers=headers)
+        res_claim = client.post("/api/v1/internal/extraction/claim?limit=1", headers=headers)
         if res_claim.status_code == 200:
             claim_items = res_claim.json()
-            if any(item.get("document_id") == uploaded_doc_id for item in claim_items):
+            if claim_items and any(item.get("document_id") == uploaded_doc_id for item in claim_items):
                 claimed_doc_found = True
-                results.append(("POST", "2. /internal/extraction/claim (Claim Antrean)", res_claim.status_code, f"OK (claimed {len(claim_items)} items)"))
+                results.append(("POST", "2. /internal/extraction/claim (Claim Antrean)", res_claim.status_code, f"OK (claimed target doc {uploaded_doc_id})"))
             else:
-                # Mungkin diklaim di claim sebelumnya atau list berisi item lain
-                results.append(("POST", "2. /internal/extraction/claim (Claim Antrean)", res_claim.status_code, f"OK ({len(claim_items)} items)"))
+                # Bila yang terklaim bukan target doc, segera requeue agar tidak tertahan di status diproses
+                for item in claim_items:
+                    other_id = item.get("document_id")
+                    if other_id and other_id != uploaded_doc_id:
+                        client.post(f"/api/v1/internal/extraction/requeue/{other_id}", headers=headers)
+                results.append(("POST", "2. /internal/extraction/claim (Claim Antrean)", res_claim.status_code, f"OK (claimed & requeued non-target docs)"))
         else:
             has_failure = True
             results.append(("POST", "2. /internal/extraction/claim (Claim Antrean)", res_claim.status_code, "FAIL"))

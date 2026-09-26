@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 from datetime import date
 from typing import Optional, List, Dict, Any, Tuple
-from sqlalchemy import func, or_, and_, desc, asc, literal_column
+from sqlalchemy import func, or_, and_, desc, asc, literal_column, case
 from sqlalchemy.orm import Session
 
 from app.models.document import Document
@@ -21,6 +21,24 @@ from app.models.enums import (
     StatusPemrosesan,
 )
 from app.services.naming_service import normalize_regulation_type
+
+
+def build_regulation_number_ilike_pattern(raw_num: str) -> str:
+    r"""
+    Membangun pola ILIKE dengan wildcard '_' untuk pemisah nomor regulasi.
+    1. Rapikan spasi di sekitar pemisah (/, \, -)
+    2. Escape % dan _ asli milik pengguna
+    3. Ganti setiap karakter pemisah (/, \, -, spasi) dengan wildcard satu karakter _
+    4. Bungkus dengan %...%
+    """
+    s = raw_num.strip()
+    # 1. Rapikan spasi di sekitar pemisah /, \, -
+    s = re.sub(r'\s*([/\\\-])\s*', r'\1', s)
+    # 2. Escape % dan _ asli milik pengguna
+    s = s.replace('%', r'\%').replace('_', r'\_')
+    # 3. Ganti karakter pemisah /, \, -, spasi dengan wildcard satu karakter _
+    s = re.sub(r'[/\\\-\s]+', '_', s)
+    return f"%{s}%"
 
 
 class SearchMode(str, enum.Enum):
@@ -113,6 +131,8 @@ class SearchService:
 
         filters = []
         tsquery_expr = None
+        has_reg_boost = False
+        reg_bonus_expr = None
 
         if has_text_query:
             # Periksa apakah query menghasilkan tsquery kosong (misal tanda baca murni seperti '!!!')
@@ -126,24 +146,20 @@ class SearchService:
             tsquery_expr = tsquery_fn("simple", q_raw)
             tsquery_str = self.db.execute(func.text(tsquery_expr)).scalar() or ""
 
-            # Jika q mengandung digit dan karakter pemisah nomor (/ . -)
+            # Jika q mengandung digit dan karakter pemisah nomor (/ . - \)
             has_digit = any(c.isdigit() for c in q_raw)
-            has_sep = any(c in "/.-" for c in q_raw)
+            has_sep = any(c in "/.-\\" for c in q_raw)
             is_reg_pattern = has_digit and has_sep
 
             if is_reg_pattern:
-                q_norm = q_raw.replace("/", "-").replace("\\", "-")
-                q_slash = q_raw.replace("-", "/").replace("\\", "/")
-                reg_conditions = [
-                    Document.regulation_number.ilike(f"%{q_raw}%"),
-                    Document.regulation_number.ilike(f"%{q_norm}%"),
-                    Document.regulation_number.ilike(f"%{q_slash}%"),
-                    func.replace(func.replace(Document.regulation_number, "/", "-"), "\\", "-").ilike(f"%{q_norm}%"),
-                ]
+                pat = build_regulation_number_ilike_pattern(q_raw)
+                reg_cond = Document.regulation_number.ilike(pat, escape="\\")
+                has_reg_boost = True
+                reg_bonus_expr = case((reg_cond, 1.0), else_=0.0)
                 if tsquery_str.strip():
-                    filters.append(or_(Document.search_vector.op("@@")(tsquery_expr), *reg_conditions))
+                    filters.append(or_(Document.search_vector.op("@@")(tsquery_expr), reg_cond))
                 else:
-                    filters.append(or_(*reg_conditions))
+                    filters.append(reg_cond)
             else:
                 if not tsquery_str.strip():
                     # Query teks murni tanda baca -> kembalikan hasil kosong total 0
@@ -152,17 +168,8 @@ class SearchService:
 
         # 4. Filter nomor regulasi
         if params.regulation_number and params.regulation_number.strip():
-            reg_raw = params.regulation_number.strip()
-            reg_norm = reg_raw.replace("/", "-").replace("\\", "-")
-            reg_slash = reg_raw.replace("-", "/").replace("\\", "/")
-            filters.append(
-                or_(
-                    Document.regulation_number.ilike(f"%{reg_raw}%"),
-                    Document.regulation_number.ilike(f"%{reg_norm}%"),
-                    Document.regulation_number.ilike(f"%{reg_slash}%"),
-                    func.replace(func.replace(Document.regulation_number, "/", "-"), "\\", "-").ilike(f"%{reg_norm}%"),
-                )
-            )
+            pat = build_regulation_number_ilike_pattern(params.regulation_number)
+            filters.append(Document.regulation_number.ilike(pat, escape="\\"))
 
         # 5. Filter jenis regulasi
         if params.regulation_type and params.regulation_type.strip():
@@ -205,8 +212,13 @@ class SearchService:
 
         order_by_clauses = []
         rank_expr = None
-        if has_text_query and tsquery_expr is not None and effective_sort == SearchSort.relevance:
-            rank_expr = func.ts_rank_cd(Document.search_vector, tsquery_expr)
+        if has_text_query and effective_sort == SearchSort.relevance:
+            base_rank = func.ts_rank_cd(Document.search_vector, tsquery_expr) if tsquery_expr is not None else literal_column("0.0")
+            if has_reg_boost and reg_bonus_expr is not None:
+                rank_expr = base_rank + reg_bonus_expr
+            else:
+                rank_expr = base_rank
+
             order_by_clauses.extend([
                 desc(rank_expr),
                 Document.release_date.desc().nulls_last(),

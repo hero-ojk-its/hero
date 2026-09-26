@@ -33,7 +33,7 @@ Jika terjadi kendala sementara pada worker sebelum sempat memproses, worker dapa
 
 Setiap request ke endpoint `/api/v1/internal/*` wajib menyertakan header:
 ```http
-X-Internal-API-Key: dev-secret-internal-key-2024
+X-Internal-API-Key: <INTERNAL_API_KEY>
 ```
 Jika header tidak ada atau nilainya salah, backend mengembalikan status **HTTP 401 Unauthorized**:
 ```json

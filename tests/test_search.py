@@ -297,3 +297,73 @@ def test_s16_no_n_plus_one_sql_queries(client, seed_search_data, db_session):
         assert query_count <= 4, f"Terlalu banyak query SQL: {query_count} (harus <= 4)"
     finally:
         event.remove(engine, "before_cursor_execute", before_cursor_execute)
+
+
+def test_s17_regulation_number_normalization_search(client, db_session):
+    """
+    S17 (§1.1): Normalisasi nomor peraturan di pencarian (toleransi /, -, spasi).
+    - Dokumen A: 11/POJK.03/2022
+    - Dokumen B: 22-POJK.03-2022
+    - Pencarian dengan '-' atau '/' atau spasi harus menemukan dokumen yang sesuai.
+    """
+    doc_slash = Document(
+        title="Penyelenggaraan TI Bank Slash",
+        regulation_number="11/POJK.03/2022",
+        regulation_type="POJK",
+        release_date=date(2022, 7, 7),
+        file_path_pdf="kb/POJK/2022/doc_slash.pdf",
+        file_hash="hash_s17_slash",
+        file_size_bytes=1000,
+        access_classification=KlasifikasiAkses.publik,
+        document_role=PeranDokumen.corpus_eksisting,
+        status_keberlakuan=StatusKeberlakuan.berlaku,
+        processing_status=StatusPemrosesan.terindeks,
+        extraction_method=MetodeEkstraksi.teks_langsung,
+        full_text="Ketentuan tata kelola teknologi informasi bank umum.",
+    )
+    doc_dash = Document(
+        title="Penyelenggaraan TI Bank Dash",
+        regulation_number="22-POJK.03-2022",
+        regulation_type="POJK",
+        release_date=date(2022, 8, 8),
+        file_path_pdf="kb/POJK/2022/doc_dash.pdf",
+        file_hash="hash_s17_dash",
+        file_size_bytes=1000,
+        access_classification=KlasifikasiAkses.publik,
+        document_role=PeranDokumen.corpus_eksisting,
+        status_keberlakuan=StatusKeberlakuan.berlaku,
+        processing_status=StatusPemrosesan.terindeks,
+        extraction_method=MetodeEkstraksi.teks_langsung,
+        full_text="Ketentuan pelaporan berkala teknologi informasi bank umum.",
+    )
+    db_session.add_all([doc_slash, doc_dash])
+    db_session.commit()
+
+    # 1. Cari nomor tersimpan ber-slash dengan input ber-dash: 11-POJK.03-2022
+    resp_filter_dash = client.get("/api/v1/documents/?regulation_number=11-POJK.03-2022")
+    assert resp_filter_dash.status_code == 200
+    assert any(it["id"] == doc_slash.id for it in resp_filter_dash.json()["items"])
+
+    # 2. Cari via q dengan input ber-dash: q=11-POJK.03-2022 -> harus peringkat 1
+    resp_q_dash = client.get("/api/v1/documents/?q=11-POJK.03-2022")
+    assert resp_q_dash.status_code == 200
+    assert resp_q_dash.json()["items"][0]["id"] == doc_slash.id
+
+    # 3. Kebalikannya: cari nomor tersimpan ber-dash (22-POJK.03-2022) dengan input ber-slash (22/POJK.03/2022)
+    resp_filter_slash = client.get("/api/v1/documents/?regulation_number=22/POJK.03/2022")
+    assert resp_filter_slash.status_code == 200
+    assert any(it["id"] == doc_dash.id for it in resp_filter_slash.json()["items"])
+
+    resp_q_slash = client.get("/api/v1/documents/?q=22/POJK.03/2022")
+    assert resp_q_slash.status_code == 200
+    assert resp_q_slash.json()["items"][0]["id"] == doc_dash.id
+
+    # 4. Pencarian dengan spasi di sekitar pemisah: "11 / POJK.03 / 2022"
+    resp_space_filter = client.get("/api/v1/documents/?regulation_number=11%20/%20POJK.03%20/%202022")
+    assert resp_space_filter.status_code == 200
+    assert any(it["id"] == doc_slash.id for it in resp_space_filter.json()["items"])
+
+    resp_space_q = client.get("/api/v1/documents/?q=11%20/%20POJK.03%20/%202022")
+    assert resp_space_q.status_code == 200
+    assert resp_space_q.json()["items"][0]["id"] == doc_slash.id
+
