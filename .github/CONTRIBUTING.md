@@ -2,7 +2,8 @@
 
 ## Alur kerja
 
-1. **Ambil issue dari Project board** kolom `Todo` pada sprint berjalan. Jangan mulai pekerjaan
+1. **Ambil issue dari [Papan Proyek](https://github.com/orgs/hero-ojk-its/projects/1/views/9)** kolom `To Do`
+   pada view *🏃 Sprint Berjalan*, lalu pindahkan kartunya ke `In Progress`. Jangan mulai pekerjaan
    yang belum ada issue-nya — RTM harus tetap utuh.
 2. **Buat branch** dari `main`:
    ```
@@ -15,7 +16,8 @@
    ```
    feat(scraper): tambah kontrol kedalaman crawling per sumber (US-13a)
    ```
-4. **Buka PR** ke `main`, isi template, tautkan issue dengan `Closes #`.
+4. **Buka PR** ke `main`, isi template, tautkan issue dengan `Closes #`. Pindahkan kartu ke
+   `In Review / Testing`; kendala tulis di field **Blocker / Remarks**.
 5. **Minta review** minimal satu anggota lain. PR tidak di-merge oleh penulisnya sendiri.
 
 ## Definition of Done
