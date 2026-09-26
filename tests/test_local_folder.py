@@ -364,7 +364,7 @@ def test_l11_reject_invalid_source_types_and_inactive(client, tmp_path: Path, mo
     web_id = resp_web.json()["id"]
     r1 = client.post(f"/api/v1/scraping-sources/{web_id}/run")
     assert r1.status_code == 409
-    assert "alur pindai (scan)" in r1.json()["detail"]
+    assert "alur pindai: POST /api/v1/scans" in r1.json()["detail"]
 
     # 2. onedrive_public -> 422
     resp_one = client.post(

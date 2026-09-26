@@ -87,7 +87,12 @@ class ScrapingSource(Base):
     )
     last_job_id = Column(
         Integer,
-        ForeignKey("job_ingest.id", ondelete="SET NULL"),
+        ForeignKey(
+            "job_ingest.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_scraping_sources_last_job_id_job_ingest"
+        ),
         nullable=True,
         comment="ID job ingest terakhir yang mengeksekusi sumber ini"
     )

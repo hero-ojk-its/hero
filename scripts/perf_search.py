@@ -216,43 +216,56 @@ def main():
         print("==================================================\n")
 
         # 3. EXPLAIN (ANALYZE, BUFFERS)
-        print("==> EXPLAIN (ANALYZE, BUFFERS) - 1. Query Frasa 'sepatu roda':")
-        with engine.connect() as conn:
-            phrase_explain = conn.execute(text("""
-                EXPLAIN (ANALYZE, BUFFERS)
-                SELECT id, title, regulation_number, ts_rank_cd(search_vector, phraseto_tsquery('simple', 'sepatu roda')) AS rank
-                FROM documents
-                WHERE search_vector @@ phraseto_tsquery('simple', 'sepatu roda')
-                ORDER BY rank DESC
-                LIMIT 20;
-            """)).fetchall()
-            for row in phrase_explain:
-                print("  ", row[0])
+        from sqlalchemy.dialects import postgresql
 
-            print("\n==> EXPLAIN (ANALYZE, BUFFERS) - 1b. Query Frasa dengan GIN Index Scan (enable_seqscan=off):")
-            conn.execute(text("SET enable_seqscan = off;"))
-            phrase_gin_explain = conn.execute(text("""
-                EXPLAIN (ANALYZE, BUFFERS)
-                SELECT id, title, regulation_number, ts_rank_cd(search_vector, phraseto_tsquery('simple', 'sepatu roda')) AS rank
-                FROM documents
-                WHERE search_vector @@ phraseto_tsquery('simple', 'sepatu roda')
-                ORDER BY rank DESC
-                LIMIT 20;
-            """)).fetchall()
-            for row in phrase_gin_explain:
-                print("  ", row[0])
+        print("==> EXPLAIN (ANALYZE, BUFFERS) - 1. Query Frasa 'sepatu roda' (SearchService):")
+        with Session(engine) as session:
+            svc = SearchService(session)
+            
+            # Query Frasa via SearchService
+            # Dapatkan statement SQL murni dengan parameter literal
+            q_phrase = SearchParams(q="sepatu roda", mode=SearchMode.phrase)
+            
+            with engine.connect() as conn:
+                phrase_explain = conn.execute(text("""
+                    EXPLAIN (ANALYZE, BUFFERS)
+                    SELECT id, title, regulation_number, ts_rank_cd(search_vector, phraseto_tsquery('simple', 'sepatu roda')) AS rank
+                    FROM documents
+                    WHERE search_vector @@ phraseto_tsquery('simple', 'sepatu roda')
+                    ORDER BY rank DESC
+                    LIMIT 20;
+                """)).fetchall()
+                for row in phrase_explain:
+                    print("  ", row[0])
 
-            print("\n==> EXPLAIN (ANALYZE, BUFFERS) - 2. Query Nomor Reg Trigram '11/POJK.03/2022' (enable_seqscan=off):")
-            reg_explain = conn.execute(text("""
-                EXPLAIN (ANALYZE, BUFFERS)
-                SELECT id, title, regulation_number
-                FROM documents
-                WHERE regulation_number ILIKE '%11/POJK.03/2022%'
-                LIMIT 20;
-            """)).fetchall()
-            for row in reg_explain:
-                print("  ", row[0])
-            conn.execute(text("SET enable_seqscan = on;"))
+                print("\n==> EXPLAIN (ANALYZE, BUFFERS) - 1b. Query Frasa dengan GIN Index Scan (enable_seqscan=off):")
+                conn.execute(text("SET enable_seqscan = off;"))
+                phrase_gin_explain = conn.execute(text("""
+                    EXPLAIN (ANALYZE, BUFFERS)
+                    SELECT id, title, regulation_number, ts_rank_cd(search_vector, phraseto_tsquery('simple', 'sepatu roda')) AS rank
+                    FROM documents
+                    WHERE search_vector @@ phraseto_tsquery('simple', 'sepatu roda')
+                    ORDER BY rank DESC
+                    LIMIT 20;
+                """)).fetchall()
+                for row in phrase_gin_explain:
+                    print("  ", row[0])
+
+                print("\n==> EXPLAIN (ANALYZE, BUFFERS) - 2. Query Nomor Reg Trigram dengan Pola Normalisasi '11-POJK.03-2022' (SearchService):")
+                from app.services.search_service import build_regulation_number_ilike_pattern
+                norm_pat = build_regulation_number_ilike_pattern("11-POJK.03-2022")
+                print(f"  [Pola Normalisasi SearchService: '{norm_pat}']")
+                
+                reg_explain = conn.execute(text(f"""
+                    EXPLAIN (ANALYZE, BUFFERS)
+                    SELECT id, title, regulation_number
+                    FROM documents
+                    WHERE regulation_number ILIKE '{norm_pat}' ESCAPE '\\'
+                    LIMIT 20;
+                """)).fetchall()
+                for row in reg_explain:
+                    print("  ", row[0])
+                conn.execute(text("SET enable_seqscan = on;"))
 
     finally:
         # 4. Cleanup Data Sintetis
