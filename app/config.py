@@ -45,6 +45,19 @@ class Settings(BaseSettings):
     local_source_max_files_per_run: int = 5000
     job_progress_commit_every: int = 10
 
+    # Alur Pindai Situs / Web Crawler (Langkah 7)
+    crawler_backend: str = "simple_http"  # simple_http | external_module | push
+    crawler_module: str = ""  # paket.modul:NamaKelas jika external_module
+    crawl_max_pages: int = 200
+    crawl_max_candidates: int = 5000
+    crawl_delay_seconds: float = 0.5
+    crawl_timeout_seconds: int = 20
+    crawl_user_agent: str = "HERO-Capstone-Crawler/0.7 (+kontak: tim HERO)"
+    crawl_respect_robots: bool = True
+    crawl_allow_private_networks: bool = False
+    crawl_head_for_size: bool = True
+    scan_stuck_minutes: int = 60
+
     @field_validator("category_path_template")
     @classmethod
     def validate_category_path_template(cls, v: str) -> str:

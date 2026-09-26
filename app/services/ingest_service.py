@@ -308,6 +308,7 @@ class IngestService:
                 regulation_type=doc_reg_type,
                 release_date=doc_release_date,
                 source_url=item.source_url.strip() if item.source_url else None,
+                original_filename=item.filename[:255] if item.filename else None,
                 file_path_pdf=rel_path,
                 standardized_filename=Path(rel_path).name[:255],
                 file_hash=fp.sha256,

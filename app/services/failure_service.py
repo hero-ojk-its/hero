@@ -411,17 +411,33 @@ class FailureService:
                 job=failure.job,
             )
 
-        if not failure.quarantine_path or not self.storage.exists(failure.quarantine_path):
+        opts_raw = failure.ingest_options or {}
+        fetch_url = opts_raw.get("fetch_url")
+
+        if fetch_url:
+            from app.crawlers.registry import get_crawler
+            from app.crawlers.simple_http import SimpleHttpCrawler
+            from app.config import settings
+            crawler = get_crawler(settings) or SimpleHttpCrawler(allow_private=settings.crawl_allow_private_networks)
+            try:
+                fetched = crawler.fetch(fetch_url, max_bytes=settings.max_upload_bytes)
+                content = fetched.content
+            except Exception as e:
+                failure.attempt_count += 1
+                failure.last_retry_at = datetime.now(timezone.utc)
+                self.db.commit()
+                raise FailureNotRetryableError(f"Gagal mengunduh ulang berkas dari {fetch_url}: {str(e)}")
+        elif not failure.quarantine_path or not self.storage.exists(failure.quarantine_path):
             failure.is_retryable = False
             self.db.commit()
             raise FailureNotRetryableError("Berkas karantina tidak ditemukan di penyimpanan.")
-
-        try:
-            content = self.storage.read_pdf(failure.quarantine_path)
-        except Exception as e:
-            failure.is_retryable = False
-            self.db.commit()
-            raise FailureNotRetryableError(f"Gagal membaca berkas karantina: {str(e)}")
+        else:
+            try:
+                content = self.storage.read_pdf(failure.quarantine_path)
+            except Exception as e:
+                failure.is_retryable = False
+                self.db.commit()
+                raise FailureNotRetryableError(f"Gagal membaca berkas karantina: {str(e)}")
 
         # Import IngestService di dalam method untuk menghindari circular import
         from app.services.ingest_service import (
