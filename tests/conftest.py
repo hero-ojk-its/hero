@@ -68,6 +68,7 @@ def bind_test_session_local(monkeypatch):
     """Pastikan SessionLocal yang dibuat oleh background task/service selalu memakai test database."""
     monkeypatch.setattr("app.database.SessionLocal", TestingSessionLocal)
     monkeypatch.setattr("app.services.source_runner.SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr("app.services.scan_service.SessionLocal", TestingSessionLocal)
 
 
 @pytest.fixture
@@ -84,6 +85,8 @@ def db_session() -> Generator[Session, None, None]:
                 documents,
                 ingest_failures,
                 source_files,
+                scan_candidates,
+                scan_sessions,
                 job_ingest,
                 scraping_sources,
                 audit_logs,
