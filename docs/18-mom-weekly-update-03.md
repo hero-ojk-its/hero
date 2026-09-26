@@ -12,7 +12,7 @@
 ## 1. Ringkasan singkat
 
 - Minggu kedua Fase 1. Sesi dibuka dengan pembahasan feedback tertulis Pak Faris atas mockup Figma, lalu progres per peran.
-- Backend melaporkan sebagian besar story Sprint 1 selesai: CRUD situs sumber, ringkasan job, unggah manual (tunggal & banyak), tipe dokumen, tolak non-PDF, deteksi duplikat, simpan metadata + teks.
+- Backend melaporkan sebagian besar story Sprint 2 selesai: CRUD situs sumber, ringkasan job, unggah manual (tunggal & banyak), tipe dokumen, tolak non-PDF, deteksi duplikat, simpan metadata + teks.
 - **Login ditunda ke akhir proyek.** Aplikasi langsung terbuka ke dashboard tanpa login supaya pengujian tidak bolak-balik.
 - **Alur scraping ditegaskan ulang:** scan dulu → tampilkan jumlah PDF baru vs sudah ada → pengguna centang yang mau ditarik → pilih tujuan (knowledge base/vektor atau unduh PDF ke folder).
 - **Draft Tanggapan tidak lagi berdiri sendiri sebagai menu** — digabung ke dalam Analisa.
@@ -159,7 +159,7 @@
 ## 6. Catatan dari sisi PM
 
 - **Login yang ditunda** mengubah backlog: US-02 dan US-01 turun prioritas. Pekerjaan login yang sudah jadi tidak dibuang — cukup dimatikan dulu.
-- **Penamaan baku** yang diminta Pak Faris sudah ada di backlog sebagai US-20a (OCR halaman 1 + naming convention, Sprint 2). Yang baru adalah urutannya: rename terjadi setelah deteksi duplikat, sebelum simpan. Rafli dan Fathir perlu sepakat siapa yang mengerjakan bagian mana.
+- **Penamaan baku** yang diminta Pak Faris sudah ada di backlog sebagai US-20a (OCR halaman 1 + naming convention, Sprint 3). Yang baru adalah urutannya: rename terjadi setelah deteksi duplikat, sebelum simpan. Rafli dan Fathir perlu sepakat siapa yang mengerjakan bagian mana.
 - **Alur scan → centang → tarik** memperluas screening dari MoM #2: sekarang pengguna juga memilih dokumen dan tujuan penyimpanannya. Ini menyentuh US-13, US-14, dan US-19 — dan mockup Ingest.
 - **Draft Tanggapan masuk Analisa** perlu dicerminkan di UI Spec dan use case sebelum Fase 4.
 - **Alamat URL ketiga dan contoh template** dijanjikan lagi. Keduanya blocker lama (#24 dan #27) — tagih di rapat berikutnya kalau belum masuk.
