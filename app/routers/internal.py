@@ -71,6 +71,7 @@ class ExtractionResultIn(BaseModel):
     regulation_type: Optional[str] = Field(None, validation_alias="jenis_peraturan")
     release_date: Optional[date] = Field(None, validation_alias="tanggal_terbit")
     extraction_method: Optional[str] = Field(None, validation_alias="metode_ekstraksi")
+    extraction_engine: Optional[str] = Field(None, validation_alias="mesin_ekstraksi")
     full_text: Optional[str] = Field(None, validation_alias="teks_lengkap")
     confidence: Optional[Dict[str, float]] = None
     error: Optional[ExtractionErrorIn] = None
@@ -312,12 +313,22 @@ def patch_extraction_result(
     if payload.full_text is not None:
         doc.full_text = payload.full_text
 
+    if payload.extraction_engine:
+        doc.extraction_engine = payload.extraction_engine.strip()
+
     if payload.extraction_method:
         meth_clean = payload.extraction_method.strip()
         if meth_clean in (MetodeEkstraksi.teks_langsung.value, "teks_langsung"):
             doc.extraction_method = MetodeEkstraksi.teks_langsung
         elif meth_clean in (MetodeEkstraksi.ocr.value, "ocr"):
             doc.extraction_method = MetodeEkstraksi.ocr
+        else:
+            if not doc.extraction_engine:
+                doc.extraction_engine = meth_clean
+            if "ocr" in meth_clean.lower():
+                doc.extraction_method = MetodeEkstraksi.ocr
+            else:
+                doc.extraction_method = MetodeEkstraksi.teks_langsung
 
     doc.extraction_confidence = payload.confidence
     doc.extracted_at = datetime.now(timezone.utc)

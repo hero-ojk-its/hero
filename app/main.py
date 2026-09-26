@@ -40,6 +40,12 @@ async def lifespan(app: FastAPI):
             seed_initial_categories(db)
         except (ProgrammingError, OperationalError):
             logger.warning("Tabel belum ada. Jalankan 'alembic upgrade head' terlebih dahulu.")
+
+        try:
+            from app.services.source_runner import recover_stuck_folder_jobs
+            recover_stuck_folder_jobs(db)
+        except Exception as exc:
+            logger.warning("Gagal memulihkan job sinkron_folder saat startup: %s", exc)
     finally:
         db.close()
     yield

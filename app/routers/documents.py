@@ -286,6 +286,7 @@ def _format_single_document_response(doc: Document, db: Session) -> Dict[str, An
         "status_keberlakuan": doc.status_keberlakuan,
         "processing_status": doc.processing_status,
         "extraction_method": getattr(doc, "extraction_method", None),
+        "extraction_engine": getattr(doc, "extraction_engine", None),
         "category_id": doc.category_id,
         "category_path": cat_path,
         "is_placed": is_placed,
@@ -415,6 +416,7 @@ def get_document_text(
         "limit": limit,
         "text": sliced_text,
         "extraction_method": doc.extraction_method,
+        "extraction_engine": doc.extraction_engine,
         "extracted_at": doc.extracted_at,
     }
 

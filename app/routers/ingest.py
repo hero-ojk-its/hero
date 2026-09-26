@@ -39,6 +39,7 @@ from app.schemas.ingest import (
     JobFailureSummary,
     JobDocumentSummary,
     DuplicateDocumentInfo,
+    JobSourceInfo,
 )
 from app.services.ingest_service import (
     DocumentMetadataInput,
@@ -314,6 +315,7 @@ def list_jobs(
     limit: int = 20,
     status: Optional[StatusJobIngest] = None,
     job_type: Optional[JenisJobIngest] = None,
+    source_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
     """Mengembalikan riwayat JobIngest dengan pagination dan filter opsional."""
@@ -322,6 +324,8 @@ def list_jobs(
         query = query.filter(JobIngest.status == status)
     if job_type:
         query = query.filter(JobIngest.job_type == job_type)
+    if source_id is not None:
+        query = query.filter(JobIngest.source_id == source_id)
 
     total = query.count()
     jobs = query.order_by(JobIngest.id.desc()).offset(skip).limit(limit).all()
@@ -337,11 +341,19 @@ def list_jobs(
             )
             .count()
         )
+        source_info = None
+        if j.source:
+            source_info = {
+                "id": j.source.id,
+                "name": j.source.name,
+                "source_type": j.source.source_type.value if hasattr(j.source.source_type, "value") else str(j.source.source_type),
+            }
         items.append({
             "id": j.id,
             "job_type": j.job_type.value if hasattr(j.job_type, "value") else str(j.job_type),
             "source_ref": j.source_ref,
             "source_id": j.source_id,
+            "source": source_info,
             "triggered_by": j.triggered_by,
             "started_at": j.started_at,
             "finished_at": j.finished_at,
@@ -349,6 +361,9 @@ def list_jobs(
             "success_count": j.success_count,
             "duplicate_count": j.duplicate_count,
             "failed_count": j.failed_count,
+            "total_found": j.total_found,
+            "processed_count": j.processed_count,
+            "skipped_count": j.skipped_count,
             "open_failures_count": open_fails,
         })
 
@@ -412,11 +427,27 @@ def get_job_detail(
             )
         )
 
+    source_info = None
+    if job.source:
+        source_info = JobSourceInfo(
+            id=job.source.id,
+            name=job.source.name,
+            source_type=job.source.source_type.value if hasattr(job.source.source_type, "value") else str(job.source.source_type),
+        )
+
+    progress_pct = None
+    if job.total_found is not None:
+        if job.total_found > 0:
+            progress_pct = min(100.0, round((job.processed_count / job.total_found) * 100, 1))
+        else:
+            progress_pct = 100.0
+
     return JobDetailResponse(
         id=job.id,
         job_type=job.job_type.value if hasattr(job.job_type, "value") else str(job.job_type),
         source_ref=job.source_ref,
         source_id=job.source_id,
+        source=source_info,
         retry_of_failure_id=job.retry_of_failure_id,
         triggered_by=job.triggered_by,
         status=job.status.value if hasattr(job.status, "value") else str(job.status),
@@ -426,6 +457,10 @@ def get_job_detail(
         success_count=job.success_count,
         duplicate_count=job.duplicate_count,
         failed_count=job.failed_count,
+        total_found=job.total_found,
+        processed_count=job.processed_count,
+        skipped_count=job.skipped_count,
+        progress_percent=progress_pct,
         documents=doc_summaries,
         failures=failure_summaries,
     )

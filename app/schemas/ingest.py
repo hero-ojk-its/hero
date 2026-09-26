@@ -78,11 +78,18 @@ class JobFailureSummary(BaseModel):
     duplicate_of_document: Optional[DuplicateDocumentInfo] = None
 
 
+class JobSourceInfo(BaseModel):
+    id: int
+    name: str
+    source_type: str
+
+
 class JobDetailResponse(BaseModel):
     id: int
     job_type: str
     source_ref: Optional[str] = None
     source_id: Optional[int] = None
+    source: Optional[JobSourceInfo] = None
     retry_of_failure_id: Optional[int] = None
     triggered_by: Optional[str] = None
     status: str
@@ -92,6 +99,10 @@ class JobDetailResponse(BaseModel):
     success_count: int
     duplicate_count: int
     failed_count: int
+    total_found: Optional[int] = None
+    processed_count: int = 0
+    skipped_count: int = 0
+    progress_percent: Optional[float] = None
     documents: List[JobDocumentSummary] = []
     failures: List[JobFailureSummary] = []
 
@@ -101,6 +112,7 @@ class JobListItemResponse(BaseModel):
     job_type: str
     source_ref: Optional[str] = None
     source_id: Optional[int] = None
+    source: Optional[JobSourceInfo] = None
     triggered_by: Optional[str] = None
     status: str
     started_at: datetime
@@ -108,6 +120,9 @@ class JobListItemResponse(BaseModel):
     success_count: int
     duplicate_count: int
     failed_count: int
+    total_found: Optional[int] = None
+    processed_count: int = 0
+    skipped_count: int = 0
     open_failures_count: int = 0
 
 

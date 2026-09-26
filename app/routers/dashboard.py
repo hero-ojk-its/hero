@@ -16,6 +16,7 @@ from app.models.ingest_failure import IngestFailure
 from app.models.job_ingest import JobIngest
 from app.models.scraping_source import ScrapingSource
 from app.models.enums import (
+    JenisSumber,
     PeranDokumen,
     StatusKeberlakuan,
     StatusPemrosesan,
@@ -34,25 +35,19 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
     target_fase1 = 20
 
     # 1. Agregat Dokumen KB (Total corpus, draft, placed, inbox)
-    doc_role_counts = (
-        db.query(Document.document_role, func.count(Document.id))
-        .group_by(Document.document_role)
-        .all()
-    )
-    role_map = {r[0]: r[1] for r in doc_role_counts}
-    corpus_docs = role_map.get(PeranDokumen.corpus_eksisting, 0)
-    draft_docs = role_map.get(PeranDokumen.draft_kajian, 0)
-
-    # 2. Placed vs Inbox
-    placed_inbox_counts = (
+    doc_stats = (
         db.query(
+            func.count(case((Document.document_role == PeranDokumen.corpus_eksisting, 1))).label("corpus"),
+            func.count(case((Document.document_role == PeranDokumen.draft_kajian, 1))).label("draft"),
             func.count(case((Document.file_path_pdf.like("kb/%"), 1))).label("placed"),
             func.count(case((~Document.file_path_pdf.like("kb/%"), 1))).label("inbox"),
         )
         .one()
     )
-    placed_docs = placed_inbox_counts.placed or 0
-    inbox_docs = placed_inbox_counts.inbox or 0
+    corpus_docs = doc_stats.corpus or 0
+    draft_docs = doc_stats.draft or 0
+    placed_docs = doc_stats.placed or 0
+    inbox_docs = doc_stats.inbox or 0
 
     # 3. Status Keberlakuan (Semua enum disertakan dengan default 0)
     by_status_keberlakuan = {s.value: 0 for s in StatusKeberlakuan}
@@ -152,13 +147,24 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
     ]
 
     # 8. Sources metrics
-    sources_stats = (
+    by_source_type = {s.value: 0 for s in JenisSumber}
+    total_sources = 0
+    active_sources = 0
+    sources_query = (
         db.query(
-            func.count(ScrapingSource.id).label("total"),
-            func.count(case((ScrapingSource.is_active == True, 1))).label("active"),  # noqa: E712
+            ScrapingSource.source_type,
+            func.count(ScrapingSource.id).label("cnt"),
+            func.count(case((ScrapingSource.is_active == True, 1))).label("active_cnt"),  # noqa: E712
         )
-        .one()
+        .group_by(ScrapingSource.source_type)
+        .all()
     )
+    for st, cnt, active_cnt in sources_query:
+        if st is not None:
+            key = st.value if hasattr(st, "value") else str(st)
+            by_source_type[key] = cnt
+            total_sources += cnt
+            active_sources += (active_cnt or 0)
 
     return {
         "kb": {
@@ -179,8 +185,9 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
             "recent_jobs": recent_jobs,
         },
         "sources": {
-            "total": sources_stats.total or 0,
-            "active": sources_stats.active or 0,
+            "total": total_sources,
+            "active": active_sources,
+            "by_type": by_source_type,
         },
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
