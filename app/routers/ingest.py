@@ -1,12 +1,13 @@
 """
 app/routers/ingest.py
 Endpoint untuk menerima upload dokumen PDF, screening deduplikasi,
-dan memantau riwayat serta status pipeline ingest.
+pemantauan job, dan antrian penanganan kegagalan / retry (Langkah 2 & 3).
 """
 from datetime import date
-from typing import List, Optional
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, Query, status
 from sqlalchemy.orm import Session
+from sqlalchemy import desc
 
 from app.config import settings
 from app.database import get_db
@@ -17,13 +18,27 @@ from app.models.enums import (
     PeranDokumen,
     StatusJobIngest,
     StatusKeberlakuan,
+    JenisKegagalan,
+    StatusTindakLanjut,
 )
 from app.models.job_ingest import JobIngest
+from app.models.ingest_failure import IngestFailure
 from app.routers.auth import get_current_user
 from app.schemas.ingest import (
     DuplicateCheckResponse,
     IngestStatusResponse,
     IngestUploadResponse,
+    JobDetailResponse,
+    FailureResponse,
+    FailureListResponse,
+    FailureStatusUpdateRequest,
+    FailureRetryRequest,
+    FailureBatchRetryRequest,
+    FailureRetryResponse,
+    BatchRetryResponse,
+    JobFailureSummary,
+    JobDocumentSummary,
+    DuplicateDocumentInfo,
 )
 from app.services.ingest_service import (
     DocumentMetadataInput,
@@ -32,9 +47,51 @@ from app.services.ingest_service import (
     IngestService,
     ItemOutcome,
 )
+from app.services.failure_service import (
+    FailureService,
+    FailureNotRetryableError,
+    RetryOverrides,
+)
 from app.services.storage_service import StorageService, get_storage_service
 
 router = APIRouter()
+
+
+def _format_failure_response(f: IngestFailure) -> FailureResponse:
+    """Helper untuk format IngestFailure model ke FailureResponse schema."""
+    dup_doc = None
+    if f.duplicate_of_document:
+        dup_doc = DuplicateDocumentInfo(
+            id=f.duplicate_of_document.id,
+            title=f.duplicate_of_document.title,
+            regulation_number=f.duplicate_of_document.regulation_number,
+        )
+
+    return FailureResponse(
+        id=f.id,
+        job_id=f.job_id,
+        original_filename=f.original_filename,
+        source_url=f.source_url,
+        failure_type=f.failure_type.value if hasattr(f.failure_type, "value") else str(f.failure_type),
+        reason_code=f.reason_code,
+        message=f.message,
+        is_retryable=f.is_retryable,
+        quarantine_path=f.quarantine_path,
+        file_hash=f.file_hash,
+        file_size_bytes=f.file_size_bytes,
+        duplicate_of_document_id=f.duplicate_of_document_id,
+        duplicate_of_document=dup_doc,
+        ingest_options=f.ingest_options or {},
+        follow_up_status=f.follow_up_status.value if hasattr(f.follow_up_status, "value") else str(f.follow_up_status),
+        attempt_count=f.attempt_count,
+        last_retry_at=f.last_retry_at,
+        last_retry_job_id=f.last_retry_job_id,
+        resolved_document_id=f.resolved_document_id,
+        handled_by_user_id=f.handled_by_user_id,
+        handling_note=f.handling_note,
+        created_at=f.created_at,
+        updated_at=f.updated_at,
+    )
 
 
 @router.post(
@@ -144,9 +201,11 @@ def upload_pdf(
     else:
         triggered_by = job_type.value
 
-    # 5. Susun referensi sumber & baca konten berkas secara sinkron
-    filenames = [f.filename for f in files if f and f.filename]
-    source_ref = ", ".join(filenames)[:250] if filenames else "unggah_manual.pdf"
+    # 5. Tentukan source_ref
+    if len(files) == 1:
+        source_ref = files[0].filename or "unggah_tunggal.pdf"
+    else:
+        source_ref = f"batch_upload_{len(files)}_files"
 
     ingest_items: List[IngestItem] = []
     for f in files:
@@ -209,6 +268,7 @@ def upload_pdf(
                 "file_size_bytes": r.file_size_bytes,
                 "file_hash": r.file_hash,
                 "reason_code": None,
+                "placement": r.extra.get("placement"),
             })
         elif r.outcome == ItemOutcome.duplicate:
             details_output.append({
@@ -217,6 +277,7 @@ def upload_pdf(
                 "message": r.message,
                 "document_id": r.document_id,
                 "duplicate_of_document_id": r.duplicate_of_document_id,
+                "failure_id": r.extra.get("failure_id"),
                 "regulation_number": r.extra.get("regulation_number"),
                 "file_hash": r.file_hash,
                 "file_size_bytes": r.file_size_bytes,
@@ -227,6 +288,7 @@ def upload_pdf(
                 "filename": r.filename,
                 "status": "failed",
                 "error": r.message,
+                "failure_id": r.extra.get("failure_id"),
                 "reason_code": r.reason_code,
             })
 
@@ -264,24 +326,309 @@ def list_jobs(
     total = query.count()
     jobs = query.order_by(JobIngest.id.desc()).offset(skip).limit(limit).all()
 
+    items = []
+    for j in jobs:
+        open_fails = (
+            db.query(IngestFailure)
+            .filter(
+                IngestFailure.job_id == j.id,
+                IngestFailure.follow_up_status == StatusTindakLanjut.belum_ditangani,
+                IngestFailure.failure_type != JenisKegagalan.duplikat,
+            )
+            .count()
+        )
+        items.append({
+            "id": j.id,
+            "job_type": j.job_type.value if hasattr(j.job_type, "value") else str(j.job_type),
+            "source_ref": j.source_ref,
+            "source_id": j.source_id,
+            "triggered_by": j.triggered_by,
+            "started_at": j.started_at,
+            "finished_at": j.finished_at,
+            "status": j.status.value if hasattr(j.status, "value") else str(j.status),
+            "success_count": j.success_count,
+            "duplicate_count": j.duplicate_count,
+            "failed_count": j.failed_count,
+            "open_failures_count": open_fails,
+        })
+
     return {
         "total": total,
-        "items": [
-            {
-                "id": j.id,
-                "job_type": j.job_type,
-                "source_ref": j.source_ref,
-                "triggered_by": j.triggered_by,
-                "started_at": j.started_at,
-                "finished_at": j.finished_at,
-                "status": j.status,
-                "success_count": j.success_count,
-                "duplicate_count": j.duplicate_count,
-                "failed_count": j.failed_count,
-            }
-            for j in jobs
-        ],
+        "items": items,
     }
+
+
+@router.get("/jobs/{job_id}", response_model=JobDetailResponse, summary="Detail job ingest")
+def get_job_detail(
+    job_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    [US-14] Mengembalikan detail lengkap job ingest termasuk daftar dokumen dan kegagalan/duplikat.
+    """
+    job = db.query(JobIngest).filter(JobIngest.id == job_id).first()
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job ingest dengan ID {job_id} tidak ditemukan.",
+        )
+
+    duration = None
+    if job.started_at and job.finished_at:
+        duration = (job.finished_at - job.started_at).total_seconds()
+
+    doc_summaries = [
+        JobDocumentSummary(
+            id=d.id,
+            title=d.title,
+            regulation_number=d.regulation_number,
+            file_path_pdf=d.file_path_pdf,
+        )
+        for d in job.documents
+    ]
+
+    failure_summaries = []
+    for f in job.failures:
+        dup_doc = None
+        if f.duplicate_of_document:
+            dup_doc = DuplicateDocumentInfo(
+                id=f.duplicate_of_document.id,
+                title=f.duplicate_of_document.title,
+                regulation_number=f.duplicate_of_document.regulation_number,
+            )
+        failure_summaries.append(
+            JobFailureSummary(
+                id=f.id,
+                original_filename=f.original_filename,
+                failure_type=f.failure_type.value if hasattr(f.failure_type, "value") else str(f.failure_type),
+                reason_code=f.reason_code,
+                message=f.message,
+                is_retryable=f.is_retryable,
+                quarantine_path=f.quarantine_path,
+                attempt_count=f.attempt_count,
+                follow_up_status=f.follow_up_status.value if hasattr(f.follow_up_status, "value") else str(f.follow_up_status),
+                duplicate_of_document_id=f.duplicate_of_document_id,
+                duplicate_of_document=dup_doc,
+            )
+        )
+
+    return JobDetailResponse(
+        id=job.id,
+        job_type=job.job_type.value if hasattr(job.job_type, "value") else str(job.job_type),
+        source_ref=job.source_ref,
+        source_id=job.source_id,
+        retry_of_failure_id=job.retry_of_failure_id,
+        triggered_by=job.triggered_by,
+        status=job.status.value if hasattr(job.status, "value") else str(job.status),
+        started_at=job.started_at,
+        finished_at=job.finished_at,
+        duration_seconds=duration,
+        success_count=job.success_count,
+        duplicate_count=job.duplicate_count,
+        failed_count=job.failed_count,
+        documents=doc_summaries,
+        failures=failure_summaries,
+    )
+
+
+@router.get("/failures", response_model=FailureListResponse, summary="Daftar kegagalan ingest")
+def list_failures(
+    job_id: Optional[int] = None,
+    failure_type: Optional[JenisKegagalan] = None,
+    follow_up_status: Optional[str] = Query("belum_ditangani", description="belum_ditangani | diproses_ulang | diabaikan | all"),
+    include_duplicates: bool = Query(False, description="Tampilkan juga duplikat (default: false)"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    storage: StorageService = Depends(get_storage_service),
+):
+    """
+    [US-23 / S-04] Mengambil daftar log kegagalan dan antrian retry.
+    """
+    svc = FailureService(db=db, storage=storage)
+    total, items = svc.list_failures(
+        job_id=job_id,
+        failure_type=failure_type,
+        follow_up_status=follow_up_status,
+        include_duplicates=include_duplicates,
+        skip=skip,
+        limit=limit,
+    )
+    return FailureListResponse(
+        total=total,
+        items=[_format_failure_response(f) for f in items],
+    )
+
+
+@router.get("/failures/{failure_id}", response_model=FailureResponse, summary="Detail satu kegagalan ingest")
+def get_failure_detail(
+    failure_id: int,
+    db: Session = Depends(get_db),
+):
+    """Mengambil detail satu baris kegagalan ingest."""
+    failure = db.query(IngestFailure).filter(IngestFailure.id == failure_id).first()
+    if not failure:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Data kegagalan ID {failure_id} tidak ditemukan.",
+        )
+    return _format_failure_response(failure)
+
+
+@router.patch("/failures/{failure_id}", response_model=FailureResponse, summary="Update status kegagalan")
+def update_failure_status(
+    failure_id: int,
+    body: FailureStatusUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    storage: StorageService = Depends(get_storage_service),
+    current_user=Depends(get_current_user),
+):
+    """
+    Mengubah status tindak lanjut kegagalan (hanya 'belum_ditangani' atau 'diabaikan').
+    """
+    svc = FailureService(db=db, storage=storage)
+    actor_user_id = current_user.id if current_user and getattr(current_user, "id", None) else None
+    client_ip = request.client.host if request.client else None
+
+    stat_enum = StatusTindakLanjut(body.follow_up_status)
+    updated = svc.update_status(
+        failure_id=failure_id,
+        status=stat_enum,
+        note=body.handling_note,
+        actor_user_id=actor_user_id,
+        ip_address=client_ip,
+    )
+    return _format_failure_response(updated)
+
+
+@router.post("/failures/{failure_id}/retry", response_model=FailureRetryResponse, summary="Retry satu kegagalan")
+def retry_failure(
+    failure_id: int,
+    request: Request,
+    body: Optional[FailureRetryRequest] = None,
+    db: Session = Depends(get_db),
+    storage: StorageService = Depends(get_storage_service),
+    current_user=Depends(get_current_user),
+):
+    """
+    Memproses ulang dokumen dari karantina.
+    """
+    svc = FailureService(db=db, storage=storage)
+    actor_user_id = current_user.id if current_user and getattr(current_user, "id", None) else None
+    client_ip = request.client.host if request.client else None
+
+    overrides = None
+    if body:
+        acc_enum = KlasifikasiAkses(body.access_classification) if body.access_classification else None
+        role_enum = PeranDokumen(body.document_role) if body.document_role else None
+        overrides = RetryOverrides(
+            category_id=body.category_id,
+            access_classification=acc_enum,
+            document_role=role_enum,
+        )
+
+    try:
+        retry_res = svc.retry(
+            failure_id=failure_id,
+            overrides=overrides,
+            actor_user_id=actor_user_id,
+            ip_address=client_ip,
+        )
+    except FailureNotRetryableError as err:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(err),
+        )
+
+    return FailureRetryResponse(
+        failure=_format_failure_response(retry_res.failure),
+        outcome=retry_res.item_result.outcome.value,
+        document_id=retry_res.item_result.document_id,
+        job_id=retry_res.job.id,
+        message=retry_res.item_result.message,
+    )
+
+
+@router.post("/failures/retry", response_model=BatchRetryResponse, summary="Batch retry kegagalan")
+def batch_retry_failures(
+    body: FailureBatchRetryRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    storage: StorageService = Depends(get_storage_service),
+    current_user=Depends(get_current_user),
+):
+    """
+    Memproses ulang beberapa kegagalan sekaligus (satu per satu, kegagalan satu tidak membatalkan yang lain).
+    """
+    svc = FailureService(db=db, storage=storage)
+    actor_user_id = current_user.id if current_user and getattr(current_user, "id", None) else None
+    client_ip = request.client.host if request.client else None
+
+    results: List[FailureRetryResponse] = []
+    success_count = 0
+    duplicate_count = 0
+    failed_count = 0
+    skipped_count = 0
+
+    for fid in body.failure_ids:
+        failure = db.query(IngestFailure).filter(IngestFailure.id == fid).first()
+        if not failure or not failure.is_retryable or failure.follow_up_status == StatusTindakLanjut.diproses_ulang:
+            skipped_count += 1
+            if failure:
+                results.append(
+                    FailureRetryResponse(
+                        failure=_format_failure_response(failure),
+                        outcome="skipped",
+                        document_id=None,
+                        job_id=failure.job_id,
+                        message="Item tidak dapat di-retry (non-retryable atau sudah diproses ulang).",
+                    )
+                )
+            continue
+
+        try:
+            retry_res = svc.retry(
+                failure_id=fid,
+                actor_user_id=actor_user_id,
+                ip_address=client_ip,
+            )
+            if retry_res.item_result.outcome == ItemOutcome.success:
+                success_count += 1
+            elif retry_res.item_result.outcome == ItemOutcome.duplicate:
+                duplicate_count += 1
+            else:
+                failed_count += 1
+
+            results.append(
+                FailureRetryResponse(
+                    failure=_format_failure_response(retry_res.failure),
+                    outcome=retry_res.item_result.outcome.value,
+                    document_id=retry_res.item_result.document_id,
+                    job_id=retry_res.job.id,
+                    message=retry_res.item_result.message,
+                )
+            )
+        except Exception as exc:
+            failed_count += 1
+            db.refresh(failure)
+            results.append(
+                FailureRetryResponse(
+                    failure=_format_failure_response(failure),
+                    outcome="failed",
+                    document_id=None,
+                    job_id=failure.job_id,
+                    message=f"Kesalahan saat retry: {str(exc)}",
+                )
+            )
+
+    return BatchRetryResponse(
+        results=results,
+        success_count=success_count,
+        duplicate_count=duplicate_count,
+        failed_count=failed_count,
+        skipped_count=skipped_count,
+    )
 
 
 @router.get(
@@ -375,6 +722,14 @@ def ingest_status(db: Session = Depends(get_db)):
     dicabut_docs = db.query(Document).filter(Document.status_keberlakuan == StatusKeberlakuan.dicabut).count()
     draft_docs = db.query(Document).filter(Document.document_role == PeranDokumen.draft_kajian).count()
     total_jobs = db.query(JobIngest).count()
+    open_failures = (
+        db.query(IngestFailure)
+        .filter(
+            IngestFailure.follow_up_status == StatusTindakLanjut.belum_ditangani,
+            IngestFailure.failure_type != JenisKegagalan.duplikat,
+        )
+        .count()
+    )
 
     return {
         "total_documents": total_docs,
@@ -382,5 +737,6 @@ def ingest_status(db: Session = Depends(get_db)):
         "dicabut_documents": dicabut_docs,
         "total_draft_kajian": draft_docs,
         "total_jobs": total_jobs,
+        "open_failures": open_failures,
         "storage_path": settings.storage_path,
     }

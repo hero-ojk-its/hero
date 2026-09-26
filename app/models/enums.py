@@ -62,3 +62,22 @@ class JenisRujukan(str, enum.Enum):
     rujukan_pasal = "rujukan_pasal"
     pencabutan = "pencabutan"
     perubahan = "perubahan"
+
+
+class JenisKegagalan(str, enum.Enum):
+    """Jenis kegagalan ingest (Data Dictionary §2.18 + 1 tambahan)"""
+    format_tidak_didukung = "format_tidak_didukung"
+    duplikat = "duplikat"
+    ekstraksi_gagal = "ekstraksi_gagal"
+    ocr_gagal = "ocr_gagal"
+    metadata_tidak_lengkap = "metadata_tidak_lengkap"
+    sumber_tidak_dapat_diakses = "sumber_tidak_dapat_diakses"
+    kesalahan_internal = "kesalahan_internal"
+
+
+class StatusTindakLanjut(str, enum.Enum):
+    """Status tindak lanjut penanganan kegagalan ingest"""
+    belum_ditangani = "belum_ditangani"
+    diproses_ulang = "diproses_ulang"
+    diabaikan = "diabaikan"
+

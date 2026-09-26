@@ -131,11 +131,13 @@ class IngestService:
         self.db.refresh(job)
         return job
 
-    def finish_job(self, job: JobIngest, results: List[ItemResult]) -> JobIngest:
+    def finish_job(self, job: JobIngest, results: Optional[List[ItemResult]] = None) -> JobIngest:
         """Menyelesaikan status JobIngest dan menghitung ringkasan eksekusi."""
-        job.success_count = sum(1 for r in results if r.outcome == ItemOutcome.success)
-        job.duplicate_count = sum(1 for r in results if r.outcome == ItemOutcome.duplicate)
-        job.failed_count = sum(1 for r in results if r.outcome == ItemOutcome.failed)
+        if results is not None:
+            job.success_count = sum(1 for r in results if r.outcome == ItemOutcome.success)
+            job.duplicate_count = sum(1 for r in results if r.outcome == ItemOutcome.duplicate)
+            job.failed_count = sum(1 for r in results if r.outcome == ItemOutcome.failed)
+
         job.finished_at = datetime.now(timezone.utc)
 
         # Status 'gagal' hanya jika sama sekali tidak ada yang berhasil/duplikat dan ada yang gagal
@@ -148,19 +150,43 @@ class IngestService:
         self.db.refresh(job)
         return job
 
-    def _on_item_failed(self, job: JobIngest, item: IngestItem, result: ItemResult) -> None:
+    def _on_item_failed(
+        self,
+        job: JobIngest,
+        item: IngestItem,
+        result: ItemResult,
+        options: IngestOptions,
+    ) -> None:
         """
         Hook untuk pencatatan log kegagalan dan pendaftaran antrian retry pada Langkah 2.
-        Saat ini no-op (tidak melakukan aksi apa pun).
         """
-        pass
+        try:
+            from app.services.failure_service import FailureService
+            svc = FailureService(self.db, self.storage)
+            failure = svc.record_failure(job, item, result, options)
+            if failure:
+                result.extra["failure_id"] = failure.id
+        except Exception as exc:
+            logger.exception("Error pada hook _on_item_failed: %s", exc)
 
-    def _on_item_duplicate(self, job: JobIngest, item: IngestItem, result: ItemResult) -> None:
+    def _on_item_duplicate(
+        self,
+        job: JobIngest,
+        item: IngestItem,
+        result: ItemResult,
+        options: IngestOptions,
+    ) -> None:
         """
         Hook untuk penanganan item duplikat pada Langkah 2.
-        Saat ini no-op (tidak melakukan aksi apa pun).
         """
-        pass
+        try:
+            from app.services.failure_service import FailureService
+            svc = FailureService(self.db, self.storage)
+            failure = svc.record_duplicate(job, item, result, options)
+            if failure:
+                result.extra["failure_id"] = failure.id
+        except Exception as exc:
+            logger.exception("Error pada hook _on_item_duplicate: %s", exc)
 
     def ingest_one(
         self,
@@ -169,6 +195,7 @@ class IngestService:
         options: IngestOptions,
         actor_user_id: Optional[int] = None,
         ip_address: Optional[str] = None,
+        suppress_failure_hooks: bool = False,
     ) -> ItemResult:
         """
         Memproses satu item berkas PDF ke dalam pipeline ingest.
@@ -185,7 +212,8 @@ class IngestService:
                 message=val_err.message,
                 reason_code=val_err.code.value,
             )
-            self._on_item_failed(job, item, result)
+            if not suppress_failure_hooks:
+                self._on_item_failed(job, item, result, options)
             return result
 
         # 2. Hitung fingerprint berkas (SHA-256 dan ukuran byte)
@@ -220,15 +248,20 @@ class IngestService:
                     "title": existing.title,
                 },
             )
-            self._on_item_duplicate(job, item, result)
+            if not suppress_failure_hooks:
+                self._on_item_duplicate(job, item, result, options)
             return result
 
-        # 4. Simpan PDF ke storage fisik
+        # 4. Simpan PDF ke storage fisik di folder staging pdf/_inbox
         rel_path: Optional[str] = None
         try:
             clean_name = sanitize_filename(item.filename)
             filename_hint = f"{fp.sha256[:12]}_{clean_name}"
-            rel_path = self.storage.save_pdf(item.content, filename_hint=filename_hint)
+            rel_path = self.storage.save_pdf(
+                item.content,
+                filename_hint=filename_hint,
+                subdir="pdf/_inbox",
+            )
 
             # 5. Validasi kategori jika diberikan
             if options.category_id is not None:
@@ -245,7 +278,8 @@ class IngestService:
                         message=f"Kategori dengan ID {options.category_id} tidak ditemukan.",
                         reason_code="kategori_tidak_ditemukan",
                     )
-                    self._on_item_failed(job, item, result)
+                    if not suppress_failure_hooks:
+                        self._on_item_failed(job, item, result, options)
                     return result
 
             # 6. Tentukan judul dan metadata dokumen
@@ -300,6 +334,34 @@ class IngestService:
             self.db.commit()
             self.db.refresh(doc)
 
+            # 7. Eksekusi Penempatan Folder KB otomatis (Langkah 3)
+            placement_extra = {
+                "placed": False,
+                "reason": "metadata_belum_cukup",
+                "category_path": None,
+                "standardized_filename": doc.standardized_filename,
+            }
+            try:
+                from app.services.category_service import CategoryService
+                from app.services.placement_service import PlacementService
+                cat_svc = CategoryService(self.db)
+                place_svc = PlacementService(self.db, self.storage, cat_svc, settings)
+                placement_res = place_svc.place(doc, actor_user_id=actor_user_id, ip_address=ip_address)
+                placement_extra = {
+                    "placed": placement_res.placed,
+                    "reason": placement_res.reason,
+                    "category_path": placement_res.category_path,
+                    "standardized_filename": doc.standardized_filename,
+                }
+            except Exception as place_exc:
+                logger.exception("Kesalahan saat penempatan berkas dokumen ID %s: %s", doc.id, place_exc)
+                placement_extra = {
+                    "placed": False,
+                    "reason": f"gagal: {str(place_exc)}",
+                    "category_path": None,
+                    "standardized_filename": doc.standardized_filename,
+                }
+
             return ItemResult(
                 filename=item.filename,
                 outcome=ItemOutcome.success,
@@ -310,6 +372,7 @@ class IngestService:
                 extra={
                     "title": doc.title,
                     "regulation_number": doc.regulation_number,
+                    "placement": placement_extra,
                 },
             )
 
@@ -348,7 +411,8 @@ class IngestService:
                         "title": dup.title,
                     },
                 )
-                self._on_item_duplicate(job, item, result)
+                if not suppress_failure_hooks:
+                    self._on_item_duplicate(job, item, result, options)
                 return result
             else:
                 logger.exception("Kesalahan integritas DB pada ingest item '%s'", item.filename)
@@ -358,7 +422,8 @@ class IngestService:
                     message=f"Gagal memproses file: {str(integ_err)}",
                     reason_code="kesalahan_internal",
                 )
-                self._on_item_failed(job, item, result)
+                if not suppress_failure_hooks:
+                    self._on_item_failed(job, item, result, options)
                 return result
 
         except Exception as exc:
@@ -372,7 +437,8 @@ class IngestService:
                 message=f"Gagal memproses file: {str(exc)}",
                 reason_code="kesalahan_internal",
             )
-            self._on_item_failed(job, item, result)
+            if not suppress_failure_hooks:
+                self._on_item_failed(job, item, result, options)
             return result
 
     def ingest_batch(

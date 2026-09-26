@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, Integer, String, DateTime, Enum as SQLEnum
+    Column, Integer, String, DateTime, Enum as SQLEnum, ForeignKey
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -31,6 +31,19 @@ class JobIngest(Base):
         nullable=True,
         comment="Pemicu job, misal user email / system / scraper id"
     )
+    source_id = Column(
+        Integer,
+        ForeignKey("scraping_sources.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="FK ke sumber scraping (Langkah 6-7)",
+    )
+    retry_of_failure_id = Column(
+        Integer,
+        ForeignKey("ingest_failures.id", ondelete="SET NULL", use_alter=True, name="fk_job_ingest_retry_failure"),
+        nullable=True,
+        comment="FK ke baris ingest_failures jika job ini merupakan retry",
+    )
     started_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -54,6 +67,9 @@ class JobIngest(Base):
 
     # Relasi ke dokumen yang dihasilkan dari job ini
     documents = relationship("Document", back_populates="job")
+    # Relasi ke failures
+    failures = relationship("IngestFailure", back_populates="job", foreign_keys="[IngestFailure.job_id]", order_by="IngestFailure.id")
 
     def __repr__(self):
         return f"<JobIngest id={self.id} type={self.job_type} status={self.status}>"
+
