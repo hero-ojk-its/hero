@@ -77,7 +77,7 @@ python -m app.create_admin
 ## 🧪 Pengujian Otomatis
 
 ### 1. Menjalankan Pytest
-Suite pengujian mencakup 114 test otomatis tanpa kegagalan/skip (Langkah 0–5) menggunakan database uji terpisah `hero_test`:
+Suite pengujian mencakup 157 test otomatis tanpa kegagalan (Langkah 0–7) menggunakan database uji terpisah `hero_test`:
 ```bash
 python -m pytest -q
 ```
@@ -273,11 +273,41 @@ Kunci API internal (`INTERNAL_API_KEY`) digunakan untuk autentikasi worker Data/
 | `POST` | `/api/v1/scraping-sources/{id}/run` | Jalankan sinkronisasi sumber folder (202 async / 200 via `?wait=true`) |
 | `GET` | `/api/v1/scraping-sources/{id}/files` | Daftar berkas terindeks per sumber (pagination & filter status) |
 
-### 7. Jejak Audit & Autentikasi
+### 7. Alur Pindai Situs Web (`/api/v1/scans`)
+| Method | Endpoint | Deskripsi |
+|---|---|---|
+| `POST` | `/api/v1/scans/` | Mulai sesi pindai situs web (202 Accepted / 200 via `?wait=true`) |
+| `GET` | `/api/v1/scans/` | Riwayat sesi pindai (filter `source_id`, `status`) |
+| `GET` | `/api/v1/scans/{id}` | Detail status sesi, progres halaman & ringkasan kandidat |
+| `GET` | `/api/v1/scans/{id}/candidates` | Daftar kandidat PDF (filter status, centang, outcome, search nama berkas) |
+| `PATCH`| `/api/v1/scans/{id}/selection` | Perbarui centang pilihan (`set`, `select_all_new`, `select_none`) |
+| `POST` | `/api/v1/scans/{id}/pull` | Tarik kandidat terpilih (`knowledge_base` atau `unduh_folder`) |
+| `POST` | `/api/v1/scans/{id}/cancel` | Batalkan sesi pemindaian atau penarikan yang sedang berjalan |
+| `GET` | `/api/v1/scans/{id}/download` | Unduh arsip ZIP hasil penarikan tujuan `unduh_folder` |
+
+### 8. Jejak Audit & Autentikasi
 | Method | Endpoint | Deskripsi |
 |---|---|---|
 | `GET` | `/api/v1/audit-logs/` | Daftar jejak audit aktivitas (filter `action`, `user_id`, `target_resource`) |
 | `POST` | `/api/v1/auth/login` | Login form OAuth2 untuk memperoleh token JWT Bearer |
+
+---
+
+## 🌐 Pindai Situs Web (Langkah 7)
+
+Alur pemindaian situs web dirancang sesuai keputusan rapat mitra (*MoM 15 & 22 Sep 2026*): **Scan → Compare → Select → Pull**.
+
+### 1. Mode & Backend Crawler
+- **`simple_http` (Bawaan):** Crawler HTTP berbasis `httpx` murni untuk situs HTML statis standar. Menghormati `robots.txt`, jeda rate-limit, BFS kedalaman slash, deteksi paging tanpa menghabiskan depth, dan HEAD request untuk ukuran/Content-Disposition.
+  *Batasan:* Tidak mengeksekusi JavaScript sisi klien (SPA) dan tidak menangani proteksi anti-bot tingkat lanjut.
+- **`external_module`:** Memuat kelas crawler kustom yang memenuhi `Crawler` Protocol secara dinamis via `CRAWLER_MODULE=pkg.module:Class`.
+- **`push`:** Mode antrean untuk worker crawler independen Data/ML via endpoint internal (`/internal/scans/claim` dan `/internal/scans/{id}/candidates`).
+
+### 2. Perlindungan Keamanan SSRF
+Semua URL divalidasi ketat oleh `guard_url`:
+- Hanya skema `http` dan `https` yang diizinkan.
+- Host di-resolve ke IP dan seluruh alamat private (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), loopback (`127.0.0.1`, `::1`), link-local (`169.254.169.254`), multicast, dan reserved ditolak keras dengan status HTTP 422 (kecuali `CRAWL_ALLOW_PRIVATE_NETWORKS=true` untuk testing lokal).
+- Setiap pengalihan (*redirect hop*) diperiksa ulang secara independen.
 
 ---
 
@@ -286,36 +316,45 @@ Kunci API internal (`INTERNAL_API_KEY`) digunakan untuk autentikasi worker Data/
 ```
 hero-backend/
 ├── alembic/                 # Skrip migrasi database Alembic
-│   ├── versions/            # Riwayat revisi migrasi skema (Langkah 0–5)
+│   ├── versions/            # Riwayat revisi migrasi skema (Langkah 0–7)
 │   └── env.py               # Konfigurasi environment migrasi
 ├── app/
-│   ├── models/              # ORM SQLAlchemy & Enums (Document, JobIngest, IngestFailure, Category, ...)
-│   ├── routers/             # Endpoint FastAPI (documents, ingest, categories, internal, dashboard, auth, ...)
+│   ├── crawlers/            # Modul crawler terisolasi (Base, URL utils, SimpleHttp, Registry)
+│   ├── models/              # ORM SQLAlchemy & Enums (Document, JobIngest, ScanSession, ScanCandidate, ...)
+│   ├── routers/             # Endpoint FastAPI (documents, ingest, categories, internal, dashboard, scans, ...)
 │   ├── schemas/             # Pydantic validation & response models
-│   ├── services/            # Logika bisnis (Search, Storage, Ingest, Failure, Naming, Category, Placement, Audit)
+│   ├── services/            # Logika bisnis (Search, Storage, Ingest, Failure, Naming, Category, Scan, Placement, Audit)
 │   ├── config.py            # Pydantic Settings & environment loader
 │   ├── database.py          # SQLAlchemy Session & Base & Category Seeder
 │   ├── main.py              # Inisialisasi FastAPI & Middleware
 │   └── create_admin.py      # Utilitas CLI pembuatan admin
 ├── docs/
 │   ├── api/                 # Panduan & kontrak integrasi API (Frontend & Data/ML)
-│   └── reports/             # Laporan berkala implementasi langkah (step0-1, step2-3, step4-5)
-├── scripts/                 # Skrip benchmark, smoke test & Docker entrypoint
+│   │   ├── frontend-changes-step7.md
+│   │   └── crawler-adapter-contract.md
+│   └── reports/             # Laporan berkala implementasi langkah (step0-1, step2-3, step4-5, step6, step7)
+├── scripts/                 # Skrip benchmark, smoke test, demo & Docker entrypoint
 │   ├── entrypoint.sh        # Entrypoint Docker (Alembic upgrade + Uvicorn)
 │   ├── perf_search.py       # Benchmark performa full-text search (2.000 dokumen)
-│   └── smoke_test.py        # Skrip otomatis smoke test end-to-end
-├── tests/                   # Suite pengujian otomatis Pytest (114 test)
+│   ├── smoke_test.py        # Skrip otomatis smoke test end-to-end
+│   └── demo_real_site_scan.py # Skrip demonstrasi alur pemindaian situs web nyata
+├── tests/                   # Suite pengujian otomatis Pytest (157 test)
 │   ├── conftest.py          # Fixture database test & storage terisolasi
 │   ├── test_api.py          # Pengujian API umum & auth
-│   ├── test_failures.py     # Pengujian log kegagalan & antrian retry (F01-F12)
-│   ├── test_naming_service.py # Pengujian standardisasi nama (N01-N07)
-│   ├── test_category_service.py # Pengujian hierarki & constraint kategori (C01-C04)
-│   ├── test_placement.py    # Pengujian penempatan folder KB (P01-P11)
-│   ├── test_search.py       # Pengujian pencarian KB full-text & filter (S01-S16)
-│   ├── test_document_detail.py # Pengujian buka PDF asli & teks (D01-D05)
-│   ├── test_metadata_correction.py # Pengujian koreksi metadata & audit diff (M01-M07)
-│   ├── test_extraction_internal.py # Pengujian integrasi worker ML (E01-E12)
-│   └── test_dashboard.py    # Pengujian dashboard ringkasan & audit target_resource (B01-B03, A01)
+│   ├── test_failures.py     # Pengujian log kegagalan & antrian retry
+│   ├── test_naming_service.py # Pengujian standardisasi nama
+│   ├── test_category_service.py # Pengujian hierarki & constraint kategori
+│   ├── test_placement.py    # Pengujian penempatan folder KB
+│   ├── test_search.py       # Pengujian pencarian KB full-text & filter
+│   ├── test_document_detail.py # Pengujian buka PDF asli & teks
+│   ├── test_metadata_correction.py # Pengujian koreksi metadata & audit diff
+│   ├── test_extraction_internal.py # Pengujian integrasi worker ML
+│   ├── test_dashboard.py    # Pengujian dashboard ringkasan
+│   ├── test_local_folder_sync.py # Pengujian sinkronisasi folder lokal
+│   ├── test_url_guard.py    # Pengujian keamanan SSRF & URL normalizer
+│   ├── test_crawler_simple.py # Pengujian BFS crawler, robots.txt & paging
+│   ├── test_scan_flow.py    # Pengujian alur scan, deduplikasi KB, selection & pull
+│   └── test_scan_push.py    # Pengujian mode crawler push internal
 ├── .env.example             # Template variabel lingkungan
 ├── docker-compose.yml       # Definisi service PostgreSQL + Backend
 ├── Dockerfile               # Image build backend Python 3.11-slim
