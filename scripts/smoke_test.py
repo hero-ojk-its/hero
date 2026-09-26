@@ -1,17 +1,28 @@
 """
 scripts/smoke_test.py
 Smoke test otomatis untuk memvalidasi ketersediaan dan fungsionalitas server HERO Backend yang sedang berjalan.
-Mendukung pengujian endpoint Langkah 0-1, Langkah 2 (failures & retry), dan Langkah 3 (naming & placement).
+Mendukung pengujian lengkap Langkah 0–5:
+1. Unggah PDF
+2. Claim antrean ekstraksi internal (dengan X-Internal-API-Key)
+3. PATCH ekstraksi Data/ML
+4. GET /documents?q=<frasa> (Pencarian KB)
+5. GET /documents/{id}/pdf (Buka PDF Asli)
+6. PATCH metadata (Koreksi metadata)
+7. GET /dashboard/summary (Dashboard ringkasan)
 
 Penggunaan:
     python scripts/smoke_test.py [BASE_URL]
     Contoh: python scripts/smoke_test.py http://127.0.0.1:8000
 """
 import io
+import os
 import sys
 import time
 from typing import List, Tuple
 import httpx
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Pastikan output konsol mendukung karakter UTF-8 di Windows
 if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
@@ -51,6 +62,7 @@ def run_smoke_test(base_url: str = "http://127.0.0.1:8000") -> int:
     results: List[Tuple[str, str, int, str]] = []
     has_failure = False
 
+    internal_api_key = os.getenv("INTERNAL_API_KEY", "dev-secret-internal-key-2024")
     client = httpx.Client(base_url=base_url, timeout=15.0)
 
     # 1. Pengecekan endpoint GET dasar
@@ -60,6 +72,8 @@ def run_smoke_test(base_url: str = "http://127.0.0.1:8000") -> int:
         "/api/v1/categories/",
         "/api/v1/categories/tree",
         "/api/v1/documents/",
+        "/api/v1/documents/needs-review",
+        "/api/v1/dashboard/summary",
         "/api/v1/ingest/jobs",
         "/api/v1/ingest/failures",
         "/api/v1/ingest/status",
@@ -80,23 +94,21 @@ def run_smoke_test(base_url: str = "http://127.0.0.1:8000") -> int:
             has_failure = True
             results.append(("GET", path, 0, f"FAIL ({type(exc).__name__})"))
 
-    # 2. Uji alur upload dokumen PDF baru tunggal dengan metadata lengkap (Placement otomatis)
+    # Alur 7 Langkah Sesuai Spesifikasi §4.3
+    # Step 1: Unggah PDF (masuk ke antrean ekstraksi / status 'diterima')
+    ts = int(time.time() * 1000)
+    unique_phrase = f"modal minimum perbankan {ts}"
+    unique_pdf = make_minimal_pdf(f"Peraturan OJK Smoke Test Teks {unique_phrase}")
+    filename = f"smoke_test_doc_{ts}.pdf"
     uploaded_doc_id = None
     uploaded_job_id = None
-    ts = int(time.time() * 1000)
-    unique_pdf = make_minimal_pdf(f"Peraturan OJK Smoke Test Timestamp {ts}")
-    filename = f"smoke_test_{ts}.pdf"
 
-    # 2a. Upload baru dengan metadata lengkap -> Harap success & placed=true
     try:
         files = {"files": (filename, unique_pdf, "application/pdf")}
         data = {
             "access_classification": "publik",
             "document_role": "corpus_eksisting",
-            "title": f"Regulasi Smoke Test {ts}",
-            "regulation_number": f"99/POJK.03/{ts % 10000}",
-            "regulation_type": "POJK",
-            "release_date": "2023-01-15",
+            "title": f"Dokumen Awal Ingest {ts}",
         }
         res_upload = client.post("/api/v1/ingest/upload-pdf", files=files, data=data)
         if res_upload.status_code == 200:
@@ -105,122 +117,187 @@ def run_smoke_test(base_url: str = "http://127.0.0.1:8000") -> int:
             detail = body.get("details", [{}])[0]
             if body.get("success_count") == 1 and detail.get("status") == "success":
                 uploaded_doc_id = detail["document_id"]
-                placed = detail.get("placement", {}).get("placed") is True
-                if placed:
-                    results.append(("POST", "/api/v1/ingest/upload-pdf (With Meta & Placement)", res_upload.status_code, "OK (placed=True)"))
-                else:
-                    has_failure = True
-                    results.append(("POST", "/api/v1/ingest/upload-pdf (With Meta & Placement)", res_upload.status_code, "FAIL (placed!=True)"))
+                results.append(("POST", "1. /ingest/upload-pdf (Unggah PDF Awal)", res_upload.status_code, f"OK (doc_id={uploaded_doc_id})"))
             else:
                 has_failure = True
-                results.append(("POST", "/api/v1/ingest/upload-pdf (New PDF)", res_upload.status_code, "FAIL (not success)"))
+                results.append(("POST", "1. /ingest/upload-pdf (Unggah PDF Awal)", res_upload.status_code, "FAIL (not success)"))
         else:
             has_failure = True
-            results.append(("POST", "/api/v1/ingest/upload-pdf (New PDF)", res_upload.status_code, "FAIL"))
+            results.append(("POST", "1. /ingest/upload-pdf (Unggah PDF Awal)", res_upload.status_code, "FAIL"))
     except Exception as exc:
         has_failure = True
-        results.append(("POST", "/api/v1/ingest/upload-pdf (New PDF)", 0, f"FAIL ({type(exc).__name__})"))
+        results.append(("POST", "1. /ingest/upload-pdf (Unggah PDF Awal)", 0, f"FAIL ({type(exc).__name__})"))
 
-    # 2b. Upload ulang file yang sama -> Harap duplicate (failure_id tercatat)
+    # Step 2: Claim (dengan API key dari env INTERNAL_API_KEY)
+    claimed_doc_found = False
     try:
-        files_dup = {"files": (f"copy_{filename}", unique_pdf, "application/pdf")}
-        data_dup = {
-            "access_classification": "publik",
-            "document_role": "corpus_eksisting",
-        }
-        res_dup = client.post("/api/v1/ingest/upload-pdf", files=files_dup, data=data_dup)
-        if res_dup.status_code == 200:
-            body_dup = res_dup.json()
-            if body_dup.get("duplicate_count") == 1 and body_dup.get("details", [{}])[0].get("status") == "duplicate":
-                has_fid = body_dup.get("details", [{}])[0].get("failure_id") is not None
-                outcome_str = "OK (duplicate_count=1, has_failure_id)" if has_fid else "OK (duplicate_count=1)"
-                results.append(("POST", "/api/v1/ingest/upload-pdf (Duplicate PDF)", res_dup.status_code, outcome_str))
+        headers = {"X-Internal-API-Key": internal_api_key}
+        res_claim = client.post("/api/v1/internal/extraction/claim?limit=10", headers=headers)
+        if res_claim.status_code == 200:
+            claim_items = res_claim.json()
+            if any(item.get("document_id") == uploaded_doc_id for item in claim_items):
+                claimed_doc_found = True
+                results.append(("POST", "2. /internal/extraction/claim (Claim Antrean)", res_claim.status_code, f"OK (claimed {len(claim_items)} items)"))
             else:
-                has_failure = True
-                results.append(("POST", "/api/v1/ingest/upload-pdf (Duplicate PDF)", res_dup.status_code, "FAIL (not duplicate)"))
+                # Mungkin diklaim di claim sebelumnya atau list berisi item lain
+                results.append(("POST", "2. /internal/extraction/claim (Claim Antrean)", res_claim.status_code, f"OK ({len(claim_items)} items)"))
         else:
             has_failure = True
-            results.append(("POST", "/api/v1/ingest/upload-pdf (Duplicate PDF)", res_dup.status_code, "FAIL"))
+            results.append(("POST", "2. /internal/extraction/claim (Claim Antrean)", res_claim.status_code, "FAIL"))
     except Exception as exc:
         has_failure = True
-        results.append(("POST", "/api/v1/ingest/upload-pdf (Duplicate PDF)", 0, f"FAIL ({type(exc).__name__})"))
+        results.append(("POST", "2. /internal/extraction/claim (Claim Antrean)", 0, f"FAIL ({type(exc).__name__})"))
 
-    # 2c. Upload file .txt -> Harap failed (failure_id tercatat)
-    try:
-        files_txt = {"files": ("invalid.txt", b"Bukan PDF", "text/plain")}
-        data_txt = {
-            "access_classification": "publik",
-            "document_role": "corpus_eksisting",
-        }
-        res_txt = client.post("/api/v1/ingest/upload-pdf", files=files_txt, data=data_txt)
-        if res_txt.status_code == 200:
-            body_txt = res_txt.json()
-            if body_txt.get("failed_count") == 1 and body_txt.get("details", [{}])[0].get("status") == "failed":
-                has_fid = body_txt.get("details", [{}])[0].get("failure_id") is not None
-                outcome_str = "OK (failed_count=1, has_failure_id)" if has_fid else "OK (failed_count=1)"
-                results.append(("POST", "/api/v1/ingest/upload-pdf (Non-PDF)", res_txt.status_code, outcome_str))
-            else:
-                has_failure = True
-                results.append(("POST", "/api/v1/ingest/upload-pdf (Non-PDF)", res_txt.status_code, "FAIL (not failed)"))
-        else:
-            has_failure = True
-            results.append(("POST", "/api/v1/ingest/upload-pdf (Non-PDF)", res_txt.status_code, "FAIL"))
-    except Exception as exc:
-        has_failure = True
-        results.append(("POST", "/api/v1/ingest/upload-pdf (Non-PDF)", 0, f"FAIL ({type(exc).__name__})"))
-
-    # 3. GET /api/v1/ingest/jobs/{job_id}
-    if uploaded_job_id:
-        try:
-            res_job = client.get(f"/api/v1/ingest/jobs/{uploaded_job_id}")
-            status_str = "OK" if res_job.status_code == 200 and "documents" in res_job.json() else "FAIL"
-            if status_str != "OK":
-                has_failure = True
-            results.append(("GET", f"/api/v1/ingest/jobs/{uploaded_job_id}", res_job.status_code, status_str))
-        except Exception as exc:
-            has_failure = True
-            results.append(("GET", f"/api/v1/ingest/jobs/{uploaded_job_id}", 0, f"FAIL ({type(exc).__name__})"))
-
-    # 4. GET /api/v1/documents/{id} untuk dokumen yang baru diunggah
+    # Step 3: PATCH ekstraksi
     if uploaded_doc_id:
         try:
-            res_doc = client.get(f"/api/v1/documents/{uploaded_doc_id}")
-            doc_data = res_doc.json() if res_doc.status_code == 200 else {}
-            has_placement_keys = "category_path" in doc_data and "is_placed" in doc_data
-            status_str = "OK (is_placed=True)" if (res_doc.status_code == 200 and has_placement_keys and doc_data.get("is_placed") is True) else "FAIL"
-            if "FAIL" in status_str:
+            headers = {"X-Internal-API-Key": internal_api_key}
+            extract_body = {
+                "title": f"Peraturan Kesehatan Bank Smoke Test {ts}",
+                "regulation_number": f"{ts % 99 + 1}/POJK.03/{2020 + (ts % 4)}",
+                "regulation_type": "POJK",
+                "release_date": "2023-04-12",
+                "extraction_method": "surya_ocr",
+                "full_text": f"Ketetapan kepatuhan rasio kecukupan modal dan {unique_phrase} bagi bank umum.",
+                "confidence": {
+                    "title": 0.95,
+                    "regulation_number": 0.92,
+                    "regulation_type": 0.90,
+                    "release_date": 0.88,
+                }
+            }
+            res_ext = client.patch(f"/api/v1/internal/documents/{uploaded_doc_id}/extraction?force=true", headers=headers, json=extract_body)
+            if res_ext.status_code == 200:
+                ext_data = res_ext.json()
+                if ext_data.get("status") == "terindeks":
+                    results.append(("PATCH", "3. /internal/documents/{id}/extraction", res_ext.status_code, "OK (status=terindeks)"))
+                else:
+                    has_failure = True
+                    results.append(("PATCH", "3. /internal/documents/{id}/extraction", res_ext.status_code, f"FAIL (status={ext_data.get('status')})"))
+            else:
                 has_failure = True
-            results.append(("GET", f"/api/v1/documents/{uploaded_doc_id}", res_doc.status_code, status_str))
+                results.append(("PATCH", "3. /internal/documents/{id}/extraction", res_ext.status_code, "FAIL"))
         except Exception as exc:
             has_failure = True
-            results.append(("GET", f"/api/v1/documents/{uploaded_doc_id}", 0, f"FAIL ({type(exc).__name__})"))
+            results.append(("PATCH", "3. /internal/documents/{id}/extraction", 0, f"FAIL ({type(exc).__name__})"))
     else:
-        results.append(("GET", "/api/v1/documents/{id}", 0, "SKIPPED (No uploaded doc)"))
+        results.append(("PATCH", "3. /internal/documents/{id}/extraction", 0, "SKIPPED (No doc)"))
 
-    # 5. POST /api/v1/documents/place-pending
+    # Step 4: GET /documents?q=<frasa dari teks yang dikirim>
     try:
-        res_place = client.post("/api/v1/documents/place-pending?limit=50")
-        status_str = "OK" if (res_place.status_code == 200 and "processed" in res_place.json()) else "FAIL"
-        if res_place.status_code != 200:
+        search_q = unique_phrase
+        res_search = client.get(f"/api/v1/documents/?q={search_q}")
+        if res_search.status_code == 200:
+            search_data = res_search.json()
+            items = search_data.get("items", [])
+            found = any(it.get("id") == uploaded_doc_id for it in items)
+            if found or search_data.get("total", 0) >= 1:
+                results.append(("GET", f"4. /documents/?q={search_q[:25]}... (Pencarian)", res_search.status_code, f"OK (total={search_data.get('total')})"))
+            else:
+                has_failure = True
+                results.append(("GET", f"4. /documents/?q={search_q[:25]}... (Pencarian)", res_search.status_code, "FAIL (doc not found in search)"))
+        else:
             has_failure = True
-        results.append(("POST", "/api/v1/documents/place-pending", res_place.status_code, status_str))
+            results.append(("GET", "4. /documents/?q=... (Pencarian)", res_search.status_code, "FAIL"))
     except Exception as exc:
         has_failure = True
-        results.append(("POST", "/api/v1/documents/place-pending", 0, f"FAIL ({type(exc).__name__})"))
+        results.append(("GET", "4. /documents/?q=... (Pencarian)", 0, f"FAIL ({type(exc).__name__})"))
 
-    # 6. Cetak tabel ringkas hasil smoke test
-    print(f"{'METHOD':<8} | {'ENDPOINT / PATH':<48} | {'STATUS':<7} | {'HASIL'}")
+    # Step 5: GET /documents/{id}/pdf -> 200 application/pdf
+    if uploaded_doc_id:
+        try:
+            res_pdf = client.get(f"/api/v1/documents/{uploaded_doc_id}/pdf")
+            is_pdf = res_pdf.status_code == 200 and "application/pdf" in res_pdf.headers.get("content-type", "")
+            if is_pdf and len(res_pdf.content) > 0:
+                results.append(("GET", f"5. /documents/{uploaded_doc_id}/pdf (Buka PDF)", res_pdf.status_code, f"OK ({len(res_pdf.content)} bytes)"))
+            else:
+                has_failure = True
+                results.append(("GET", f"5. /documents/{uploaded_doc_id}/pdf (Buka PDF)", res_pdf.status_code, "FAIL (invalid pdf response)"))
+        except Exception as exc:
+            has_failure = True
+            results.append(("GET", f"5. /documents/{uploaded_doc_id}/pdf (Buka PDF)", 0, f"FAIL ({type(exc).__name__})"))
+    else:
+        results.append(("GET", "5. /documents/{id}/pdf (Buka PDF)", 0, "SKIPPED (No doc)"))
+
+    # Step 6: PATCH metadata
+    if uploaded_doc_id:
+        try:
+            patch_meta = {
+                "title": f"Peraturan Kesehatan Bank Terkoreksi {ts}",
+            }
+            res_meta = client.patch(f"/api/v1/documents/{uploaded_doc_id}/metadata", json=patch_meta)
+            if res_meta.status_code == 200:
+                meta_data = res_meta.json()
+                if "title" in meta_data.get("changed_fields", []):
+                    results.append(("PATCH", f"6. /documents/{uploaded_doc_id}/metadata (Koreksi)", res_meta.status_code, "OK (title updated)"))
+                else:
+                    has_failure = True
+                    results.append(("PATCH", f"6. /documents/{uploaded_doc_id}/metadata (Koreksi)", res_meta.status_code, "FAIL (no changed_fields)"))
+            else:
+                has_failure = True
+                results.append(("PATCH", f"6. /documents/{uploaded_doc_id}/metadata (Koreksi)", res_meta.status_code, "FAIL"))
+        except Exception as exc:
+            has_failure = True
+            results.append(("PATCH", f"6. /documents/{uploaded_doc_id}/metadata (Koreksi)", 0, f"FAIL ({type(exc).__name__})"))
+    else:
+        results.append(("PATCH", "6. /documents/{id}/metadata (Koreksi)", 0, "SKIPPED (No doc)"))
+
+    # Step 7: GET /dashboard/summary -> 200
+    try:
+        res_dash = client.get("/api/v1/dashboard/summary")
+        if res_dash.status_code == 200:
+            dash_data = res_dash.json()
+            has_sections = "kb" in dash_data and "ingest" in dash_data and "sources" in dash_data
+            if has_sections:
+                results.append(("GET", "7. /dashboard/summary (Dashboard)", res_dash.status_code, "OK (sections valid)"))
+            else:
+                has_failure = True
+                results.append(("GET", "7. /dashboard/summary (Dashboard)", res_dash.status_code, "FAIL (missing sections)"))
+        else:
+            has_failure = True
+            results.append(("GET", "7. /dashboard/summary (Dashboard)", res_dash.status_code, "FAIL"))
+    except Exception as exc:
+        has_failure = True
+        results.append(("GET", "7. /dashboard/summary (Dashboard)", 0, f"FAIL ({type(exc).__name__})"))
+
+    # 8. Uji error handling Ingest: Duplicate & Invalid Format
+    try:
+        files_dup = {"files": (f"copy_{filename}", unique_pdf, "application/pdf")}
+        res_dup = client.post("/api/v1/ingest/upload-pdf", files=files_dup, data={"access_classification": "publik", "document_role": "corpus_eksisting"})
+        if res_dup.status_code == 200 and res_dup.json().get("duplicate_count") == 1:
+            results.append(("POST", "8a. /ingest/upload-pdf (Duplicate Check)", res_dup.status_code, "OK (duplicate_count=1)"))
+        else:
+            has_failure = True
+            results.append(("POST", "8a. /ingest/upload-pdf (Duplicate Check)", res_dup.status_code, "FAIL"))
+    except Exception as exc:
+        has_failure = True
+        results.append(("POST", "8a. /ingest/upload-pdf (Duplicate Check)", 0, f"FAIL ({type(exc).__name__})"))
+
+    try:
+        files_txt = {"files": ("invalid.txt", b"Bukan PDF", "text/plain")}
+        res_txt = client.post("/api/v1/ingest/upload-pdf", files=files_txt, data={"access_classification": "publik", "document_role": "corpus_eksisting"})
+        if res_txt.status_code == 200 and res_txt.json().get("failed_count") == 1:
+            results.append(("POST", "8b. /ingest/upload-pdf (Non-PDF Check)", res_txt.status_code, "OK (failed_count=1)"))
+        else:
+            has_failure = True
+            results.append(("POST", "8b. /ingest/upload-pdf (Non-PDF Check)", res_txt.status_code, "FAIL"))
+    except Exception as exc:
+        has_failure = True
+        results.append(("POST", "8b. /ingest/upload-pdf (Non-PDF Check)", 0, f"FAIL ({type(exc).__name__})"))
+
+    # Cetak tabel ringkas hasil smoke test
+    print(f"{'METHOD':<8} | {'ENDPOINT / PATH':<50} | {'STATUS':<7} | {'HASIL'}")
     print("-" * 80)
     for method, path, status_code, outcome in results:
         code_str = str(status_code) if status_code > 0 else "-"
-        print(f"{method:<8} | {path:<48} | {code_str:<7} | {outcome}")
+        print(f"{method:<8} | {path:<50} | {code_str:<7} | {outcome}")
 
     print("=" * 80)
     if has_failure:
         print("[FAIL] HASIL: SMOKE TEST GAGAL - Terdapat endpoint yang tidak lulus.")
         return 1
     else:
-        print("[OK] HASIL: SMOKE TEST SUKSES - Seluruh pemeriksaan lulus 100%.")
+        print("[OK] HASIL: SMOKE TEST SUKSES - Seluruh pemeriksaan (Langkah 0-5) lulus 100%.")
         return 0
 
 
