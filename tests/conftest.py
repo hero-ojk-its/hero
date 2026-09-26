@@ -5,7 +5,7 @@ from typing import Generator
 import bcrypt
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
-from starlette.testclient import TestClient
+from fastapi.testclient import TestClient
 import alembic.config
 import alembic.command
 

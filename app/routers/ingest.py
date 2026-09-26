@@ -106,7 +106,7 @@ def upload_pdf(
     ])
     if len(files) > 1 and has_single_doc_meta:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
                 "Metadata per-dokumen (judul, nomor, tanggal) hanya boleh diisi untuk unggahan "
                 "satu berkas. Untuk unggahan jamak, metadata diisi dari hasil ekstraksi atau koreksi manual."
@@ -120,7 +120,7 @@ def upload_pdf(
             parsed_release_date = date.fromisoformat(release_date.strip())
         except ValueError:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Format tanggal rilis tidak valid. Gunakan format YYYY-MM-DD.",
             )
 
@@ -132,7 +132,7 @@ def upload_pdf(
             parsed_category_id = int(val)
         else:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="category_id harus berupa bilangan bulat.",
             )
 
