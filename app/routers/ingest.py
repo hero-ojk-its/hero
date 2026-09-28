@@ -537,7 +537,15 @@ def update_failure_status(
     return _format_failure_response(updated)
 
 
-@router.post("/failures/{failure_id}/retry", response_model=FailureRetryResponse, summary="Retry satu kegagalan")
+@router.post(
+    "/failures/{failure_id}/retry",
+    response_model=FailureRetryResponse,
+    summary="Retry satu kegagalan",
+    responses={
+        404: {"description": "Data kegagalan tidak ditemukan"},
+        409: {"description": "Kegagalan tidak dapat diulang (non-retryable / sudah terselesaikan)"},
+    },
+)
 def retry_failure(
     failure_id: int,
     request: Request,

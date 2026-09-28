@@ -1,0 +1,47 @@
+services:
+  db:
+    ports: !reset []
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hero_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-hero_db}
+
+  backend:
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    ports: !reset
+      - "127.0.0.1:${APP_PORT:-8000}:${APP_PORT:-8000}"
+    volumes: !reset
+      - storage_data:/app/storage
+      - ./sources:/app/sources:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  caddy:
+    image: caddy:2
+    container_name: hero_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - API_DOMAIN=${API_DOMAIN:-localhost}
+      - APP_PORT=${APP_PORT:-8000}
+      - DOCS_BASIC_AUTH_USER=${DOCS_BASIC_AUTH_USER:-admin}
+      - DOCS_BASIC_AUTH_HASH=${DOCS_BASIC_AUTH_HASH:-}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+
+volumes:
+  storage_data:
+  caddy_data:
+  caddy_config:

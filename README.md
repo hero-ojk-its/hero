@@ -77,7 +77,7 @@ python -m app.create_admin
 ## 🧪 Pengujian Otomatis
 
 ### 1. Menjalankan Pytest
-Suite pengujian mencakup 157 test otomatis tanpa kegagalan (Langkah 0–7) menggunakan database uji terpisah `hero_test`:
+Suite pengujian mencakup 170 test otomatis tanpa kegagalan (Langkah 0–8) menggunakan database uji terpisah `hero_test`:
 ```bash
 python -m pytest -q
 ```
@@ -89,11 +89,72 @@ python scripts/perf_search.py
 ```
 
 ### 3. Menjalankan Smoke Test
-Smoke test memvalidasi end-to-end server yang sedang berjalan (Langkah 0–5: Upload -> Claim -> Extraction -> Search -> PDF -> Metadata -> Dashboard):
+Smoke test memvalidasi end-to-end server yang sedang berjalan (Langkah 0–8: Upload -> Claim -> Extraction -> Search -> PDF -> Metadata -> Dashboard -> Scan & Pull):
 ```bash
 # Terhadap server lokal / docker
 python scripts/smoke_test.py http://127.0.0.1:8000
 ```
+
+---
+
+## 🚢 Panduan Deployment Produksi (VPS)
+
+Deployment ke target server produksi (Ubuntu/Debian VPS) menggunakan **Docker Compose** dengan reverse proxy **Caddy 2** (HTTPS Let's Encrypt otomatis, Basic Auth Swagger, proteksi ukuran payload 110MB).
+
+Panduan lengkap instalasi, backup rutin, pembaruan, dan mitigasi kendala tersedia di:
+- 👉 **[Runbook Deployment VPS](docs/deploy/RUNBOOK-VPS.md)**
+- 👉 **[Checklist Persiapan Demo 8 Oktober](docs/deploy/DEMO-CHECKLIST-8-OKT.md)**
+
+### Perintah Cepat Deploy Produksi:
+```bash
+# 1. Konfigurasi env produksi
+cp .env.prod.example .env.prod
+nano .env.prod
+
+# 2. Jalankan stack produksi
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+
+# 3. Cek status kesehatan sistem
+curl https://<API_DOMAIN>/health
+```
+
+---
+
+## ⚙️ Variabel Lingkungan (Environment Variables)
+
+| Kategori | Variabel | Tipe / Default | Deskripsi |
+|---|---|---|---|
+| **Aplikasi** | `APP_ENV` | `development` / `production` | Mode lingkungan aplikasi |
+| | `APP_PORT` | `8000` | Port aplikasi di dalam container |
+| | `API_DOMAIN` | `localhost` | Domain publik untuk reverse proxy Caddy & CORS |
+| | `UVICORN_WORKERS` | `1` | Jumlah worker Uvicorn (1 disarankan untuk in-process task) |
+| | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | IP reverse proxy yang dipercaya untuk X-Forwarded-For |
+| | `EXPOSE_API_DOCS` | `true` | Menampilkan/menyembunyikan endpoint `/docs` & `/redoc` |
+| **Keamanan** | `AUTH_ENABLED` | `false` | Status proteksi JWT Bearer login pengguna |
+| | `PROTECT_NON_PUBLIC_WHEN_AUTH_DISABLED` | `true` | Proteksi NDA (403 PDF/teks & restricted search) bila auth nonaktif |
+| | `SECRET_KEY` | *(wajib)* | Kunci signing token JWT (min 32 karakter pada produksi) |
+| | `INTERNAL_API_KEY` | *(wajib)* | Kunci API untuk worker internal ML & crawler |
+| | `CORS_ORIGINS` | `http://localhost:3000` | Daftar origin frontend yang diizinkan (dipisah koma) |
+| | `DOCS_BASIC_AUTH_USER` | `hero-team` | Username HTTP Basic Auth dokumentasi Swagger di Caddy |
+| | `DOCS_BASIC_AUTH_HASH` | *(string bcrypt)* | Hash password Basic Auth dokumentasi Swagger di Caddy |
+| **Database** | `DATABASE_URL` | `postgresql+psycopg://...` | URI koneksi PostgreSQL |
+| | `TEST_DATABASE_URL` | `postgresql+psycopg://...` | URI database pengujian `hero_test` |
+| | `POSTGRES_USER` | `hero_user` | User database PostgreSQL |
+| | `POSTGRES_PASSWORD` | `hero_pass` | Password database PostgreSQL |
+| | `POSTGRES_DB` | `hero_db` | Nama database utama |
+| **Storage** | `STORAGE_PATH` | `./storage` | Root path direktori penyimpanan dokumen lokal |
+| | `MAX_UPLOAD_SIZE_MB` | `100` | Batas maksimum ukuran unggahan PDF (MB) |
+| **Sumber Dokumen** | `LOCAL_SOURCE_ROOTS` | `./sources` | Direktori sumber berkas lokal/OneDrive yang diizinkan |
+| **Crawler Web** | `CRAWLER_BACKEND` | `simple_http` | Backend crawling (`simple_http`, `push`, `external_module`) |
+| | `CRAWLER_MODULE` | `null` | Modul kustom crawler jika backend `external_module` |
+| | `CRAWLER_USER_AGENT` | `HERO-Bot/1.0` | User agent HTTP crawler |
+| | `CRAWLER_RATE_LIMIT_DELAY` | `1.0` | Jeda waktu minimum antar request crawler (detik) |
+| | `CRAWLER_REQUEST_TIMEOUT` | `15.0` | Timeout per HTTP request crawler (detik) |
+| | `CRAWLER_MAX_FILE_SIZE_MB` | `50` | Batas ukuran berkas PDF yang dipindai crawler |
+| | `CRAWL_ALLOW_PRIVATE_NETWORKS` | `false` | Izin crawling jaringan privat (wajib `false` di produksi) |
+| **Ekstraksi ML** | `EXTRACTION_CONFIDENCE_THRESHOLD` | `0.7` | Ambang batas confidence untuk status `terindeks` |
+| **Penamaan/Kategori** | `NAMING_AUTO_RENAME` | `true` | Otomatis menstandardisasi nama berkas PDF saat ingest |
+| | `NAMING_MAX_LENGTH` | `120` | Panjang maksimum nama berkas hasil standardisasi |
 
 ---
 
@@ -324,21 +385,32 @@ hero-backend/
 │   ├── routers/             # Endpoint FastAPI (documents, ingest, categories, internal, dashboard, scans, ...)
 │   ├── schemas/             # Pydantic validation & response models
 │   ├── services/            # Logika bisnis (Search, Storage, Ingest, Failure, Naming, Category, Scan, Placement, Audit)
-│   ├── config.py            # Pydantic Settings & environment loader
+│   ├── config.py            # Pydantic Settings, environment loader & validasi produksi
 │   ├── database.py          # SQLAlchemy Session & Base & Category Seeder
-│   ├── main.py              # Inisialisasi FastAPI & Middleware
+│   ├── main.py              # Inisialisasi FastAPI, OpenAPI patch & Middleware
 │   └── create_admin.py      # Utilitas CLI pembuatan admin
+├── deploy/                  # Konfigurasi deployment produksi & skrip backup
+│   ├── Caddyfile            # Reverse proxy Caddy 2, SSL & Basic Auth
+│   ├── backup.sh            # Skrip backup otomatis DB + storage (retensi 7 hari)
+│   ├── restore.sh           # Skrip restore interaktif DB + storage
+│   └── demo_sources.example.json # Template konfigurasi sumber demo
 ├── docs/
 │   ├── api/                 # Panduan & kontrak integrasi API (Frontend & Data/ML)
 │   │   ├── frontend-changes-step7.md
+│   │   ├── frontend-changes-step8.md
 │   │   └── crawler-adapter-contract.md
-│   └── reports/             # Laporan berkala implementasi langkah (step0-1, step2-3, step4-5, step6, step7)
+│   ├── deploy/              # Runbook operasional VPS & checklist demo
+│   │   ├── RUNBOOK-VPS.md
+│   │   └── DEMO-CHECKLIST-8-OKT.md
+│   └── reports/             # Laporan berkala implementasi langkah (step0-1, step2-3, step4-5, step6, step7, step8)
 ├── scripts/                 # Skrip benchmark, smoke test, demo & Docker entrypoint
-│   ├── entrypoint.sh        # Entrypoint Docker (Alembic upgrade + Uvicorn)
+│   ├── entrypoint.sh        # Entrypoint Docker produksi (Alembic upgrade + Uvicorn)
+│   ├── demo_reset.py        # Reset bersih data operasional pra-demo
+│   ├── demo_seed.py         # Ingest otomatis sumber demo lewat API
 │   ├── perf_search.py       # Benchmark performa full-text search (2.000 dokumen)
-│   ├── smoke_test.py        # Skrip otomatis smoke test end-to-end
+│   ├── smoke_test.py        # Skrip otomatis smoke test end-to-end (clean teardown)
 │   └── demo_real_site_scan.py # Skrip demonstrasi alur pemindaian situs web nyata
-├── tests/                   # Suite pengujian otomatis Pytest (157 test)
+├── tests/                   # Suite pengujian otomatis Pytest (170 test)
 │   ├── conftest.py          # Fixture database test & storage terisolasi
 │   ├── test_api.py          # Pengujian API umum & auth
 │   ├── test_failures.py     # Pengujian log kegagalan & antrian retry
@@ -354,10 +426,15 @@ hero-backend/
 │   ├── test_url_guard.py    # Pengujian keamanan SSRF & URL normalizer
 │   ├── test_crawler_simple.py # Pengujian BFS crawler, robots.txt & paging
 │   ├── test_scan_flow.py    # Pengujian alur scan, deduplikasi KB, selection & pull
-│   └── test_scan_push.py    # Pengujian mode crawler push internal
-├── .env.example             # Template variabel lingkungan
-├── docker-compose.yml       # Definisi service PostgreSQL + Backend
-├── Dockerfile               # Image build backend Python 3.11-slim
+│   ├── test_scan_push.py    # Pengujian mode crawler push internal
+│   ├── test_docs_enums.py   # Pengujian validitas enum pada dokumentasi API
+│   ├── test_step8_fixes.py  # Pengujian bugfixes §1.2 & §1.3
+│   └── test_deploy_readiness.py # Pengujian kesiapan deploy produksi §2.2–§2.7
+├── .env.example             # Template variabel lingkungan lokal
+├── .env.prod.example        # Template variabel lingkungan produksi VPS
+├── docker-compose.yml       # Definisi service lokal PostgreSQL + Backend
+├── docker-compose.prod.yml  # Override produksi (Caddy, named volume, no host DB port)
+├── Dockerfile               # Image build backend Python 3.11-slim + Healthcheck
 ├── requirements.txt         # Dependensi produksi
 └── requirements-dev.txt     # Dependensi pengembangan & pengujian
 ```

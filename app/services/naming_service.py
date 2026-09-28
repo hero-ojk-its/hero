@@ -91,6 +91,10 @@ def build_standard_filename(
     Membangun nama berkas PDF baku berdasarkan template dan input metadata.
     Jika melebihi max_length, bagian judul dipotong di batas kata.
     """
+    template = template or "{nomor} {judul} {tahun}"
+    wildcard = wildcard or "NA"
+    max_length = max_length or 150
+
     # 1. Nomor regulasi
     if inp.regulation_number and inp.regulation_number.strip():
         num_clean = inp.regulation_number.strip().replace("/", "-").replace("\\", "-")

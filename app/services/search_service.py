@@ -12,6 +12,7 @@ from typing import Optional, List, Dict, Any, Tuple
 from sqlalchemy import func, or_, and_, desc, asc, literal_column, case
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.document import Document
 from app.models.category import Category
 from app.models.enums import (
@@ -259,12 +260,23 @@ class SearchService:
         # 12. Query Data dengan pagination
         # Buat kolom rank dan highlight jika q ada
         select_cols = [Document]
+        is_protect_non_public = settings.protect_non_public_when_auth_disabled and not settings.auth_enabled
+
         if has_text_query and tsquery_expr is not None:
             if rank_expr is None:
                 rank_expr = func.ts_rank_cd(Document.search_vector, tsquery_expr)
+
+            if is_protect_non_public:
+                text_source = case(
+                    (Document.access_classification == KlasifikasiAkses.non_publik, Document.title),
+                    else_=func.coalesce(func.left(Document.full_text, 50000), Document.title),
+                )
+            else:
+                text_source = func.coalesce(func.left(Document.full_text, 50000), Document.title)
+
             highlight_expr = func.ts_headline(
                 literal_column("'simple'"),
-                func.coalesce(func.left(Document.full_text, 50000), Document.title),
+                text_source,
                 tsquery_expr,
                 "StartSel=<mark>,StopSel=</mark>,MaxFragments=2,MaxWords=25,MinWords=10",
             )
@@ -290,6 +302,12 @@ class SearchService:
             cpath = cat_paths.get(doc_obj.category_id, []) if doc_obj.category_id else []
             is_placed = bool(doc_obj.file_path_pdf and doc_obj.file_path_pdf.replace("\\", "/").startswith("kb/"))
 
+            is_restricted = False
+            if is_protect_non_public and doc_obj.access_classification == KlasifikasiAkses.non_publik:
+                is_restricted = True
+
+            pdf_url = None if is_restricted else f"/api/v1/documents/{doc_obj.id}/pdf"
+
             items.append({
                 "id": doc_obj.id,
                 "title": doc_obj.title,
@@ -309,7 +327,8 @@ class SearchService:
                 "standardized_filename": doc_obj.standardized_filename,
                 "source_url": doc_obj.source_url,
                 "is_placed": is_placed,
-                "pdf_url": f"/api/v1/documents/{doc_obj.id}/pdf",
+                "pdf_url": pdf_url,
+                "restricted": is_restricted,
                 "rank": rank_val,
                 "highlight": highlight_val,
                 "created_at": doc_obj.created_at,

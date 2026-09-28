@@ -116,11 +116,12 @@ class PlacementService:
             target_cat = self.categories.resolve_or_create_path(cat_segments)
 
         # 4. Hitung nama baku
+        cfg = self.settings or settings
         std_filename = build_standard_filename(
             inp,
-            template=self.settings.naming_template,
-            wildcard=self.settings.naming_wildcard,
-            max_length=self.settings.naming_max_length,
+            template=getattr(cfg, "naming_template", None) or "{nomor} {judul} {tahun}",
+            wildcard=getattr(cfg, "naming_wildcard", None) or "NA",
+            max_length=getattr(cfg, "naming_max_length", None) or 150,
         )
 
         old_path = doc.file_path_pdf

@@ -1,6 +1,8 @@
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+APP_VERSION = "0.8.0"
+
 
 class Settings(BaseSettings):
     """Konfigurasi aplikasi dari environment variables / .env"""
@@ -16,11 +18,16 @@ class Settings(BaseSettings):
     # App
     app_env: str = "development"
     app_port: int = 8000
+    app_version: str = APP_VERSION
     secret_key: str = "change-me"
     internal_api_key: str = "change-me-internal-key"
     auth_enabled: bool = False
     cors_origins: str = "*"
     access_token_expire_hours: int = 8
+    expose_api_docs: bool = True
+    protect_non_public_when_auth_disabled: bool = True
+    uvicorn_workers: int = 1
+    forwarded_allow_ips: str = "127.0.0.1"
 
     # Storage & Upload
     storage_path: str = "./storage"
@@ -84,11 +91,43 @@ class Settings(BaseSettings):
                     f"naming_template memuat placeholder tidak dikenal: '{{{p}}}'. "
                     f"Placeholder yang diizinkan: {', '.join('{' + a + '}' for a in allowed)}."
                 )
-        return v
-
     @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_mb * 1024 * 1024
+
+    def validate_production_config(self) -> None:
+        """Validasi konfigurasi produksi yang ketat saat APP_ENV=production."""
+        if self.app_env.lower() == "production":
+            errors = []
+            default_secret_prefixes = ("change-me", "ganti-dengan", "secret", "default", "password", "hero")
+            if any(self.secret_key.lower().startswith(p) for p in default_secret_prefixes) or len(self.secret_key) < 32:
+                errors.append(
+                    "SECRET_KEY tidak aman untuk production: tidak boleh nilai default dan minimal 32 karakter."
+                )
+
+            default_internal_prefixes = ("change-me", "ganti-dengan", "secret", "default", "password", "hero")
+            if any(self.internal_api_key.lower().startswith(p) for p in default_internal_prefixes) or len(self.internal_api_key) < 32:
+                errors.append(
+                    "INTERNAL_API_KEY tidak aman untuk production: tidak boleh nilai default dan minimal 32 karakter."
+                )
+
+            raw_cors = [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+            if not raw_cors or "*" in raw_cors:
+                errors.append(
+                    "CORS_ORIGINS tidak aman untuk production: tidak boleh bernilai '*' atau kosong."
+                )
+
+            if self.crawl_allow_private_networks:
+                errors.append(
+                    "CRAWL_ALLOW_PRIVATE_NETWORKS tidak diizinkan pada production (risiko SSRF/keamanan jaringan internal)."
+                )
+
+            if errors:
+                error_msg = (
+                    "Gagal memulai aplikasi dalam mode produksi karena konfigurasi tidak valid:\n"
+                    + "\n".join(f"  - {e}" for e in errors)
+                )
+                raise ValueError(error_msg)
 
     model_config = SettingsConfigDict(
         env_file=".env",

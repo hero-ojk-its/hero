@@ -326,7 +326,13 @@ def _format_single_document_response(doc: Document, db: Session) -> Dict[str, An
     }
 
 
-@router.get("/{document_id}", summary="Detail satu dokumen beserta pasalnya")
+@router.get(
+    "/{document_id}",
+    summary="Detail satu dokumen beserta pasalnya",
+    responses={
+        404: {"description": "Dokumen tidak ditemukan"},
+    },
+)
 def get_document(document_id: int, db: Session = Depends(get_db)):
     """Mengembalikan detail lengkap dokumen beserta pasal level teratas, rujukan hukum, dan status penempatan KB."""
     doc = db.query(Document).filter(Document.id == document_id).first()
@@ -336,7 +342,14 @@ def get_document(document_id: int, db: Session = Depends(get_db)):
     return _format_single_document_response(doc, db)
 
 
-@router.get("/{document_id}/pdf", summary="Buka atau unduh berkas PDF asli")
+@router.get(
+    "/{document_id}/pdf",
+    summary="Buka atau unduh berkas PDF asli",
+    responses={
+        403: {"description": "Dokumen non-publik memerlukan autentikasi aktif"},
+        404: {"description": "Dokumen atau berkas fisik PDF tidak ditemukan"},
+    },
+)
 def get_document_pdf(
     document_id: int,
     request: Request,
@@ -352,6 +365,13 @@ def get_document_pdf(
     doc = db.query(Document).filter(Document.id == document_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
+
+    if settings.protect_non_public_when_auth_disabled and not settings.auth_enabled:
+        if doc.access_classification == KlasifikasiAkses.non_publik:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.",
+            )
 
     if not doc.file_path_pdf or not storage.exists(doc.file_path_pdf):
         logger.error("Berkas PDF asli tidak ditemukan di penyimpanan untuk dokumen id=%s, path=%s", doc.id, doc.file_path_pdf)
@@ -392,12 +412,20 @@ def get_document_pdf(
     )
 
 
-@router.get("/{document_id}/text", summary="Membaca teks mentah dokumen")
+@router.get(
+    "/{document_id}/text",
+    summary="Membaca teks mentah dokumen",
+    responses={
+        403: {"description": "Dokumen non-publik memerlukan autentikasi aktif"},
+        404: {"description": "Dokumen tidak ditemukan"},
+    },
+)
 def get_document_text(
     document_id: int,
     offset: int = Query(0, ge=0, description="Offset karakter teks"),
     limit: int = Query(20000, ge=1, le=100000, description="Batas karakter yang diambil"),
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     """
     Mengembalikan potongan teks mentah hasil ekstraksi dokumen lengkap.
@@ -405,6 +433,13 @@ def get_document_text(
     doc = db.query(Document).filter(Document.id == document_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
+
+    if settings.protect_non_public_when_auth_disabled and not settings.auth_enabled:
+        if doc.access_classification == KlasifikasiAkses.non_publik:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.",
+            )
 
     full_text = doc.full_text or ""
     total_len = len(full_text)

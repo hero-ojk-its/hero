@@ -1,12 +1,14 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, status
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError, OperationalError
 
-from app.config import settings
+from app.config import settings, APP_VERSION
 from app.database import seed_initial_categories, SessionLocal
 
 # IMPORT EXPLICIT
@@ -23,8 +25,67 @@ from app.routers.scans import router as scans_router
 logger = logging.getLogger("hero")
 
 
+def check_storage_writable(storage_path: str) -> bool:
+    """Uji tulis-hapus berkas kecil di direktori .tmp penyimpanan."""
+    try:
+        tmp_dir = os.path.join(storage_path, ".tmp")
+        os.makedirs(tmp_dir, exist_ok=True)
+        test_file = os.path.join(tmp_dir, f".health_{os.getpid()}.tmp")
+        with open(test_file, "w") as f:
+            f.write("ok")
+        if os.path.exists(test_file):
+            os.remove(test_file)
+        return True
+    except Exception:
+        return False
+
+
+def check_crawler_loaded(backend_name: str) -> bool:
+    """Uji keberhasilan pemuatan crawler backend."""
+    try:
+        if backend_name == "push":
+            return True
+        from app.crawlers.registry import get_crawler
+        crawler = get_crawler(settings)
+        return crawler is not None
+    except Exception:
+        return False
+
+
+def get_alembic_status(db):
+    """Mendapatkan revisi Alembic DB dan Head script."""
+    db_rev = None
+    head_rev = None
+    up_to_date = False
+    try:
+        res = db.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).scalar_one_or_none()
+        db_rev = res
+    except Exception:
+        db_rev = None
+
+    try:
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+        cfg = Config("alembic.ini")
+        script = ScriptDirectory.from_config(cfg)
+        head_rev = script.get_current_head()
+    except Exception:
+        head_rev = None
+
+    if db_rev and head_rev and db_rev == head_rev:
+        up_to_date = True
+    elif not db_rev and not head_rev:
+        up_to_date = True
+
+    return db_rev, head_rev, up_to_date
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Validasi konfigurasi produksi yang ketat saat startup
+    if settings.app_env.lower() == "production":
+        settings.validate_production_config()
+
     # Peringatan keamanan untuk internal_api_key jika bukan mode development
     if settings.app_env != "development":
         default_keys = ("change-me", "ganti-dengan", "change-me-internal-key")
@@ -58,7 +119,51 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="HERO Backend API", version="0.2.0", lifespan=lifespan)
+# Tentukan visibilitas docs berdasarkan APP_ENV dan EXPOSE_API_DOCS
+is_prod = settings.app_env.lower() == "production"
+docs_url = None if (is_prod and not settings.expose_api_docs) else "/docs"
+redoc_url = None if (is_prod and not settings.expose_api_docs) else "/redoc"
+openapi_url = None if (is_prod and not settings.expose_api_docs) else "/openapi.json"
+
+app = FastAPI(
+    title="HERO Backend API",
+    version=APP_VERSION,
+    lifespan=lifespan,
+    docs_url=docs_url,
+    redoc_url=redoc_url,
+    openapi_url=openapi_url,
+)
+
+
+def custom_openapi():
+    """Custom OpenAPI schema untuk memastikan upload file jamak dirender sebagai binary di Swagger UI."""
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        openapi_version=app.openapi_version,
+        description=app.description,
+        routes=app.routes,
+    )
+
+    # Patch schemas pada components untuk file upload arrays
+    schemas = openapi_schema.get("components", {}).get("schemas", {})
+    for schema_name, schema in schemas.items():
+        if isinstance(schema, dict) and "properties" in schema:
+            for prop_name, prop in schema["properties"].items():
+                if isinstance(prop, dict) and prop.get("type") == "array" and "items" in prop:
+                    items = prop["items"]
+                    if isinstance(items, dict) and (items.get("type") == "string" or "contentMediaType" in items):
+                        items["type"] = "string"
+                        items["format"] = "binary"
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
 
 # CORS Configuration
 raw_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
@@ -99,17 +204,42 @@ def health():
     db = SessionLocal()
     try:
         db.execute(text("SELECT 1"))
-        return {
-            "status": "ok",
-            "database": "ok",
-            "auth_enabled": settings.auth_enabled,
-        }
+        db_ok = True
     except Exception as exc:
         logger.error("Health check failed on database: %s", exc)
+        db_ok = False
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={"status": "degraded", "database": "error"},
+            content={
+                "status": "degraded",
+                "database": "error",
+                "version": APP_VERSION,
+                "app_env": settings.app_env,
+            },
         )
+
+    try:
+        db_rev, head_rev, migrations_ok = get_alembic_status(db)
+        storage_ok = check_storage_writable(settings.storage_path)
+        crawler_loaded = check_crawler_loaded(settings.crawler_backend)
+        protect_non_public = settings.protect_non_public_when_auth_disabled and not settings.auth_enabled
+
+        overall_status = "ok" if (db_ok and migrations_ok) else "degraded"
+
+        return {
+            "status": overall_status,
+            "database": "ok",
+            "version": APP_VERSION,
+            "app_env": settings.app_env,
+            "alembic_revision": db_rev,
+            "alembic_head": head_rev,
+            "migrations_up_to_date": migrations_ok,
+            "storage_writable": storage_ok,
+            "crawler_backend": settings.crawler_backend,
+            "crawler_loaded": crawler_loaded,
+            "auth_enabled": settings.auth_enabled,
+            "protect_non_public": protect_non_public,
+        }
     finally:
         db.close()
 
