@@ -185,7 +185,7 @@ class FailureService:
 
             failure = IngestFailure(
                 job_id=job.id,
-                original_filename=clean_name[:255],
+                original_filename=(item.filename or "dokumen.pdf")[:255],
                 source_url=item.source_url,
                 failure_type=failure_type,
                 reason_code=reason[:50],
@@ -234,7 +234,7 @@ class FailureService:
 
             failure = IngestFailure(
                 job_id=job.id,
-                original_filename=clean_name[:255],
+                original_filename=(item.filename or "dokumen.pdf")[:255],
                 source_url=item.source_url,
                 failure_type=JenisKegagalan.duplikat,
                 reason_code="duplikat",
@@ -492,6 +492,8 @@ class FailureService:
             category_id=cat_id,
             metadata=meta_input,
         )
+        # Catat opsi efektif (termasuk override) agar riwayat dapat diaudit
+        failure.ingest_options = self._serialize_options(options)
 
         # Buat JobIngest baru untuk retry
         parent_job = failure.job

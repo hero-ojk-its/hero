@@ -50,8 +50,8 @@ def sanitize_filename(name: str, max_len: int = 150) -> str:
     # 2. Normalisasi Unicode NFKD ke ASCII
     normalized = unicodedata.normalize("NFKD", clean_name).encode("ascii", "ignore").decode("ascii")
 
-    # 3. Filter hanya karakter yang diizinkan: [A-Za-z0-9._ -]
-    filtered = "".join(c for c in normalized if c.isalnum() or c in "._- ")
+    # 3. Filter hanya karakter yang diizinkan: [A-Za-z0-9._ -()]
+    filtered = "".join(c for c in normalized if c.isalnum() or c in "._- ()")
 
     # 4. Ganti spasi beruntun menjadi spasi tunggal dan strip
     collapsed = re.sub(r"\s+", " ", filtered).strip()

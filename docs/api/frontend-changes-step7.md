@@ -293,7 +293,7 @@ Pengguna menekan tombol:
   "pull_job_id": 61,
   "pull_progress": {
     "job_id": 61,
-    "status": "memproses",
+    "status": "berjalan",
     "processed_count": 1,
     "total_found": 3,
     "progress_percent": 33.3

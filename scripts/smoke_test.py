@@ -95,6 +95,12 @@ def run_smoke_test(base_url: str = "http://127.0.0.1:8000") -> int:
             has_failure = True
             results.append(("GET", path, 0, f"FAIL ({type(exc).__name__})"))
 
+    created_doc_ids: List[int] = []
+    created_job_ids: List[int] = []
+    created_failure_ids: List[int] = []
+    created_source_ids: List[int] = []
+    created_scan_ids: List[int] = []
+
     # Alur 7 Langkah Sesuai Spesifikasi §4.3
     # Step 1: Unggah PDF (masuk ke antrean ekstraksi / status 'diterima')
     ts = int(time.time() * 1000)
@@ -115,9 +121,12 @@ def run_smoke_test(base_url: str = "http://127.0.0.1:8000") -> int:
         if res_upload.status_code == 200:
             body = res_upload.json()
             uploaded_job_id = body.get("job_id")
+            if uploaded_job_id:
+                created_job_ids.append(uploaded_job_id)
             detail = body.get("details", [{}])[0]
             if body.get("success_count") == 1 and detail.get("status") == "success":
                 uploaded_doc_id = detail["document_id"]
+                created_doc_ids.append(uploaded_doc_id)
                 results.append(("POST", "1. /ingest/upload-pdf (Unggah PDF Awal)", res_upload.status_code, f"OK (doc_id={uploaded_doc_id})"))
             else:
                 has_failure = True
@@ -270,6 +279,12 @@ def run_smoke_test(base_url: str = "http://127.0.0.1:8000") -> int:
         files_dup = {"files": (f"copy_{filename}", unique_pdf, "application/pdf")}
         res_dup = client.post("/api/v1/ingest/upload-pdf", files=files_dup, data={"access_classification": "publik", "document_role": "corpus_eksisting"})
         if res_dup.status_code == 200 and res_dup.json().get("duplicate_count") == 1:
+            dup_job_id = res_dup.json().get("job_id")
+            if dup_job_id:
+                created_job_ids.append(dup_job_id)
+            dup_det = res_dup.json().get("details", [{}])[0]
+            if dup_det.get("failure_id"):
+                created_failure_ids.append(dup_det["failure_id"])
             results.append(("POST", "8a. /ingest/upload-pdf (Duplicate Check)", res_dup.status_code, "OK (duplicate_count=1)"))
         else:
             has_failure = True
@@ -282,6 +297,12 @@ def run_smoke_test(base_url: str = "http://127.0.0.1:8000") -> int:
         files_txt = {"files": ("invalid.txt", b"Bukan PDF", "text/plain")}
         res_txt = client.post("/api/v1/ingest/upload-pdf", files=files_txt, data={"access_classification": "publik", "document_role": "corpus_eksisting"})
         if res_txt.status_code == 200 and res_txt.json().get("failed_count") == 1:
+            txt_job_id = res_txt.json().get("job_id")
+            if txt_job_id:
+                created_job_ids.append(txt_job_id)
+            txt_det = res_txt.json().get("details", [{}])[0]
+            if txt_det.get("failure_id"):
+                created_failure_ids.append(txt_det["failure_id"])
             results.append(("POST", "8b. /ingest/upload-pdf (Non-PDF Check)", res_txt.status_code, "OK (failed_count=1)"))
         else:
             has_failure = True
@@ -320,11 +341,15 @@ def run_smoke_test(base_url: str = "http://127.0.0.1:8000") -> int:
         if res_src.status_code == 201:
             src_data = res_src.json()
             local_source_id = src_data["id"]
+            created_source_ids.append(local_source_id)
             results.append(("POST", "9a. /scraping-sources/ (Daftar Folder Lokal)", res_src.status_code, f"OK (source_id={local_source_id})"))
 
             # Jalankan run?wait=true (Run 1 -> 2 success)
             res_run1 = client.post(f"/api/v1/scraping-sources/{local_source_id}/run?wait=true")
             if res_run1.status_code == 200 and res_run1.json().get("success_count") == 2:
+                r1_job_id = res_run1.json().get("id")
+                if r1_job_id:
+                    created_job_ids.append(r1_job_id)
                 results.append(("POST", f"9b. /scraping-sources/{local_source_id}/run (Run 1)", res_run1.status_code, "OK (2 success)"))
             else:
                 has_failure = True
@@ -333,6 +358,9 @@ def run_smoke_test(base_url: str = "http://127.0.0.1:8000") -> int:
             # Jalankan run?wait=true (Run 2 -> 2 skipped)
             res_run2 = client.post(f"/api/v1/scraping-sources/{local_source_id}/run?wait=true")
             if res_run2.status_code == 200 and res_run2.json().get("skipped_count") == 2:
+                r2_job_id = res_run2.json().get("id")
+                if r2_job_id:
+                    created_job_ids.append(r2_job_id)
                 results.append(("POST", f"9c. /scraping-sources/{local_source_id}/run (Run 2 Idempoten)", res_run2.status_code, "OK (2 skipped)"))
             else:
                 has_failure = True
@@ -383,6 +411,7 @@ def run_smoke_test(base_url: str = "http://127.0.0.1:8000") -> int:
             )
             if res_src_web.status_code == 201:
                 web_src_id = res_src_web.json()["id"]
+                created_source_ids.append(web_src_id)
                 results.append(("POST", "10a. /scraping-sources/ (Daftar Situs Web)", res_src_web.status_code, f"OK (source_id={web_src_id})"))
 
                 # Jalankan scan
@@ -390,6 +419,7 @@ def run_smoke_test(base_url: str = "http://127.0.0.1:8000") -> int:
                 if res_scan.status_code == 200:
                     scan_info = res_scan.json()
                     scan_id = scan_info["id"]
+                    created_scan_ids.append(scan_id)
                     summ = scan_info.get("candidates_summary", {})
                     results.append(("POST", f"10b. /api/v1/scans/ (Pindai Situs #{scan_id})", res_scan.status_code, f"OK (total={summ.get('total')}, baru={summ.get('baru')})"))
 
@@ -405,6 +435,9 @@ def run_smoke_test(base_url: str = "http://127.0.0.1:8000") -> int:
 
                             res_pull = client.post(f"/api/v1/scans/{scan_id}/pull?wait=true", json={"destination": "knowledge_base"})
                             if res_pull.status_code == 200:
+                                p_body = res_pull.json()
+                                if p_body.get("pull_job_id"):
+                                    created_job_ids.append(p_body["pull_job_id"])
                                 results.append(("POST", f"10c. /api/v1/scans/{scan_id}/pull (Tarik ke KB)", res_pull.status_code, "OK (1 berkas ditarik)"))
                             else:
                                 results.append(("POST", f"10c. /api/v1/scans/{scan_id}/pull (Tarik ke KB)", res_pull.status_code, f"FAIL ({res_pull.text})"))
@@ -419,6 +452,67 @@ def run_smoke_test(base_url: str = "http://127.0.0.1:8000") -> int:
             results.append(("POST", "10. /api/v1/scans/ (Pindai Situs)", 0, f"FAIL ({type(exc).__name__})"))
     else:
         results.append(("GET", "10. /api/v1/scans/ (Pindai Situs)", 200, "DILEWATI (SMOKE_SCAN_URL tidak diset)"))
+
+    # Bersihkan seluruh artefak data uji di database lokal jika modul DB tersedia
+    try:
+        from app.database import SessionLocal
+        from app.models.document import Document
+        from app.models.job_ingest import JobIngest
+        from app.models.ingest_failure import IngestFailure
+        from app.models.source_file import SourceFile
+        from app.models.scan_session import ScanSession
+        from app.models.scan_candidate import ScanCandidate
+        from app.models.article import Article, LegalReference, ArticleReference
+        from app.models.scraping_source import ScrapingSource
+        from app.services.storage_service import get_storage_service
+
+        db = SessionLocal()
+        storage = get_storage_service()
+        try:
+            # Temukan seluruh dokumen terkait job-job yang dibuat
+            all_target_doc_ids = set(created_doc_ids)
+            if created_job_ids:
+                job_docs = db.query(Document.id).filter(Document.job_id.in_(created_job_ids)).all()
+                for (jd_id,) in job_docs:
+                    all_target_doc_ids.add(jd_id)
+
+            if all_target_doc_ids:
+                docs = db.query(Document).filter(Document.id.in_(list(all_target_doc_ids))).all()
+                for doc in docs:
+                    if doc.file_path_pdf and storage.exists(doc.file_path_pdf):
+                        storage.delete(doc.file_path_pdf)
+                doc_list = list(all_target_doc_ids)
+                db.query(LegalReference).filter(LegalReference.document_id.in_(doc_list)).delete(synchronize_session=False)
+                db.query(ArticleReference).filter(ArticleReference.source_document_id.in_(doc_list)).delete(synchronize_session=False)
+                db.query(Article).filter(Article.document_id.in_(doc_list)).delete(synchronize_session=False)
+                db.query(Document).filter(Document.id.in_(doc_list)).delete(synchronize_session=False)
+
+            if created_scan_ids:
+                db.query(ScanCandidate).filter(ScanCandidate.scan_id.in_(created_scan_ids)).delete(synchronize_session=False)
+                db.query(ScanSession).filter(ScanSession.id.in_(created_scan_ids)).delete(synchronize_session=False)
+
+            if created_failure_ids:
+                fails = db.query(IngestFailure).filter(IngestFailure.id.in_(created_failure_ids)).all()
+                for f in fails:
+                    if f.quarantine_path and storage.exists(f.quarantine_path):
+                        storage.delete(f.quarantine_path)
+                db.query(IngestFailure).filter(IngestFailure.id.in_(created_failure_ids)).delete(synchronize_session=False)
+
+            if created_job_ids:
+                db.query(IngestFailure).filter(IngestFailure.job_id.in_(created_job_ids)).delete(synchronize_session=False)
+                db.query(JobIngest).filter(JobIngest.id.in_(created_job_ids)).delete(synchronize_session=False)
+
+            if created_source_ids:
+                db.query(SourceFile).filter(SourceFile.source_id.in_(created_source_ids)).delete(synchronize_session=False)
+                db.query(ScrapingSource).filter(ScrapingSource.id.in_(created_source_ids)).delete(synchronize_session=False)
+
+            db.commit()
+        except Exception as cl_err:
+            db.rollback()
+        finally:
+            db.close()
+    except Exception:
+        pass
 
     # Cetak tabel ringkas hasil smoke test
     print(f"{'METHOD':<8} | {'ENDPOINT / PATH':<50} | {'STATUS':<7} | {'HASIL'}")

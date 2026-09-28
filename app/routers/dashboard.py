@@ -78,28 +78,34 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
     # 5. By Regulation Type (Hanya corpus eksisting, max 15)
     reg_type_query = (
         db.query(Document.regulation_type, func.count(Document.id).label("count"))
-        .filter(Document.document_role == PeranDokumen.corpus_eksisting, Document.regulation_type.isnot(None))
+        .filter(Document.document_role == PeranDokumen.corpus_eksisting)
         .group_by(Document.regulation_type)
         .order_by(desc("count"))
         .limit(15)
         .all()
     )
-    by_regulation_type = [
-        {"regulation_type": rt, "count": cnt} for rt, cnt in reg_type_query if rt
-    ]
+    by_regulation_type = []
+    for rt, cnt in reg_type_query:
+        if rt and str(rt).strip():
+            by_regulation_type.append({"regulation_type": rt, "label": rt, "count": cnt})
+        else:
+            by_regulation_type.append({"regulation_type": None, "label": "Belum diketahui", "count": cnt})
 
     # 6. By Year (Hanya corpus eksisting, max 15, urutan tahun terbaru)
     year_query = (
         db.query(func.extract("year", Document.release_date).label("year"), func.count(Document.id).label("count"))
-        .filter(Document.document_role == PeranDokumen.corpus_eksisting, Document.release_date.isnot(None))
+        .filter(Document.document_role == PeranDokumen.corpus_eksisting)
         .group_by("year")
         .order_by(desc("year"))
         .limit(15)
         .all()
     )
-    by_year = [
-        {"year": int(y), "count": cnt} for y, cnt in year_query if y is not None
-    ]
+    by_year = []
+    for y, cnt in year_query:
+        if y is not None:
+            by_year.append({"year": int(y), "label": str(int(y)), "count": cnt})
+        else:
+            by_year.append({"year": None, "label": "Belum diketahui", "count": cnt})
 
     # 7. Ingest metrics: open failures, needs review, active scans
     open_failures_cnt = (
@@ -156,7 +162,10 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
             "finished_at": j.finished_at.isoformat() if j.finished_at else None,
             "success_count": j.success_count,
             "duplicate_count": j.duplicate_count,
+            "skipped_count": j.skipped_count or 0,
             "failed_count": j.failed_count,
+            "processed_count": j.processed_count or 0,
+            "total_found": j.total_found or 0,
         }
         for j in recent_job_objs
     ]

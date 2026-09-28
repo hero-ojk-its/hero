@@ -112,3 +112,12 @@ class StatusKandidat(str, enum.Enum):
     sudah_ada = "sudah_ada"
     mungkin_ada = "mungkin_ada"
 
+
+class HasilTarik(str, enum.Enum):
+    """Hasil akhir penarikan berkas kandidat (Langkah 8)"""
+    berhasil = "berhasil"
+    duplikat = "duplikat"
+    gagal = "gagal"
+    diunduh = "diunduh"
+
+

@@ -100,7 +100,15 @@ def _build_session_response(session: ScanSession, db: Session, request: Optional
     )
 
 
-@router.post("/", response_model=Any, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/",
+    response_model=Any,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        200: {"model": ScanSessionResponse, "description": "Pemindaian selesai secara sinkron (wait=true)"},
+        202: {"description": "Sesi pemindaian berhasil dijadwalkan (wait=false)"},
+    },
+)
 def create_and_start_scan(
     payload: ScanCreate,
     wait: bool = Query(False, description="Tunggu hingga pemindaian selesai secara sinkron"),
@@ -124,6 +132,7 @@ def create_and_start_scan(
     if wait and session.mode != "push":
         response.status_code = status.HTTP_200_OK
         svc.execute_scan(session.id)
+        db.expire_all()
         db.refresh(session)
         return _build_session_response(session, db, request)
 
@@ -162,7 +171,11 @@ def list_scan_sessions(
     return ScanListResponse(items=items, total=total, skip=skip, limit=limit)
 
 
-@router.get("/{scan_id}", response_model=ScanSessionResponse)
+@router.get(
+    "/{scan_id}",
+    response_model=ScanSessionResponse,
+    responses={404: {"description": "Sesi pemindaian tidak ditemukan"}},
+)
 def get_scan_session_detail(
     scan_id: int,
     request: Request,
@@ -181,13 +194,18 @@ def get_scan_session_detail(
     return _build_session_response(session, db, request)
 
 
-@router.get("/{scan_id}/candidates", response_model=CandidateListResponse)
+@router.get(
+    "/{scan_id}/candidates",
+    response_model=CandidateListResponse,
+    responses={404: {"description": "Sesi pemindaian tidak ditemukan"}},
+)
 def list_scan_candidates(
     scan_id: int,
     match_status: Optional[StatusKandidat] = Query(None, description="Filter status kecocokan KB"),
     selected: Optional[bool] = Query(None, description="Filter status centang"),
     pull_outcome: Optional[str] = Query(None, description="Filter hasil penarikan"),
     q: Optional[str] = Query(None, description="Pencarian nama berkas (case-insensitive)"),
+    page: Optional[int] = Query(None, ge=1, description="Nomor halaman (opsional, kompatibilitas)"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -213,13 +231,26 @@ def list_scan_candidates(
         query = query.filter(ScanCandidate.match_status == match_status)
     if selected is not None:
         query = query.filter(ScanCandidate.selected == selected)
-    if pull_outcome is not None:
-        query = query.filter(ScanCandidate.pull_outcome == pull_outcome)
+    if pull_outcome is not None and pull_outcome.strip():
+        val = pull_outcome.strip().lower()
+        outcome_aliases = {
+            "success": ["berhasil", "success"],
+            "berhasil": ["berhasil", "success"],
+            "duplicate": ["duplikat", "duplicate"],
+            "duplikat": ["duplikat", "duplicate"],
+            "failed": ["gagal", "failed"],
+            "gagal": ["gagal", "failed"],
+            "downloaded": ["diunduh", "downloaded"],
+            "diunduh": ["diunduh", "downloaded"],
+        }
+        allowed = outcome_aliases.get(val, [val])
+        query = query.filter(ScanCandidate.pull_outcome.in_(allowed))
     if q and q.strip():
         query = query.filter(ScanCandidate.filename.ilike(f"%{q.strip()}%"))
 
     total = query.count()
-    candidates = query.order_by(ScanCandidate.id.asc()).offset(skip).limit(limit).all()
+    effective_skip = (page - 1) * limit if page is not None and page >= 1 else skip
+    candidates = query.order_by(ScanCandidate.id.asc()).offset(effective_skip).limit(limit).all()
 
     items = []
     for c in candidates:
@@ -253,10 +284,14 @@ def list_scan_candidates(
             )
         )
 
-    return CandidateListResponse(items=items, total=total, skip=skip, limit=limit)
+    return CandidateListResponse(items=items, total=total, skip=effective_skip, limit=limit)
 
 
-@router.patch("/{scan_id}/selection", response_model=ScanSelectionResponse)
+@router.patch(
+    "/{scan_id}/selection",
+    response_model=ScanSelectionResponse,
+    responses={404: {"description": "Sesi pemindaian tidak ditemukan"}},
+)
 def update_candidate_selection(
     scan_id: int,
     payload: ScanSelectionUpdate,
@@ -270,7 +305,16 @@ def update_candidate_selection(
     return svc.update_selection(scan_id, payload)
 
 
-@router.post("/{scan_id}/pull", response_model=Any, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/{scan_id}/pull",
+    response_model=Any,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        200: {"model": ScanSessionResponse, "description": "Penarikan selesai secara sinkron (wait=true)"},
+        202: {"description": "Penarikan berkas berhasil dijadwalkan (wait=false)"},
+        404: {"description": "Sesi pemindaian tidak ditemukan"},
+    },
+)
 def start_scan_pull(
     scan_id: int,
     payload: ScanPullRequest,
@@ -302,6 +346,7 @@ def start_scan_pull(
     if wait:
         response.status_code = status.HTTP_200_OK
         svc.execute_pull(session.id)
+        db.expire_all()
         db.refresh(session)
         return _build_session_response(session, db, request)
 
@@ -313,7 +358,11 @@ def start_scan_pull(
     }
 
 
-@router.post("/{scan_id}/cancel", response_model=ScanSessionResponse)
+@router.post(
+    "/{scan_id}/cancel",
+    response_model=ScanSessionResponse,
+    responses={404: {"description": "Sesi pemindaian tidak ditemukan"}},
+)
 def cancel_scan_session(
     scan_id: int,
     request: Request,

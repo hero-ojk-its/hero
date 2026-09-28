@@ -311,8 +311,13 @@ def patch_extraction_result(
         }
 
     # 2. Penanganan Sukses
+    ignored_fields = []
+    changed_fields = []
+
     if payload.full_text is not None:
-        doc.full_text = payload.full_text
+        if doc.full_text != payload.full_text:
+            doc.full_text = payload.full_text
+            changed_fields.append("full_text")
 
     if payload.extraction_engine:
         doc.extraction_engine = payload.extraction_engine.strip()
@@ -335,9 +340,6 @@ def patch_extraction_result(
     doc.extracted_at = datetime.now(timezone.utc)
 
     # Aturan Metadata: jangan menimpa bila sudah dikoreksi manual
-    ignored_fields = []
-    changed_fields = []
-
     if doc.metadata_corrected_at is not None:
         for fname in ["title", "regulation_number", "regulation_type", "release_date"]:
             if getattr(payload, fname) is not None:
