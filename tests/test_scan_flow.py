@@ -154,14 +154,14 @@ def test_k07_pull_to_knowledge_base(client, scan_source: int, mock_http_server, 
     monkeypatch.setattr(settings, "crawl_allow_private_networks", True)
     monkeypatch.setattr(settings, "crawl_delay_seconds", 0)
 
-    # 1. Jalankan scan
-    resp_scan = client.post(f"/api/v1/scans/?wait=true", json={"source_id": scan_source, "crawl_depth": 1})
+    # 1. Jalankan scan dengan crawl_depth=2 agar menemukan c.pdf, d.pdf (depth 2), dan e.pdf
+    resp_scan = client.post(f"/api/v1/scans/?wait=true", json={"source_id": scan_source, "crawl_depth": 2})
     scan_id = resp_scan.json()["id"]
 
-    # Pilih hanya c.pdf dan e.pdf untuk ditarik
+    # Pilih c.pdf, d.pdf, dan e.pdf untuk ditarik (3 kandidat)
     resp_cands = client.get(f"/api/v1/scans/{scan_id}/candidates")
     cands = resp_cands.json()["items"]
-    target_ids = [c["id"] for c in cands if c["filename"] in ("c.pdf", "e.pdf")]
+    target_ids = [c["id"] for c in cands if c["filename"] in ("c.pdf", "d.pdf", "e.pdf")]
 
     client.patch(f"/api/v1/scans/{scan_id}/selection", json={"action": "select_none"})
     client.patch(f"/api/v1/scans/{scan_id}/selection", json={"action": "set", "candidate_ids": target_ids, "selected": True})
@@ -175,15 +175,33 @@ def test_k07_pull_to_knowledge_base(client, scan_source: int, mock_http_server, 
     pull_data = resp_pull.json()
     assert pull_data["status"] == "selesai"
     assert pull_data["pull_job_id"] is not None
+    assert pull_data["pull_progress"] is not None
+    assert pull_data["pull_progress"]["status"] == "selesai"
+    assert pull_data["pull_progress"]["processed_count"] == 3
+    assert pull_data["pull_progress"]["progress_percent"] == 100
+
+    # Verifikasi Job Ingest
+    resp_job = client.get(f"/api/v1/ingest/jobs/{pull_data['pull_job_id']}")
+    assert resp_job.status_code == 200
+    job_data = resp_job.json()
+    assert job_data["status"] == "selesai"
+    assert job_data["success_count"] == 3
+    assert job_data["duplicate_count"] == 0
+    assert job_data["failed_count"] == 0
+    assert job_data["processed_count"] == 3
+    assert job_data["progress_percent"] == 100
 
     # Verifikasi dokumen baru di database
     resp_cands_final = client.get(f"/api/v1/scans/{scan_id}/candidates")
     pulled_c = next(c for c in resp_cands_final.json()["items"] if c["filename"] == "c.pdf")
+    pulled_d = next(c for c in resp_cands_final.json()["items"] if c["filename"] == "d.pdf")
     pulled_e = next(c for c in resp_cands_final.json()["items"] if c["filename"] == "e.pdf")
 
-    assert pulled_c["pull_outcome"] == "success"
+    assert pulled_c["pull_outcome"] in ("success", "berhasil")
     assert pulled_c["document_id"] is not None
-    assert pulled_e["pull_outcome"] == "success"
+    assert pulled_d["pull_outcome"] in ("success", "berhasil")
+    assert pulled_d["document_id"] is not None
+    assert pulled_e["pull_outcome"] in ("success", "berhasil")
     assert pulled_e["document_id"] is not None
 
     # Verifikasi detail dokumen
@@ -254,19 +272,29 @@ def test_k08_k09_k10_pull_failures_and_duplicates(client, db_session: Session, s
     cand_a2 = next(c for c in resp_cands_final.json()["items"] if c["filename"] == "a2.pdf")
 
     # K08: hilang.pdf gagal
-    assert cand_hilang["pull_outcome"] == "failed"
+    assert cand_hilang["pull_outcome"] in ("failed", "gagal")
     assert cand_hilang["failure_id"] is not None
 
     # K09: besar.pdf gagal ukuran_melebihi_batas
-    assert cand_besar["pull_outcome"] == "failed"
+    assert cand_besar["pull_outcome"] in ("failed", "gagal")
     assert cand_besar["failure_id"] is not None
     failure_besar = db_session.query(IngestFailure).filter(IngestFailure.id == cand_besar["failure_id"]).first()
     assert failure_besar.reason_code == "ukuran_melebihi_batas"
     assert failure_besar.is_retryable is False
 
     # K10: a2.pdf duplikat
-    assert cand_a2["pull_outcome"] == "duplicate"
+    assert cand_a2["pull_outcome"] in ("duplicate", "duplikat")
     assert cand_a2["document_id"] == doc_dup.id
+
+    # Verifikasi Job Ingest counts untuk K08-K10
+    pull_job_id = resp_pull.json()["pull_job_id"]
+    resp_job = client.get(f"/api/v1/ingest/jobs/{pull_job_id}")
+    assert resp_job.status_code == 200
+    job_data = resp_job.json()
+    assert job_data["success_count"] == 0
+    assert job_data["duplicate_count"] == 1
+    assert job_data["failed_count"] == 2
+    assert job_data["processed_count"] == 3
 
     # Verifikasi failure_id hilang.pdf di database
     failure = db_session.query(IngestFailure).filter(IngestFailure.id == cand_hilang["failure_id"]).first()
@@ -306,9 +334,15 @@ def test_k11_pull_to_unduh_folder_zip_export(client, scan_source: int, mock_http
     # Pastikan tidak ada Document baru yang dibuat di database
     resp_cands_final = client.get(f"/api/v1/scans/{scan_id}/candidates")
     c_final = next(c for c in resp_cands_final.json()["items"] if c["filename"] == "c.pdf")
-    assert c_final["pull_outcome"] == "downloaded"
+    assert c_final["pull_outcome"] in ("downloaded", "diunduh")
     assert c_final["document_id"] is None
     assert c_final["export_path"] is not None
+
+    # Verifikasi Job Ingest count untuk unduh_folder
+    resp_job = client.get(f"/api/v1/ingest/jobs/{resp_pull.json()['pull_job_id']}")
+    assert resp_job.status_code == 200
+    assert resp_job.json()["success_count"] == 1
+    assert resp_job.json()["processed_count"] == 1
 
     # 3. Unduh ZIP
     resp_zip = client.get(f"/api/v1/scans/{scan_id}/download")

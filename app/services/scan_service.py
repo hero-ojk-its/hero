@@ -640,11 +640,13 @@ class ScanService:
                         )
                         db.add(failure)
                         db.flush()
-                        cand.pull_outcome = "failed"
+                        cand.pull_outcome = "gagal"
                         cand.failure_id = failure.id
                         cand.message = str(fle)
                         job.failed_count += 1
                         job.processed_count += 1
+                        if job.processed_count % settings.job_progress_commit_every == 0:
+                            db.commit()
                         continue
 
                     except (BlockedUrlError, CrawlerError, Exception) as exc:
@@ -666,11 +668,13 @@ class ScanService:
                         )
                         db.add(failure)
                         db.flush()
-                        cand.pull_outcome = "failed"
+                        cand.pull_outcome = "gagal"
                         cand.failure_id = failure.id
                         cand.message = str(exc)
                         job.failed_count += 1
                         job.processed_count += 1
+                        if job.processed_count % settings.job_progress_commit_every == 0:
+                            db.commit()
                         continue
 
                     # 2. Proses berkas sesuai tujuan
@@ -682,14 +686,27 @@ class ScanService:
                             source_url=norm_source_url,
                         )
                         opts = IngestOptions(
-                            access_classification=source.default_access_classification if source else "publik",
-                            document_role=source.default_document_role if source else "corpus_eksisting",
+                            access_classification=source.default_access_classification if source else KlasifikasiAkses.publik,
+                            document_role=source.default_document_role if source else PeranDokumen.corpus_eksisting,
                         )
                         res = ingest_svc.ingest_one(job, item, opts, suppress_failure_hooks=False)
-                        cand.pull_outcome = res.outcome.value
+                        
+                        outcome_indonesia_map = {
+                            ItemOutcome.success: "berhasil",
+                            ItemOutcome.duplicate: "duplikat",
+                            ItemOutcome.failed: "gagal",
+                            ItemOutcome.requeued: "antrian",
+                        }
+                        cand.pull_outcome = outcome_indonesia_map.get(res.outcome, res.outcome.value)
                         cand.document_id = res.document_id
                         cand.message = res.message
-                        if res.outcome == ItemOutcome.failed:
+
+                        if res.outcome == ItemOutcome.success:
+                            job.success_count += 1
+                        elif res.outcome == ItemOutcome.duplicate:
+                            job.duplicate_count += 1
+                        else:
+                            job.failed_count += 1
                             f_row = (
                                 db.query(IngestFailure)
                                 .filter(IngestFailure.job_id == job.id, IngestFailure.source_url == norm_source_url)
@@ -708,7 +725,7 @@ class ScanService:
                                 filename_hint=safe_hint,
                                 subdir=f"exports/scan_{session.id}",
                             )
-                            cand.pull_outcome = "downloaded"
+                            cand.pull_outcome = "diunduh"
                             cand.export_path = rel_path
                             cand.message = "Berkas berhasil diunduh ke folder ekspor."
                             job.success_count += 1
@@ -724,7 +741,7 @@ class ScanService:
                             )
                             db.add(failure)
                             db.flush()
-                            cand.pull_outcome = "failed"
+                            cand.pull_outcome = "gagal"
                             cand.failure_id = failure.id
                             cand.message = fve.message
                             job.failed_count += 1
@@ -738,6 +755,9 @@ class ScanService:
                 job.finished_at = datetime.now(timezone.utc)
                 if session.cancel_requested:
                     session.status = StatusPindai.dibatalkan
+                    job.status = StatusJobIngest.gagal
+                elif job.success_count == 0 and job.duplicate_count == 0 and job.failed_count > 0:
+                    session.status = StatusPindai.selesai
                     job.status = StatusJobIngest.gagal
                 else:
                     session.status = StatusPindai.selesai
@@ -755,7 +775,7 @@ class ScanService:
                     )
 
                 db.commit()
-                logger.info(f"[Pull] Sesi #{session.id} penarikan selesai: {job.success_count} success, {job.failed_count} failed.")
+                logger.info(f"[Pull] Sesi #{session.id} penarikan selesai: {job.success_count} success, {job.duplicate_count} duplicate, {job.failed_count} failed.")
 
             except Exception as e:
                 logger.exception(f"[Pull] Kesalahan fatal saat eksekusi penarikan sesi #{session.id}: {e}")
@@ -857,7 +877,7 @@ class ScanService:
             self.db.query(ScanCandidate)
             .filter(
                 ScanCandidate.scan_id == scan_id,
-                ScanCandidate.pull_outcome == "downloaded",
+                ScanCandidate.pull_outcome.in_(["diunduh", "downloaded"]),
                 ScanCandidate.export_path.isnot(None),
             )
             .all()

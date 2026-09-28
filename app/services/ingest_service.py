@@ -123,6 +123,8 @@ class IngestService:
             source_ref=source_ref[:255] if source_ref else None,
             triggered_by=triggered_by[:100] if triggered_by else "system",
             status=StatusJobIngest.berjalan,
+            total_found=0,
+            processed_count=0,
             success_count=0,
             duplicate_count=0,
             failed_count=0,
@@ -138,6 +140,15 @@ class IngestService:
             job.success_count = sum(1 for r in results if r.outcome == ItemOutcome.success)
             job.duplicate_count = sum(1 for r in results if r.outcome == ItemOutcome.duplicate)
             job.failed_count = sum(1 for r in results if r.outcome == ItemOutcome.failed)
+            job.processed_count = len(results)
+            if (job.total_found or 0) < job.processed_count:
+                job.total_found = job.processed_count
+        else:
+            calc_processed = (job.success_count or 0) + (job.duplicate_count or 0) + (job.failed_count or 0)
+            if job.processed_count == 0 and calc_processed > 0:
+                job.processed_count = calc_processed
+            if (job.total_found or 0) < job.processed_count:
+                job.total_found = job.processed_count
 
         job.finished_at = datetime.now(timezone.utc)
 
