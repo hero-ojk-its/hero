@@ -33,6 +33,7 @@
 | **16** | **[Dokumen Arsitektur Sistem](16-arsitektur-sistem.md)** | BA | Draft v1.0 | Persetujuan ADR-08 s.d. ADR-10 oleh PO |
 | **17** | **[MoM Weekly Update #2](17-mom-weekly-update-02.md)** | PM | Final | — |
 | **18** | **[MoM Weekly Update #3](18-mom-weekly-update-03.md)** | PM | Final | — |
+| **19** | **[MoM Weekly Update #4](19-mom-weekly-update-04.md)** | PM | Final | — |
 
 ### Template Operasional
 
