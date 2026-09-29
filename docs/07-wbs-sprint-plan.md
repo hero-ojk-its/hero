@@ -1,5 +1,5 @@
 # WORK BREAKDOWN STRUCTURE, SPRINT PLAN & MILESTONE
-**Proyek:** HERO | **Versi:** 1.2 | **Tanggal:** 9 September 2026 | **Penyusun:** Project Manager
+**Proyek:** HERO | **Versi:** 1.3 | **Tanggal:** 29 September 2026 | **Penyusun:** Project Manager
 
 ---
 
@@ -233,7 +233,7 @@ Ditetapkan Faris pada Weekly Update #1. Dibawakan oleh PM:
 | ID | Milestone | Tanggal | Indikator Keberhasilan | Penerima Sign-off |
 | --- | --- | --- | --- | --- |
 | **M0** | Inception selesai | 13 Sep 2026 | Dokumen requirement & arsitektur disetujui; infrastruktur dasar siap; struktur folder KB awal tersedia; NDA lengkap | Mentor + PO |
-| **M1** | MVP Scraping & Ingest | **Uji coba mitra 8 Okt**, penerimaan 11 Okt 2026 | ≥ 3 situs sumber tertarik; unggah manual berfungsi; ≥ 1 folder lokal terbaca; ≥ 20 dokumen di KB (mode Deterministik). **OneDrive digeser ke Fase 2** — folder belum disediakan mitra | PO |
+| **M1** | MVP Scraping & Ingest | **Uji coba mitra 8 Okt**, penerimaan 11 Okt 2026 | Scan tiga sumber — situs regulasi OJK, JDIH OJK, OneDrive public — **mengindeks** dokumen (URL, nama dokumen, nama berkas, ukuran) tanpa unduh, dengan jumlah mendekati *ground truth* DPEA (± 1.700 dan ± 400–500); unggah manual berfungsi; ≥ 1 folder lokal terbaca; ≥ 20 dokumen di KB (mode Deterministik). *Direvisi Weekly #4 — OneDrive kembali ke Fase 1* | PO |
 | **M2** | MVP Analisa & Summary | 8 Nov 2026 | Summary & Key Takeaways untuk ≥ 10 dokumen uji; waktu proses < 5 menit/dokumen; toggle AI-Assisted berfungsi | PO + SME |
 | **M3** | MVP Harmonisasi | 29 Nov 2026 | ≥ 5 pasang dokumen dibandingkan; ≥ 70% potensi konflik/duplikasi terdeteksi (divalidasi manual) | PO + SME |
 | **M4** | MVP Tanggapan PoV | 13 Des 2026 | ≥ 3 draft tanggapan tersusun; template sesuai standar unit tervalidasi pilot user | PO + Pilot User |
@@ -250,12 +250,41 @@ Mitra menyatakan akan **mencoba sendiri** aplikasinya, bukan hanya menonton demo
 | Delapan alur pada [UI Spec §6](15-ui-spec-fase-1.md) dapat diselesaikan tanpa pendampingan | Frontend + Backend | 7 Okt 2026 |
 | ≥ 20 dokumen sudah terisi di knowledge base | Data/ML | 7 Okt 2026 |
 | Panduan singkat cara memakai | BA | 7 Okt 2026 |
+| Frontend dan backend terintegrasi; alur utuh berjalan dari UI ([#91](https://github.com/hero-ojk-its/hero/issues/91)) | Frontend + Backend | Sebelum rapat 6 Okt |
+| Pengujian internal dimulai H-14 ([#92](https://github.com/hero-ojk-its/hero/issues/92)) | Infra/QA | Pekan 28 Sep 2026 |
+| Jumlah dokumen terindeks per sumber dilaporkan terhadap *ground truth* ([#88](https://github.com/hero-ojk-its/hero/issues/88), [#87](https://github.com/hero-ojk-its/hero/issues/87)) | Backend + Data/ML | 6 Okt 2026 |
 
 > **Ini prasyarat yang mudah terlewat.** Tim menyatakan akan mulai dari lokal lalu publish
 > bertahap. Aplikasi yang hanya berjalan di laptop anggota tim **tidak dapat diuji mitra** —
 > dan M1 gagal diverifikasi meskipun seluruh fiturnya jalan. Pendanaan tersedia dengan skema
 > yang sama seperti semester lalu; ajukan sebelum akhir September bila hosting berbayar
 > diperlukan.
+
+> **Risiko jadwal (Weekly #4):** Pak Faris training seminggu di Jakarta "minggu depan" — bisa
+> bertabrakan dengan rapat 6 Okt dan uji coba 8 Okt. Konfirmasi ketersediaan beliau dan pastikan
+> aplikasi bisa diuji dari jarak jauh.
+
+### 5.2 Jadwal Pengujian per MVP — Aturan H-14
+
+Ditetapkan Pak Faris di [Weekly #4](19-mom-weekly-update-04.md): tentukan tanggal rilis MVP, lalu
+tarik mundur. **Pengujian mulai H-14; seminggu terakhir (H-7 sampai rilis) untuk perbaikan**,
+supaya feedback dari pengujian masih sempat ditangani. Uji dan perbaikan boleh berulang dalam
+jendela itu.
+
+| MVP | Rilis (H) | Fase mulai | Mulai uji (H-14) | Mulai perbaikan (H-7) | Waktu bangun sebelum uji |
+| --- | --- | --- | --- | --- | --- |
+| M1 — Scraping & Ingest | 11 Okt | 14 Sep | 27 Sep → **pekan 28 Sep** | 4 Okt (uji coba mitra 8 Okt) | 2 minggu |
+| M2 — Analisa & Summary | 8 Nov | 12 Okt | 25 Okt | 1 Nov | 2 minggu |
+| M3 — Harmonisasi | 29 Nov | 9 Nov | 15 Nov | 22 Nov | **6 hari** |
+| M4 — Tanggapan PoV | 13 Des | 30 Nov | 29 Nov | 6 Des | **tidak ada** — uji dimulai sebelum fase |
+
+M5 (serah terima) mengikuti jadwal UAT di [Test Plan §4](11-test-plan-uat.md).
+
+> **Catatan PM — aturan H-14 tidak muat untuk Fase 3 dan 4.** Fase 1 dan 2 masih menyisakan dua
+> minggu untuk membangun sebelum uji. Fase 3 (3 minggu) hanya menyisakan 6 hari, dan Fase 4
+> (2 minggu) tidak menyisakan waktu sama sekali. **Usulan:** untuk Fase 3 dan 4, pengujian
+> berjalan per fitur begitu fitur selesai (bukan satu jendela di akhir), dan H-7 tetap menjadi
+> batas mulai perbaikan. Perlu dikonfirmasi ke Pak Faris sebelum Fase 3 dimulai (9 Nov).
 
 ---
 
@@ -323,3 +352,4 @@ flowchart LR
 | 1.0 | 7 Sep 2026 | Draft awal: WBS, peta fase-sprint, Gantt, 9 sprint, 6 milestone, jalur kritis | PM |
 | 1.2 | 9 Sep 2026 | WBS 1.4 dipecah menjadi 1.4.A (algoritma, Data/ML) dan 1.4.B (pipeline, Backend); kepemilikan 1.5 diperjelas | PM |
 | 1.1 | 8 Sep 2026 | Kadens rapat menjadi mingguan + format laporan mitra; M1 menyertakan uji coba mitra 8 Okt; OneDrive digeser ke Fase 2; tambah §5.1 prasyarat uji coba | PM |
+| 1.3 | 29 Sep 2026 | Weekly #4: indikator M1 memakai dokumen terindeks vs *ground truth* dan OneDrive kembali ke Fase 1; prasyarat §5.1 ditambah; §5.2 aturan H-14 per MVP | PM |

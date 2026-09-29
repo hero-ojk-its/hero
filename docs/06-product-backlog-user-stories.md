@@ -1,5 +1,5 @@
 # PRODUCT BACKLOG & USER STORIES
-**Proyek:** HERO | **Versi:** 1.2 | **Tanggal:** 9 September 2026 | **Penyusun:** PM / Business Analyst
+**Proyek:** HERO | **Versi:** 1.3 | **Tanggal:** 29 September 2026 | **Penyusun:** PM / Business Analyst
 
 ---
 
@@ -308,6 +308,71 @@ daripada memaksakan 13 SP ke dalam sprint yang sudah kelebihan beban.
 
 ---
 
+## 5C. Story Baru & Revisi — Hasil Weekly Update #4 (29 Sep 2026)
+
+Sumber: [MoM Weekly Update #4](19-mom-weekly-update-04.md). Backlog yang berjalan ada di issue GitHub
+dan [HERO — Papan Proyek](https://github.com/orgs/hero-ojk-its/projects/1); bagian ini mencatat
+perubahannya.
+
+> **Penomoran sprint.** Bagian ini memakai penomoran PRD yang dipakai papan proyek: **Sprint 3 =
+> 28 Sep – 11 Okt** (Fase 1). Di tabel §4–§5B, periode yang sama masih tertulis **S2**.
+
+### 5C.1 Story Baru
+
+| ID | Issue | **Peran** | User Story | AC Ringkas | FR | Pri | SP | Sprint |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **US-13c** | [#88](https://github.com/hero-ojk-its/hero/issues/88) | Backend | Sebagai **Admin KB**, saya ingin scan situs sumber menemukan seluruh dokumen meskipun situsnya memakai paging, *redirect*, atau captcha | Paging dua format terbaca; *redirect* diikuti; captcha terdeteksi & dilaporkan; tiap dokumen terindeks (URL, nama dokumen, nama berkas, ukuran) tanpa unduh; jumlah per sumber dibandingkan *ground truth* DPEA | FR-SCR-02, FR-SCR-03 | M | 8 | Sprint 3 |
+| **US-20b** | [#89](https://github.com/hero-ojk-its/hero/issues/89) | Frontend | Sebagai **Admin KB**, saya ingin menyusun format nama berkas sebelum menarik dokumen | Tombol Nomor / Nama / Tahun / Jenis / Bidang; urutan klik menjadi format; tombol *Clear*; pratinjau nama berkas | FR-SCR-09b | M | 3 | Sprint 3 |
+| **US-20c** | [#90](https://github.com/hero-ojk-its/hero/issues/90) | Backend | Sebagai **sistem**, saya harus me-*rename* berkas mengikuti format pilihan pengguna | Format tetap diganti format dinamis; unsur tak terbaca menjadi *wildcard*; rename setelah deteksi duplikat, sebelum simpan | FR-SCR-09b | M | 3 | Sprint 3 |
+
+SP di atas adalah estimasi awal PM dan dikonfirmasi tim di sprint planning.
+
+**Task dan item mitra dari rapat yang sama** (bukan user story, tanpa SP):
+
+| ID | Issue | Item | PIC | Tenggat |
+| --- | --- | --- | --- | --- |
+| AI-T12 | [#91](https://github.com/hero-ojk-its/hero/issues/91) | Integrasi frontend–backend dan kontrak API MVP Fase 1 | Ikhwan · Rafli | Sebelum rapat 6 Okt |
+| AI-T13 | [#92](https://github.com/hero-ojk-its/hero/issues/92) | Pengujian internal MVP Fase 1 dan skenario uji scraping | Hamdan | 28 Sep – 3 Okt |
+| AI-T14 | [#93](https://github.com/hero-ojk-its/hero/issues/93) | Dokumen sprint review Sprint 2 | Zaky | 4 Okt |
+| AI-M7 | [#87](https://github.com/hero-ojk-its/hero/issues/87) | Angka *ground truth* jumlah dokumen per situs sumber | Pak Faris | Sebelum rapat 6 Okt |
+
+### 5C.2 Story yang Kriteria Penerimaannya Direvisi
+
+| ID | Perubahan AC | Alasan |
+| --- | --- | --- |
+| US-13b ([#44](https://github.com/hero-ojk-its/hero/issues/44)) | Scan dianggap berhasil bila setiap PDF **terindeks** — URL resmi, nama dokumen, nama berkas, ukuran — tanpa harus diunduh. Pengguna menyusun format nama sebelum tarik | Kriteria penerimaan Pak Faris: unduh bergantung internet dan penyimpanan lokal, jadi bukan ukuran keberhasilan scraping. *(US-13b sendiri berasal dari Weekly #3.)* |
+| US-20a ([#12](https://github.com/hero-ojk-its/hero/issues/12)) | Konvensi nama tetap dihapus. Story ini fokus membaca nomor, judul, dan tanggal dari halaman pertama sebagai bahan format dinamis (US-20b, US-20c) | OJK tidak punya format baku untuk nama berkas; format bakunya hanya ada di isi dokumen |
+| US-28 ([#19](https://github.com/hero-ojk-its/hero/issues/19)) | Detail satu layar penuh berisi isi dokumen; judul peraturan di Knowledge Base membuka halaman ini; PDF dilihat langsung di browser, cadangan tahap pertama unduh ke lokal | Pengguna harus bisa memverifikasi kesimpulan analisa ke dokumen aslinya. Viewer ini dipakai ulang oleh US-49a di Fase 3 |
+| US-03 ([#33](https://github.com/hero-ojk-its/hero/issues/33)) | Tanpa informasi redundan; angka per kategori dapat diklik dan membuka Knowledge Base yang terfilter; statistik berlaku vs dicabut | Feedback mockup Weekly #3 dan #4. Sprint tetap Sprint 5 |
+| US-17 ([#30](https://github.com/hero-ojk-its/hero/issues/30)) | Masuk uji scan tiga sumber MVP Fase 1 | Lihat §5C.3 |
+
+### 5C.3 Perpindahan Sprint
+
+| ID | Dari | Ke | Alasan |
+| --- | --- | --- | --- |
+| US-17 — Folder OneDrive public ([#30](https://github.com/hero-ojk-its/hero/issues/30)) | Sprint 5 (Fase 2) | **Sprint 3 (Fase 1)** | Folder sudah tersedia (#26), backend sudah bisa membacanya, dan Pak Faris memasukkan OneDrive ke tiga sumber uji MVP. Membalik pergeseran di §5B.3 |
+
+### 5C.4 Dampak ke Kapasitas Sprint 3
+
+| | SP |
+| --- | --- |
+| Sprint 3 di papan sebelum Weekly #4 | 51 |
+| Tambahan: US-17 (8) + US-13c (8) + US-20b (3) + US-20c (3) | + 22 |
+| **Sprint 3 sekarang** | **73** |
+| Kapasitas realistis per sprint (§5B.1) | ± 44 |
+
+> **Catatan PM — Sprint 3 kelebihan ± 29 SP, tepat di pekan pengujian MVP.** Sebagian sudah
+> *In Review* (US-16, US-23, US-25, US-27 — 18 SP), jadi sisa kerja nyata ± 55 SP. Tetap di atas
+> kapasitas. Tambahan baru tidak bisa ditunda karena langsung menjadi kriteria M1.
+> **Kandidat yang diturunkan ke Sprint 4** — keduanya bukan indikator M1:
+> 1. US-24 — Klasifikasi kategori peraturan (5 SP, *To Do*)
+> 2. US-21 — Koreksi metadata manual (3 SP, *To Do*)
+>
+> SPIKE US-32a (parser) **jangan** ikut diturunkan: ia melindungi jalur kritis Fase 2 (§5B.4).
+> Keputusan diambil di sprint review Sprint 2 ([#93](https://github.com/hero-ojk-its/hero/issues/93)).
+
+---
+
 ## 6. Backlog Fase Berikutnya (Tidak Dikerjakan pada MVP)
 
 | ID | Item | Alasan Ditunda | Sumber |
@@ -326,3 +391,4 @@ daripada memaksakan 13 SP ke dalam sprint yang sudah kelebihan beban.
 | Versi | Tanggal | Perubahan | Penyusun |
 | --- | --- | --- | --- |
 | 1.0 | 7 Sep 2026 | Draft awal: 7 epic, 63 user story, DoR/DoD, distribusi sprint | PM/BA |
+| 1.3 | 29 Sep 2026 | §5C hasil Weekly #4: US-13c, US-20b, US-20c baru; AC US-13b, US-20a, US-28, US-03 direvisi; US-17 ditarik ke Sprint 3; catatan kapasitas Sprint 3 | PM/BA |

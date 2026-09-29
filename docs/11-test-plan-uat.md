@@ -1,5 +1,5 @@
 # TEST PLAN & UAT SCENARIO
-**Proyek:** HERO | **Versi:** 1.1 | **Tanggal:** 8 September 2026 | **Penyusun:** PM/BA bersama QA
+**Proyek:** HERO | **Versi:** 1.2 | **Tanggal:** 29 September 2026 | **Penyusun:** PM/BA bersama QA
 
 ---
 
@@ -78,13 +78,15 @@ Format: **ID · Deskripsi · Prakondisi · Langkah · Hasil Diharapkan · FR**
 | ID | Deskripsi | Langkah Ringkas | Hasil Diharapkan | FR |
 | --- | --- | --- | --- | --- |
 | TC-01 | Kelola daftar situs sumber | Tambah, ubah, nonaktifkan, hapus URL | Data tersimpan; URL tidak valid & duplikat ditolak | FR-SCR-01 |
-| TC-02 | Scraping dari 3 situs sumber | Pilih 3 situs → jalankan job | Dokumen PDF terunduh & tercatat sumbernya; **M-01 terpenuhi** | FR-SCR-02 |
+| TC-02 | Scan 3 sumber uji MVP | Scan situs regulasi OJK, JDIH OJK, dan folder OneDrive public | Setiap dokumen **terindeks** — URL resmi, nama dokumen, nama berkas, ukuran — tanpa unduh; jumlah per sumber mendekati *ground truth* DPEA (± 1.700 dan ± 400–500); **M-01 terpenuhi** | FR-SCR-02 |
+| TC-02a | Ketahanan scan terhadap variasi situs | Scan situs dengan paging `1 2 3 … terakhir` dan `1 2 … 7 8 terakhir`, situs yang *redirect*, dan situs bercaptcha | Paging terbaca penuh; *redirect* diikuti; captcha terdeteksi & dilaporkan di ringkasan job | FR-SCR-02, FR-SCR-03 |
 | TC-03 | Ringkasan hasil job scraping | Jalankan job dengan 1 situs sengaja tidak dapat diakses | Ringkasan menampilkan berhasil/duplikat/gagal + alasan; job tetap selesai | FR-SCR-03 |
 | TC-04 | Unggah manual banyak berkas | Unggah 5 PDF sekaligus | Semua masuk antrian; notifikasi hasil per berkas | FR-SCR-04 |
 | TC-05 | Baca folder lokal | Konfigurasi 1 folder lokal berisi PDF → jalankan sinkron | Dokumen terbaca & masuk KB | FR-SCR-05 |
 | TC-06 | Baca folder OneDrive public | Konfigurasi 1 folder OneDrive public → jalankan sinkron | Dokumen terbaca & masuk KB | FR-SCR-06 |
 | TC-07 | Tolak berkas non-PDF | Unggah berkas Word/Excel | Ditolak dengan alasan jelas; tidak masuk KB; tercatat di log kegagalan | FR-SCR-07 |
 | TC-08 | Ekstraksi metadata dasar | Ingest dokumen berstruktur baku | Judul, nomor peraturan, tanggal terbit terisi otomatis | FR-SCR-09 |
+| TC-08a | Format nama berkas dinamis | Susun format Tahun → Jenis → Nama, lalu tarik 3 dokumen; ulangi dengan format lain | Nama berkas mengikuti urutan yang disusun; unsur tak terbaca menjadi *wildcard* | FR-SCR-09b |
 | TC-09 | Deteksi duplikat | Unggah dokumen yang sama dua kali | Unggahan kedua ditandai duplikat; tidak tersimpan ganda | FR-SCR-08 |
 | TC-10 | Koreksi metadata manual | Ubah nomor peraturan hasil ekstraksi yang salah | Perubahan tersimpan & tercatat di audit log | FR-SCR-10 |
 | TC-11 | OCR pada PDF hasil pindai | Ingest PDF hasil scan | Teks terekstraksi & dapat dicari | FR-SCR-11 |
@@ -301,7 +303,8 @@ Setiap skenario dijalankan oleh minimal 1 pilot user per fitur, didampingi QA.
 | Kegiatan | Periode | Penanggung Jawab |
 | --- | --- | --- |
 | Penyusunan test case per fitur | Mengikuti sprint fitur | QA + BA |
-| System test Fase 1 | 8 – 11 Okt 2026 | QA |
+| System test Fase 1 — pengujian internal | 28 Sep – 3 Okt 2026 | QA |
+| Uji coba mitra Fase 1 + perbaikan | 4 – 11 Okt 2026 (uji coba mitra 8 Okt) | QA + Tim |
 | System test Fase 2 + performance test | 5 – 8 Nov 2026 | QA |
 | Penyiapan berkas uji harmonisasi & sesi validasi sampling DPEA | 9 – 22 Nov 2026 | BA + Validator DPEA |
 | System test Fase 3 + evaluasi recall | 26 – 29 Nov 2026 | QA + BA |
@@ -315,6 +318,10 @@ Setiap skenario dijalankan oleh minimal 1 pilot user per fitur, didampingi QA.
 > jalankan "UAT kering" (*dry run*) per fitur pada akhir fasenya masing-masing — Fase 1, 2, 3,
 > dan 4 — sehingga sesi UAT resmi menjadi konfirmasi, bukan penemuan masalah pertama kali.
 
+> **Aturan H-14 (Weekly #4).** Mulai Fase 1, pengujian tiap MVP dimulai H-14 dan seminggu
+> terakhir dipakai untuk perbaikan — lihat [WBS §5.2](07-wbs-sprint-plan.md). Baris Fase 2–4 di
+> atas disesuaikan setelah usulan untuk Fase 3 dan 4 dikonfirmasi PO.
+
 ---
 
 ## Riwayat Revisi
@@ -323,3 +330,4 @@ Setiap skenario dijalankan oleh minimal 1 pilot user per fitur, didampingi QA.
 | --- | --- | --- | --- |
 | 1.0 | 7 Sep 2026 | Draft awal: strategi, 60 test case, 5 skenario UAT, jadwal | PM/BA |
 | 1.1 | 8 Sep 2026 | Metode validasi sampling DPEA (§1.2a) menggantikan ground truth SME; TC-35..37 diselaraskan dengan klasifikasi baru; TC-37a & TC-40a ditambahkan; UAT-06 verifikasi metrik utama ditambahkan | PM/BA |
+| 1.2 | 29 Sep 2026 | Weekly #4: TC-02 memakai dokumen terindeks vs *ground truth*; TC-02a & TC-08a ditambahkan; jadwal system test Fase 1 mengikuti aturan H-14 | PM/BA |

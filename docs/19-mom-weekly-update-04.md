@@ -12,7 +12,7 @@
 ## 1. Ringkasan singkat
 
 - Minggu ketiga Fase 1, awal Sprint 3. Tim mulai mencicil task Sprint 3; sebagian task Sprint 2 masih finalisasi dan *in review*.
-- **Pengujian MVP Fase 1 harus mulai pekan ini.** MVP dirilis 11 Okt. Pak Faris memberi aturan untuk setiap MVP: pengujian mulai H-14, batas perbaikan H-7.
+- **Pengujian MVP Fase 1 harus mulai pekan ini.** MVP dirilis 11 Okt. Pak Faris memberi aturan untuk setiap MVP: pengujian mulai H-14, dan seminggu terakhir sebelum rilis (H-7) untuk perbaikan.
 - **Kriteria penerimaan scraping ditetapkan:** dokumen dianggap berhasil kalau sudah terindeks saat scan (URL, nama dokumen, nama berkas, ukuran), tanpa harus diunduh. Jumlahnya dibandingkan dengan *ground truth* DPEA: ± 1.700 dokumen di situs regulasi OJK dan ± 400–500 di JDIH.
 - **Tiga sumber uji MVP:** situs regulasi OJK, JDIH OJK, dan folder OneDrive public.
 - **Format nama berkas dibuat dinamis.** Di halaman Scraping ada tombol Nama / Tahun / Jenis / Bidang. Urutan klik menentukan format nama berkas.
@@ -112,7 +112,7 @@
 ### Untuk Zaky (PM)
 
 **Dari Pak Faris — Jadwal pengujian MVP:**
-- Rumus untuk setiap MVP: tentukan tanggal rilis, lalu tarik mundur. **H-14 mulai pengujian, H-7 batas perbaikan.** Dengan begitu kalau pengujian menghasilkan feedback, masih ada seminggu untuk memperbaiki.
+- Rumus untuk setiap MVP: tentukan tanggal rilis, lalu tarik mundur. **H-14 mulai pengujian, H-7 sampai rilis untuk perbaikan.** Dengan begitu kalau pengujian menghasilkan feedback, masih ada seminggu untuk memperbaiki.
 - MVP Fase 1 dirilis **11 Okt**, jadi pengujian mulai **pekan ini**. Siklus uji dan perbaikan berjalan sampai sekitar 9 Okt.
 - Rumus yang sama berlaku untuk MVP berikutnya (± sebulan sekali).
 
@@ -141,7 +141,7 @@
 
 ## 5. Keputusan
 
-1. Pengujian MVP Fase 1 dimulai pekan ini; rilis 11 Okt. Untuk setiap MVP berlaku H-14 mulai uji dan H-7 batas perbaikan.
+1. Pengujian MVP Fase 1 dimulai pekan ini; rilis 11 Okt. Untuk setiap MVP berlaku H-14 mulai uji dan seminggu terakhir (H-7) untuk perbaikan.
 2. Scraping diterima kalau dokumen terindeks saat scan (URL, nama dokumen, nama berkas, ukuran). Jumlahnya dibandingkan dengan *ground truth* DPEA; unduh tidak termasuk kriteria.
 3. Tiga sumber uji MVP Fase 1: situs regulasi OJK, JDIH OJK, dan OneDrive public.
 4. Scraper dibangun sebagai algoritma dengan pengecekan paging, redirect, dan captcha/Cloudflare. Crawling tidak diserahkan penuh ke LLM.
@@ -156,9 +156,9 @@
 ## 6. Action item
 
 ### Zaky
-- [ ] Selesaikan dokumen sprint review Sprint 2 (tiga bagian) dan kirim untuk direview — pekan ini
+- [ ] Selesaikan dokumen sprint review Sprint 2 (tiga bagian) dan kirim untuk direview — pekan ini (#93)
 - [ ] Rekap masukan DPEA dari rapat dan WhatsApp beserta statusnya, untuk dokumen sprint review
-- [ ] Koordinasikan integrasi frontend–backend dan pengujian internal; siapkan akses uji untuk DPEA sebelum rapat 6 Okt
+- [ ] Koordinasikan integrasi frontend–backend dan pengujian internal; siapkan akses uji untuk DPEA sebelum rapat 6 Okt (#91, #92)
 - [ ] Tagih tanda tangan PRD ke Pak Andika (#45)
 - [ ] Perbarui backlog: format nama dinamis, kriteria penerimaan scraping, OneDrive masuk uji MVP Fase 1
 - [ ] Sampaikan hasil rapat ke Fathir
@@ -166,41 +166,41 @@
 - [ ] Akhir proyek: minta surat rekomendasi DPEA (Pak Dwi)
 
 ### Ikhwan
-- [ ] Revisi redundansi dashboard; angka kategori bisa diklik ke Knowledge Base yang terfilter
-- [ ] Halaman detail peraturan berisi isi dokumen; PDF dilihat langsung di browser (unduh lokal sebagai cadangan)
-- [ ] UI format nama berkas di halaman Scraping: tombol Nama / Tahun / Jenis / Bidang, kotak format, tombol clear
+- [ ] Revisi redundansi dashboard; angka kategori bisa diklik ke Knowledge Base yang terfilter (#33)
+- [ ] Halaman detail peraturan berisi isi dokumen; PDF dilihat langsung di browser (unduh lokal sebagai cadangan) (#19)
+- [ ] UI format nama berkas di halaman Scraping: tombol Nama / Tahun / Jenis / Bidang, kotak format, tombol clear (#89)
 - [ ] Selesaikan penyesuaian frontend Fase 1 pekan ini
-- [ ] Sepakati kontrak API dengan Rafli dan sambungkan frontend ke backend
+- [ ] Sepakati kontrak API dengan Rafli dan sambungkan frontend ke backend (#91)
 
 ### Rafli
-- [ ] Uji scan ke tiga sumber (regulasi OJK, JDIH, OneDrive); laporkan jumlah terindeks dibandingkan *ground truth*
-- [ ] Tangani paging (dua format), redirect, dan captcha
-- [ ] Ubah rename dari format tetap `nomor judul tahun` menjadi dinamis mengikuti urutan komponen dari UI
+- [ ] Uji scan ke tiga sumber (regulasi OJK, JDIH, OneDrive); laporkan jumlah terindeks dibandingkan *ground truth* (#88, #30)
+- [ ] Tangani paging (dua format), redirect, dan captcha (#88)
+- [ ] Ubah rename dari format tetap `nomor judul tahun` menjadi dinamis mengikuti urutan komponen dari UI (#90)
 - [ ] Uji ketangguhan scan ke situs lain (cukup scan, tanpa unduh)
-- [ ] Sediakan kontrak API untuk Ikhwan
+- [ ] Sediakan kontrak API untuk Ikhwan (#91)
 
 ### Fathir
-- [ ] Lanjutkan metadata dasar, OCR halaman pertama, dan penamaan baku (US-20, US-20a); selaraskan dengan rename dinamis Rafli
+- [ ] Lanjutkan metadata dasar, OCR halaman pertama, dan penamaan baku (US-20 #11, US-20a #12); selaraskan dengan rename dinamis Rafli
 - [ ] Bantu Rafli menguji scan ke tiga sumber
 - [ ] Masih terbuka dari MoM #3: komparasi waktu proses folder PDF vs vektor (#42)
 
 ### Hamdan
-- [ ] Susun skenario uji scraping berdasarkan kriteria penerimaan (jumlah terindeks vs *ground truth*)
+- [ ] Susun skenario uji scraping berdasarkan kriteria penerimaan (jumlah terindeks vs *ground truth*) (#92)
 - [ ] Siapkan dokumen uji untuk pengujian internal pekan ini
 - [ ] Estimasi kapasitas pengguna dan penyimpanan dokumen di server backend
 
 ### Mitra
-- [ ] Pak Faris: bagikan angka *ground truth* jumlah dokumen per situs sebagai pembanding
+- [ ] Pak Faris: bagikan angka *ground truth* jumlah dokumen per situs sebagai pembanding (#87)
 - [ ] Pak Faris: contoh surat tanggapan tertulis (#27) — masih ditunggu
-- [ ] Pak Andika: tanda tangan PRD
+- [ ] Pak Andika: tanda tangan PRD (#45)
 
 ---
 
 ## 7. Catatan dari sisi PM
 
 - **Kriteria M1 berubah.** Dokumen 07 menulis M1 sebagai "≥ 3 situs sumber tertarik; ≥ 20 dokumen di KB". Sekarang ukurannya jumlah dokumen terindeks dibandingkan *ground truth* (± 1.700 OJK, ± 400–500 JDIH), tanpa unduh. Dokumen 07, Test Plan (11), dan kriteria penerimaan US-13 / US-13b (#44) perlu disesuaikan.
-- **OneDrive maju ke Fase 1.** Di backlog, US-17 (#30) ada di Sprint 5 karena dulu foldernya belum tersedia. Sekarang foldernya sudah ada (#26 ditutup), backend Rafli sudah bisa membacanya, dan Pak Faris memasukkannya ke tiga sumber uji MVP. US-17 sebaiknya ditarik ke Sprint 3.
-- **Penamaan berkas kini melibatkan tiga orang.** Ikhwan membuat UI format, Rafli logika rename, Fathir OCR halaman pertama yang menyediakan metadatanya. US-20a (#12) perlu dipecah atau diberi sub-task supaya ketiganya tidak jalan sendiri-sendiri.
+- **OneDrive maju ke Fase 1.** Di backlog, US-17 (#30) ada di Sprint 5 karena dulu foldernya belum tersedia. Sekarang foldernya sudah ada (#26 ditutup), backend Rafli sudah bisa membacanya, dan Pak Faris memasukkannya ke tiga sumber uji MVP. US-17 sudah ditarik ke Sprint 3.
+- **Penamaan berkas kini melibatkan tiga orang.** Ikhwan membuat UI format, Rafli logika rename, Fathir OCR halaman pertama yang menyediakan metadatanya. US-20a (#12) sudah dipecah: UI di #89, rename di #90.
 - **Detail peraturan adalah fondasi verifikasi.** Permintaan Pak Faris terkait US-28 (#19) di Fase 1 dan US-49a (#72, buka PDF asli dari temuan) di Fase 3. Kalau viewer PDF dibangun sekarang, Fase 3 tinggal memakainya.
 - **Integrasi frontend–backend belum dimulai** per rapat ini, dan ini jalur kritis minggu ini. Kontrak API perlu disepakati secepatnya supaya pengujian bisa jalan sesuai H-14.
 - **Risiko jadwal:** Pak Faris training seminggu di Jakarta "minggu depan", yang bisa bertabrakan dengan rapat 6 Okt dan uji coba mitra 8 Okt. Konfirmasi ketersediaan beliau dan pastikan akses uji bisa dipakai dari jarak jauh.
