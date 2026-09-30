@@ -946,9 +946,9 @@ class ScanService:
                             original_filename=cand.filename,
                         )
                         base_name = build_standard_filename(
+                            input_data,
                             naming_format=session.naming_format,
-                            input_data=input_data,
-                            separator=session.naming_separator or " ",
+                            naming_separator=session.naming_separator or " ",
                         )
                     else:
                         base_name = sanitize_filename(cand.filename)

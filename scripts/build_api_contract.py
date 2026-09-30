@@ -118,14 +118,23 @@ def reset_test_db():
 
 
 def normalize_val(val: Any) -> Any:
-    """Normalisasi tanggal dinamis agar idempoten pada setiap eksekusi."""
+    """Normalisasi tanggal dinamis dan suffix berkas agar idempoten pada setiap eksekusi."""
     if isinstance(val, str):
         # Match ISO timestamp pattern
         if re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", val):
             return "2026-10-01T10:00:00Z"
+        # Normalisasi suffix duplikasi berkas pada path
+        if val.endswith(".pdf") and re.search(r"-\d+\.pdf$", val):
+            return re.sub(r"-\d+\.pdf$", ".pdf", val)
         return val
     elif isinstance(val, dict):
-        return {k: normalize_val(v) for k, v in val.items()}
+        normalized_dict = {}
+        for k, v in val.items():
+            if k == "changed_fields" and isinstance(v, list):
+                normalized_dict[k] = sorted(normalize_val(item) for item in v)
+            else:
+                normalized_dict[k] = normalize_val(v)
+        return normalized_dict
     elif isinstance(val, list):
         return [normalize_val(item) for item in val]
     return val
