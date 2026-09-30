@@ -1,0 +1,6853 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "HERO Backend API",
+    "version": "0.8.0"
+  },
+  "paths": {
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Login Dapatkan Token",
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_login_api_v1_auth_login_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/audit-logs/": {
+      "get": {
+        "tags": [
+          "Audit Logs"
+        ],
+        "summary": "Daftar Audit Log",
+        "operationId": "get_audit_logs_api_v1_audit_logs__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter berdasarkan kode aksi (misal: LOGIN, UPLOAD_DOCUMENT)",
+              "title": "Action"
+            },
+            "description": "Filter berdasarkan kode aksi (misal: LOGIN, UPLOAD_DOCUMENT)"
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter berdasarkan ID pengguna",
+              "title": "User Id"
+            },
+            "description": "Filter berdasarkan ID pengguna"
+          },
+          {
+            "name": "target_resource",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter berdasarkan target resource (prefix match, misal: document:12)",
+              "title": "Target Resource"
+            },
+            "description": "Filter berdasarkan target resource (prefix match, misal: document:12)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/categories/": {
+      "get": {
+        "tags": [
+          "Categories"
+        ],
+        "summary": "Daftar Kategori Datar",
+        "description": "Mengembalikan daftar datar seluruh kategori.",
+        "operationId": "list_categories_api_v1_categories__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Categories"
+        ],
+        "summary": "Buat Kategori Baru",
+        "description": "Membuat kategori baru di root atau di bawah kategori induk.",
+        "operationId": "create_category_api_v1_categories__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/categories/tree": {
+      "get": {
+        "tags": [
+          "Categories"
+        ],
+        "summary": "Pohon Hierarki Kategori KB",
+        "description": "Mengembalikan seluruh hierarki kategori berbentuk pohon bersarang\ndengan document_count (langsung) dan total_document_count (termasuk turunan).",
+        "operationId": "get_category_tree_api_v1_categories_tree_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/categories/{category_id}": {
+      "get": {
+        "tags": [
+          "Categories"
+        ],
+        "summary": "Detail Kategori dan Jalur Hierarki",
+        "description": "Mengembalikan detail satu kategori beserta jalur root->leaf dan jumlah dokumen.",
+        "operationId": "get_category_detail_api_v1_categories__category_id__get",
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Category Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ingest/upload-pdf": {
+      "post": {
+        "tags": [
+          "Ingest"
+        ],
+        "summary": "Upload PDF regulasi baru (mendukung berkas tunggal maupun jamak)",
+        "description": "[US-15, US-20c] Endpoint sinkron untuk upload PDF regulasi / draft kajian.\nMendukung unggahan tunggal dan jamak (multiple files) serta format penamaan dinamis.",
+        "operationId": "upload_pdf_api_v1_ingest_upload_pdf_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_pdf_api_v1_ingest_upload_pdf_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestUploadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ingest/jobs": {
+      "get": {
+        "tags": [
+          "Ingest"
+        ],
+        "summary": "Riwayat job ingest",
+        "description": "Mengembalikan riwayat JobIngest dengan pagination dan filter opsional.",
+        "operationId": "list_jobs_api_v1_ingest_jobs_get",
+        "parameters": [
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StatusJobIngest"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "job_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/JenisJobIngest"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job Type"
+            }
+          },
+          {
+            "name": "source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ingest/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "Ingest"
+        ],
+        "summary": "Detail job ingest",
+        "description": "[US-14] Mengembalikan detail lengkap job ingest termasuk daftar dokumen dan kegagalan/duplikat.",
+        "operationId": "get_job_detail_api_v1_ingest_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ingest/failures": {
+      "get": {
+        "tags": [
+          "Ingest"
+        ],
+        "summary": "Daftar kegagalan ingest",
+        "description": "[US-23 / S-04] Mengambil daftar log kegagalan dan antrian retry.",
+        "operationId": "list_failures_api_v1_ingest_failures_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "failure_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/JenisKegagalan"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Failure Type"
+            }
+          },
+          {
+            "name": "follow_up_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "belum_ditangani | diproses_ulang | diabaikan | all",
+              "default": "belum_ditangani",
+              "title": "Follow Up Status"
+            },
+            "description": "belum_ditangani | diproses_ulang | diabaikan | all"
+          },
+          {
+            "name": "include_duplicates",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Tampilkan juga duplikat (default: false)",
+              "default": false,
+              "title": "Include Duplicates"
+            },
+            "description": "Tampilkan juga duplikat (default: false)"
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailureListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ingest/failures/{failure_id}": {
+      "get": {
+        "tags": [
+          "Ingest"
+        ],
+        "summary": "Detail satu kegagalan ingest",
+        "description": "Mengambil detail satu baris kegagalan ingest.",
+        "operationId": "get_failure_detail_api_v1_ingest_failures__failure_id__get",
+        "parameters": [
+          {
+            "name": "failure_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Failure Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailureResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Ingest"
+        ],
+        "summary": "Update status kegagalan",
+        "description": "Mengubah status tindak lanjut kegagalan (hanya 'belum_ditangani' atau 'diabaikan').",
+        "operationId": "update_failure_status_api_v1_ingest_failures__failure_id__patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "failure_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Failure Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FailureStatusUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailureResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ingest/failures/{failure_id}/retry": {
+      "post": {
+        "tags": [
+          "Ingest"
+        ],
+        "summary": "Retry satu kegagalan",
+        "description": "Memproses ulang dokumen dari karantina.",
+        "operationId": "retry_failure_api_v1_ingest_failures__failure_id__retry_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "failure_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Failure Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/FailureRetryRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailureRetryResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Data kegagalan tidak ditemukan"
+          },
+          "409": {
+            "description": "Kegagalan tidak dapat diulang (non-retryable / sudah terselesaikan)"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ingest/failures/retry": {
+      "post": {
+        "tags": [
+          "Ingest"
+        ],
+        "summary": "Batch retry kegagalan",
+        "description": "Memproses ulang beberapa kegagalan sekaligus (satu per satu, kegagalan satu tidak membatalkan yang lain).",
+        "operationId": "batch_retry_failures_api_v1_ingest_failures_retry_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FailureBatchRetryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchRetryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ingest/check-duplicate": {
+      "get": {
+        "tags": [
+          "Ingest"
+        ],
+        "summary": "Screening dedup sebelum upload (hemat bandwidth scraper)",
+        "description": "Endpoint ringan untuk pengecekan duplikasi sebelum upload penuh.",
+        "operationId": "check_duplicate_api_v1_ingest_check_duplicate_get",
+        "parameters": [
+          {
+            "name": "file_hash",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "File Hash"
+            }
+          },
+          {
+            "name": "file_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "File Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicateCheckResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ingest/status": {
+      "get": {
+        "tags": [
+          "Ingest"
+        ],
+        "summary": "Status ingest pipeline",
+        "description": "Cek ringkasan dokumen dan job di pipeline ingest.",
+        "operationId": "ingest_status_api_v1_ingest_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/documents/": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Daftar & pencarian dokumen regulasi",
+        "description": "Mengembalikan daftar dokumen regulasi dengan pagination dan pencarian full-text / multi-filter.",
+        "operationId": "list_documents_api_v1_documents__get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Kata kunci pencarian",
+              "title": "Q"
+            },
+            "description": "Kata kunci pencarian"
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SearchMode",
+              "description": "Mode pencarian teks: phrase, all, web",
+              "default": "phrase"
+            },
+            "description": "Mode pencarian teks: phrase, all, web"
+          },
+          {
+            "name": "regulation_number",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter nomor regulasi",
+              "title": "Regulation Number"
+            },
+            "description": "Filter nomor regulasi"
+          },
+          {
+            "name": "regulation_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter jenis regulasi",
+              "title": "Regulation Type"
+            },
+            "description": "Filter jenis regulasi"
+          },
+          {
+            "name": "category_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter ID kategori folder KB",
+              "title": "Category Id"
+            },
+            "description": "Filter ID kategori folder KB"
+          },
+          {
+            "name": "include_subcategories",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Sertakan subkategori jika category_id diisi",
+              "default": true,
+              "title": "Include Subcategories"
+            },
+            "description": "Sertakan subkategori jika category_id diisi"
+          },
+          {
+            "name": "status_keberlakuan",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StatusKeberlakuan"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter status keberlakuan (bisa berulang)",
+              "title": "Status Keberlakuan"
+            },
+            "description": "Filter status keberlakuan (bisa berulang)"
+          },
+          {
+            "name": "document_role",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/PeranDokumen"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter peran dokumen",
+              "title": "Document Role"
+            },
+            "description": "Filter peran dokumen"
+          },
+          {
+            "name": "access_classification",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/KlasifikasiAkses"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter klasifikasi akses",
+              "title": "Access Classification"
+            },
+            "description": "Filter klasifikasi akses"
+          },
+          {
+            "name": "processing_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StatusPemrosesan"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter status pemrosesan",
+              "title": "Processing Status"
+            },
+            "description": "Filter status pemrosesan"
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter tanggal rilis awal (inklusif)",
+              "title": "Date From"
+            },
+            "description": "Filter tanggal rilis awal (inklusif)"
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter tanggal rilis akhir (inklusif)",
+              "title": "Date To"
+            },
+            "description": "Filter tanggal rilis akhir (inklusif)"
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter tahun rilis",
+              "title": "Year"
+            },
+            "description": "Filter tahun rilis"
+          },
+          {
+            "name": "bidang",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter sektor atau bidang regulasi (misal: Perbankan, BMKS)",
+              "title": "Bidang"
+            },
+            "description": "Filter sektor atau bidang regulasi (misal: Perbankan, BMKS)"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/SearchSort"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Pengurutan hasil pencarian",
+              "title": "Sort"
+            },
+            "description": "Pengurutan hasil pencarian"
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Offset pagination",
+              "default": 0,
+              "title": "Skip"
+            },
+            "description": "Offset pagination"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Batas dokumen per halaman (maks 100)",
+              "default": 20,
+              "title": "Limit"
+            },
+            "description": "Batas dokumen per halaman (maks 100)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/documents/place-pending": {
+      "post": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Tempatkan semua dokumen yang belum berada di kb/",
+        "description": "Menjalankan penempatan berkas untuk dokumen-dokumen yang belum ditempatkan di kb/.",
+        "operationId": "place_pending_documents_api_v1_documents_place_pending_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/documents/needs-review": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Antrean dokumen yang memerlukan koreksi metadata manual",
+        "description": "Mengembalikan dokumen berstatus `perlu_koreksi`, ditambah dokumen berstatus `terindeks`\nyang memiliki field hasil ekstraksi dengan confidence di bawah threshold dan belum dikoreksi manual.",
+        "operationId": "get_documents_needing_review_api_v1_documents_needs_review_get",
+        "parameters": [
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/documents/{document_id}": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Detail satu dokumen beserta pasalnya",
+        "description": "Mengembalikan detail lengkap dokumen beserta pasal level teratas, rujukan hukum, dan status penempatan KB.",
+        "operationId": "get_document_api_v1_documents__document_id__get",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "description": "Dokumen tidak ditemukan"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/documents/{document_id}/pdf": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Buka atau unduh berkas PDF asli",
+        "description": "Mengembalikan berkas PDF asli dari penyimpanan.\nMencatat audit OPEN_PDF atau DOWNLOAD_PDF.",
+        "operationId": "get_document_pdf_api_v1_documents__document_id__pdf_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "download",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Jika true, set Content-Disposition ke attachment",
+              "default": false,
+              "title": "Download"
+            },
+            "description": "Jika true, set Content-Disposition ke attachment"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "Dokumen non-publik memerlukan autentikasi aktif"
+          },
+          "404": {
+            "description": "Dokumen atau berkas fisik PDF tidak ditemukan"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/documents/{document_id}/text": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Membaca teks mentah dokumen",
+        "description": "Mengembalikan potongan teks mentah hasil ekstraksi dokumen lengkap.",
+        "operationId": "get_document_text_api_v1_documents__document_id__text_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Offset karakter teks",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Offset karakter teks"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100000,
+              "minimum": 1,
+              "description": "Batas karakter yang diambil",
+              "default": 20000,
+              "title": "Limit"
+            },
+            "description": "Batas karakter yang diambil"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "Dokumen non-publik memerlukan autentikasi aktif"
+          },
+          "404": {
+            "description": "Dokumen tidak ditemukan"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/documents/{document_id}/metadata": {
+      "patch": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Koreksi metadata dokumen manual",
+        "description": "Melakukan koreksi metadata dokumen manual (US-21).\nPerubahan dicatat di audit log dan memicu relokasi/penamaan ulang berkas bila diperlukan.",
+        "operationId": "patch_document_metadata_api_v1_documents__document_id__metadata_patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMetadataIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/documents/{document_id}/place": {
+      "post": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Pemicu penempatan folder KB dokumen",
+        "description": "Memicu proses penamaan baku dan pemindahan dokumen ke folder kategori KB.",
+        "operationId": "place_document_api_v1_documents__document_id__place_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Paksa tempatkan ulang meski sudah di bawah kb/",
+              "default": false,
+              "title": "Force"
+            },
+            "description": "Paksa tempatkan ulang meski sudah di bawah kb/"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/documents/{document_id}/status": {
+      "put": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Update status keberlakuan dokumen regulasi",
+        "description": "Memperbarui kolom `status_keberlakuan` pada dokumen yang dipilih. Jika status diubah menjadi **`dicabut`** atau **`diubah`** dan `revoking_document_id` disertakan, endpoint akan otomatis membuat entri baru di tabel `legal_references` yang mencatat hubungan pencabutan/perubahan antar dokumen.",
+        "operationId": "update_document_status_api_v1_documents__document_id__status_put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDocumentStatusIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateDocumentStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/internal/articles": {
+      "post": {
+        "tags": [
+          "Internal"
+        ],
+        "summary": "[Internal] Bulk insert chunk pasal dari ML pipeline",
+        "description": "Bulk insert pasal dari pipeline ML.",
+        "operationId": "bulk_insert_articles_api_v1_internal_articles_post",
+        "parameters": [
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkArticleIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkArticleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/internal/extraction/claim": {
+      "post": {
+        "tags": [
+          "Internal"
+        ],
+        "summary": "[Internal] Klaim antrean dokumen untuk diekstraksi oleh Data/ML",
+        "description": "Mengambil dan mengunci dokumen dalam antrean ekstraksi (SELECT FOR UPDATE SKIP LOCKED).\nMencakup status 'diterima' dan status 'diproses' yang telah kedaluwarsa (claim timeout).",
+        "operationId": "claim_extraction_batch_api_v1_internal_extraction_claim_post",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "description": "Jumlah dokumen yang ingin diklaim",
+              "default": 10,
+              "title": "Limit"
+            },
+            "description": "Jumlah dokumen yang ingin diklaim"
+          },
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/internal/documents/{document_id}/pdf": {
+      "get": {
+        "tags": [
+          "Internal"
+        ],
+        "summary": "[Internal] Unduh berkas PDF untuk ekstraksi",
+        "description": "Mengembalikan berkas PDF asli untuk kebutuhan worker ekstraksi Data/ML tanpa audit per unduhan.",
+        "operationId": "get_internal_document_pdf_api_v1_internal_documents__document_id__pdf_get",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/internal/documents/{document_id}/extraction": {
+      "patch": {
+        "tags": [
+          "Internal"
+        ],
+        "summary": "[Internal] Kirim hasil ekstraksi metadata dan teks dari Data/ML",
+        "description": "Menerima hasil ekstraksi Data/ML (US-20, US-20a, US-26).\nMendukung penanganan error ekstraksi, proteksi koreksi manual, dan penempatan otomatis.",
+        "operationId": "patch_extraction_result_api_v1_internal_documents__document_id__extraction_patch",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Paksa update meskipun status dokumen bukan 'diproses'",
+              "default": false,
+              "title": "Force"
+            },
+            "description": "Paksa update meskipun status dokumen bukan 'diproses'"
+          },
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtractionResultIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/internal/extraction/requeue/{document_id}": {
+      "post": {
+        "tags": [
+          "Internal"
+        ],
+        "summary": "[Internal] Mengembalikan dokumen ke antrean ekstraksi",
+        "description": "Mengembalikan dokumen ke status 'diterima' dan mereset claimed_at (tidak mereset attempt count).",
+        "operationId": "requeue_document_extraction_api_v1_internal_extraction_requeue__document_id__post",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/internal/scans/claim": {
+      "post": {
+        "tags": [
+          "Internal"
+        ],
+        "summary": "[Internal Data/ML] Mengklaim antrean sesi pemindaian mode push",
+        "description": "[Langkah 7 - Opsi B Data/ML] Mengambil sesi pemindaian antrean dengan mode='push'.",
+        "operationId": "claim_push_scans_endpoint_api_v1_internal_scans_claim_post",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5,
+              "minimum": 1,
+              "description": "Jumlah sesi yang ingin diklaim (1-5)",
+              "default": 1,
+              "title": "Limit"
+            },
+            "description": "Jumlah sesi yang ingin diklaim (1-5)"
+          },
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/internal/scans/{scan_id}/candidates": {
+      "post": {
+        "tags": [
+          "Internal"
+        ],
+        "summary": "[Internal Data/ML] Mengirim batch kandidat PDF hasil pemindaian",
+        "description": "[Langkah 7 - Opsi B Data/ML] Menerima kandidat PDF yang ditemukan oleh crawler eksternal.\nSaat done=true, sistem otomatis menjalankan perbandingan dengan basis pengetahuan.",
+        "operationId": "push_scan_candidates_endpoint_api_v1_internal_scans__scan_id__candidates_post",
+        "parameters": [
+          {
+            "name": "scan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Scan Id"
+            }
+          },
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InternalCandidatesBatchIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scraping-sources/": {
+      "post": {
+        "tags": [
+          "Scraping Sources"
+        ],
+        "summary": "Menambah situs/folder sumber baru",
+        "description": "[US-12, US-16, FR-SCR-05] Menambah sumber dokumen baru (situs web, folder lokal, OneDrive).",
+        "operationId": "create_scraping_source_api_v1_scraping_sources__post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScrapingSourceCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScrapingSourceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Scraping Sources"
+        ],
+        "summary": "Menampilkan daftar semua situs/folder sumber",
+        "description": "[US-12, US-16] Menampilkan daftar semua sumber dokumen.\nMendukung filter opsional `is_active` dan `source_type`.",
+        "operationId": "list_scraping_sources_api_v1_scraping_sources__get",
+        "parameters": [
+          {
+            "name": "is_active",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Is Active"
+            }
+          },
+          {
+            "name": "source_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/JenisSumber"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScrapingSourceResponse"
+                  },
+                  "title": "Response List Scraping Sources Api V1 Scraping Sources  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scraping-sources/{source_id}": {
+      "get": {
+        "tags": [
+          "Scraping Sources"
+        ],
+        "summary": "Detail satu situs/folder sumber",
+        "description": "Mendapatkan detail satu situs/folder sumber berdasarkan ID.",
+        "operationId": "get_scraping_source_api_v1_scraping_sources__source_id__get",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScrapingSourceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Scraping Sources"
+        ],
+        "summary": "Mengubah properti situs/folder sumber (PUT)",
+        "operationId": "update_scraping_source_put_api_v1_scraping_sources__source_id__put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScrapingSourceUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScrapingSourceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Scraping Sources"
+        ],
+        "summary": "Mengubah properti situs/folder sumber (PATCH)",
+        "operationId": "update_scraping_source_patch_api_v1_scraping_sources__source_id__patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScrapingSourceUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScrapingSourceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Scraping Sources"
+        ],
+        "summary": "Menghapus situs/folder sumber",
+        "description": "[US-12, US-16] Menghapus situs/folder sumber berdasarkan ID.",
+        "operationId": "delete_scraping_source_api_v1_scraping_sources__source_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scraping-sources/{source_id}/run": {
+      "post": {
+        "tags": [
+          "Scraping Sources"
+        ],
+        "summary": "Menjalankan sinkronisasi / crawling sumber dokumen",
+        "description": "[US-16, FR-SCR-05] Menjalankan pemindaian dan sinkronisasi sumber dokumen.\n- default (wait=false) -> 202 Accepted {job_id, status: 'antrian', message}\n- wait=true -> 200 OK dengan detail ringkasan job setelah eksekusi selesai.",
+        "operationId": "run_scraping_source_api_v1_scraping_sources__source_id__run_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Source Id"
+            }
+          },
+          {
+            "name": "wait",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Jika true, tunggu eksekusi selesai secara sinkron",
+              "default": false,
+              "title": "Wait"
+            },
+            "description": "Jika true, tunggu eksekusi selesai secara sinkron"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ScrapingSourceRunRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scraping-sources/{source_id}/files": {
+      "get": {
+        "tags": [
+          "Scraping Sources"
+        ],
+        "summary": "Daftar berkas yang terindeks pada sumber",
+        "description": "[US-16] Mengambil daftar berkas pada sumber beserta status sinkronisasi terakhir.",
+        "operationId": "list_source_files_api_v1_scraping_sources__source_id__files_get",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Source Id"
+            }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "last_outcome",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter: success | duplicate | failed | skipped_unchanged",
+              "title": "Last Outcome"
+            },
+            "description": "Filter: success | duplicate | failed | skipped_unchanged"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceFileListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/summary": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "summary": "Ringkasan statistik Knowledge Base & Ingest",
+        "description": "Mengembalikan ringkasan statistik metrik Knowledge Base, status keberlakuan,\npipeline ingest, dan sumber scraping dengan query agregat SQL yang efisien.",
+        "operationId": "get_dashboard_summary_api_v1_dashboard_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Dashboard Summary Api V1 Dashboard Summary Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scans/": {
+      "post": {
+        "tags": [
+          "Scans"
+        ],
+        "summary": "Create And Start Scan",
+        "description": "[US-16, FR-SCR-02] Memulai sesi pemindaian situs web.\n- default (wait=false) -> 202 Accepted {scan_id, status: 'antrian', message}\n- wait=true -> 200 OK dengan detail ScanSessionResponse setelah pemindaian selesai.",
+        "operationId": "create_and_start_scan_api_v1_scans__post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Tunggu hingga pemindaian selesai secara sinkron",
+              "default": false,
+              "title": "Wait"
+            },
+            "description": "Tunggu hingga pemindaian selesai secara sinkron"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Sesi pemindaian berhasil dijadwalkan (wait=false)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Create And Start Scan Api V1 Scans  Post"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Pemindaian selesai secara sinkron (wait=true)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanSessionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Scans"
+        ],
+        "summary": "List Scan Sessions",
+        "description": "[US-16] Mengambil daftar riwayat sesi pemindaian dengan filter dan paginasi.",
+        "operationId": "list_scan_sessions_api_v1_scans__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter berdasarkan ID sumber scraping",
+              "title": "Source Id"
+            },
+            "description": "Filter berdasarkan ID sumber scraping"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StatusPindai"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter status pemindaian",
+              "title": "Status"
+            },
+            "description": "Filter status pemindaian"
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scans/{scan_id}": {
+      "get": {
+        "tags": [
+          "Scans"
+        ],
+        "summary": "Get Scan Session Detail",
+        "description": "[US-16] Mengambil detail lengkap status sesi pemindaian beserta progres penarikan.",
+        "operationId": "get_scan_session_detail_api_v1_scans__scan_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "scan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Scan Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanSessionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sesi pemindaian tidak ditemukan"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scans/{scan_id}/candidates": {
+      "get": {
+        "tags": [
+          "Scans"
+        ],
+        "summary": "List Scan Candidates",
+        "description": "[US-16] Mengambil daftar kandidat PDF dalam sesi pemindaian.",
+        "operationId": "list_scan_candidates_api_v1_scans__scan_id__candidates_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "scan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Scan Id"
+            }
+          },
+          {
+            "name": "match_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StatusKandidat"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter status kecocokan KB",
+              "title": "Match Status"
+            },
+            "description": "Filter status kecocokan KB"
+          },
+          {
+            "name": "selected",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter status centang",
+              "title": "Selected"
+            },
+            "description": "Filter status centang"
+          },
+          {
+            "name": "pull_outcome",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter hasil penarikan",
+              "title": "Pull Outcome"
+            },
+            "description": "Filter hasil penarikan"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Pencarian nama berkas (case-insensitive)",
+              "title": "Q"
+            },
+            "description": "Pencarian nama berkas (case-insensitive)"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Nomor halaman (opsional, kompatibilitas)",
+              "title": "Page"
+            },
+            "description": "Nomor halaman (opsional, kompatibilitas)"
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateListResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sesi pemindaian tidak ditemukan"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scans/{scan_id}/selection": {
+      "patch": {
+        "tags": [
+          "Scans"
+        ],
+        "summary": "Update Candidate Selection",
+        "description": "[US-16] Memperbarui centang pilihan kandidat berkas (select_all_new, select_none, atau set).",
+        "operationId": "update_candidate_selection_api_v1_scans__scan_id__selection_patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "scan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Scan Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanSelectionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanSelectionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sesi pemindaian tidak ditemukan"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scans/{scan_id}/pull": {
+      "post": {
+        "tags": [
+          "Scans"
+        ],
+        "summary": "Start Scan Pull",
+        "description": "[US-16, FR-SCR-05] Memulai proses penarikan berkas kandidat terpilih.\n- default (wait=false) -> 202 Accepted {job_id, status: 'antrian', message}\n- wait=true -> 200 OK dengan detail ScanSessionResponse setelah penarikan selesai.",
+        "operationId": "start_scan_pull_api_v1_scans__scan_id__pull_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "scan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Scan Id"
+            }
+          },
+          {
+            "name": "wait",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Tunggu hingga penarikan selesai secara sinkron",
+              "default": false,
+              "title": "Wait"
+            },
+            "description": "Tunggu hingga penarikan selesai secara sinkron"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanPullRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Penarikan berkas berhasil dijadwalkan (wait=false)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Start Scan Pull Api V1 Scans  Scan Id  Pull Post"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Penarikan selesai secara sinkron (wait=true)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanSessionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sesi pemindaian tidak ditemukan"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scans/{scan_id}/cancel": {
+      "post": {
+        "tags": [
+          "Scans"
+        ],
+        "summary": "Cancel Scan Session",
+        "description": "[US-16] Membatalkan sesi pemindaian atau penarikan.",
+        "operationId": "cancel_scan_session_api_v1_scans__scan_id__cancel_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "scan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Scan Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanSessionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sesi pemindaian tidak ditemukan"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scans/{scan_id}/download": {
+      "get": {
+        "tags": [
+          "Scans"
+        ],
+        "summary": "Download Scan Export Zip",
+        "description": "[US-16] Mengunduh seluruh berkas hasil penarikan tujuan 'unduh_folder' sebagai arsip ZIP.",
+        "operationId": "download_scan_export_zip_api_v1_scans__scan_id__download_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "scan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Scan Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/naming/components": {
+      "get": {
+        "tags": [
+          "Naming"
+        ],
+        "summary": "Daftar komponen pembangun nama berkas",
+        "description": "[US-20c] Mengembalikan daftar komponen yang tersedia untuk pembentukan nama berkas dinamis,\nbeserta opsi pemisah, wildcard, format default, dan batas maksimal komponen.\nUrutan komponen disesuaikan dengan tata letak tombol di antarmuka pengguna (UI):\nNama, Tahun, Jenis, Bidang, Nomor.",
+        "operationId": "get_naming_components_api_v1_naming_components_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NamingComponentsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/naming/preview": {
+      "post": {
+        "tags": [
+          "Naming"
+        ],
+        "summary": "Pratinjau standardisasi nama berkas",
+        "description": "[US-20c] Menghasilkan pratinjau nama berkas PDF baku berdasarkan format urutan komponen pilihan,\npemisah, dan data metadata dokumen (dari DB, payload sampel, atau sampel bawaan sistem).",
+        "operationId": "preview_naming_api_v1_naming_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NamingPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NamingPreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Root",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/debug-routes": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Debug Routes",
+        "operationId": "debug_routes_debug_routes_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ArticleChunkIn": {
+        "properties": {
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id",
+            "description": "FK ke tabel documents — dokumen sumber pasal ini",
+            "examples": [
+              42
+            ]
+          },
+          "level": {
+            "type": "string",
+            "title": "Level",
+            "description": "Level hierarki: bab | pasal | ayat | huruf",
+            "examples": [
+              "pasal"
+            ]
+          },
+          "chapter_title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Title",
+            "description": "Judul bab pemilik pasal ini, misal: 'BAB II RUANG LINGKUP'",
+            "examples": [
+              "BAB II RUANG LINGKUP"
+            ]
+          },
+          "article_number": {
+            "type": "string",
+            "maxLength": 50,
+            "title": "Article Number",
+            "description": "Nomor pasal/ayat, misal: 'Pasal 5', 'Ayat (1)', 'a.'",
+            "examples": [
+              "Pasal 5"
+            ]
+          },
+          "content_text": {
+            "type": "string",
+            "title": "Content Text",
+            "description": "Isi teks mentah pasal / ayat",
+            "examples": [
+              "Setiap orang yang melakukan ..."
+            ]
+          },
+          "order_index": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Index",
+            "description": "Urutan tampil dalam dokumen (0-based, untuk sort yang benar)",
+            "examples": [
+              4
+            ]
+          },
+          "embedding": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding",
+            "description": "Vektor embedding dimensi 1536 (pgvector). Kirimkan null / omit jika embedding belum tersedia."
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "level",
+          "article_number",
+          "content_text"
+        ],
+        "title": "ArticleChunkIn",
+        "description": "Schema untuk satu buah chunk pasal dari hasil ekstraksi ML pipeline.\nSeluruh field wajib ada kecuali embedding (boleh None jika belum di-embed).",
+        "example": {
+          "article_number": "Pasal 5",
+          "chapter_title": "BAB II RUANG LINGKUP",
+          "content_text": "Ketentuan ini berlaku bagi seluruh lembaga keuangan...",
+          "document_id": 1,
+          "level": "pasal",
+          "order_index": 4
+        }
+      },
+      "BatchRetryResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/FailureRetryResponse"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "success_count": {
+            "type": "integer",
+            "title": "Success Count"
+          },
+          "duplicate_count": {
+            "type": "integer",
+            "title": "Duplicate Count"
+          },
+          "failed_count": {
+            "type": "integer",
+            "title": "Failed Count"
+          },
+          "skipped_count": {
+            "type": "integer",
+            "title": "Skipped Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "results",
+          "success_count",
+          "duplicate_count",
+          "failed_count",
+          "skipped_count"
+        ],
+        "title": "BatchRetryResponse"
+      },
+      "Body_login_api_v1_auth_login_post": {
+        "properties": {
+          "grant_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^password$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grant Type"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "title": "Password"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope",
+            "default": ""
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "client_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "format": "password",
+            "title": "Client Secret"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "Body_login_api_v1_auth_login_post"
+      },
+      "Body_upload_pdf_api_v1_ingest_upload_pdf_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream",
+              "format": "binary"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Daftar file PDF regulasi yang diunggah (bisa jamak / multiple files)"
+          },
+          "access_classification": {
+            "$ref": "#/components/schemas/KlasifikasiAkses",
+            "description": "Klasifikasi akses (publik / non_publik) - WAJIB untuk kepatuhan NDA"
+          },
+          "document_role": {
+            "$ref": "#/components/schemas/PeranDokumen",
+            "description": "Peran dokumen: corpus_eksisting | draft_kajian (WAJIB dinyatakan)"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Judul dokumen (hanya untuk unggahan 1 berkas)"
+          },
+          "regulation_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Number",
+            "description": "Nomor regulasi unik, misal: PP-24-2005 (hanya untuk unggahan 1 berkas)"
+          },
+          "regulation_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Type",
+            "description": "Jenis regulasi, misal: UU, PP, Permen (opsional)"
+          },
+          "bidang": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bidang",
+            "description": "Sektor atau bidang regulasi, misal: Perbankan, BMKS (hanya untuk unggahan 1 berkas)"
+          },
+          "naming_format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Naming Format",
+            "description": "Urutan komponen nama berkas dipisah koma (misal: 'nama,jenis,tahun')"
+          },
+          "naming_separator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Naming Separator",
+            "description": "Pemisah komponen nama (' ', '_', '-')"
+          },
+          "job_type": {
+            "$ref": "#/components/schemas/JenisJobIngest",
+            "description": "Jenis job ingest: scraping | unggah_manual | sinkron_folder",
+            "default": "unggah_manual"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id",
+            "description": "ID kategori KB terkait (opsional)"
+          },
+          "release_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Date",
+            "description": "Tanggal terbit format YYYY-MM-DD (hanya untuk unggahan 1 berkas)"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url",
+            "description": "URL asal dokumen (opsional)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files",
+          "access_classification",
+          "document_role"
+        ],
+        "title": "Body_upload_pdf_api_v1_ingest_upload_pdf_post"
+      },
+      "BulkArticleIn": {
+        "properties": {
+          "articles": {
+            "items": {
+              "$ref": "#/components/schemas/ArticleChunkIn"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Articles",
+            "description": "Daftar chunk pasal yang akan dimasukkan ke database (min. 1 item)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "articles"
+        ],
+        "title": "BulkArticleIn",
+        "description": "Payload untuk bulk insert: list chunk pasal dari satu batch ML pipeline."
+      },
+      "BulkArticleResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Status operasi",
+            "default": "ok"
+          },
+          "inserted_count": {
+            "type": "integer",
+            "title": "Inserted Count",
+            "description": "Jumlah pasal yang berhasil disimpan"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Pesan ringkasan"
+          }
+        },
+        "type": "object",
+        "required": [
+          "inserted_count",
+          "message"
+        ],
+        "title": "BulkArticleResponse",
+        "description": "Response setelah bulk insert berhasil."
+      },
+      "CandidateListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "skip": {
+            "type": "integer",
+            "title": "Skip"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "skip",
+          "limit"
+        ],
+        "title": "CandidateListResponse",
+        "description": "Daftar kandidat dengan paginasi."
+      },
+      "CandidateMatchDocument": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "regulation_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "CandidateMatchDocument",
+        "description": "Informasi ringkas dokumen KB yang cocok dengan kandidat."
+      },
+      "CandidateResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "scan_id": {
+            "type": "integer",
+            "title": "Scan Id"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "found_on_page": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Found On Page"
+          },
+          "depth": {
+            "type": "integer",
+            "title": "Depth"
+          },
+          "match_status": {
+            "$ref": "#/components/schemas/StatusKandidat"
+          },
+          "match_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Reason"
+          },
+          "match_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Document Id"
+          },
+          "match_document": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateMatchDocument"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selected": {
+            "type": "boolean",
+            "title": "Selected"
+          },
+          "pull_outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pull Outcome"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "failure_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Id"
+          },
+          "export_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Export Path"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "scan_id",
+          "url",
+          "filename",
+          "depth",
+          "match_status",
+          "selected"
+        ],
+        "title": "CandidateResponse",
+        "description": "Detail satu kandidat PDF hasil pemindaian."
+      },
+      "CategoryCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CategoryCreateRequest"
+      },
+      "CategoryDetailResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "auto_created": {
+            "type": "boolean",
+            "title": "Auto Created"
+          },
+          "path": {
+            "items": {
+              "type": "string",
+              "format": "binary"
+            },
+            "type": "array",
+            "title": "Path"
+          },
+          "document_count": {
+            "type": "integer",
+            "title": "Document Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "auto_created",
+          "path",
+          "document_count"
+        ],
+        "title": "CategoryDetailResponse"
+      },
+      "DuplicateCheckResponse": {
+        "properties": {
+          "is_duplicate": {
+            "type": "boolean",
+            "title": "Is Duplicate"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "existing_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Existing Document Id"
+          },
+          "regulation_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_duplicate",
+          "message"
+        ],
+        "title": "DuplicateCheckResponse"
+      },
+      "DuplicateDocumentInfo": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "regulation_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "DuplicateDocumentInfo"
+      },
+      "ExtractionErrorIn": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ExtractionErrorIn"
+      },
+      "ExtractionResultIn": {
+        "properties": {
+          "judul": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judul"
+          },
+          "nomor_peraturan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nomor Peraturan"
+          },
+          "jenis_peraturan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jenis Peraturan"
+          },
+          "tanggal_terbit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tanggal Terbit"
+          },
+          "bidang": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bidang"
+          },
+          "metode_ekstraksi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metode Ekstraksi"
+          },
+          "mesin_ekstraksi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mesin Ekstraksi"
+          },
+          "teks_lengkap": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teks Lengkap"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExtractionErrorIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ExtractionResultIn"
+      },
+      "FailureBatchRetryRequest": {
+        "properties": {
+          "failure_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Failure Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "failure_ids"
+        ],
+        "title": "FailureBatchRetryRequest"
+      },
+      "FailureListResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FailureResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "items"
+        ],
+        "title": "FailureListResponse"
+      },
+      "FailureResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "job_id": {
+            "type": "integer",
+            "title": "Job Id"
+          },
+          "original_filename": {
+            "type": "string",
+            "title": "Original Filename"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "failure_type": {
+            "type": "string",
+            "title": "Failure Type"
+          },
+          "reason_code": {
+            "type": "string",
+            "title": "Reason Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "is_retryable": {
+            "type": "boolean",
+            "title": "Is Retryable"
+          },
+          "quarantine_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quarantine Path"
+          },
+          "file_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Hash"
+          },
+          "file_size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Size Bytes"
+          },
+          "duplicate_of_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Of Document Id"
+          },
+          "duplicate_of_document": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DuplicateDocumentInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ingest_options": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Ingest Options",
+            "default": {}
+          },
+          "follow_up_status": {
+            "type": "string",
+            "title": "Follow Up Status"
+          },
+          "attempt_count": {
+            "type": "integer",
+            "title": "Attempt Count"
+          },
+          "last_retry_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Retry At"
+          },
+          "last_retry_job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Retry Job Id"
+          },
+          "resolved_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Document Id"
+          },
+          "handled_by_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handled By User Id"
+          },
+          "handling_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handling Note"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "job_id",
+          "original_filename",
+          "failure_type",
+          "reason_code",
+          "message",
+          "is_retryable",
+          "follow_up_status",
+          "attempt_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "FailureResponse"
+      },
+      "FailureRetryRequest": {
+        "properties": {
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "access_classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Classification"
+          },
+          "document_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role"
+          }
+        },
+        "type": "object",
+        "title": "FailureRetryRequest"
+      },
+      "FailureRetryResponse": {
+        "properties": {
+          "failure": {
+            "$ref": "#/components/schemas/FailureResponse"
+          },
+          "outcome": {
+            "type": "string",
+            "title": "Outcome"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "job_id": {
+            "type": "integer",
+            "title": "Job Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "failure",
+          "outcome",
+          "job_id",
+          "message"
+        ],
+        "title": "FailureRetryResponse"
+      },
+      "FailureStatusUpdateRequest": {
+        "properties": {
+          "follow_up_status": {
+            "type": "string",
+            "title": "Follow Up Status"
+          },
+          "handling_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handling Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "follow_up_status"
+        ],
+        "title": "FailureStatusUpdateRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "IngestItemDetailResponse": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Status hasil: success | duplicate | failed"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "duplicate_of_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Of Document Id"
+          },
+          "failure_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "regulation_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Number"
+          },
+          "file_size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Size Bytes"
+          },
+          "file_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Hash"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "placement": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Placement"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "status"
+        ],
+        "title": "IngestItemDetailResponse"
+      },
+      "IngestStatusResponse": {
+        "properties": {
+          "total_documents": {
+            "type": "integer",
+            "title": "Total Documents"
+          },
+          "berlaku_documents": {
+            "type": "integer",
+            "title": "Berlaku Documents"
+          },
+          "dicabut_documents": {
+            "type": "integer",
+            "title": "Dicabut Documents"
+          },
+          "total_draft_kajian": {
+            "type": "integer",
+            "title": "Total Draft Kajian"
+          },
+          "total_jobs": {
+            "type": "integer",
+            "title": "Total Jobs"
+          },
+          "open_failures": {
+            "type": "integer",
+            "title": "Open Failures",
+            "default": 0
+          },
+          "storage_path": {
+            "type": "string",
+            "title": "Storage Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_documents",
+          "berlaku_documents",
+          "dicabut_documents",
+          "total_draft_kajian",
+          "total_jobs",
+          "storage_path"
+        ],
+        "title": "IngestStatusResponse"
+      },
+      "IngestUploadResponse": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "job_id": {
+            "type": "integer",
+            "title": "Job Id"
+          },
+          "job_status": {
+            "type": "string",
+            "title": "Job Status"
+          },
+          "total_files": {
+            "type": "integer",
+            "title": "Total Files"
+          },
+          "success_count": {
+            "type": "integer",
+            "title": "Success Count"
+          },
+          "duplicate_count": {
+            "type": "integer",
+            "title": "Duplicate Count"
+          },
+          "failed_count": {
+            "type": "integer",
+            "title": "Failed Count"
+          },
+          "details": {
+            "items": {
+              "$ref": "#/components/schemas/IngestItemDetailResponse"
+            },
+            "type": "array",
+            "title": "Details"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "job_id",
+          "job_status",
+          "total_files",
+          "success_count",
+          "duplicate_count",
+          "failed_count",
+          "details"
+        ],
+        "title": "IngestUploadResponse"
+      },
+      "InternalCandidateIn": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "found_on_page": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Found On Page"
+          },
+          "depth": {
+            "type": "integer",
+            "title": "Depth",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "filename"
+        ],
+        "title": "InternalCandidateIn",
+        "description": "Satu kandidat PDF yang dikirimkan oleh crawler eksternal."
+      },
+      "InternalCandidatesBatchIn": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/InternalCandidateIn"
+            },
+            "type": "array",
+            "title": "Candidates",
+            "default": []
+          },
+          "pages_visited": {
+            "type": "integer",
+            "title": "Pages Visited",
+            "default": 0
+          },
+          "done": {
+            "type": "boolean",
+            "title": "Done",
+            "default": false
+          },
+          "truncated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Truncated",
+            "default": false
+          },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errors",
+            "default": []
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "title": "InternalCandidatesBatchIn",
+        "description": "Batch hasil pemindaian yang di-push oleh crawler eksternal."
+      },
+      "JenisJobIngest": {
+        "type": "string",
+        "enum": [
+          "scraping",
+          "unggah_manual",
+          "sinkron_folder"
+        ],
+        "title": "JenisJobIngest",
+        "description": "Tipe sumber pekerjaan ingest"
+      },
+      "JenisKegagalan": {
+        "type": "string",
+        "enum": [
+          "format_tidak_didukung",
+          "duplikat",
+          "ekstraksi_gagal",
+          "ocr_gagal",
+          "metadata_tidak_lengkap",
+          "sumber_tidak_dapat_diakses",
+          "kesalahan_internal"
+        ],
+        "title": "JenisKegagalan",
+        "description": "Jenis kegagalan ingest (Data Dictionary §2.18 + 1 tambahan)"
+      },
+      "JenisSumber": {
+        "type": "string",
+        "enum": [
+          "situs_web",
+          "folder_lokal",
+          "onedrive_public"
+        ],
+        "title": "JenisSumber",
+        "description": "Jenis situs atau folder sumber dokumen"
+      },
+      "JobDetailResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "job_type": {
+            "type": "string",
+            "title": "Job Type"
+          },
+          "source_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ref"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobSourceInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "retry_of_failure_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry Of Failure Id"
+          },
+          "triggered_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Triggered By"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "success_count": {
+            "type": "integer",
+            "title": "Success Count"
+          },
+          "duplicate_count": {
+            "type": "integer",
+            "title": "Duplicate Count"
+          },
+          "failed_count": {
+            "type": "integer",
+            "title": "Failed Count"
+          },
+          "total_found": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Found"
+          },
+          "processed_count": {
+            "type": "integer",
+            "title": "Processed Count",
+            "default": 0
+          },
+          "skipped_count": {
+            "type": "integer",
+            "title": "Skipped Count",
+            "default": 0
+          },
+          "progress_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress Percent"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/JobDocumentSummary"
+            },
+            "type": "array",
+            "title": "Documents",
+            "default": []
+          },
+          "failures": {
+            "items": {
+              "$ref": "#/components/schemas/JobFailureSummary"
+            },
+            "type": "array",
+            "title": "Failures",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "job_type",
+          "status",
+          "started_at",
+          "success_count",
+          "duplicate_count",
+          "failed_count"
+        ],
+        "title": "JobDetailResponse"
+      },
+      "JobDocumentSummary": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "regulation_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Number"
+          },
+          "file_path_pdf": {
+            "type": "string",
+            "title": "File Path Pdf"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "file_path_pdf"
+        ],
+        "title": "JobDocumentSummary"
+      },
+      "JobFailureSummary": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "original_filename": {
+            "type": "string",
+            "title": "Original Filename"
+          },
+          "failure_type": {
+            "type": "string",
+            "title": "Failure Type"
+          },
+          "reason_code": {
+            "type": "string",
+            "title": "Reason Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "is_retryable": {
+            "type": "boolean",
+            "title": "Is Retryable"
+          },
+          "quarantine_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quarantine Path"
+          },
+          "attempt_count": {
+            "type": "integer",
+            "title": "Attempt Count"
+          },
+          "follow_up_status": {
+            "type": "string",
+            "title": "Follow Up Status"
+          },
+          "duplicate_of_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Of Document Id"
+          },
+          "duplicate_of_document": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DuplicateDocumentInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "original_filename",
+          "failure_type",
+          "reason_code",
+          "message",
+          "is_retryable",
+          "attempt_count",
+          "follow_up_status"
+        ],
+        "title": "JobFailureSummary"
+      },
+      "JobSourceInfo": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "source_type"
+        ],
+        "title": "JobSourceInfo"
+      },
+      "KlasifikasiAkses": {
+        "type": "string",
+        "enum": [
+          "publik",
+          "non_publik"
+        ],
+        "title": "KlasifikasiAkses",
+        "description": "Klasifikasi akses dokumen:\n- publik: dokumen regulasi terbuka / umum\n- non_publik: dokumen internal / draft yang tunduk pada NDA"
+      },
+      "NamingComponentItem": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "Kunci komponen (nama, tahun, jenis, bidang, nomor)"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "Label teks untuk tombol di UI"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "NamingComponentItem",
+        "description": "Satu komponen nama berkas yang tersedia di UI."
+      },
+      "NamingComponentsResponse": {
+        "properties": {
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/NamingComponentItem"
+            },
+            "type": "array",
+            "title": "Components"
+          },
+          "separators": {
+            "items": {
+              "type": "string",
+              "format": "binary"
+            },
+            "type": "array",
+            "title": "Separators"
+          },
+          "wildcard": {
+            "type": "string",
+            "title": "Wildcard"
+          },
+          "default_format": {
+            "items": {
+              "type": "string",
+              "format": "binary"
+            },
+            "type": "array",
+            "title": "Default Format"
+          },
+          "max_components": {
+            "type": "integer",
+            "title": "Max Components"
+          }
+        },
+        "type": "object",
+        "required": [
+          "components",
+          "separators",
+          "wildcard",
+          "default_format",
+          "max_components"
+        ],
+        "title": "NamingComponentsResponse",
+        "description": "Daftar komponen, pemisah, dan format default untuk pembangun nama berkas di UI."
+      },
+      "NamingPreviewRequest": {
+        "properties": {
+          "naming_format": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Naming Format",
+            "description": "Daftar urutan komponen penamaan berkas pilihan pengguna"
+          },
+          "naming_separator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Naming Separator",
+            "description": "Pemisah antar komponen (' ', '_', '-')",
+            "default": " "
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id",
+            "description": "ID dokumen yang ada di database untuk mengambil metadata riil"
+          },
+          "sample": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamingSampleInput"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sampel metadata ad-hoc jika tidak menggunakan document_id"
+          }
+        },
+        "type": "object",
+        "title": "NamingPreviewRequest",
+        "description": "Permintaan pratinjau penamaan berkas."
+      },
+      "NamingPreviewResponse": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "description": "Nama berkas hasil standardisasi"
+          },
+          "missing_components": {
+            "items": {
+              "type": "string",
+              "format": "binary"
+            },
+            "type": "array",
+            "title": "Missing Components",
+            "description": "Daftar komponen dalam format yang bernilai kosong (wildcard NA)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename"
+        ],
+        "title": "NamingPreviewResponse",
+        "description": "Hasil pratinjau penamaan berkas."
+      },
+      "NamingSampleInput": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "regulation_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Number"
+          },
+          "regulation_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Type"
+          },
+          "release_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Date"
+          },
+          "bidang": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bidang"
+          }
+        },
+        "type": "object",
+        "title": "NamingSampleInput",
+        "description": "Sampel metadata kustom untuk pratinjau penamaan berkas."
+      },
+      "PeranDokumen": {
+        "type": "string",
+        "enum": [
+          "corpus_eksisting",
+          "draft_kajian"
+        ],
+        "title": "PeranDokumen",
+        "description": "Peran dokumen dalam basis pengetahuan / kajian"
+      },
+      "PullProgress": {
+        "properties": {
+          "job_id": {
+            "type": "integer",
+            "title": "Job Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "processed_count": {
+            "type": "integer",
+            "title": "Processed Count"
+          },
+          "total_found": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Found"
+          },
+          "progress_percent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress Percent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status",
+          "processed_count",
+          "total_found",
+          "progress_percent"
+        ],
+        "title": "PullProgress",
+        "description": "Progres penarikan dokumen dari job terkait."
+      },
+      "RejectedSelection": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "reason"
+        ],
+        "title": "RejectedSelection",
+        "description": "Informasi kandidat yang ditolak centangnya (misal: status sudah_ada)."
+      },
+      "ScanCreate": {
+        "properties": {
+          "source_id": {
+            "type": "integer",
+            "title": "Source Id",
+            "description": "ID sumber scraping situs_web"
+          },
+          "crawl_depth": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 5.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crawl Depth",
+            "description": "Override kedalaman crawling (1-5)"
+          },
+          "max_pages": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Pages",
+            "description": "Override batas halaman yang dikunjungi"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id"
+        ],
+        "title": "ScanCreate",
+        "description": "Payload untuk memulai pemindaian situs baru."
+      },
+      "ScanListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ScanSessionResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "skip": {
+            "type": "integer",
+            "title": "Skip"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "skip",
+          "limit"
+        ],
+        "title": "ScanListResponse",
+        "description": "Daftar sesi pemindaian dengan paginasi."
+      },
+      "ScanPullRequest": {
+        "properties": {
+          "destination": {
+            "$ref": "#/components/schemas/TujuanTarik",
+            "description": "Tujuan penarikan: 'knowledge_base' atau 'unduh_folder'"
+          },
+          "naming_format": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Naming Format",
+            "description": "Daftar urutan komponen penamaan file standar"
+          },
+          "naming_separator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Naming Separator",
+            "description": "Pemisah komponen penamaan (spasi, _, atau -)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "destination"
+        ],
+        "title": "ScanPullRequest",
+        "description": "Payload untuk mengeksekusi penarikan berkas kandidat terpilih."
+      },
+      "ScanSelectionResponse": {
+        "properties": {
+          "scan_id": {
+            "type": "integer",
+            "title": "Scan Id"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ScanSummaryCount"
+          },
+          "rejected_ids": {
+            "items": {
+              "$ref": "#/components/schemas/RejectedSelection"
+            },
+            "type": "array",
+            "title": "Rejected Ids",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "scan_id",
+          "summary"
+        ],
+        "title": "ScanSelectionResponse",
+        "description": "Hasil pembaruan centang kandidat."
+      },
+      "ScanSelectionUpdate": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "Aksi seleksi: 'select_all_new' | 'select_none' | 'set'"
+          },
+          "candidate_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Ids",
+            "description": "Daftar ID kandidat (wajib jika action='set')"
+          },
+          "selected": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected",
+            "description": "Nilai seleksi (true/false) jika action='set'"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "ScanSelectionUpdate",
+        "description": "Payload untuk memperbarui pilihan centang kandidat."
+      },
+      "ScanSessionResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "start_url": {
+            "type": "string",
+            "title": "Start Url"
+          },
+          "crawl_depth": {
+            "type": "integer",
+            "title": "Crawl Depth"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode"
+          },
+          "crawler_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crawler Name"
+          },
+          "status": {
+            "$ref": "#/components/schemas/StatusPindai"
+          },
+          "cancel_requested": {
+            "type": "boolean",
+            "title": "Cancel Requested"
+          },
+          "pages_visited": {
+            "type": "integer",
+            "title": "Pages Visited"
+          },
+          "candidates_summary": {
+            "$ref": "#/components/schemas/ScanSummaryCount"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          },
+          "errors": {
+            "items": {
+              "type": "string",
+              "format": "binary"
+            },
+            "type": "array",
+            "title": "Errors",
+            "default": []
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "destination": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TujuanTarik"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "naming_format": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Naming Format"
+          },
+          "naming_separator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Naming Separator"
+          },
+          "pull_job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pull Job Id"
+          },
+          "pull_progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PullProgress"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "download_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Url"
+          },
+          "claimed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed At"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "scanned_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scanned At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "start_url",
+          "crawl_depth",
+          "mode",
+          "status",
+          "cancel_requested",
+          "pages_visited",
+          "candidates_summary",
+          "truncated",
+          "created_at"
+        ],
+        "title": "ScanSessionResponse",
+        "description": "Detail lengkap sesi pemindaian situs."
+      },
+      "ScanSummaryCount": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "baru": {
+            "type": "integer",
+            "title": "Baru",
+            "default": 0
+          },
+          "sudah_ada": {
+            "type": "integer",
+            "title": "Sudah Ada",
+            "default": 0
+          },
+          "mungkin_ada": {
+            "type": "integer",
+            "title": "Mungkin Ada",
+            "default": 0
+          },
+          "terpilih": {
+            "type": "integer",
+            "title": "Terpilih",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "ScanSummaryCount",
+        "description": "Ringkasan angka kandidat berkas."
+      },
+      "ScrapingSourceCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "source_type": {
+            "$ref": "#/components/schemas/JenisSumber",
+            "default": "situs_web"
+          },
+          "crawl_depth": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crawl Depth"
+          },
+          "recursive": {
+            "type": "boolean",
+            "title": "Recursive",
+            "default": true
+          },
+          "default_access_classification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KlasifikasiAkses"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default_document_role": {
+            "$ref": "#/components/schemas/PeranDokumen",
+            "default": "corpus_eksisting"
+          },
+          "default_naming_format": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Naming Format"
+          },
+          "default_naming_separator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Naming Separator"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "url"
+        ],
+        "title": "ScrapingSourceCreate",
+        "description": "Schema input untuk penambahan sumber dokumen baru (POST /)"
+      },
+      "ScrapingSourceResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "source_type": {
+            "$ref": "#/components/schemas/JenisSumber"
+          },
+          "crawl_depth": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crawl Depth"
+          },
+          "recursive": {
+            "type": "boolean",
+            "title": "Recursive",
+            "default": true
+          },
+          "default_access_classification": {
+            "$ref": "#/components/schemas/KlasifikasiAkses"
+          },
+          "default_document_role": {
+            "$ref": "#/components/schemas/PeranDokumen"
+          },
+          "default_naming_format": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Naming Format"
+          },
+          "default_naming_separator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Naming Separator"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "last_run_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run At"
+          },
+          "last_run_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run Status"
+          },
+          "last_run_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run Message"
+          },
+          "last_job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Job Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "url",
+          "source_type",
+          "default_access_classification",
+          "default_document_role",
+          "is_active"
+        ],
+        "title": "ScrapingSourceResponse",
+        "description": "Schema response data situs/folder sumber dokumen"
+      },
+      "ScrapingSourceRunRequest": {
+        "properties": {
+          "naming_format": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Naming Format"
+          },
+          "naming_separator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Naming Separator"
+          }
+        },
+        "type": "object",
+        "title": "ScrapingSourceRunRequest",
+        "description": "Schema input opsional saat mengeksekusi run sumber (POST /{id}/run)"
+      },
+      "ScrapingSourceUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "source_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JenisSumber"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "crawl_depth": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crawl Depth"
+          },
+          "recursive": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recursive"
+          },
+          "default_access_classification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KlasifikasiAkses"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default_document_role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PeranDokumen"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default_naming_format": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Naming Format"
+          },
+          "default_naming_separator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Naming Separator"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "title": "ScrapingSourceUpdate",
+        "description": "Schema input untuk pembaruan sumber dokumen (PUT/PATCH /{id})"
+      },
+      "SearchMode": {
+        "type": "string",
+        "enum": [
+          "phrase",
+          "all",
+          "web"
+        ],
+        "title": "SearchMode"
+      },
+      "SearchSort": {
+        "type": "string",
+        "enum": [
+          "relevance",
+          "release_date_desc",
+          "release_date_asc",
+          "created_desc",
+          "title_asc"
+        ],
+        "title": "SearchSort"
+      },
+      "SourceFileItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "source_id": {
+            "type": "integer",
+            "title": "Source Id"
+          },
+          "relative_path": {
+            "type": "string",
+            "title": "Relative Path"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "mtime": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Mtime"
+          },
+          "file_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Hash"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "document_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Title"
+          },
+          "last_outcome": {
+            "type": "string",
+            "title": "Last Outcome"
+          },
+          "last_seen_job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen Job Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "source_id",
+          "relative_path",
+          "size_bytes",
+          "mtime",
+          "last_outcome"
+        ],
+        "title": "SourceFileItem",
+        "description": "Schema item berkas hasil pemindaian sumber"
+      },
+      "SourceFileListResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SourceFileItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "items"
+        ],
+        "title": "SourceFileListResponse",
+        "description": "Schema daftar berkas pada sumber (pagination)"
+      },
+      "StatusJobIngest": {
+        "type": "string",
+        "enum": [
+          "antrian",
+          "berjalan",
+          "selesai",
+          "gagal"
+        ],
+        "title": "StatusJobIngest",
+        "description": "Status eksekusi batch/job ingest"
+      },
+      "StatusKandidat": {
+        "type": "string",
+        "enum": [
+          "baru",
+          "sudah_ada",
+          "mungkin_ada"
+        ],
+        "title": "StatusKandidat",
+        "description": "Status kecocokan kandidat berkas terhadap basis pengetahuan (KB)"
+      },
+      "StatusKeberlakuan": {
+        "type": "string",
+        "enum": [
+          "berlaku",
+          "diubah",
+          "dicabut",
+          "tidak_diketahui"
+        ],
+        "title": "StatusKeberlakuan",
+        "description": "Status keberlakuan suatu dokumen regulasi"
+      },
+      "StatusPemrosesan": {
+        "type": "string",
+        "enum": [
+          "diterima",
+          "diproses",
+          "perlu_koreksi",
+          "terindeks",
+          "gagal",
+          "ditolak"
+        ],
+        "title": "StatusPemrosesan",
+        "description": "Status tahapan pemrosesan dokumen dalam pipeline ingest"
+      },
+      "StatusPindai": {
+        "type": "string",
+        "enum": [
+          "antrian",
+          "memindai",
+          "siap_dipilih",
+          "menarik",
+          "selesai",
+          "gagal",
+          "dibatalkan"
+        ],
+        "title": "StatusPindai",
+        "description": "Status tahapan sesi pemindaian situs web (Langkah 7)"
+      },
+      "TujuanTarik": {
+        "type": "string",
+        "enum": [
+          "knowledge_base",
+          "unduh_folder"
+        ],
+        "title": "TujuanTarik",
+        "description": "Tujuan penarikan dokumen dari sesi pemindaian"
+      },
+      "UpdateDocumentStatusIn": {
+        "properties": {
+          "status_keberlakuan": {
+            "$ref": "#/components/schemas/StatusKeberlakuan",
+            "description": "Status keberlakuan baru: berlaku | diubah | dicabut | tidak_diketahui"
+          },
+          "revoking_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoking Document Id",
+            "description": "ID dokumen yang mencabut/mengubah dokumen ini. Wajib diisi jika status_keberlakuan adalah 'dicabut' atau 'diubah' agar entri LegalReference otomatis terbuat.",
+            "examples": [
+              7
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "status_keberlakuan"
+        ],
+        "title": "UpdateDocumentStatusIn",
+        "description": "Payload untuk memperbarui status keberlakuan dokumen regulasi.\nJika status menjadi 'dicabut' atau 'diubah', sertakan revoking_document_id\nagar relasi LegalReference otomatis dibuat.",
+        "example": {
+          "revoking_document_id": 7,
+          "status_keberlakuan": "dicabut"
+        }
+      },
+      "UpdateDocumentStatusResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Status operasi",
+            "default": "ok"
+          },
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "status_keberlakuan": {
+            "type": "string",
+            "title": "Status Keberlakuan"
+          },
+          "legal_reference_created": {
+            "type": "boolean",
+            "title": "Legal Reference Created",
+            "description": "True jika entri LegalReference baru berhasil dibuat",
+            "default": false
+          },
+          "legal_reference_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Reference Id",
+            "description": "ID entri LegalReference yang baru dibuat (jika ada)"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "status_keberlakuan",
+          "message"
+        ],
+        "title": "UpdateDocumentStatusResponse",
+        "description": "Response setelah status dokumen berhasil diperbarui."
+      },
+      "UpdateMetadataIn": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "regulation_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Number"
+          },
+          "regulation_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Type"
+          },
+          "release_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Date"
+          },
+          "bidang": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bidang"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "access_classification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KlasifikasiAkses"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "document_role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PeranDokumen"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "UpdateMetadataIn"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "OAuth2PasswordBearer": {
+        "type": "oauth2",
+        "flows": {
+          "password": {
+            "scopes": {},
+            "tokenUrl": "/api/v1/auth/login"
+          }
+        }
+      }
+    }
+  }
+}

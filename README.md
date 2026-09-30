@@ -74,6 +74,16 @@ python -m app.create_admin
 
 ---
 
+## 📱 Untuk Tim Frontend
+
+Dokumentasi dan artefak resmi untuk integrasi antarmuka frontend (Next.js):
+1. **[Kontrak API Fase 1 (`docs/api/KONTRAK-API-FASE1.md`)](docs/api/KONTRAK-API-FASE1.md):** Spesifikasi lengkap seluruh alur UI, contoh request & respons nyata, tabel enum Indonesia, dan kode galat HTTP.
+2. **[Snapshot OpenAPI JSON (`docs/api/openapi-fase1.json`)](docs/api/openapi-fase1.json):** Schema JSON OpenAPI untuk membangkitkan tipe TypeScript secara otomatis.
+3. **[REST Client Collection (`docs/api/hero-fase1.http`)](docs/api/hero-fase1.http):** Koleksi request interaktif yang siap dijalankan di VS Code via ekstensi REST Client.
+4. **[Catatan Perubahan Langkah 9 (`docs/api/frontend-changes-step9.md`)](docs/api/frontend-changes-step9.md):** Penjelasan fitur penamaan dinamis (`/naming/*`), field `bidang`, dan multipart naming options.
+
+---
+
 ## 🧪 Pengujian Otomatis
 
 ### 1. Menjalankan Pytest
