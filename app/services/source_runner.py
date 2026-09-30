@@ -49,6 +49,8 @@ class SourceRunner:
         actor_user_id: Optional[int] = None,
         actor_username: Optional[str] = None,
         ip_address: Optional[str] = None,
+        naming_format: Optional[List[str]] = None,
+        naming_separator: Optional[str] = None,
     ) -> JobIngest:
         """
         Validasi dan inisialisasi job eksekusi sumber.
@@ -130,7 +132,12 @@ class SourceRunner:
         self.db.refresh(job)
         return job
 
-    def execute(self, job_id: int) -> None:
+    def execute(
+        self,
+        job_id: int,
+        naming_format: Optional[List[str]] = None,
+        naming_separator: Optional[str] = None,
+    ) -> None:
         """
         Eksekusi pemindaian folder lokal dan ingest berkas-berkasnya.
         Dijalankan di BackgroundTasks atau secara sinkron (wait=true).
@@ -228,6 +235,10 @@ class SourceRunner:
             storage = get_storage_service()
             ingest_svc = IngestService(db, storage)
 
+            # Tentukan naming_format dan naming_separator efektif (override di run > default sumber)
+            effective_naming_format = naming_format if naming_format is not None else (source.default_naming_format if source else None)
+            effective_naming_separator = naming_separator if naming_separator is not None else (source.default_naming_separator if source else None)
+
             for entry in pdf_files:
                 # Cek apakah berkas sudah ada di source_files dan tidak berubah
                 src_file = (
@@ -322,6 +333,8 @@ class SourceRunner:
                 options = IngestOptions(
                     access_classification=source.default_access_classification,
                     document_role=source.default_document_role,
+                    naming_format=effective_naming_format,
+                    naming_separator=effective_naming_separator,
                 )
                 res = ingest_svc.ingest_one(job, item, options)
                 results.append(res)

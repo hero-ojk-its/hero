@@ -89,6 +89,8 @@ class ScanSessionResponse(BaseModel):
     errors: List[str] = []
     error_message: Optional[str] = None
     destination: Optional[TujuanTarik] = None
+    naming_format: Optional[List[str]] = None
+    naming_separator: Optional[str] = None
     pull_job_id: Optional[int] = None
     pull_progress: Optional[PullProgress] = None
     download_url: Optional[str] = None
@@ -144,6 +146,14 @@ class ScanPullRequest(BaseModel):
     destination: TujuanTarik = Field(
         ...,
         description="Tujuan penarikan: 'knowledge_base' atau 'unduh_folder'",
+    )
+    naming_format: Optional[List[str]] = Field(
+        default=None,
+        description="Daftar urutan komponen penamaan file standar",
+    )
+    naming_separator: Optional[str] = Field(
+        default=None,
+        description="Pemisah komponen penamaan (spasi, _, atau -)",
     )
 
 

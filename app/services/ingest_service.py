@@ -33,6 +33,7 @@ from app.services.file_validation import (
     sanitize_filename,
     validate_pdf,
 )
+from app.services.naming_service import NamingInput, build_standard_filename
 from app.services.storage_service import StorageService, get_storage_service
 
 logger = logging.getLogger("hero")
@@ -59,6 +60,7 @@ class DocumentMetadataInput:
     regulation_number: Optional[str] = None
     regulation_type: Optional[str] = None
     release_date: Optional[date] = None
+    bidang: Optional[str] = None
 
 
 @dataclass
@@ -67,6 +69,8 @@ class IngestOptions:
     document_role: PeranDokumen
     category_id: Optional[int] = None
     metadata: Optional[DocumentMetadataInput] = None
+    naming_format: Optional[List[str]] = None
+    naming_separator: Optional[str] = None
 
 
 @dataclass
@@ -267,15 +271,56 @@ class IngestService:
         # 4. Simpan PDF ke storage fisik di folder staging pdf/_inbox
         rel_path: Optional[str] = None
         try:
-            clean_name = sanitize_filename(item.filename)
-            filename_hint = f"{fp.sha256[:12]}_{clean_name}"
+            # Tentukan judul dan metadata dokumen
+            doc_title: str
+            if options.metadata and options.metadata.title and options.metadata.title.strip():
+                doc_title = options.metadata.title.strip()[:255]
+            else:
+                stem = Path(item.filename).stem if item.filename else "dokumen"
+                doc_title = stem[:255]
+
+            doc_reg_number = None
+            if options.metadata and options.metadata.regulation_number and options.metadata.regulation_number.strip():
+                doc_reg_number = options.metadata.regulation_number.strip()[:100]
+
+            doc_reg_type = None
+            if options.metadata and options.metadata.regulation_type and options.metadata.regulation_type.strip():
+                doc_reg_type = options.metadata.regulation_type.strip()[:100]
+
+            doc_release_date = options.metadata.release_date if options.metadata else None
+
+            doc_bidang = None
+            if options.metadata and options.metadata.bidang and options.metadata.bidang.strip():
+                doc_bidang = options.metadata.bidang.strip()[:150]
+
+            # 5. Hitung nama baku awal berdasarkan format pilihan pengguna
+            naming_inp = NamingInput(
+                regulation_number=doc_reg_number,
+                title=doc_title,
+                regulation_type=doc_reg_type,
+                release_date=doc_release_date,
+                bidang=doc_bidang,
+                original_filename=item.filename,
+            )
+            std_filename = build_standard_filename(
+                naming_inp,
+                naming_format=options.naming_format,
+                naming_separator=options.naming_separator,
+                template=settings.naming_template,
+                wildcard=settings.naming_wildcard,
+                max_length=settings.naming_max_length,
+            )
+
+            # 6. Simpan PDF ke storage fisik di folder staging pdf/_inbox dengan format standard_name__<hash8>.pdf
+            std_stem = Path(std_filename).stem
+            inbox_filename = f"{std_stem}__{fp.sha256[:8]}.pdf"
             rel_path = self.storage.save_pdf(
                 item.content,
-                filename_hint=filename_hint,
+                filename_hint=inbox_filename,
                 subdir="pdf/_inbox",
             )
 
-            # 5. Validasi kategori jika diberikan
+            # 7. Validasi kategori jika diberikan
             if options.category_id is not None:
                 category = (
                     self.db.query(Category)
@@ -294,34 +339,19 @@ class IngestService:
                         self._on_item_failed(job, item, result, options)
                     return result
 
-            # 6. Tentukan judul dan metadata dokumen
-            doc_title: str
-            if options.metadata and options.metadata.title and options.metadata.title.strip():
-                doc_title = options.metadata.title.strip()[:255]
-            else:
-                stem = Path(item.filename).stem if item.filename else "dokumen"
-                doc_title = stem[:255]
-
-            doc_reg_number = None
-            if options.metadata and options.metadata.regulation_number and options.metadata.regulation_number.strip():
-                doc_reg_number = options.metadata.regulation_number.strip()[:100]
-
-            doc_reg_type = None
-            if options.metadata and options.metadata.regulation_type and options.metadata.regulation_type.strip():
-                doc_reg_type = options.metadata.regulation_type.strip()[:100]
-
-            doc_release_date = options.metadata.release_date if options.metadata else None
-
             # Buat instance Document
             doc = Document(
                 title=doc_title,
                 regulation_number=doc_reg_number,
                 regulation_type=doc_reg_type,
                 release_date=doc_release_date,
+                bidang=doc_bidang,
+                naming_format=options.naming_format,
+                naming_separator=options.naming_separator,
                 source_url=item.source_url.strip() if item.source_url else None,
                 original_filename=item.filename[:255] if item.filename else None,
                 file_path_pdf=rel_path,
-                standardized_filename=Path(rel_path).name[:255],
+                standardized_filename=std_filename,
                 file_hash=fp.sha256,
                 file_size_bytes=fp.size_bytes,
                 access_classification=options.access_classification,

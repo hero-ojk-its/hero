@@ -14,7 +14,7 @@ import urllib.parse
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, AliasChoices
 from sqlalchemy import or_, and_, desc
 from sqlalchemy.orm import Session
 
@@ -71,6 +71,7 @@ class ExtractionResultIn(BaseModel):
     regulation_number: Optional[str] = Field(None, validation_alias="nomor_peraturan")
     regulation_type: Optional[str] = Field(None, validation_alias="jenis_peraturan")
     release_date: Optional[date] = Field(None, validation_alias="tanggal_terbit")
+    bidang: Optional[str] = Field(None, validation_alias=AliasChoices("bidang", "sektor", "sector"))
     extraction_method: Optional[str] = Field(None, validation_alias="metode_ekstraksi")
     extraction_engine: Optional[str] = Field(None, validation_alias="mesin_ekstraksi")
     full_text: Optional[str] = Field(None, validation_alias="teks_lengkap")
@@ -341,7 +342,7 @@ def patch_extraction_result(
 
     # Aturan Metadata: jangan menimpa bila sudah dikoreksi manual
     if doc.metadata_corrected_at is not None:
-        for fname in ["title", "regulation_number", "regulation_type", "release_date"]:
+        for fname in ["title", "regulation_number", "regulation_type", "release_date", "bidang"]:
             if getattr(payload, fname) is not None:
                 ignored_fields.append(fname)
     else:
@@ -367,6 +368,12 @@ def patch_extraction_result(
             if doc.release_date != payload.release_date:
                 doc.release_date = payload.release_date
                 changed_fields.append("release_date")
+
+        if payload.bidang and payload.bidang.strip():
+            clean_bidang = payload.bidang.strip()
+            if doc.bidang != clean_bidang:
+                doc.bidang = clean_bidang
+                changed_fields.append("bidang")
 
     # Hitung low confidence fields
     low_confidence_fields = []

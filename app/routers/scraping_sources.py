@@ -18,6 +18,7 @@ from app.schemas.scraping_source import (
     ScrapingSourceCreate,
     ScrapingSourceUpdate,
     ScrapingSourceResponse,
+    ScrapingSourceRunRequest,
     SourceFileItem,
     SourceFileListResponse,
     validate_http_url,
@@ -29,6 +30,7 @@ from app.services.audit_service import (
     UPDATE_SOURCE,
     DELETE_SOURCE,
 )
+from app.services.naming_service import validate_naming_format, validate_naming_separator
 from app.services.source_runner import SourceRunner
 
 router = APIRouter()
@@ -174,6 +176,8 @@ def create_scraping_source(
             KlasifikasiAkses.publik if payload.source_type == JenisSumber.situs_web else KlasifikasiAkses.non_publik
         ),
         default_document_role=payload.default_document_role,
+        default_naming_format=validate_naming_format(payload.default_naming_format) if payload.default_naming_format is not None else None,
+        default_naming_separator=validate_naming_separator(payload.default_naming_separator) if payload.default_naming_separator is not None else None,
         is_active=payload.is_active,
     )
     db.add(source)
@@ -298,6 +302,26 @@ def _process_update(
     if payload.default_document_role is not None:
         source.default_document_role = payload.default_document_role
 
+    if payload.default_naming_format is not None:
+        try:
+            validate_naming_format(payload.default_naming_format)
+        except ValueError as err:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(err),
+            )
+        source.default_naming_format = payload.default_naming_format
+
+    if payload.default_naming_separator is not None:
+        try:
+            validate_naming_separator(payload.default_naming_separator)
+        except ValueError as err:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(err),
+            )
+        source.default_naming_separator = payload.default_naming_separator
+
     if payload.is_active is not None:
         source.is_active = payload.is_active
 
@@ -396,6 +420,7 @@ def run_scraping_source(
     background_tasks: BackgroundTasks,
     request: Request,
     response: Response,
+    payload: Optional[ScrapingSourceRunRequest] = None,
     wait: bool = Query(False, description="Jika true, tunggu eksekusi selesai secara sinkron"),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
@@ -405,6 +430,28 @@ def run_scraping_source(
     - default (wait=false) -> 202 Accepted {job_id, status: 'antrian', message}
     - wait=true -> 200 OK dengan detail ringkasan job setelah eksekusi selesai.
     """
+    naming_fmt = None
+    naming_sep = None
+    if payload:
+        if payload.naming_format is not None:
+            try:
+                validate_naming_format(payload.naming_format)
+            except ValueError as err:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=str(err),
+                )
+            naming_fmt = payload.naming_format
+        if payload.naming_separator is not None:
+            try:
+                validate_naming_separator(payload.naming_separator)
+            except ValueError as err:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=str(err),
+                )
+            naming_sep = payload.naming_separator
+
     actor_user_id = current_user.id if current_user and getattr(current_user, "id", None) else None
     actor_username = current_user.username if current_user and getattr(current_user, "username", None) else None
     client_ip = request.client.host if request.client else None
@@ -415,12 +462,14 @@ def run_scraping_source(
         actor_user_id=actor_user_id,
         actor_username=actor_username,
         ip_address=client_ip,
+        naming_format=naming_fmt,
+        naming_separator=naming_sep,
     )
 
     if wait:
         # Eksekusi secara sinkron
         response.status_code = status.HTTP_200_OK
-        runner.execute(job.id)
+        runner.execute(job.id, naming_format=naming_fmt, naming_separator=naming_sep)
 
         # Ambil job terbaru
         db.refresh(job)
@@ -439,7 +488,7 @@ def run_scraping_source(
     else:
         # Eksekusi di BackgroundTasks
         response.status_code = status.HTTP_202_ACCEPTED
-        background_tasks.add_task(runner.execute, job.id)
+        background_tasks.add_task(runner.execute, job.id, naming_fmt, naming_sep)
         return {
             "job_id": job.id,
             "status": "antrian",

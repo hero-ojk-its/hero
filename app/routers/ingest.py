@@ -53,6 +53,7 @@ from app.services.failure_service import (
     FailureNotRetryableError,
     RetryOverrides,
 )
+from app.services.naming_service import validate_naming_format, validate_naming_separator
 from app.services.storage_service import StorageService, get_storage_service
 
 router = APIRouter()
@@ -126,6 +127,18 @@ def upload_pdf(
         None,
         description="Jenis regulasi, misal: UU, PP, Permen (opsional)",
     ),
+    bidang: Optional[str] = Form(
+        None,
+        description="Sektor atau bidang regulasi, misal: Perbankan, BMKS (hanya untuk unggahan 1 berkas)",
+    ),
+    naming_format: Optional[str] = Form(
+        None,
+        description="Urutan komponen nama berkas dipisah koma (misal: 'nama,jenis,tahun')",
+    ),
+    naming_separator: Optional[str] = Form(
+        None,
+        description="Pemisah komponen nama (' ', '_', '-')",
+    ),
     job_type: JenisJobIngest = Form(
         JenisJobIngest.unggah_manual,
         description="Jenis job ingest: scraping | unggah_manual | sinkron_folder",
@@ -147,8 +160,8 @@ def upload_pdf(
     current_user=Depends(get_current_user),
 ):
     """
-    [US-15] Endpoint sinkron untuk upload PDF regulasi / draft kajian.
-    Mendukung unggahan tunggal dan jamak (multiple files).
+    [US-15, US-20c] Endpoint sinkron untuk upload PDF regulasi / draft kajian.
+    Mendukung unggahan tunggal dan jamak (multiple files) serta format penamaan dinamis.
     """
     if not files:
         raise HTTPException(
@@ -161,17 +174,28 @@ def upload_pdf(
         title and title.strip(),
         regulation_number and regulation_number.strip(),
         release_date and release_date.strip(),
+        bidang and bidang.strip(),
     ])
     if len(files) > 1 and has_single_doc_meta:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
-                "Metadata per-dokumen (judul, nomor, tanggal) hanya boleh diisi untuk unggahan "
+                "Metadata per-dokumen (judul, nomor, tanggal, bidang) hanya boleh diisi untuk unggahan "
                 "satu berkas. Untuk unggahan jamak, metadata diisi dari hasil ekstraksi atau koreksi manual."
             ),
         )
 
-    # 2. Validasi release_date
+    # 2. Validasi naming_format & naming_separator
+    parsed_naming_format: Optional[List[str]] = None
+    if naming_format is not None and naming_format.strip():
+        raw_items = [k.strip() for k in naming_format.split(",") if k.strip()]
+        parsed_naming_format = validate_naming_format(raw_items)
+
+    parsed_naming_separator: Optional[str] = None
+    if naming_separator is not None:
+        parsed_naming_separator = validate_naming_separator(naming_separator)
+
+    # 3. Validasi release_date
     parsed_release_date: Optional[date] = None
     if release_date and release_date.strip():
         try:
@@ -182,7 +206,7 @@ def upload_pdf(
                 detail="Format tanggal rilis tidak valid. Gunakan format YYYY-MM-DD.",
             )
 
-    # 3. Parse category_id
+    # 4. Parse category_id
     parsed_category_id: Optional[int] = None
     if category_id and str(category_id).strip():
         val = str(category_id).strip()
@@ -194,7 +218,7 @@ def upload_pdf(
                 detail="category_id harus berupa bilangan bulat.",
             )
 
-    # 4. Tentukan triggered_by
+    # 5. Tentukan triggered_by
     if current_user and getattr(current_user, "username", None):
         triggered_by = current_user.username
     elif job_type == JenisJobIngest.unggah_manual:
@@ -202,7 +226,7 @@ def upload_pdf(
     else:
         triggered_by = job_type.value
 
-    # 5. Tentukan source_ref
+    # 6. Tentukan source_ref
     if len(files) == 1:
         source_ref = files[0].filename or "unggah_tunggal.pdf"
     else:
@@ -220,7 +244,7 @@ def upload_pdf(
             )
         )
 
-    # 6. Susun metadata input
+    # 7. Susun metadata input
     meta_input: Optional[DocumentMetadataInput] = None
     if len(files) == 1:
         meta_input = DocumentMetadataInput(
@@ -228,6 +252,7 @@ def upload_pdf(
             regulation_number=regulation_number.strip() if regulation_number and regulation_number.strip() else None,
             regulation_type=regulation_type.strip() if regulation_type and regulation_type.strip() else None,
             release_date=parsed_release_date,
+            bidang=bidang.strip() if bidang and bidang.strip() else None,
         )
     elif regulation_type and regulation_type.strip():
         meta_input = DocumentMetadataInput(
@@ -239,12 +264,14 @@ def upload_pdf(
         document_role=document_role,
         category_id=parsed_category_id,
         metadata=meta_input,
+        naming_format=parsed_naming_format,
+        naming_separator=parsed_naming_separator,
     )
 
     actor_user_id = current_user.id if current_user and getattr(current_user, "id", None) else None
     client_ip = request.client.host if request.client else None
 
-    # 7. Eksekusi batch melalui IngestService
+    # 8. Eksekusi batch melalui IngestService
     service = IngestService(db=db, storage=storage, max_upload_bytes=settings.max_upload_bytes)
     batch_res = service.ingest_batch(
         items=ingest_items,
@@ -255,6 +282,15 @@ def upload_pdf(
         actor_user_id=actor_user_id,
         ip_address=client_ip,
     )
+
+    # Simpan ingest_options di job
+    batch_res.job.ingest_options = {
+        "naming_format": parsed_naming_format,
+        "naming_separator": parsed_naming_separator,
+        "access_classification": access_classification.value,
+        "document_role": document_role.value,
+    }
+    db.commit()
 
     # 8. Susun detail respons JSON
     details_output = []

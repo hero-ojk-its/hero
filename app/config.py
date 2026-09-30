@@ -84,13 +84,14 @@ class Settings(BaseSettings):
     def validate_naming_template(cls, v: str) -> str:
         import re
         placeholders = re.findall(r"\{([^}]+)\}", v)
-        allowed = {"nomor", "judul", "tahun", "jenis"}
+        allowed = {"nomor", "judul", "nama", "tahun", "jenis", "bidang"}
         for p in placeholders:
             if p not in allowed:
                 raise ValueError(
                     f"naming_template memuat placeholder tidak dikenal: '{{{p}}}'. "
                     f"Placeholder yang diizinkan: {', '.join('{' + a + '}' for a in allowed)}."
                 )
+        return v
     @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_mb * 1024 * 1024

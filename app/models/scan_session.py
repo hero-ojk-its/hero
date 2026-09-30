@@ -132,6 +132,16 @@ class ScanSession(Base):
         nullable=True,
         comment="Tujuan penarikan: knowledge_base | unduh_folder",
     )
+    naming_format = Column(
+        JSONB,
+        nullable=True,
+        comment="Format penamaan berkas yang dipilih saat pull",
+    )
+    naming_separator = Column(
+        String(1),
+        nullable=True,
+        comment="Pemisah komponen penamaan berkas",
+    )
     pull_job_id = Column(
         Integer,
         ForeignKey("job_ingest.id", ondelete="SET NULL"),

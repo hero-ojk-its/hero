@@ -25,6 +25,8 @@ from app.models.enums import (
     JenisJobIngest,
     StatusJobIngest,
     JenisKegagalan,
+    KlasifikasiAkses,
+    PeranDokumen,
 )
 from app.models.document import Document
 from app.models.job_ingest import JobIngest
@@ -49,6 +51,12 @@ from app.schemas.scan import (
 from app.services.file_validation import sanitize_filename, validate_pdf, FileValidationError
 from app.services.storage_service import get_storage_service, StorageService
 from app.services.ingest_service import IngestService, IngestItem, IngestOptions, ItemOutcome
+from app.services.naming_service import (
+    build_standard_filename,
+    NamingInput,
+    validate_naming_format,
+    validate_naming_separator,
+)
 from app.services.audit_service import (
     record_audit,
     START_SCAN,
@@ -488,6 +496,8 @@ class ScanService:
         self,
         scan_id: int,
         destination: TujuanTarik,
+        naming_format: Optional[List[str]] = None,
+        naming_separator: Optional[str] = None,
         actor_user_id: Optional[int] = None,
         actor_username: Optional[str] = None,
         ip_address: Optional[str] = None,
@@ -519,6 +529,37 @@ class ScanService:
                 detail="Tidak ada kandidat PDF yang dipilih untuk ditarik. Silakan pilih minimal 1 berkas.",
             )
 
+        source = self.db.query(ScrapingSource).filter(ScrapingSource.id == session.source_id).first() if session.source_id else None
+        eff_format = naming_format
+        eff_separator = naming_separator
+        if eff_format is None and source and source.default_naming_format:
+            eff_format = source.default_naming_format
+            if eff_separator is None:
+                eff_separator = source.default_naming_separator
+
+        if eff_format:
+            try:
+                validate_naming_format(eff_format)
+            except ValueError as err:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=str(err),
+                )
+        if eff_separator:
+            try:
+                validate_naming_separator(eff_separator)
+            except ValueError as err:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=str(err),
+                )
+
+        ingest_opts = {}
+        if eff_format is not None:
+            ingest_opts["naming_format"] = eff_format
+        if eff_separator is not None:
+            ingest_opts["naming_separator"] = eff_separator
+
         # Buat JobIngest untuk penarikan
         trigger_name = actor_username or "manual_scan_pull"
         job = JobIngest(
@@ -540,6 +581,8 @@ class ScanService:
         session.status = StatusPindai.menarik
         session.destination = destination
         session.pull_job_id = job.id
+        session.naming_format = eff_format
+        session.naming_separator = eff_separator
 
         # Catat Audit Log
         record_audit(
@@ -552,6 +595,8 @@ class ScanService:
                 "job_id": job.id,
                 "destination": destination.value,
                 "selected_count": selected_count,
+                "naming_format": eff_format,
+                "naming_separator": eff_separator,
             },
             ip_address=ip_address,
             commit=False,
@@ -688,6 +733,8 @@ class ScanService:
                         opts = IngestOptions(
                             access_classification=source.default_access_classification if source else KlasifikasiAkses.publik,
                             document_role=source.default_document_role if source else PeranDokumen.corpus_eksisting,
+                            naming_format=session.naming_format,
+                            naming_separator=session.naming_separator,
                         )
                         res = ingest_svc.ingest_one(job, item, opts, suppress_failure_hooks=False)
                         
@@ -893,9 +940,20 @@ class ScanService:
                     continue
                 try:
                     file_bytes = storage.read_pdf(cand.export_path)
-                    base_name = sanitize_filename(cand.filename)
-                    if not base_name.lower().endswith(".pdf"):
-                        base_name += ".pdf"
+                    if session.naming_format:
+                        input_data = NamingInput(
+                            title=None,
+                            original_filename=cand.filename,
+                        )
+                        base_name = build_standard_filename(
+                            naming_format=session.naming_format,
+                            input_data=input_data,
+                            separator=session.naming_separator or " ",
+                        )
+                    else:
+                        base_name = sanitize_filename(cand.filename)
+                        if not base_name.lower().endswith(".pdf"):
+                            base_name += ".pdf"
 
                     # Jaga keunikan nama dalam ZIP
                     if base_name in used_names:

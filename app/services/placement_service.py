@@ -63,6 +63,8 @@ class PlacementService:
             title=doc.title,
             regulation_type=doc.regulation_type,
             release_date=doc.release_date,
+            bidang=doc.bidang,
+            original_filename=doc.original_filename,
         )
 
         # 1. Cek kelengkapan metadata
@@ -119,6 +121,8 @@ class PlacementService:
         cfg = self.settings or settings
         std_filename = build_standard_filename(
             inp,
+            naming_format=doc.naming_format,
+            naming_separator=doc.naming_separator,
             template=getattr(cfg, "naming_template", None) or "{nomor} {judul} {tahun}",
             wildcard=getattr(cfg, "naming_wildcard", None) or "NA",
             max_length=getattr(cfg, "naming_max_length", None) or 150,

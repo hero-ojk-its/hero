@@ -49,6 +49,8 @@ class ScrapingSourceCreate(BaseModel):
     recursive: bool = True
     default_access_classification: Optional[KlasifikasiAkses] = None
     default_document_role: PeranDokumen = PeranDokumen.corpus_eksisting
+    default_naming_format: Optional[List[str]] = None
+    default_naming_separator: Optional[str] = None
     is_active: bool = True
 
     @model_validator(mode="after")
@@ -82,6 +84,8 @@ class ScrapingSourceUpdate(BaseModel):
     recursive: Optional[bool] = None
     default_access_classification: Optional[KlasifikasiAkses] = None
     default_document_role: Optional[PeranDokumen] = None
+    default_naming_format: Optional[List[str]] = None
+    default_naming_separator: Optional[str] = None
     is_active: Optional[bool] = None
 
     @model_validator(mode="after")
@@ -93,6 +97,12 @@ class ScrapingSourceUpdate(BaseModel):
             if self.crawl_depth is not None:
                 raise ValueError(f"Kedalaman crawling (crawl_depth) harus bernilai NULL untuk jenis sumber {self.source_type.value}.")
         return self
+
+
+class ScrapingSourceRunRequest(BaseModel):
+    """Schema input opsional saat mengeksekusi run sumber (POST /{id}/run)"""
+    naming_format: Optional[List[str]] = None
+    naming_separator: Optional[str] = None
 
 
 class ScrapingSourceResponse(BaseModel):
@@ -108,6 +118,8 @@ class ScrapingSourceResponse(BaseModel):
     recursive: bool = True
     default_access_classification: KlasifikasiAkses
     default_document_role: PeranDokumen
+    default_naming_format: Optional[List[str]] = None
+    default_naming_separator: Optional[str] = None
     is_active: bool
     last_run_at: Optional[datetime] = None
     last_run_status: Optional[str] = None

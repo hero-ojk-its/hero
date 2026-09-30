@@ -88,6 +88,8 @@ def _build_session_response(session: ScanSession, db: Session, request: Optional
         errors=session.errors or [],
         error_message=session.error_message,
         destination=session.destination,
+        naming_format=session.naming_format,
+        naming_separator=session.naming_separator,
         pull_job_id=session.pull_job_id,
         pull_progress=pull_prog,
         download_url=download_url,
@@ -338,6 +340,8 @@ def start_scan_pull(
     session, job = svc.start_pull(
         scan_id=scan_id,
         destination=payload.destination,
+        naming_format=payload.naming_format,
+        naming_separator=payload.naming_separator,
         actor_user_id=actor_user_id,
         actor_username=actor_username,
         ip_address=client_ip,

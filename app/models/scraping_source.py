@@ -3,6 +3,7 @@ Model SQLAlchemy: ScrapingSource
 [US-12] Mengelola daftar URL situs sumber scraping regulasi.
 """
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Enum as SQLEnum, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -63,6 +64,16 @@ class ScrapingSource(Base):
         default=PeranDokumen.corpus_eksisting,
         server_default="corpus_eksisting",
         comment="Peran dokumen default untuk dokumen dari sumber ini"
+    )
+    default_naming_format = Column(
+        JSONB,
+        nullable=True,
+        comment="Format penamaan berkas default untuk sumber ini"
+    )
+    default_naming_separator = Column(
+        String(1),
+        nullable=True,
+        comment="Pemisah komponen penamaan berkas default"
     )
     is_active = Column(
         Boolean,

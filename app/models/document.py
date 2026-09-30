@@ -78,6 +78,21 @@ class Document(Base):
         nullable=True,
         comment="Nama file yang sudah distandarisasi"
     )
+    bidang = Column(
+        String(150),
+        nullable=True,
+        comment="Sektor atau bidang regulasi (misal: Perbankan, Pasar Modal, IKNB, BMKS)"
+    )
+    naming_format = Column(
+        JSONB,
+        nullable=True,
+        comment="Format urutan komponen penamaan berkas pilihan pengguna"
+    )
+    naming_separator = Column(
+        String(1),
+        nullable=True,
+        comment="Pemisah komponen penamaan berkas"
+    )
     access_classification = Column(
         SQLEnum(KlasifikasiAkses, native_enum=False),
         nullable=False,

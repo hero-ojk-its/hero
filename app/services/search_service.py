@@ -71,6 +71,7 @@ class SearchParams:
     date_from: Optional[date] = None
     date_to: Optional[date] = None
     year: Optional[int] = None
+    bidang: Optional[str] = None
     sort: Optional[SearchSort] = None
     skip: int = 0
     limit: int = 20
@@ -205,6 +206,8 @@ class SearchService:
             filters.append(Document.release_date <= params.date_to)
         if params.year is not None:
             filters.append(func.extract("year", Document.release_date) == params.year)
+        if params.bidang and params.bidang.strip():
+            filters.append(Document.bidang.ilike(f"%{params.bidang.strip()}%"))
 
         # 10. Tentukan Pengurutan (Sort)
         effective_sort = params.sort
@@ -314,6 +317,7 @@ class SearchService:
                 "regulation_number": doc_obj.regulation_number,
                 "regulation_type": doc_obj.regulation_type,
                 "release_date": doc_obj.release_date,
+                "bidang": doc_obj.bidang,
                 "access_classification": doc_obj.access_classification,
                 "document_role": doc_obj.document_role,
                 "category_id": doc_obj.category_id,

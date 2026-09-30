@@ -21,6 +21,7 @@ from app.routers.internal import router as internal_router
 from app.routers.scraping_sources import router as scraping_sources_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.scans import router as scans_router
+from app.routers.naming import router as naming_router
 
 logger = logging.getLogger("hero")
 
@@ -192,6 +193,7 @@ app.include_router(internal_router, prefix="/api/v1/internal", tags=["Internal"]
 app.include_router(scraping_sources_router, prefix="/api/v1/scraping-sources", tags=["Scraping Sources"])  
 app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["Dashboard"])
 app.include_router(scans_router)  
+app.include_router(naming_router)  
 
 
 @app.get("/", tags=["Health"])

@@ -55,6 +55,7 @@ class UpdateMetadataIn(BaseModel):
     regulation_number: Optional[str] = None
     regulation_type: Optional[str] = None
     release_date: Optional[date] = None
+    bidang: Optional[str] = None
     category_id: Optional[int] = None
     access_classification: Optional[KlasifikasiAkses] = None
     document_role: Optional[PeranDokumen] = None
@@ -75,6 +76,7 @@ def list_documents(
     date_from: Optional[date] = Query(None, description="Filter tanggal rilis awal (inklusif)"),
     date_to: Optional[date] = Query(None, description="Filter tanggal rilis akhir (inklusif)"),
     year: Optional[int] = Query(None, description="Filter tahun rilis"),
+    bidang: Optional[str] = Query(None, description="Filter sektor atau bidang regulasi (misal: Perbankan, BMKS)"),
     sort: Optional[SearchSort] = Query(None, description="Pengurutan hasil pencarian"),
     skip: int = Query(0, ge=0, description="Offset pagination"),
     limit: int = Query(20, ge=1, description="Batas dokumen per halaman (maks 100)"),
@@ -106,6 +108,7 @@ def list_documents(
         date_from=date_from,
         date_to=date_to,
         year=year,
+        bidang=bidang,
         sort=sort,
         skip=skip,
         limit=clamped_limit,
@@ -134,6 +137,7 @@ def list_documents(
             "date_from": date_from.isoformat() if date_from else None,
             "date_to": date_to.isoformat() if date_to else None,
             "year": year,
+            "bidang": bidang,
             "sort": effective_sort.value if hasattr(effective_sort, "value") else str(effective_sort),
             "skip": skip,
             "limit": clamped_limit,
@@ -278,6 +282,9 @@ def _format_single_document_response(doc: Document, db: Session) -> Dict[str, An
         "regulation_number": doc.regulation_number,
         "regulation_type": getattr(doc, "regulation_type", None),
         "release_date": doc.release_date,
+        "bidang": getattr(doc, "bidang", None),
+        "naming_format": getattr(doc, "naming_format", None),
+        "naming_separator": getattr(doc, "naming_separator", None),
         "source_url": doc.source_url,
         "original_filename": getattr(doc, "original_filename", None),
         "file_path_pdf": doc.file_path_pdf,
@@ -511,6 +518,8 @@ def patch_document_metadata(
             new_val = new_val.strip()
         if field == "regulation_number" and new_val is not None:
             new_val = new_val.strip()
+        if field == "bidang" and new_val is not None:
+            new_val = new_val.strip()
 
         if current_val != new_val:
             changed_fields.append(field)
@@ -530,6 +539,8 @@ def patch_document_metadata(
         title=doc.title,
         regulation_type=doc.regulation_type,
         release_date=doc.release_date,
+        bidang=doc.bidang,
+        original_filename=doc.original_filename,
     )
     is_suff = is_metadata_sufficient(naming_inp)
 
@@ -539,7 +550,7 @@ def patch_document_metadata(
             doc.processing_status = StatusPemrosesan.terindeks
 
     # Placement / Relokasi jika field penamaan/kategori berubah
-    placement_fields = {"title", "regulation_number", "regulation_type", "release_date", "category_id", "document_role"}
+    placement_fields = {"title", "regulation_number", "regulation_type", "release_date", "category_id", "document_role", "bidang"}
     placement_info = None
 
     if any(f in changed_fields for f in placement_fields) and is_suff:
