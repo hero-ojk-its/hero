@@ -453,6 +453,78 @@ def run_smoke_test(base_url: str = "http://127.0.0.1:8000") -> int:
     else:
         results.append(("GET", "10. /api/v1/scans/ (Pindai Situs)", 200, "DILEWATI (SMOKE_SCAN_URL tidak diset)"))
 
+    # Step 11: Format Penamaan Dinamis (Langkah 9)
+    try:
+        # Cek komponen
+        res_comp = client.get("/api/v1/naming/components")
+        if res_comp.status_code == 200:
+            results.append(("GET", "11a. /naming/components", res_comp.status_code, "OK"))
+        else:
+            has_failure = True
+            results.append(("GET", "11a. /naming/components", res_comp.status_code, "FAIL"))
+
+        # Cek pratinjau
+        res_prev = client.post(
+            "/api/v1/naming/preview",
+            json={
+                "naming_format": ["nama", "bidang", "tahun"],
+                "naming_separator": "_",
+                "sample": {
+                    "title": "Smoke Naming Test",
+                    "bidang": "BMKS",
+                    "release_date": "2026-09-01",
+                },
+            },
+        )
+        if res_prev.status_code == 200 and res_prev.json().get("filename") == "Smoke Naming Test_BMKS_2026.pdf":
+            results.append(("POST", "11b. /naming/preview", res_prev.status_code, "OK"))
+        else:
+            has_failure = True
+            results.append(("POST", "11b. /naming/preview", res_prev.status_code, f"FAIL ({res_prev.text})"))
+
+        # Unggah PDF dengan naming_format
+        dynamic_pdf = make_minimal_pdf(f"Konten Uji Penamaan Dinamis {ts}")
+        dynamic_files = {"files": (f"dynamic_naming_{ts}.pdf", dynamic_pdf, "application/pdf")}
+        dynamic_data = {
+            "access_classification": "publik",
+            "document_role": "corpus_eksisting",
+            "title": f"Regulasi Bursa Karbon {ts}",
+            "bidang": "BMKS",
+            "naming_format": "nama,bidang,tahun",
+            "naming_separator": "_",
+        }
+        res_dyn_upload = client.post("/api/v1/ingest/upload-pdf", files=dynamic_files, data=dynamic_data)
+        if res_dyn_upload.status_code == 200:
+            dyn_body = res_dyn_upload.json()
+            if dyn_body.get("job_id"):
+                created_job_ids.append(dyn_body["job_id"])
+            dyn_detail = dyn_body.get("details", [{}])[0]
+            dyn_doc_id = dyn_detail.get("document_id")
+            if dyn_doc_id:
+                created_doc_ids.append(dyn_doc_id)
+                # Ambil detail dokumen dan cek standardized_filename
+                res_dyn_doc = client.get(f"/api/v1/documents/{dyn_doc_id}")
+                if res_dyn_doc.status_code == 200:
+                    dyn_doc_data = res_dyn_doc.json()
+                    std_fn = dyn_doc_data.get("standardized_filename", "")
+                    if "BMKS" in std_fn and "NA" in std_fn:
+                        results.append(("POST", "11c. /ingest/upload-pdf (Format Dinamis)", res_dyn_upload.status_code, f"OK (std_name={std_fn})"))
+                    else:
+                        has_failure = True
+                        results.append(("POST", "11c. /ingest/upload-pdf (Format Dinamis)", res_dyn_upload.status_code, f"FAIL (std_name={std_fn})"))
+                else:
+                    has_failure = True
+                    results.append(("GET", f"11c. /documents/{dyn_doc_id}", res_dyn_doc.status_code, "FAIL"))
+            else:
+                has_failure = True
+                results.append(("POST", "11c. /ingest/upload-pdf (Format Dinamis)", res_dyn_upload.status_code, "FAIL (no doc_id)"))
+        else:
+            has_failure = True
+            results.append(("POST", "11c. /ingest/upload-pdf (Format Dinamis)", res_dyn_upload.status_code, "FAIL"))
+    except Exception as exc:
+        has_failure = True
+        results.append(("POST", "11. Format Penamaan Dinamis", 0, f"FAIL ({type(exc).__name__})"))
+
     # Bersihkan seluruh artefak data uji di database lokal jika modul DB tersedia
     try:
         from app.database import SessionLocal

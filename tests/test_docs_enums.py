@@ -48,7 +48,7 @@ VALID_ENUM_VALUES: Dict[str, Set[str]] = {
         | {e.value for e in StatusPemrosesan}
         | {e.value for e in StatusKeberlakuan}
         | {e.value for e in StatusTindakLanjut}
-        | {"ok", "degraded", "error", "sukses", "gagal_dicatat", "requeued"}  # Status health / status respon aksi
+        | {"ok", "degraded", "error", "sukses", "gagal_dicatat", "requeued", "success", "duplicate", "failed"}  # Status health / status respon aksi / upload item
     ),
 }
 
