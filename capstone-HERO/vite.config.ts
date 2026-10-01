@@ -6,4 +6,6 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   base: process.env.VITE_BASE ?? '/',
   plugins: [react()],
+  // Disajikan GitHub Pages di https://hero-ojk-its.github.io/hero/
+  base: '/hero/',
 })
