@@ -14,6 +14,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
+from unittest.mock import patch
 
 # Pastikan root proyek masuk ke sys.path
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -58,6 +59,8 @@ from app.models.scan_session import ScanSession
 from app.models.scan_candidate import ScanCandidate
 from app.models.ingest_failure import IngestFailure
 from app.services.storage_service import get_storage_service
+from app.services.scan_service import ScanService
+from app.services.source_runner import SourceRunner
 
 # Setup DB Test
 TEST_DATABASE_URL = os.getenv(
@@ -146,13 +149,13 @@ def format_json_block(data: Any) -> str:
 
 
 def generate_enum_tables() -> str:
-    """Membangkitkan tabel enum dari app/models/enums.py secara otomatis."""
+    """Membangkitkan tabel enum dari app/models/enums.py secara otomatis dengan penomoran urut."""
     enum_labels = {
         JenisSumber: {
             "title": "Jenis Sumber Dokumen (`JenisSumber`)",
             "key": "source_type",
             "labels": {
-                JenisSumber.situs_web: ("Situs Web", "Situs eksternal (misal: JDIH OJK) untuk perayapan berkas."),
+                JenisSumber.situs_web: ("Situs Web", "Situs eksternal (misal: JDIH ESDM) untuk perayapan berkas."),
                 JenisSumber.folder_lokal: ("Folder Lokal", "Direktori penyimpanan lokal di peladen."),
                 JenisSumber.onedrive_public: ("OneDrive Publik", "Tautan folder publik Microsoft OneDrive."),
             }
@@ -279,8 +282,8 @@ def generate_enum_tables() -> str:
     }
 
     md_out = []
-    for enum_cls, info in enum_labels.items():
-        md_out.append(f"### 11.{len(md_out)+1} {info['title']}\n")
+    for idx, (enum_cls, info) in enumerate(enum_labels.items(), start=1):
+        md_out.append(f"### 11.{idx} {info['title']}\n")
         md_out.append(f"Field respons/parameter: `{info['key']}`\n")
         md_out.append("| Nilai Enum (Backend) | Label UI Indonesia | Keterangan |")
         md_out.append("|---|---|---|")
@@ -293,11 +296,6 @@ def generate_enum_tables() -> str:
     return "\n".join(md_out)
 
 
-from unittest.mock import patch
-from app.services.scan_service import ScanService
-from app.services.source_runner import SourceRunner
-
-
 def run_contract_builder():
     print("Memulai build API Contract HERO Backend...")
     reset_test_db()
@@ -306,10 +304,18 @@ def run_contract_builder():
     app.dependency_overrides[get_db] = lambda: TestingSessionLocal()
     client = TestClient(app)
 
-    db = TestingSessionLocal()
-
     # Dictionary penampung blok JSON nyata
     auto_blocks: Dict[str, str] = {}
+
+    def capture(block_name: str, response: Any, expect: int = 200) -> None:
+        """Helper wajib untuk menangkap JSON respons nyata dan memvalidasi status HTTP."""
+        if response.status_code != expect:
+            raise RuntimeError(
+                f"[BUILD ERROR] Blok '{block_name}' gagal! "
+                f"Diharapkan status code {expect}, tetapi menerima {response.status_code}. "
+                f"Detail: {response.text}"
+            )
+        auto_blocks[block_name] = format_json_block(response.json())
 
     with patch.object(ScanService, "execute_scan", return_value=None), \
          patch.object(ScanService, "execute_pull", return_value=None), \
@@ -318,17 +324,17 @@ def run_contract_builder():
         # ==================== SEKSI 1: KONVENSI UMUM ====================
         # 404 App Error
         r_404 = client.get("/api/v1/documents/999999")
-        auto_blocks["error_404_sample"] = format_json_block(r_404.json())
+        capture("error_404_sample", r_404, expect=404)
 
         # 422 Validation Error
         r_422 = client.post("/api/v1/naming/preview", json={"naming_format": ["nama", "warna_invalid"]})
-        auto_blocks["error_422_sample"] = format_json_block(r_422.json())
+        capture("error_422_sample", r_422, expect=422)
 
         # ==================== SEKSI 2: TAMBAH SUMBER ====================
-        # Tambah Sumber Situs Web
+        # Tambah Sumber Situs Web (Contoh JDIH ESDM yang divalidasi)
         payload_src_web = {
-            "name": "JDIH OJK Pusat",
-            "url": "https://jdih.ojk.go.id",
+            "name": "JDIH ESDM",
+            "url": "https://jdih.esdm.go.id",
             "source_type": "situs_web",
             "crawl_depth": 2,
             "default_access_classification": "publik",
@@ -338,9 +344,9 @@ def run_contract_builder():
             "is_active": True,
         }
         r_src_web = client.post("/api/v1/scraping-sources/", json=payload_src_web)
-        auto_blocks["source_create_web_request"] = format_json_block(payload_src_web)
-        auto_blocks["source_create_web_response"] = format_json_block(r_src_web.json())
+        capture("source_create_web_response", r_src_web, expect=201)
         src_web_id = r_src_web.json()["id"]
+        auto_blocks["source_create_web_request"] = format_json_block(payload_src_web)
 
         # Tambah Sumber Folder Lokal
         allowed_roots = [r.strip() for r in settings.local_source_roots.split(";") if r.strip()]
@@ -358,69 +364,74 @@ def run_contract_builder():
             "is_active": True,
         }
         r_src_local = client.post("/api/v1/scraping-sources/", json=payload_src_local)
-        auto_blocks["source_create_local_response"] = format_json_block(r_src_local.json())
+        capture("source_create_local_response", r_src_local, expect=201)
         src_local_id = r_src_local.json()["id"]
 
         # List Sumber
         r_src_list = client.get("/api/v1/scraping-sources/")
-        auto_blocks["source_list_response"] = format_json_block(r_src_list.json())
+        capture("source_list_response", r_src_list, expect=200)
 
         # ==================== SEKSI 3: SCAN & KANDIDAT ====================
         # Buat Sesi Scan
         payload_scan = {"source_id": src_web_id, "crawl_depth": 1, "max_pages": 10}
         r_scan_init = client.post("/api/v1/scans/", json=payload_scan)
-        scan_id = r_scan_init.json()["scan_id"]
+        capture("scan_create_response", r_scan_init, expect=202)
+        scan_id = r_scan_init.json().get("scan_id") or r_scan_init.json().get("id")
         auto_blocks["scan_create_request"] = format_json_block(payload_scan)
-        auto_blocks["scan_create_response"] = format_json_block(r_scan_init.json())
 
-        # Seed Scan Candidate & Sesi siap_dipilih untuk keperluan dokumentasi
-        scan_sess = db.query(ScanSession).filter(ScanSession.id == scan_id).first()
-        scan_sess.status = StatusPindai.siap_dipilih
-        scan_sess.pages_visited = 5
-        scan_sess.candidates_total = 2
+        # Seed Scan Candidate & Sesi siap_dipilih untuk menyimulasikan hasil perayapan crawler async
+        db = TestingSessionLocal()
+        try:
+            scan_sess = db.query(ScanSession).filter(ScanSession.id == scan_id).first()
+            scan_sess.status = StatusPindai.siap_dipilih
+            scan_sess.pages_visited = 5
+            scan_sess.candidates_total = 2
 
-        import hashlib
-        c1 = ScanCandidate(
-            scan_id=scan_id,
-            url="https://jdih.ojk.go.id/docs/POJK_16_2026.pdf",
-            url_hash=hashlib.sha256("https://jdih.ojk.go.id/docs/POJK_16_2026.pdf".encode()).hexdigest(),
-            filename="POJK_16_2026.pdf",
-            size_bytes=1048576,
-            depth=1,
-            match_status=StatusKandidat.baru,
-            selected=True,
-        )
-        c2 = ScanCandidate(
-            scan_id=scan_id,
-            url="https://jdih.ojk.go.id/docs/SEOJK_05_2025.pdf",
-            url_hash=hashlib.sha256("https://jdih.ojk.go.id/docs/SEOJK_05_2025.pdf".encode()).hexdigest(),
-            filename="SEOJK_05_2025.pdf",
-            size_bytes=524288,
-            depth=1,
-            match_status=StatusKandidat.sudah_ada,
-            match_reason="url_sama",
-            selected=False,
-        )
-        db.add_all([c1, c2])
-        db.commit()
+            import hashlib
+            c1 = ScanCandidate(
+                scan_id=scan_id,
+                url="https://jdih.esdm.go.id/docs/Permen_ESDM_16_2026.pdf",
+                url_hash=hashlib.sha256("https://jdih.esdm.go.id/docs/Permen_ESDM_16_2026.pdf".encode()).hexdigest(),
+                filename="Permen_ESDM_16_2026.pdf",
+                size_bytes=1048576,
+                depth=1,
+                match_status=StatusKandidat.baru,
+                selected=True,
+            )
+            c2 = ScanCandidate(
+                scan_id=scan_id,
+                url="https://jdih.esdm.go.id/docs/Kepmen_05_2025.pdf",
+                url_hash=hashlib.sha256("https://jdih.esdm.go.id/docs/Kepmen_05_2025.pdf".encode()).hexdigest(),
+                filename="Kepmen_05_2025.pdf",
+                size_bytes=524288,
+                depth=1,
+                match_status=StatusKandidat.sudah_ada,
+                match_reason="url_sama",
+                selected=False,
+            )
+            db.add_all([c1, c2])
+            db.commit()
+            c1_id = c1.id
+        finally:
+            db.close()
 
         # Detail Sesi Scan
         r_scan_detail = client.get(f"/api/v1/scans/{scan_id}")
-        auto_blocks["scan_detail_response"] = format_json_block(r_scan_detail.json())
+        capture("scan_detail_response", r_scan_detail, expect=200)
 
         # Daftar Kandidat
         r_cand_list = client.get(f"/api/v1/scans/{scan_id}/candidates")
-        auto_blocks["scan_candidates_response"] = format_json_block(r_cand_list.json())
+        capture("scan_candidates_response", r_cand_list, expect=200)
 
         # Update Selection (Centang)
-        payload_select = {"action": "set", "candidate_ids": [c1.id], "selected": True}
+        payload_select = {"action": "set", "candidate_ids": [c1_id], "selected": True}
         r_select = client.patch(f"/api/v1/scans/{scan_id}/selection", json=payload_select)
-        auto_blocks["scan_selection_response"] = format_json_block(r_select.json())
+        capture("scan_selection_response", r_select, expect=200)
 
         # ==================== SEKSI 4: PILIH FORMAT NAMA ====================
         # GET /naming/components
         r_comp = client.get("/api/v1/naming/components")
-        auto_blocks["naming_components_response"] = format_json_block(r_comp.json())
+        capture("naming_components_response", r_comp, expect=200)
 
         # POST /naming/preview (Default sample)
         payload_preview_default = {
@@ -428,7 +439,7 @@ def run_contract_builder():
             "naming_separator": " ",
         }
         r_prev_def = client.post("/api/v1/naming/preview", json=payload_preview_default)
-        auto_blocks["naming_preview_default_response"] = format_json_block(r_prev_def.json())
+        capture("naming_preview_default_response", r_prev_def, expect=200)
 
         # POST /naming/preview (Custom sample)
         payload_preview_custom = {
@@ -442,7 +453,7 @@ def run_contract_builder():
             },
         }
         r_prev_cust = client.post("/api/v1/naming/preview", json=payload_preview_custom)
-        auto_blocks["naming_preview_custom_response"] = format_json_block(r_prev_cust.json())
+        capture("naming_preview_custom_response", r_prev_cust, expect=200)
 
         # ==================== SEKSI 5: TARIK HASIL SCAN ====================
         # POST /scans/{id}/pull (knowledge_base async)
@@ -452,13 +463,17 @@ def run_contract_builder():
             "naming_separator": "_",
         }
         r_pull_kb = client.post(f"/api/v1/scans/{scan_id}/pull", json=payload_pull_kb)
-        auto_blocks["scan_pull_kb_response"] = format_json_block(r_pull_kb.json())
+        capture("scan_pull_kb_response", r_pull_kb, expect=202)
 
         # POST /scans/{id}/pull (unduh_folder ZIP)
         # Ubah status sesi ke siap_dipilih kembali untuk contoh kedua
-        scan_sess = db.query(ScanSession).filter(ScanSession.id == scan_id).first()
-        scan_sess.status = StatusPindai.siap_dipilih
-        db.commit()
+        db = TestingSessionLocal()
+        try:
+            scan_sess = db.query(ScanSession).filter(ScanSession.id == scan_id).first()
+            scan_sess.status = StatusPindai.siap_dipilih
+            db.commit()
+        finally:
+            db.close()
 
         payload_pull_zip = {
             "destination": "unduh_folder",
@@ -466,11 +481,15 @@ def run_contract_builder():
             "naming_separator": " ",
         }
         r_pull_zip = client.post(f"/api/v1/scans/{scan_id}/pull", json=payload_pull_zip)
-        auto_blocks["scan_pull_zip_response"] = format_json_block(r_pull_zip.json())
+        capture("scan_pull_zip_response", r_pull_zip, expect=202)
 
         # ==================== SEKSI 6: UNGGAH MANUAL & SINKRONISASI ====================
-        # POST /ingest/upload-pdf
-        pdf_sample = make_pdf("Penyelenggaraan Usaha Bank Umum Konvensional dan Syariah di Indonesia.")
+        # POST /ingest/upload-pdf (Alur murni API)
+        pdf_sample = make_pdf(
+            "Peraturan Otoritas Jasa Keuangan tentang Penyelenggaraan Usaha Bank Umum. "
+            "BAB I KETENTUAN UMUM Pasal 1: Dalam Peraturan Otoritas Jasa Keuangan ini yang dimaksud dengan Bank Umum adalah bank konvensional dan syariah. "
+            "BAB II MODAL INTI Pasal 2: Modal inti minimum bagi Bank Umum ditetapkan sebesar Rp3.000.000.000.000 (tiga triliun rupiah)."
+        )
         files = [("files", ("POJK 10 Tahun 2026 Bank Umum.pdf", pdf_sample, "application/pdf"))]
         form_data = {
             "access_classification": "publik",
@@ -480,8 +499,8 @@ def run_contract_builder():
             "bidang": "Perbankan",
         }
         r_upload = client.post("/api/v1/ingest/upload-pdf", files=files, data=form_data)
-        auto_blocks["upload_pdf_response"] = format_json_block(r_upload.json())
-        uploaded_doc_id = r_upload.json()["items"][0]["document_id"] if r_upload.json().get("items") else 1
+        capture("upload_pdf_response", r_upload, expect=200)
+        uploaded_doc_id = r_upload.json()["details"][0]["document_id"]
 
         # POST /scraping-sources/{id}/run
         payload_run_source = {
@@ -489,100 +508,150 @@ def run_contract_builder():
             "naming_separator": "-",
         }
         r_run_src = client.post(f"/api/v1/scraping-sources/{src_local_id}/run", json=payload_run_source)
-        auto_blocks["source_run_response"] = format_json_block(r_run_src.json())
+        capture("source_run_response", r_run_src, expect=202)
 
         # GET /scraping-sources/{id}/files
         r_src_files = client.get(f"/api/v1/scraping-sources/{src_local_id}/files")
-        auto_blocks["source_files_response"] = format_json_block(r_src_files.json())
+        capture("source_files_response", r_src_files, expect=200)
 
-        # ==================== SEKSI 7: KNOWLEDGE BASE & PENCARIAN ====================
-        # Seed artikel dan teks dokumen untuk pencarian yang kaya
-        doc_row = db.query(Document).filter(Document.id == uploaded_doc_id).first()
-        if doc_row:
-            doc_row.title = "Penyelenggaraan Usaha Bank Umum"
-            doc_row.regulation_number = "POJK 10/2026"
-            doc_row.regulation_type = "Peraturan Otoritas Jasa Keuangan"
-            doc_row.release_date = datetime(2026, 3, 15, tzinfo=timezone.utc)
-            doc_row.status_keberlakuan = StatusKeberlakuan.berlaku
-            doc_row.processing_status = StatusPemrosesan.terindeks
-            doc_row.bidang = "Perbankan"
-            doc_row.category_id = 1
-            art1 = Article(
-                document_id=doc_row.id,
-                article_number="Pasal 1",
-                chapter_title="BAB I KETENTUAN UMUM",
-                content_text="Dalam Peraturan Otoritas Jasa Keuangan ini yang dimaksud dengan Bank Umum adalah...",
-                order_index=1,
-            )
-            art2 = Article(
-                document_id=doc_row.id,
-                article_number="Pasal 2",
-                chapter_title="BAB II MODAL INTI",
-                content_text="Modal inti minimum bagi Bank Umum ditetapkan sebesar Rp3.000.000.000.000.",
-                order_index=2,
-            )
-            db.add_all([art1, art2])
-            db.commit()
+        # ==================== SEKSI 7 & 8: PIPELINE EKSTRAKSI, KNOWLEDGE BASE, DETAIL & TEKS ====================
+        # Jalankan pipeline ekstraksi murni lewat HTTP API internal
+        headers_internal = {"X-Internal-API-Key": settings.internal_api_key}
+        payload_extraction = {
+            "title": "Penyelenggaraan Usaha Bank Umum",
+            "regulation_number": "POJK 10/POJK.03/2026",
+            "regulation_type": "Peraturan Otoritas Jasa Keuangan",
+            "release_date": "2026-03-15",
+            "bidang": "Perbankan",
+            "extraction_method": "teks_langsung",
+            "full_text": (
+                "Peraturan Otoritas Jasa Keuangan tentang Penyelenggaraan Usaha Bank Umum. "
+                "BAB I KETENTUAN UMUM Pasal 1: Dalam Peraturan Otoritas Jasa Keuangan ini yang dimaksud dengan Bank Umum adalah bank konvensional dan syariah. "
+                "BAB II MODAL INTI Pasal 2: Modal inti minimum bagi Bank Umum ditetapkan sebesar Rp3.000.000.000.000 (tiga triliun rupiah)."
+            ),
+            "confidence": {
+                "title": 0.98,
+                "regulation_number": 0.96,
+                "regulation_type": 0.95,
+                "release_date": 0.90,
+                "bidang": 0.92,
+            },
+        }
+        r_ext = client.patch(
+            f"/api/v1/internal/documents/{uploaded_doc_id}/extraction?force=true",
+            headers=headers_internal,
+            json=payload_extraction,
+        )
+        if r_ext.status_code != 200:
+            raise RuntimeError(f"Gagal ekstraksi dokumen {uploaded_doc_id}: {r_ext.text}")
 
-        # GET /documents/ (Daftar & Filter)
+        # Insert pasal secara murni lewat HTTP API internal
+        payload_articles = {
+            "articles": [
+                {
+                    "document_id": uploaded_doc_id,
+                    "level": "pasal",
+                    "chapter_title": "BAB I KETENTUAN UMUM",
+                    "article_number": "Pasal 1",
+                    "content_text": "Dalam Peraturan Otoritas Jasa Keuangan ini yang dimaksud dengan Bank Umum adalah bank yang melaksanakan kegiatan usaha secara konvensional dan atau berdasarkan prinsip syariah yang dalam kegiatannya memberikan jasa dalam lalu lintas pembayaran.",
+                    "order_index": 1,
+                },
+                {
+                    "document_id": uploaded_doc_id,
+                    "level": "pasal",
+                    "chapter_title": "BAB II MODAL INTI",
+                    "article_number": "Pasal 2",
+                    "content_text": "Modal inti minimum bagi Bank Umum ditetapkan paling sedikit sebesar Rp3.000.000.000.000 (tiga triliun rupiah) yang wajib dipenuhi oleh setiap entitas perbankan.",
+                    "order_index": 2,
+                },
+            ]
+        }
+        r_bulk_art = client.post(
+            "/api/v1/internal/articles",
+            headers=headers_internal,
+            json=payload_articles,
+        )
+        if r_bulk_art.status_code != 200:
+            raise RuntimeError(f"Gagal bulk insert articles: {r_bulk_art.text}")
+
+        # GET /documents/ (Daftar & Filter tanpa parameter q)
         r_docs_list = client.get("/api/v1/documents/?bidang=Perbankan&skip=0&limit=10")
-        auto_blocks["documents_list_response"] = format_json_block(r_docs_list.json())
+        capture("documents_list_response", r_docs_list, expect=200)
 
-        # GET /documents/search (Pencarian frasa / pasal)
-        r_docs_search = client.get("/api/v1/documents/search?q=modal+inti&bidang=Perbankan&highlight=true")
-        auto_blocks["documents_search_response"] = format_json_block(r_docs_search.json())
+        # GET /documents/ (Pencarian Full-Text Frasa & Highlight dengan parameter q)
+        r_docs_search = client.get("/api/v1/documents/?q=modal+inti&bidang=Perbankan&highlight=true")
+        capture("documents_search_response", r_docs_search, expect=200)
 
-        # ==================== SEKSI 8: DETAIL DOKUMEN, TEKS & PDF ====================
         # GET /documents/{id}
         r_doc_detail = client.get(f"/api/v1/documents/{uploaded_doc_id}")
-        auto_blocks["document_detail_response"] = format_json_block(r_doc_detail.json())
+        capture("document_detail_response", r_doc_detail, expect=200)
 
         # GET /documents/{id}/text
-        r_doc_text = client.get(f"/api/v1/documents/{uploaded_doc_id}/text")
-        auto_blocks["document_text_response"] = format_json_block(r_doc_text.json())
+        r_doc_text = client.get(f"/api/v1/documents/{uploaded_doc_id}/text?offset=0&limit=20000")
+        capture("document_text_response", r_doc_text, expect=200)
 
-        # ==================== SEKSI 9: KOREKSI METADATA & ANTRIAN GAGAL ====================
+        # ==================== SEKSI 9: KOREKSI METADATA & ANTREAN GAGAL ====================
         # PATCH /documents/{id}/metadata
         payload_meta_update = {
             "title": "Penyelenggaraan Usaha Bank Umum Terkoreksi",
             "regulation_number": "POJK 10/POJK.03/2026",
             "bidang": "Perbankan",
-            "category_id": 1,
             "status_keberlakuan": "berlaku",
         }
         r_patch_meta = client.patch(f"/api/v1/documents/{uploaded_doc_id}/metadata", json=payload_meta_update)
-        auto_blocks["document_patch_metadata_response"] = format_json_block(r_patch_meta.json())
+        capture("document_patch_metadata_response", r_patch_meta, expect=200)
 
-        # Seed failure record
-        fail_row = IngestFailure(
-            job_id=1,
-            failure_type=JenisKegagalan.format_tidak_didukung,
-            reason_code="corrupt_pdf_header",
-            original_filename="Peraturan_Rusak_2026.pdf",
-            source_url="https://jdih.ojk.go.id/docs/Peraturan_Rusak_2026.pdf",
-            message="Format header berkas PDF tidak valid.",
-            is_retryable=True,
-            follow_up_status=StatusTindakLanjut.belum_ditangani,
+        # Unggah PDF corrupt lewat API untuk membuat baris kegagalan nyata di tabel ingest_failures
+        bad_pdf = [("files", ("Peraturan_Rusak_2026.pdf", b"INVALID_CORRUPT_HEADER_XYZ", "application/pdf"))]
+        r_bad_upload = client.post(
+            "/api/v1/ingest/upload-pdf",
+            files=bad_pdf,
+            data={"access_classification": "publik", "document_role": "corpus_eksisting"},
         )
-        db.add(fail_row)
-        db.commit()
+        if r_bad_upload.status_code != 200:
+            raise RuntimeError(f"Gagal membuat failure row via bad upload: {r_bad_upload.text}")
 
-        # GET /failures/
-        r_failures = client.get("/api/v1/failures/")
-        auto_blocks["failures_list_response"] = format_json_block(r_failures.json())
+        # Buat failure retryable lewat pelaporan error ekstraksi via API internal
+        pdf_retryable = make_pdf("Konten regulasi ekstraksi retryable.")
+        r_retry_upload = client.post(
+            "/api/v1/ingest/upload-pdf",
+            files=[("files", ("Regulasi_Retry_2026.pdf", pdf_retryable, "application/pdf"))],
+            data={"access_classification": "publik", "document_role": "corpus_eksisting"},
+        )
+        retry_doc_id = r_retry_upload.json()["details"][0]["document_id"]
+        client.patch(
+            f"/api/v1/internal/documents/{retry_doc_id}/extraction?force=true",
+            headers=headers_internal,
+            json={"error": {"code": "ocr_timeout", "message": "Proses OCR timeout saat ekstraksi berkas."}},
+        )
 
-        # POST /failures/{id}/retry
-        r_retry = client.post(f"/api/v1/failures/{fail_row.id}/retry")
-        auto_blocks["failure_retry_response"] = format_json_block(r_retry.json())
+        # GET /ingest/failures
+        r_failures = client.get("/api/v1/ingest/failures")
+        capture("failures_list_response", r_failures, expect=200)
 
-        # POST /failures/{id}/ignore
-        r_ignore = client.post(f"/api/v1/failures/{fail_row.id}/ignore")
-        auto_blocks["failure_ignore_response"] = format_json_block(r_ignore.json())
+        fail_items = r_failures.json().get("items", [])
+        fail_id = fail_items[0]["id"] if fail_items else 1
+
+        # Temukan failure yang retryable untuk contoh retry
+        retryable_fail = next((f for f in fail_items if f.get("is_retryable")), fail_items[0] if fail_items else None)
+        retryable_fail_id = retryable_fail["id"] if retryable_fail else fail_id
+
+        # POST /ingest/failures/{id}/retry
+        r_retry = client.post(f"/api/v1/ingest/failures/{retryable_fail_id}/retry")
+        capture("failure_retry_response", r_retry, expect=200)
+
+        # PATCH /ingest/failures/{id} (Abaikan)
+        payload_ignore = {
+            "follow_up_status": "diabaikan",
+            "handling_note": "Abaikan berkas corrupt hasil pengujian.",
+        }
+        r_ignore = client.patch(f"/api/v1/ingest/failures/{fail_id}", json=payload_ignore)
+        capture("failure_ignore_response", r_ignore, expect=200)
 
         # ==================== SEKSI 10: DASHBOARD ====================
         # GET /dashboard/summary
         r_dash = client.get("/api/v1/dashboard/summary")
-        auto_blocks["dashboard_summary_response"] = format_json_block(r_dash.json())
+        capture("dashboard_summary_response", r_dash, expect=200)
 
         # ==================== SEKSI 11: ENUM TABLES ====================
         auto_blocks["enum_tables"] = generate_enum_tables()
@@ -596,16 +665,24 @@ def run_contract_builder():
 
 def build_markdown_contract(blocks: Dict[str, str]):
     contract_path = BASE_DIR / "docs" / "api" / "KONTRAK-API-FASE1.md"
+    max_upload_mb = settings.max_upload_bytes // (1024 * 1024)
     
     doc_content = f"""# KONTRAK API HERO BACKEND — FASE 1 (MVP)
 
 > **Untuk Tim Frontend (Personil_D)**  
-> **Status:** Resmi Disepakati (Step 9 / Issue #91 AI-T12 & #90 US-20c)  
+> **Status:** DRAF v0.9 — untuk disepakati Personil_D & Personil_E (rapat internal 1 Okt 2026)  
 > **Basis Implementasi:** FastAPI · PostgreSQL 15.4 · SQLAlchemy 2.x  
 > **Artefak Pendamping:**
-> - [Koleksi Request Siap Eksekusi (REST Client / VS Code)](file:///docs/api/hero-fase1.http)
-> - [Snapshot Skema OpenAPI JSON untuk Type Generator](file:///docs/api/openapi-fase1.json)
-> - [Catatan Perubahan Frontend Step 9](file:///docs/api/frontend-changes-step9.md)
+> - [Koleksi Request Siap Eksekusi (REST Client / VS Code)](hero-fase1.http)
+> - [Snapshot Skema OpenAPI JSON untuk Type Generator](openapi-fase1.json)
+> - [Catatan Perubahan Frontend Step 9](frontend-changes-step9.md)
+
+### Tabel Persetujuan
+
+| Nama | Peran | Tanggal | Catatan |
+|---|---|---|---|
+| Personil_D | Frontend Lead | - | Belum ditandatangani |
+| Personil_E | Backend Lead / PM | - | Belum ditandatangani |
 
 ---
 
@@ -619,7 +696,7 @@ def build_markdown_contract(blocks: Dict[str, str]):
 6. [Alur 5: Unggah Berkas Manual & Sinkronisasi Folder Lokal](#6-alur-5-unggah-berkas-manual--sinkronisasi-folder-lokal)
 7. [Alur 6: Eksplorasi Knowledge Base & Pencarian Regulasi](#7-alur-6-eksplorasi-knowledge-base--pencarian-regulasi)
 8. [Alur 7: Detail Dokumen, Pembaca Teks & Penampil PDF](#8-alur-7-detail-dokumen-pembaca-teks--penampil-pdf)
-9. [Alur 8: Kurasi & Koreksi Metadata serta Penanganan Gagal](#9-alur-8-kurasi--koreksi-metadata-serta-penanganan-gagal)
+9. [Alur 8: Kurasi & Koreksi Metadata serta Antrean Penanganan Gagal](#9-alur-8-kurasi--koreksi-metadata-serta-antrean-penanganan-gagal)
 10. [Alur 9: Dashboard Ringkasan Eksekutif](#10-alur-9-dashboard-ringkasan-eksekutif)
 11. [Tabel Referensi Enum & Label Bahasa Indonesia](#11-tabel-referensi-enum--label-bahasa-indonesia)
 12. [Daftar Kode Galat HTTP & Penanganan di UI](#12-daftar-kode-galat-http--penanganan-di-ui)
@@ -649,44 +726,54 @@ def build_markdown_contract(blocks: Dict[str, str]):
 ### 1.3 Dua Bentuk Format Galat (Error Response)
 Frontend wajib menangani **2 format error**:
 
-1. **Galat Logika Bisnis Aplikasi (400, 403, 404, 409, 503):**
-   `detail` berupa **string pesan tunggal**:
+1. **Galat Logika Bisnis / HTTP 4xx (dari Backend Application):**
+   ```json
+   {{
+     "detail": "Pesan galat dalam bahasa Indonesia yang ramah pengguna."
+   }}
+   ```
+   *Contoh Riil 404 (Dokumen tidak ditemukan):*
 <!-- AUTO:error_404_sample -->
 {blocks['error_404_sample']}
 <!-- /AUTO:error_404_sample -->
 
-2. **Galat Validasi Input Schema / Pydantic (422 Unprocessable Entity):**
-   `detail` berupa **array of objects**:
+2. **Galat Validasi Schema (HTTP 422 dari FastAPI/Pydantic):**
+   ```json
+   {{
+     "detail": [
+       {{
+         "loc": ["body", "naming_format", 1],
+         "msg": "Komponen naming_format tidak valid: 'warna_invalid'. Komponen yang didukung: 'nama', 'nomor', 'tahun', 'jenis', 'bidang'.",
+         "type": "value_error"
+       }}
+     ]
+   }}
+   ```
+   *Contoh Riil 422:*
 <!-- AUTO:error_422_sample -->
 {blocks['error_422_sample']}
 <!-- /AUTO:error_422_sample -->
 
-> **Saran UI:**  
-> Buat interceptor response pada Axios / Fetch:  
-> `const errorMsg = typeof err.response.data.detail === 'string' ? err.response.data.detail : err.response.data.detail.map(e => e.msg).join(', ');`
+### 1.4 Status Autentikasi & CORS
+- **`AUTH_ENABLED=false` (Default Fase 1):** Header `Authorization: Bearer <token>` **tidak wajib** disertakan pada seluruh endpoint publik/operasional.
+- **CORS:** Backend mengizinkan origin yang didefinisikan pada `CORS_ORIGINS` di `.env` (misal: `http://localhost:3000,http://127.0.0.1:3000`).
 
-### 1.4 Status Autentikasi (Fase 1)
-- Pada Fase 1, `AUTH_ENABLED=false`. Frontend **tidak perlu mengirimkan header Authorization/Bearer token**.
-- Seluruh endpoint publik dapat diakses langsung.
-
-### 1.5 CORS (Cross-Origin Resource Sharing)
-- Backend mengizinkan origin frontend: `http://localhost:3000` dan `http://127.0.0.1:3000`.
-- Jika pengujian frontend berjalan di port lain, pastikan menambahkan port tersebut di konfigurasi `.env` (`CORS_ORIGINS`).
-
-### 1.6 Pola Operasi Panjang (Asynchronous Polling)
-Operasi berat seperti pemindaian situs web (`POST /scans/`), penarikan dokumen (`POST /scans/{{id}}/pull`), dan sinkronisasi folder (`POST /scraping-sources/{{id}}/run`):
-1. **Default (`wait=false`):** Backend merespons langsung dengan status **`202 Accepted`** berisi `scan_id` atau `job_id` dan status `"antrian"`.
-2. **Polling UI:** Frontend melakukan polling GET (`GET /api/v1/scans/{{id}}` atau `GET /api/v1/jobs/{{id}}`) tiap **2 detik**.
-3. **Status Final:** Polling berhenti saat status mencapai salah satu nilai final:
-   - `selesai` (sukses)
-   - `gagal` (terjadi kesalahan, lihat `error_message`)
-   - `dibatalkan` (dibatalkan oleh pengguna)
+### 1.5 Pola Operasi Panjang (Long-Running Operations)
+Operasi penarikan berkas (`/pull`) dan pemindaian situs (`/scans/`) menggunakan pola polling:
+1. Frontend mengirim request dengan query `wait=false` (default).
+2. Backend merespons langsung dengan status `202 Accepted` (atau `200 OK`) berisi `job_id` atau `scan_id`.
+3. Frontend melakukan polling `GET /api/v1/scans/{{id}}` atau `GET /api/v1/ingest/jobs/{{job_id}}` setiap 2 detik hingga mencapai **status final**: `selesai`, `gagal`, atau `dibatalkan`.
 
 ---
 
 ## 2. ALUR 1: TAMBAH & KELOLA SUMBER DOKUMEN
 
-### 2.1 Menambah Sumber Situs Web (JDIH OJK)
+Mendukung pendaftaran situs web dan folder lokal sebagai sumber regulasi.
+
+> [!NOTE]
+> Contoh URL menggunakan `https://jdih.esdm.go.id` yang telah divalidasi dengan crawler standar (`SimpleHttpCrawler`). Dukungan untuk situs berbasis SPA (seperti JDIH OJK) dan integrasi Microsoft OneDrive sedang dikerjakan pada isu terpisah (#88, #30).
+
+### 2.1 Tambah Sumber Situs Web
 - **Method & Path:** `POST /api/v1/scraping-sources/`
 - **Request Body:**
 <!-- AUTO:source_create_web_request -->
@@ -697,16 +784,15 @@ Operasi berat seperti pemindaian situs web (`POST /scans/`), penarikan dokumen (
 {blocks['source_create_web_response']}
 <!-- /AUTO:source_create_web_response -->
 
-### 2.2 Menambah Sumber Folder Lokal
+### 2.2 Tambah Sumber Folder Lokal
 - **Method & Path:** `POST /api/v1/scraping-sources/`
 - **Respons (201 Created):**
 <!-- AUTO:source_create_local_response -->
 {blocks['source_create_local_response']}
 <!-- /AUTO:source_create_local_response -->
 
-### 2.3 Daftar Semua Sumber
+### 2.3 Daftar Sumber Dokumen
 - **Method & Path:** `GET /api/v1/scraping-sources/`
-- **Query Params:** `is_active` (boolean, opsional), `source_type` (JenisSumber, opsional).
 - **Respons (200 OK):**
 <!-- AUTO:source_list_response -->
 {blocks['source_list_response']}
@@ -716,9 +802,8 @@ Operasi berat seperti pemindaian situs web (`POST /scans/`), penarikan dokumen (
 
 ## 3. ALUR 2: PEMINDAIAN SITUS WEB, SELEKSI & CENTANG KANDIDAT
 
-### 3.1 Memulai Pemindaian Situs
+### 3.1 Memulai Sesi Pemindaian
 - **Method & Path:** `POST /api/v1/scans/`
-- **Query Param:** `wait=false` (default) → 202 Accepted, `wait=true` → 200 OK setelah selesai.
 - **Request Body:**
 <!-- AUTO:scan_create_request -->
 {blocks['scan_create_request']}
@@ -728,27 +813,27 @@ Operasi berat seperti pemindaian situs web (`POST /scans/`), penarikan dokumen (
 {blocks['scan_create_response']}
 <!-- /AUTO:scan_create_response -->
 
-### 3.2 Detail Status Sesi Pemindaian
+### 3.2 Memeriksa Detail & Status Sesi Pemindaian
 - **Method & Path:** `GET /api/v1/scans/{{scan_id}}`
 - **Respons (200 OK):**
 <!-- AUTO:scan_detail_response -->
 {blocks['scan_detail_response']}
 <!-- /AUTO:scan_detail_response -->
 
-### 3.3 Menampilkan Daftar Kandidat PDF
+### 3.3 Mengambil Daftar Kandidat Berkas
 - **Method & Path:** `GET /api/v1/scans/{{scan_id}}/candidates`
-- **Query Params:** `match_status` (`baru` | `sudah_ada` | `mungkin_ada`), `selected` (boolean), `pull_outcome`, `q` (filter nama berkas), `skip`, `limit`.
+- **Query Params:** `match_status` (`baru`, `sudah_ada`, `mungkin_ada`), `selected` (`true`, `false`).
 - **Respons (200 OK):**
 <!-- AUTO:scan_candidates_response -->
 {blocks['scan_candidates_response']}
 <!-- /AUTO:scan_candidates_response -->
 
-### 3.4 Memperbarui Centang Pilihan (Selection)
+### 3.4 Mengubah Pilihan Centang Berkas (Selection)
 - **Method & Path:** `PATCH /api/v1/scans/{{scan_id}}/selection`
-- **Aksi Valid:**
-  - `select_all_new`: Centang semua kandidat berstatus `baru`.
-  - `select_none`: Kosongkan seluruh centang.
-  - `set`: Atur centang kandidat tertentu (`candidate_ids: [1, 2]`, `selected: true/false`).
+- **Aksi yang Didukung:**
+  - `select_all`: Centang semua berkas berstatus `baru`.
+  - `select_none`: Hapus semua centangan.
+  - `set`: Atur centang berkas tertentu berdasarkan daftar `candidate_ids`.
 - **Respons (200 OK):**
 <!-- AUTO:scan_selection_response -->
 {blocks['scan_selection_response']}
@@ -760,20 +845,20 @@ Operasi berat seperti pemindaian situs web (`POST /scans/`), penarikan dokumen (
 
 Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`, `jenis`, `bidang`, `nomor`).
 
-### 4.1 Mendapatkan Komponen Penamaan Tersedia
+### 4.1 Mendapatkan Komponen & Aturan Penamaan
 - **Method & Path:** `GET /api/v1/naming/components`
 - **Respons (200 OK):**
 <!-- AUTO:naming_components_response -->
 {blocks['naming_components_response']}
 <!-- /AUTO:naming_components_response -->
 
-### 4.2 Pratinjau Nama Berkas Dinamis (Live Preview)
+### 4.2 Pratinjau Live Penamaan Berkas
 - **Method & Path:** `POST /api/v1/naming/preview`
-- **Contoh 1 (Sample Bawaan Sistem):**
+- **Respons Contoh Bawaan (Default Sample):**
 <!-- AUTO:naming_preview_default_response -->
 {blocks['naming_preview_default_response']}
 <!-- /AUTO:naming_preview_default_response -->
-- **Contoh 2 (Kustom Sample):**
+- **Respons Contoh Kustom (Custom Sample):**
 <!-- AUTO:naming_preview_custom_response -->
 {blocks['naming_preview_custom_response']}
 <!-- /AUTO:naming_preview_custom_response -->
@@ -782,53 +867,47 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
 
 ## 5. ALUR 4: PENARIKAN BERKAS (KNOWLEDGE BASE & UNDUH ZIP)
 
-### 5.1 Tarik ke Knowledge Base (KB)
+### 5.1 Tarik ke Knowledge Base (Asinkron)
 - **Method & Path:** `POST /api/v1/scans/{{scan_id}}/pull`
-- **Body:** `destination: "knowledge_base"`, `naming_format` (array), `naming_separator` (opsional).
 - **Respons (202 Accepted):**
 <!-- AUTO:scan_pull_kb_response -->
 {blocks['scan_pull_kb_response']}
 <!-- /AUTO:scan_pull_kb_response -->
 
-### 5.2 Tarik ke Folder Ekspor & Unduh ZIP
+### 5.2 Tarik ke Folder Unduhan (Arsip ZIP)
 - **Method & Path:** `POST /api/v1/scans/{{scan_id}}/pull`
-- **Body:** `destination: "unduh_folder"`, `naming_format` (array), `naming_separator` (opsional).
 - **Respons (202 Accepted):**
 <!-- AUTO:scan_pull_zip_response -->
 {blocks['scan_pull_zip_response']}
 <!-- /AUTO:scan_pull_zip_response -->
-
-- **Unduh Berkas ZIP Setelah Selesai:**
-  - `GET /api/v1/scans/{{scan_id}}/download` → Menghasilkan stream berkas `scan_{{id}}_export.zip` dengan nama berkas di dalam ZIP mengikuti format penamaan yang dipilih.
+- **Unduh ZIP:** `GET /api/v1/scans/{{scan_id}}/download` setelah status sesi `selesai`.
 
 ---
 
 ## 6. ALUR 5: UNGGAH BERKAS MANUAL & SINKRONISASI FOLDER LOKAL
 
-### 6.1 Unggah Manual Banyak Berkas (Multipart/form-data)
+### 6.1 Unggah Berkas PDF (Multipart Form Data)
 - **Method & Path:** `POST /api/v1/ingest/upload-pdf`
-- **Header:** `Content-Type: multipart/form-data`
-- **Form Fields:**
-  - `files`: Berkas-berkas PDF (bisa banyak berkas sekaligus).
-  - `access_classification`: `publik` atau `non_publik` (default: `publik`).
-  - `document_role`: `corpus_eksisting` atau `referensi_tambahan`.
+- **Form Data:**
+  - `files`: File PDF tunggal atau jamak.
+  - `access_classification`: `publik` | `non_publik` (Wajib).
+  - `document_role`: `corpus_eksisting` | `draft_kajian` (Wajib).
   - `naming_format`: String dipisah koma (contoh: `"nama,jenis,tahun,bidang"`).
   - `naming_separator`: `" "` | `"_"` | `"-"`.
-  - `bidang`: String sektor/bidang regulasi (contoh: `"Perbankan"`).
+  - `bidang`: Sektor regulasi (contoh: `"Perbankan"`).
 - **Respons (200 OK):**
 <!-- AUTO:upload_pdf_response -->
 {blocks['upload_pdf_response']}
 <!-- /AUTO:upload_pdf_response -->
 
-### 6.2 Eksekusi Sinkronisasi Folder Lokal
+### 6.2 Sinkronisasi Folder Lokal
 - **Method & Path:** `POST /api/v1/scraping-sources/{{source_id}}/run`
-- **Body (Opsional):** `naming_format` (array), `naming_separator` (string).
-- **Respons (202 Accepted / 200 OK):**
+- **Respons (202 Accepted):**
 <!-- AUTO:source_run_response -->
 {blocks['source_run_response']}
 <!-- /AUTO:source_run_response -->
 
-### 6.3 Daftar Berkas Sumber Lokal
+### 6.3 Daftar Berkas Sumber Folder
 - **Method & Path:** `GET /api/v1/scraping-sources/{{source_id}}/files`
 - **Respons (200 OK):**
 <!-- AUTO:source_files_response -->
@@ -839,29 +918,34 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
 
 ## 7. ALUR 6: EKSPLORASI KNOWLEDGE BASE & PENCARIAN REGULASI
 
-### 7.1 Daftar & Filter Dokumen KB
+Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** berbasis `tsvector` dan `tsquery` berbobot (`title` [A], `regulation_number` [A], `articles.content_text` [B], `full_text` [C]) serta pencocokan nomor regulasi via indeks trigram GIN. Belum ada pencarian berbasis model vektor atau embedding pada Fase 1.
+
+### 7.1 Daftar, Filter & Pencarian Dokumen KB
 - **Method & Path:** `GET /api/v1/documents/`
 - **Query Params:**
-  - `skip`, `limit`
-  - `bidang` (filter sektor, contoh: `Perbankan`, `Pasar Modal`, `BMKS`)
-  - `category_id` (filter kategori)
-  - `regulation_type` (filter jenis regulasi)
-  - `year` (filter tahun)
-  - `status_keberlakuan` (`berlaku`, `dicabut`, `diubah`, dll.)
-  - `processing_status` (`tersimpan`, `diekstraksi`, `terindeks`, `perlu_koreksi`)
-  - `access_classification` (`publik`, `non_publik`)
+  - `q` (string, opsional): Kata kunci / frasa teks hukum (contoh: `modal inti bank umum`).
+  - `mode` (string, opsional): Mode full-text PostgreSQL: `phrase` (default, frasa urut) | `all` (semua kata) | `web` (boolean websearch).
+  - `highlight` (boolean, opsional): `true` (default) untuk menyertakan cuplikan teks dengan tag `<b>...</b>`.
+  - `bidang` (string, opsional): Filter sektor regulasi (contoh: `Perbankan`, `Pasar Modal`, `BMKS`, `IKNB`).
+  - `category_id` (integer, opsional): Filter kategori KB.
+  - `regulation_type` (string, opsional): Filter jenis regulasi (contoh: `POJK`, `SEOJK`, `UU`, `PP`).
+  - `year` (integer, opsional): Filter tahun regulasi.
+  - `status_keberlakuan` (string, opsional): `berlaku`, `dicabut`, `diubah`, `tidak_diketahui`.
+  - `regulation_number` (string, opsional): Pencocokan nomor regulasi (contoh: `POJK 10/POJK.03/2026`).
+  - `access_classification` (string, opsional): `publik`, `non_publik`.
+  - `document_role` (string, opsional): `corpus_eksisting`, `draft_kajian`.
+  - `skip` (integer, opsional): Offset paginasi (default `0`).
+  - `limit` (integer, opsional): Batas dokumen per halaman (default `20`, min `1`, max `100`).
+
+#### Contoh A: Daftar & Filter Dokumen (Tanpa Parameter `q`)
+*Request:* `GET /api/v1/documents/?bidang=Perbankan&skip=0&limit=10`
 - **Respons (200 OK):**
 <!-- AUTO:documents_list_response -->
 {blocks['documents_list_response']}
 <!-- /AUTO:documents_list_response -->
 
-### 7.2 Pencarian Cerdas Regulasi (Full-Text & Semantik)
-- **Method & Path:** `GET /api/v1/documents/search`
-- **Query Params:**
-  - `q`: Kata kunci / frasa hukum (contoh: `modal inti bank umum`).
-  - `mode`: `phrase` (pencarian frasa tepat) | `all` (semua kata) | `web` (pencarian berbasis web/boolean).
-  - `bidang`: Filter sektor regulasi.
-  - `highlight`: `true` untuk menyertakan cuplikan teks dengan tag `<mark>`.
+#### Contoh B: Pencarian Full-Text & Highlight (Dengan Parameter `q`)
+*Request:* `GET /api/v1/documents/?q=modal+inti&bidang=Perbankan&highlight=true`
 - **Respons (200 OK):**
 <!-- AUTO:documents_search_response -->
 {blocks['documents_search_response']}
@@ -880,7 +964,7 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
 
 ### 8.2 Membaca Teks Mentah Dokumen
 - **Method & Path:** `GET /api/v1/documents/{{document_id}}/text`
-- **Query Params:** `offset` (karakter awal, default 0), `limit` (panjang karakter, default 10000).
+- **Query Params:** `offset` (karakter awal, default `0`), `limit` (panjang karakter, default `20000`, maks `100000`).
 - **Respons (200 OK):**
 <!-- AUTO:document_text_response -->
 {blocks['document_text_response']}
@@ -901,7 +985,7 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
 
 ---
 
-## 9. ALUR 8: KURASI & KOREKSI METADATA SERTA PENANGANAN GAGAL
+## 9. ALUR 8: KURASI & KOREKSI METADATA SERTA ANTREAN PENANGANAN GAGAL
 
 ### 9.1 Koreksi Metadata Dokumen
 - **Method & Path:** `PATCH /api/v1/documents/{{document_id}}/metadata`
@@ -911,22 +995,24 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
 {blocks['document_patch_metadata_response']}
 <!-- /AUTO:document_patch_metadata_response -->
 
-### 9.2 Daftar Antrian Gagal (Ingest Failures)
-- **Method & Path:** `GET /api/v1/failures/`
+### 9.2 Daftar Antrean Gagal (Ingest Failures)
+- **Method & Path:** `GET /api/v1/ingest/failures`
+- **Query Params:** `job_id`, `failure_type`, `follow_up_status` (`belum_ditangani`, `diproses_ulang`, `diabaikan`, `all`), `include_duplicates` (`false`), `skip` (`0`), `limit` (`50`).
 - **Respons (200 OK):**
 <!-- AUTO:failures_list_response -->
 {blocks['failures_list_response']}
 <!-- /AUTO:failures_list_response -->
 
 ### 9.3 Mencoba Ulang (Retry) Berkas Gagal
-- **Method & Path:** `POST /api/v1/failures/{{failure_id}}/retry`
+- **Method & Path:** `POST /api/v1/ingest/failures/{{failure_id}}/retry`
 - **Respons (200 OK):**
 <!-- AUTO:failure_retry_response -->
 {blocks['failure_retry_response']}
 <!-- /AUTO:failure_retry_response -->
 
 ### 9.4 Mengabaikan (Ignore) Berkas Gagal
-- **Method & Path:** `POST /api/v1/failures/{{failure_id}}/ignore`
+- **Method & Path:** `PATCH /api/v1/ingest/failures/{{failure_id}}`
+- **Body:** `{{"follow_up_status": "diabaikan", "handling_note": "Catatan alasan pengabaian"}}`
 - **Respons (200 OK):**
 <!-- AUTO:failure_ignore_response -->
 {blocks['failure_ignore_response']}
@@ -961,7 +1047,7 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
 | **403 Forbidden** | Akses ditolak | Mengakses PDF non-publik saat mode proteksi aktif | Tampilkan dialog izin akses atau peringatan login. |
 | **404 Not Found** | Data tidak ditemukan | ID dokumen, scan, atau sumber tidak ditemukan | Arahkan pengguna kembali ke halaman daftar. |
 | **409 Conflict** | Konflik status | Sesi sedang berjalan atau mencoba retry job aktif | Berikan notifikasi bahwa proses sedang berjalan di latar belakang. |
-| **413 Payload Too Large** | Berkas melebihi batas | Ukuran unggah PDF melebihi batas (default 50 MB) | Peringatkan pengguna untuk mengunggah berkas lebih kecil. |
+| **413 Payload Too Large** | Berkas melebihi batas | Ukuran unggah PDF melebihi batas (default {max_upload_mb} MB) | Peringatkan pengguna untuk mengunggah berkas lebih kecil. |
 | **422 Unprocessable** | Validasi skema gagal | Komponen format nama salah, field wajib kosong | Sorot field formulir yang bersangkutan dengan pesan spesifik. |
 | **503 Service Unavailable** | Layanan database/AI sibuk | Koneksi database terputus atau komponen ML offline | Tampilkan pesan coba lagi beberapa saat. |
 
@@ -1020,8 +1106,8 @@ POST {{baseUrl}}/scraping-sources/
 Content-Type: application/json
 
 {
-  "name": "JDIH OJK Pusat",
-  "url": "https://jdih.ojk.go.id",
+  "name": "JDIH ESDM",
+  "url": "https://jdih.esdm.go.id",
   "source_type": "situs_web",
   "crawl_depth": 2,
   "default_access_classification": "publik",
@@ -1067,8 +1153,8 @@ Content-Type: application/json
 GET {{baseUrl}}/documents/?bidang=Perbankan&skip=0&limit=10
 Accept: application/json
 
-### 11. Documents: Search
-GET {{baseUrl}}/documents/search?q=modal+inti&bidang=Perbankan&highlight=true
+### 11. Documents: Search Full-Text & Highlight
+GET {{baseUrl}}/documents/?q=modal+inti&bidang=Perbankan&highlight=true
 Accept: application/json
 
 ### 12. Documents: Get Detail (Ganti ID)
@@ -1076,7 +1162,7 @@ GET {{baseUrl}}/documents/1
 Accept: application/json
 
 ### 13. Documents: Read Text (Ganti ID)
-GET {{baseUrl}}/documents/1/text?offset=0&limit=5000
+GET {{baseUrl}}/documents/1/text?offset=0&limit=20000
 Accept: application/json
 
 ### 14. Documents: Open PDF Inline (Ganti ID)
@@ -1094,7 +1180,24 @@ Content-Type: application/json
   "status_keberlakuan": "berlaku"
 }
 
-### 16. Dashboard: Summary
+### 16. Ingest: List Failures Queue
+GET {{baseUrl}}/ingest/failures
+Accept: application/json
+
+### 17. Ingest: Retry Failure (Ganti ID)
+POST {{baseUrl}}/ingest/failures/1/retry
+Accept: application/json
+
+### 18. Ingest: Ignore Failure (Ganti ID)
+PATCH {{baseUrl}}/ingest/failures/1
+Content-Type: application/json
+
+{
+  "follow_up_status": "diabaikan",
+  "handling_note": "Abaikan berkas corrupt hasil pengujian."
+}
+
+### 19. Dashboard: Summary
 GET {{baseUrl}}/dashboard/summary
 Accept: application/json
 """

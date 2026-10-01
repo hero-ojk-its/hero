@@ -538,21 +538,9 @@ class ScanService:
                 eff_separator = source.default_naming_separator
 
         if eff_format:
-            try:
-                validate_naming_format(eff_format)
-            except ValueError as err:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=str(err),
-                )
+            validate_naming_format(eff_format)
         if eff_separator:
-            try:
-                validate_naming_separator(eff_separator)
-            except ValueError as err:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=str(err),
-                )
+            validate_naming_separator(eff_separator)
 
         ingest_opts = {}
         if eff_format is not None:
