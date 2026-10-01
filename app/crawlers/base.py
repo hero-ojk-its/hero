@@ -4,17 +4,29 @@ Protokol dan dataclass dasar untuk crawler HERO.
 PENTING: Modul ini TIDAK BOLEH mengimpor app.database, app.models, app.routers, app.services.
 """
 from dataclasses import dataclass, field
-from typing import Callable, Optional, List, Protocol
+from datetime import date
+from typing import Callable, Optional, List, Dict, Any, Protocol
 
 
 @dataclass(frozen=True)
 class PdfCandidate:
     """Kandidat berkas PDF yang ditemukan saat pemindaian situs."""
-    url: str                 # sudah dinormalisasi
-    filename: str            # dari path URL / Content-Disposition, sudah di-unquote
-    size_bytes: Optional[int]
-    found_on_page: str
-    depth: int               # 1 = ditemukan di halaman awal (atau halaman paging-nya)
+    url: str                                         # sudah dinormalisasi
+    filename: str                                    # dari path URL / Content-Disposition / metadata
+    size_bytes: Optional[int] = None
+    found_on_page: str = ""
+    depth: int = 1                                   # 1 = ditemukan di halaman awal (atau halaman paging-nya)
+    document_title: Optional[str] = None             # Judul regulasi / nama dokumen di situs
+    detail_url: Optional[str] = None                 # Halaman detail tempat lampiran ditemukan
+    final_url: Optional[str] = None                  # URL akhir setelah redirect
+    doc_kind: Optional[str] = "utama"                # utama | abstrak | faq | lampiran | lainnya
+    regulation_number: Optional[str] = None          # Nomor regulasi
+    regulation_type: Optional[str] = None            # Jenis regulasi (dinormalisasi)
+    bidang: Optional[str] = None                     # Sektor / bidang regulasi
+    sub_bidang: Optional[str] = None                 # Sub-sektor regulasi
+    release_date: Optional[date] = None              # Tanggal penetapan / berlaku
+    size_source: Optional[str] = "unknown"           # listing | head | range | unknown
+    source_path: Optional[str] = None                # Jalur folder relatif (OneDrive)
 
 
 @dataclass
@@ -24,6 +36,8 @@ class ScanResult:
     pages_visited: int = 0
     errors: List[str] = field(default_factory=list)  # pesan Indonesia
     truncated: bool = False                          # true bila kena batas halaman/kandidat
+    blocked: bool = False                            # true bila terdeteksi captcha / Cloudflare / WAF
+    stats: Dict[str, Any] = field(default_factory=dict)  # statistik ringkasan pemindaian
 
 
 @dataclass

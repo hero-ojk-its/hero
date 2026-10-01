@@ -45,6 +45,7 @@ class ScrapingSourceCreate(BaseModel):
     name: str
     url: str
     source_type: JenisSumber = JenisSumber.situs_web
+    crawler_adapter: Optional[str] = None
     crawl_depth: Optional[int] = None
     recursive: bool = True
     default_access_classification: Optional[KlasifikasiAkses] = None
@@ -68,8 +69,6 @@ class ScrapingSourceCreate(BaseModel):
             if self.default_access_classification is None:
                 self.default_access_classification = KlasifikasiAkses.non_publik
         elif self.source_type == JenisSumber.onedrive_public:
-            if self.crawl_depth is not None:
-                raise ValueError("Kedalaman crawling (crawl_depth) harus bernilai NULL untuk jenis sumber OneDrive.")
             if self.default_access_classification is None:
                 self.default_access_classification = KlasifikasiAkses.non_publik
         return self
@@ -80,6 +79,7 @@ class ScrapingSourceUpdate(BaseModel):
     name: Optional[str] = None
     url: Optional[str] = None
     source_type: Optional[JenisSumber] = None
+    crawler_adapter: Optional[str] = None
     crawl_depth: Optional[int] = None
     recursive: Optional[bool] = None
     default_access_classification: Optional[KlasifikasiAkses] = None
@@ -93,7 +93,7 @@ class ScrapingSourceUpdate(BaseModel):
         if self.source_type == JenisSumber.situs_web:
             if self.crawl_depth is not None and not (1 <= self.crawl_depth <= 5):
                 raise ValueError("Kedalaman crawling (crawl_depth) untuk situs web harus bernilai antara 1 dan 5.")
-        elif self.source_type in (JenisSumber.folder_lokal, JenisSumber.onedrive_public):
+        elif self.source_type == JenisSumber.folder_lokal:
             if self.crawl_depth is not None:
                 raise ValueError(f"Kedalaman crawling (crawl_depth) harus bernilai NULL untuk jenis sumber {self.source_type.value}.")
         return self
@@ -114,6 +114,7 @@ class ScrapingSourceResponse(BaseModel):
     url: str
     address: Optional[str] = None
     source_type: JenisSumber
+    crawler_adapter: Optional[str] = None
     crawl_depth: Optional[int] = None
     recursive: bool = True
     default_access_classification: KlasifikasiAkses

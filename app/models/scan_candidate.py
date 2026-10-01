@@ -9,6 +9,7 @@ from sqlalchemy import (
     String,
     Boolean,
     Text,
+    Date,
     ForeignKey,
     Enum as SQLEnum,
     UniqueConstraint,
@@ -62,6 +63,63 @@ class ScanCandidate(Base):
         Text,
         nullable=True,
         comment="URL halaman tempat tautan PDF ini ditemukan",
+    )
+    document_title = Column(
+        String(500),
+        nullable=True,
+        comment="Nama dokumen / judul regulasi yang tertera di situs",
+    )
+    detail_url = Column(
+        Text,
+        nullable=True,
+        comment="Halaman detail tempat lampiran ditemukan",
+    )
+    final_url = Column(
+        Text,
+        nullable=True,
+        comment="URL akhir setelah mengikuti redirect",
+    )
+    doc_kind = Column(
+        String(30),
+        nullable=True,
+        default="utama",
+        comment="Jenis/peran dokumen: utama | abstrak | faq | lampiran | lainnya",
+    )
+    regulation_number = Column(
+        String(255),
+        nullable=True,
+        comment="Nomor regulasi yang terbaca tanpa membuka PDF",
+    )
+    regulation_type = Column(
+        String(100),
+        nullable=True,
+        comment="Jenis regulasi ternormalisasi",
+    )
+    bidang = Column(
+        String(100),
+        nullable=True,
+        comment="Sektor/bidang regulasi yang terbaca dari situs",
+    )
+    sub_bidang = Column(
+        String(100),
+        nullable=True,
+        comment="Sub-sektor regulasi yang terbaca dari situs",
+    )
+    release_date = Column(
+        Date,
+        nullable=True,
+        comment="Tanggal rilis/penetapan regulasi yang terbaca dari situs",
+    )
+    size_source = Column(
+        String(10),
+        nullable=True,
+        default="unknown",
+        comment="Sumber penentuan ukuran berkas: listing | head | range | unknown",
+    )
+    source_path = Column(
+        Text,
+        nullable=True,
+        comment="Jalur folder relatif sumber, misal untuk OneDrive",
     )
     depth = Column(
         Integer,

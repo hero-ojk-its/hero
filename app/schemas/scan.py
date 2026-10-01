@@ -2,7 +2,7 @@
 app/schemas/scan.py
 Skema Pydantic untuk modul Alur Pindai Situs (Scan -> Bandingkan -> Centang -> Tarik).
 """
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, ConfigDict, Field
 from app.models.enums import StatusPindai, TujuanTarik, StatusKandidat
@@ -10,9 +10,10 @@ from app.models.enums import StatusPindai, TujuanTarik, StatusKandidat
 
 class ScanCreate(BaseModel):
     """Payload untuk memulai pemindaian situs baru."""
-    source_id: int = Field(..., description="ID sumber scraping situs_web")
+    source_id: int = Field(..., description="ID sumber scraping situs_web atau onedrive_public")
     crawl_depth: Optional[int] = Field(None, ge=1, le=5, description="Override kedalaman crawling (1-5)")
     max_pages: Optional[int] = Field(None, ge=1, description="Override batas halaman yang dikunjungi")
+    crawler_adapter: Optional[str] = Field(None, description="Override crawler adapter (sharepoint_postback, jdih_api, onedrive_share, generic_html)")
 
 
 class ScanSummaryCount(BaseModel):
@@ -41,6 +42,17 @@ class CandidateResponse(BaseModel):
     filename: str
     size_bytes: Optional[int] = None
     found_on_page: Optional[str] = None
+    document_title: Optional[str] = None
+    detail_url: Optional[str] = None
+    final_url: Optional[str] = None
+    doc_kind: Optional[str] = "utama"
+    regulation_number: Optional[str] = None
+    regulation_type: Optional[str] = None
+    bidang: Optional[str] = None
+    sub_bidang: Optional[str] = None
+    release_date: Optional[date] = None
+    size_source: Optional[str] = "unknown"
+    source_path: Optional[str] = None
     depth: int
     match_status: StatusKandidat
     match_reason: Optional[str] = None
@@ -81,11 +93,14 @@ class ScanSessionResponse(BaseModel):
     crawl_depth: int
     mode: str
     crawler_name: Optional[str] = None
+    crawler_adapter: Optional[str] = None
     status: StatusPindai
     cancel_requested: bool
+    blocked: bool = False
     pages_visited: int
     candidates_summary: ScanSummaryCount
     truncated: bool
+    stats: Optional[Dict[str, Any]] = None
     errors: List[str] = []
     error_message: Optional[str] = None
     destination: Optional[TujuanTarik] = None
@@ -173,6 +188,17 @@ class InternalCandidateIn(BaseModel):
     size_bytes: Optional[int] = None
     found_on_page: Optional[str] = None
     depth: int = 1
+    document_title: Optional[str] = None
+    detail_url: Optional[str] = None
+    final_url: Optional[str] = None
+    doc_kind: Optional[str] = "utama"
+    regulation_number: Optional[str] = None
+    regulation_type: Optional[str] = None
+    bidang: Optional[str] = None
+    sub_bidang: Optional[str] = None
+    release_date: Optional[date] = None
+    size_source: Optional[str] = "unknown"
+    source_path: Optional[str] = None
 
 
 class InternalCandidatesBatchIn(BaseModel):

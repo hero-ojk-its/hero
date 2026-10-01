@@ -1,7 +1,7 @@
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-APP_VERSION = "0.8.0"
+APP_VERSION = "0.10.0"
 
 
 class Settings(BaseSettings):

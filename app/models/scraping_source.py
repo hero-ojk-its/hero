@@ -39,6 +39,11 @@ class ScrapingSource(Base):
         index=True,
         comment="Jenis sumber: situs_web | folder_lokal | onedrive_public"
     )
+    crawler_adapter = Column(
+        String(50),
+        nullable=True,
+        comment="Adapter crawler khusus: sharepoint_postback | jdih_api | onedrive_share | generic_html"
+    )
     crawl_depth = Column(
         Integer,
         nullable=True,

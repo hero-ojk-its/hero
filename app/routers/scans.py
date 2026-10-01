@@ -7,7 +7,7 @@ import io
 from typing import Optional, List, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status, BackgroundTasks
 from fastapi.responses import StreamingResponse
-from sqlalchemy import desc
+from sqlalchemy import desc, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -80,11 +80,14 @@ def _build_session_response(session: ScanSession, db: Session, request: Optional
         crawl_depth=session.crawl_depth,
         mode=session.mode,
         crawler_name=session.crawler_name,
+        crawler_adapter=session.crawler_adapter,
         status=session.status,
         cancel_requested=session.cancel_requested,
+        blocked=session.blocked or False,
         pages_visited=session.pages_visited,
         candidates_summary=summary,
         truncated=session.truncated,
+        stats=session.stats,
         errors=session.errors or [],
         error_message=session.error_message,
         destination=session.destination,
@@ -206,7 +209,9 @@ def list_scan_candidates(
     match_status: Optional[StatusKandidat] = Query(None, description="Filter status kecocokan KB"),
     selected: Optional[bool] = Query(None, description="Filter status centang"),
     pull_outcome: Optional[str] = Query(None, description="Filter hasil penarikan"),
-    q: Optional[str] = Query(None, description="Pencarian nama berkas (case-insensitive)"),
+    doc_kind: Optional[str] = Query(None, description="Filter peran/kategori dokumen (utama, abstrak, faq, lampiran, lainnya)"),
+    bidang: Optional[str] = Query(None, description="Filter bidang/sektor regulasi"),
+    q: Optional[str] = Query(None, description="Pencarian nama berkas, judul dokumen, atau URL"),
     page: Optional[int] = Query(None, ge=1, description="Nomor halaman (opsional, kompatibilitas)"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
@@ -233,6 +238,10 @@ def list_scan_candidates(
         query = query.filter(ScanCandidate.match_status == match_status)
     if selected is not None:
         query = query.filter(ScanCandidate.selected == selected)
+    if doc_kind is not None and doc_kind.strip():
+        query = query.filter(ScanCandidate.doc_kind == doc_kind.strip())
+    if bidang is not None and bidang.strip():
+        query = query.filter(ScanCandidate.bidang.ilike(f"%{bidang.strip()}%"))
     if pull_outcome is not None and pull_outcome.strip():
         val = pull_outcome.strip().lower()
         outcome_aliases = {
@@ -248,7 +257,14 @@ def list_scan_candidates(
         allowed = outcome_aliases.get(val, [val])
         query = query.filter(ScanCandidate.pull_outcome.in_(allowed))
     if q and q.strip():
-        query = query.filter(ScanCandidate.filename.ilike(f"%{q.strip()}%"))
+        term = f"%{q.strip()}%"
+        query = query.filter(
+            or_(
+                ScanCandidate.filename.ilike(term),
+                ScanCandidate.document_title.ilike(term),
+                ScanCandidate.url.ilike(term),
+            )
+        )
 
     total = query.count()
     effective_skip = (page - 1) * limit if page is not None and page >= 1 else skip
@@ -272,6 +288,17 @@ def list_scan_candidates(
                 filename=c.filename,
                 size_bytes=c.size_bytes,
                 found_on_page=c.found_on_page,
+                document_title=c.document_title,
+                detail_url=c.detail_url,
+                final_url=c.final_url,
+                doc_kind=c.doc_kind or "utama",
+                regulation_number=c.regulation_number,
+                regulation_type=c.regulation_type,
+                bidang=c.bidang,
+                sub_bidang=c.sub_bidang,
+                release_date=c.release_date,
+                size_source=c.size_source or "unknown",
+                source_path=c.source_path,
                 depth=c.depth,
                 match_status=c.match_status,
                 match_reason=c.match_reason,

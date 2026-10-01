@@ -79,8 +79,8 @@ class SourceRunner:
 
         if source.source_type == JenisSumber.onedrive_public:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Konektor OneDrive langsung belum tersedia pada Fase 1. Sinkronkan folder OneDrive ke folder lokal lalu daftarkan sebagai Folder Lokal.",
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Sumber OneDrive publik dijalankan melalui alur pindai: POST /api/v1/scans.",
             )
 
         # Cek apakah ada job yang sedang berjalan/antrian untuk sumber ini

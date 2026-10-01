@@ -50,7 +50,7 @@ from app.schemas.scan import (
 )
 from app.services.file_validation import sanitize_filename, validate_pdf, FileValidationError
 from app.services.storage_service import get_storage_service, StorageService
-from app.services.ingest_service import IngestService, IngestItem, IngestOptions, ItemOutcome
+from app.services.ingest_service import IngestService, IngestItem, IngestOptions, DocumentMetadataInput, ItemOutcome
 from app.services.naming_service import (
     build_standard_filename,
     NamingInput,
@@ -102,10 +102,10 @@ class ScanService:
                 detail="Sumber nonaktif.",
             )
 
-        if source.source_type != JenisSumber.situs_web:
+        if source.source_type not in (JenisSumber.situs_web, JenisSumber.onedrive_public):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=f"Sumber bertipe '{source.source_type.value}' bukan merupakan situs_web. Pemindaian hanya untuk situs web.",
+                detail=f"Sumber bertipe '{source.source_type.value}' bukan merupakan situs_web atau onedrive_public. Pemindaian hanya untuk situs web dan OneDrive publik.",
             )
 
         # 2. Cek apakah ada sesi pemindaian yang masih aktif untuk sumber ini
@@ -157,9 +157,12 @@ class ScanService:
             start_url=source.url,
             crawl_depth=effective_depth,
             mode=settings.crawler_backend,
+            crawler_adapter=payload.crawler_adapter or source.crawler_adapter,
             status=StatusPindai.antrian,
             requested_by_user_id=actor_user_id,
             errors=[],
+            blocked=False,
+            stats={},
         )
         self.db.add(session)
         self.db.flush()
@@ -232,7 +235,14 @@ class ScanService:
                     return
 
                 # 3. Dapatkan crawler aktif
-                crawler = get_crawler(settings)
+                try:
+                    crawler = get_crawler(
+                        settings,
+                        source_url=session.start_url,
+                        crawler_adapter=session.crawler_adapter or (source.crawler_adapter if source else None),
+                    )
+                except TypeError:
+                    crawler = get_crawler(settings)
                 if not crawler:
                     session.status = StatusPindai.gagal
                     session.error_message = "Tidak ada crawler aktif yang terkonfigurasi pada sistem."
@@ -291,6 +301,17 @@ class ScanService:
                         size_bytes=cand.size_bytes,
                         found_on_page=cand.found_on_page,
                         depth=cand.depth,
+                        document_title=cand.document_title,
+                        detail_url=cand.detail_url,
+                        final_url=cand.final_url,
+                        doc_kind=cand.doc_kind or "utama",
+                        regulation_number=cand.regulation_number,
+                        regulation_type=cand.regulation_type,
+                        bidang=cand.bidang,
+                        sub_bidang=cand.sub_bidang,
+                        release_date=cand.release_date,
+                        size_source=cand.size_source or "unknown",
+                        source_path=cand.source_path,
                     )
                     db.add(candidate_row)
 
@@ -303,6 +324,8 @@ class ScanService:
                 session.pages_visited = scan_res.pages_visited
                 session.truncated = scan_res.truncated
                 session.errors = scan_res.errors
+                session.blocked = scan_res.blocked
+                session.stats = scan_res.stats
                 session.scanned_at = datetime.now(timezone.utc)
                 session.status = StatusPindai.siap_dipilih
 
@@ -634,7 +657,17 @@ class ScanService:
                 db.commit()
 
                 # Gunakan crawler untuk mengunduh berkas
-                crawler = get_crawler(settings) or SimpleHttpCrawler(allow_private=settings.crawl_allow_private_networks)
+                try:
+                    crawler = (
+                        get_crawler(
+                            settings,
+                            source_url=session.start_url,
+                            crawler_adapter=session.crawler_adapter or (source.crawler_adapter if source else None),
+                        )
+                        or SimpleHttpCrawler(allow_private=settings.crawl_allow_private_networks)
+                    )
+                except TypeError:
+                    crawler = get_crawler(settings) or SimpleHttpCrawler(allow_private=settings.crawl_allow_private_networks)
                 storage = get_storage_service()
                 ingest_svc = IngestService(db, storage)
 
@@ -718,9 +751,17 @@ class ScanService:
                             content=fetched.content,
                             source_url=norm_source_url,
                         )
+                        doc_meta = DocumentMetadataInput(
+                            title=cand.document_title or cand.filename,
+                            regulation_number=cand.regulation_number,
+                            regulation_type=cand.regulation_type,
+                            release_date=cand.release_date,
+                            bidang=cand.bidang,
+                        )
                         opts = IngestOptions(
                             access_classification=source.default_access_classification if source else KlasifikasiAkses.publik,
                             document_role=source.default_document_role if source else PeranDokumen.corpus_eksisting,
+                            metadata=doc_meta,
                             naming_format=session.naming_format,
                             naming_separator=session.naming_separator,
                         )
@@ -1054,6 +1095,17 @@ class ScanService:
                 existing.size_bytes = cand_in.size_bytes
                 existing.depth = cand_in.depth
                 existing.found_on_page = cand_in.found_on_page
+                existing.document_title = cand_in.document_title
+                existing.detail_url = cand_in.detail_url
+                existing.final_url = cand_in.final_url
+                existing.doc_kind = cand_in.doc_kind or "utama"
+                existing.regulation_number = cand_in.regulation_number
+                existing.regulation_type = cand_in.regulation_type
+                existing.bidang = cand_in.bidang
+                existing.sub_bidang = cand_in.sub_bidang
+                existing.release_date = cand_in.release_date
+                existing.size_source = cand_in.size_source or "unknown"
+                existing.source_path = cand_in.source_path
             else:
                 new_cand = ScanCandidate(
                     scan_id=scan_id,
@@ -1063,6 +1115,17 @@ class ScanService:
                     size_bytes=cand_in.size_bytes,
                     found_on_page=cand_in.found_on_page,
                     depth=cand_in.depth,
+                    document_title=cand_in.document_title,
+                    detail_url=cand_in.detail_url,
+                    final_url=cand_in.final_url,
+                    doc_kind=cand_in.doc_kind or "utama",
+                    regulation_number=cand_in.regulation_number,
+                    regulation_type=cand_in.regulation_type,
+                    bidang=cand_in.bidang,
+                    sub_bidang=cand_in.sub_bidang,
+                    release_date=cand_in.release_date,
+                    size_source=cand_in.size_source or "unknown",
+                    source_path=cand_in.source_path,
                 )
                 self.db.add(new_cand)
 

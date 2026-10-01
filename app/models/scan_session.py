@@ -115,6 +115,23 @@ class ScanSession(Base):
         nullable=False,
         comment="True jika pemindaian terpotong karena mencapai batas halaman/kandidat",
     )
+    blocked = Column(
+        Boolean,
+        default=False,
+        server_default=text("false"),
+        nullable=False,
+        comment="True jika pemindaian terhenti akibat captcha/Cloudflare/WAF",
+    )
+    stats = Column(
+        JSONB,
+        nullable=True,
+        comment="Statistik detail hasil pemindaian (regulations_found, pdfs_found, per doc_kind, pages_visited, requests_made, duration_seconds)",
+    )
+    crawler_adapter = Column(
+        String(50),
+        nullable=True,
+        comment="Adapter crawler yang mengeksekusi (sharepoint_postback, jdih_api, onedrive_share, generic_html)",
+    )
     errors = Column(
         JSONB,
         default=list,
