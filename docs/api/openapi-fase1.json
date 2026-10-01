@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "HERO Backend API",
-    "version": "0.8.0"
+    "version": "0.10.0"
   },
   "paths": {
     "/api/v1/auth/login": {
@@ -2916,6 +2916,42 @@
             "description": "Filter hasil penarikan"
           },
           {
+            "name": "doc_kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter peran/kategori dokumen (utama, abstrak, faq, lampiran, lainnya)",
+              "title": "Doc Kind"
+            },
+            "description": "Filter peran/kategori dokumen (utama, abstrak, faq, lampiran, lainnya)"
+          },
+          {
+            "name": "bidang",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter bidang/sektor regulasi",
+              "title": "Bidang"
+            },
+            "description": "Filter bidang/sektor regulasi"
+          },
+          {
             "name": "q",
             "in": "query",
             "required": false,
@@ -2928,10 +2964,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Pencarian nama berkas (case-insensitive)",
+              "description": "Pencarian nama berkas, judul dokumen, atau URL",
               "title": "Q"
             },
-            "description": "Pencarian nama berkas (case-insensitive)"
+            "description": "Pencarian nama berkas, judul dokumen, atau URL"
           },
           {
             "name": "page",
@@ -3853,6 +3889,130 @@
               }
             ],
             "title": "Found On Page"
+          },
+          "document_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Title"
+          },
+          "detail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail Url"
+          },
+          "final_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Url"
+          },
+          "doc_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Kind",
+            "default": "utama"
+          },
+          "regulation_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Number"
+          },
+          "regulation_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Type"
+          },
+          "bidang": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bidang"
+          },
+          "sub_bidang": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sub Bidang"
+          },
+          "release_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Date"
+          },
+          "size_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Source",
+            "default": "unknown"
+          },
+          "source_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Path"
           },
           "depth": {
             "type": "integer",
@@ -4860,6 +5020,130 @@
             "type": "integer",
             "title": "Depth",
             "default": 1
+          },
+          "document_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Title"
+          },
+          "detail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail Url"
+          },
+          "final_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Url"
+          },
+          "doc_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Kind",
+            "default": "utama"
+          },
+          "regulation_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Number"
+          },
+          "regulation_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Type"
+          },
+          "bidang": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bidang"
+          },
+          "sub_bidang": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sub Bidang"
+          },
+          "release_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Date"
+          },
+          "size_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Source",
+            "default": "unknown"
+          },
+          "source_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Path"
           }
         },
         "type": "object",
@@ -5574,7 +5858,7 @@
           "source_id": {
             "type": "integer",
             "title": "Source Id",
-            "description": "ID sumber scraping situs_web"
+            "description": "ID sumber scraping situs_web atau onedrive_public"
           },
           "crawl_depth": {
             "anyOf": [
@@ -5602,6 +5886,18 @@
             ],
             "title": "Max Pages",
             "description": "Override batas halaman yang dikunjungi"
+          },
+          "crawler_adapter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crawler Adapter",
+            "description": "Override crawler adapter (sharepoint_postback, jdih_api, onedrive_share, generic_html)"
           }
         },
         "type": "object",
@@ -5792,12 +6088,28 @@
             ],
             "title": "Crawler Name"
           },
+          "crawler_adapter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crawler Adapter"
+          },
           "status": {
             "$ref": "#/components/schemas/StatusPindai"
           },
           "cancel_requested": {
             "type": "boolean",
             "title": "Cancel Requested"
+          },
+          "blocked": {
+            "type": "boolean",
+            "title": "Blocked",
+            "default": false
           },
           "pages_visited": {
             "type": "integer",
@@ -5809,6 +6121,18 @@
           "truncated": {
             "type": "boolean",
             "title": "Truncated"
+          },
+          "stats": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stats"
           },
           "errors": {
             "items": {
@@ -6025,6 +6349,17 @@
             "$ref": "#/components/schemas/JenisSumber",
             "default": "situs_web"
           },
+          "crawler_adapter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crawler Adapter"
+          },
           "crawl_depth": {
             "anyOf": [
               {
@@ -6121,6 +6456,17 @@
           },
           "source_type": {
             "$ref": "#/components/schemas/JenisSumber"
+          },
+          "crawler_adapter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crawler Adapter"
           },
           "crawl_depth": {
             "anyOf": [
@@ -6321,6 +6667,17 @@
                 "type": "null"
               }
             ]
+          },
+          "crawler_adapter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crawler Adapter"
           },
           "crawl_depth": {
             "anyOf": [

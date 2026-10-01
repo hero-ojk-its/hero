@@ -1,183 +1,125 @@
-# Kontrak Adapter Crawler HERO (Tim Data/ML)
+# Kontrak Adapter Crawler & Web Scanning — HERO Backend (Langkah 10)
 
-Dokumen ini ditujukan untuk tim Data/ML (Fathir) yang akan mengembangkan crawler tingkat lanjut (penanganan JavaScript dinamis, SPA, anti-bot Cloudflare, autentikasi SharePoint DPEA, dll.).
-
-HERO Backend menyediakan 2 opsi integrasi yang saling kompatibel:
-- **Opsi A (Modul Python Terpasang):** Berjalan dalam runtime backend yang sama via plugin/adapter.
-- **Opsi B (Layanan Mikro / Push Mode):** Crawler berjalan sebagai microservice independen dan berkomunikasi via API internal.
+Dokumen ini mendefinisikan arsitektur, antarmuka standar (contract), mekanisme registrasi, dan panduan penambahan adapter crawler untuk pemindaian situs web regulasi dan penyimpanan cloud di HERO Backend.
 
 ---
 
-## 1. Batasan & Aturan Utama (Arsitektur §4.3, RA-06)
+## 1. Prinsip Desain Crawler
 
-1. **Crawler Tidak Menyentuh Database:** Crawler dilarang mengimpor atau mengakses database backend (`app.database`, `app.models`, `app.services`, `app.routers`). Seluruh perbandingan duplikasi, status, dan penyimpanan dikelola oleh Backend.
-2. **Perlindungan SSRF:** Semua URL yang dijelajahi dan ditarik wajib melalui validasi keamanan. Backend menolak alamat privat/loopback/link-local (seperti `127.0.0.1`, `10.0.0.0/8`, `169.254.169.254`, `::1`).
-3. **Aturan Kedalaman & Paging:**
-   - Kedalaman (*depth*) dihitung berdasarkan tingkat path/slash URL awal.
-   - Halaman navigasi/paging (misal `?page=2`, `rel="next"`, angka pagination) **tidak menambah kedalaman**, namun tetap dihitung ke batas `max_pages`.
+1. **Ringan & Cepat (Zero Headless Browser)**: Seluruh pemindaian berjalan melalui protokol HTTP murni (`httpx`) tanpa dependensi Playwright/Selenium, sehingga ramah sumber daya (RAM < 50MB, eksekusi dalam hitungan detik).
+2. **Tanpa Unduh Penuh untuk Deteksi Ukuran**: Ukuran berkas dideteksi secara presisi melalui probe `HEAD` (Content-Length), fallback `GET Range: bytes=0-0` (Content-Range), atau metadata listing folder cloud (`size_source="listing"`).
+3. **Deteksi Proteksi & Keamanan (WAF / Captcha / SSRF)**:
+   - **SSRF Guard**: Memblokir IP privat/loopback/cloud metadata (`127.0.0.1`, `10.0.0.0/8`, `169.254.169.254`, `::1`) saat pemindaian publik.
+   - **Captcha / WAF Marker**: Mendeteksi halaman tantangan Cloudflare (`cf-chl`, `cf-ray`, `503 Service Unavailable`), reCAPTCHA (`g-recaptcha`, `recaptcha/api.js`), hCaptcha, dan WAF blokir. Mengembalikan flag `blocked=True` dan kode error `terblokir_captcha` tanpa membuat server crash.
+4. **Tahan Paging & Loop Detection**:
+   - Mendeteksi pagination standar HTML (nomor urut, `Berikutnya` / `Next`, `Terakhir`).
+   - Mendeteksi ASP.NET WebForms form postback (`__EVENTTARGET`, `__VIEWSTATE`, `__EVENTVALIDATION`).
+   - Mencegah loop siklik tak hingga dengan pelacakan URL yang telah dikunjungi dan signature isi halaman (content hash).
 
 ---
 
-## 2. Opsi A: Adapter Modul Python (`external_module`)
+## 2. Struktur Data Standar (Model Kontrak)
 
-### 2.1 Interface Protocol & Dataclass
+### 2.1 `PdfCandidate` (Kandidat Dokumen)
 
-Modul kustom wajib mengimplementasikan protokol `Crawler` dan memanfaatkan dataclass berikut dari `app.crawlers.base`:
+Setiap adapter **wajib** menghasilkan daftar `PdfCandidate` dengan skema terpadu berikut:
+
+| Field | Tipe | Deskripsi | Contoh |
+|---|---|---|---|
+| `url` | `str` | URL absolut unduhan berkas PDF (ternormalisasi) | `https://ojk.go.id/.../POJK%2017.pdf` |
+| `filename` | `str` | Nama berkas PDF | `POJK 17 Tahun 2023.pdf` |
+| `size_bytes` | `Optional[int]` | Ukuran berkas dalam bytes (bila berhasil dideteksi) | `1048576` |
+| `size_source` | `str` | Sumber perolehan ukuran: `head`, `range`, `listing`, `unknown` | `head` |
+| `found_on_page` | `str` | Halaman di mana tautan ditemukan | `https://ojk.go.id/id/regulasi/Pages/...` |
+| `depth` | `int` | Kedalaman penelusuran (1-indexed) | `1` |
+| `document_title` | `Optional[str]` | Judul resmi dokumen/regulasi | `Penerapan Tata Kelola Bagi Bank Umum` |
+| `detail_url` | `Optional[str]` | URL halaman detail regulasi | `https://ojk.go.id/id/regulasi/Pages/...` |
+| `final_url` | `Optional[str]` | URL akhir setelah redirect | `https://ojk.go.id/.../POJK%2017.pdf` |
+| `doc_kind` | `str` | Peran berkas: `utama`, `abstrak`, `faq`, `lampiran`, `lainnya` | `utama` |
+| `regulation_number` | `Optional[str]` | Nomor regulasi resmi | `POJK 17/POJK.03/2023` |
+| `regulation_type` | `Optional[str]` | Jenis regulasi ternormalisasi: `POJK`, `SEOJK`, `PADK`, dll. | `POJK` |
+| `bidang` | `Optional[str]` | Bidang / Sektor regulasi | `Perbankan` |
+| `sub_bidang` | `Optional[str]` | Sub bidang regulasi | `Bank Umum` |
+| `release_date` | `Optional[date]` | Tanggal penetapan / berlakunya regulasi | `2023-09-14` |
+| `source_path` | `Optional[str]` | Jalur folder relatif sumber (khusus OneDrive / struktur folder) | `perbankan/2023/POJK 17.pdf` |
+
+### 2.2 `ScanResult` (Hasil Pemindaian)
+
+| Field | Tipe | Deskripsi |
+|---|---|---|
+| `candidates` | `List[PdfCandidate]` | Daftar seluruh kandidat dokumen PDF yang ditemukan |
+| `pages_visited` | `int` | Jumlah halaman HTML / endpoint API / folder yang dikunjungi |
+| `errors` | `List[str]` | Daftar pesan error non-fatal atau peringatan saat pemindaian |
+| `truncated` | `bool` | `true` jika pemindaian berhenti karena batas `max_pages` / `max_candidates` |
+| `blocked` | `bool` | `true` jika pemindaian terdeteksi terblokir Captcha / WAF / Cloudflare |
+| `stats` | `Dict[str, Any]` | Metrik: `regulations_found`, `pdfs_found`, `by_doc_kind`, `duration_seconds`, dll. |
+
+---
+
+## 3. Daftar Adapter Tersedia
+
+### 3.1 `GenericHtmlCrawler` (`generic_html`)
+- **Cocok untuk**: Situs web umum HTML statis / dinamis standar.
+- **Fitur**: Paging link (`<a>`), recursive link follower dengan pembatas domain, redirect resolver hingga 10 hop, meta refresh handling, SSRF guard, dan deteksi proteksi Cloudflare/reCAPTCHA.
+
+### 3.2 `SharepointPostbackCrawler` (`sharepoint_postback`)
+- **Cocok untuk**: Portal Regulasi OJK (`https://ojk.go.id/id/regulasi/default.aspx`) dan situs ASP.NET WebForms SharePoint.
+- **Fitur**:
+  - Penanganan postback ASP.NET (`__doPostBack`) dengan ekstraksi token `__VIEWSTATE`, `__EVENTVALIDATION`, `__EVENTTARGET`.
+  - Pengecualian otomatis tombol submit pencarian agar tidak memicu reset filter.
+  - Parser halaman detail regulasi dengan penarikan multi-lampiran (dokumen regulasi utama, lembar abstrak, dan tanya jawab / FAQ) serta ekstraksi metadata tabel (Nomor, Jenis, Sektor, Sub-Sektor, Tanggal).
+
+### 3.3 `JdihApiCrawler` (`jdih_api`)
+- **Cocok untuk**: JDIH OJK (`https://jdih.ojk.go.id/`).
+- **Fitur**:
+  - Konsumsi langsung DataTables JSON API (`/Web/ViewPeraturanHome/ListDataPeraturan`).
+  - Paging efisien berbasis parameter `iDisplayStart` dan `iDisplayLength`.
+  - Ekstraksi metadata langsung dari kolom JSON (`Nomor`, `Bentuk/Jenis`, `Sektor`, `Tanggal Pengundangan`).
+  - URL unduh langsung via `/Download/{guid}/{filename}` dengan probing HEAD.
+
+### 3.4 `OneDriveShareCrawler` (`onedrive_share`)
+- **Cocok untuk**: Tautan berbagi folder publik OneDrive / SharePoint (`https://oneojk-my.sharepoint.com/:f:/g/personal/...`).
+- **Fitur**:
+  - Inisialisasi guest auth session otomatis melalui tautan berbagi publik.
+  - Penelusuran pohon folder secara rekursif via SharePoint REST API (`/_api/web/GetFolderByServerRelativeUrl(...)`).
+  - Ekstraksi ukuran eksak langsung dari atribut listing (`Length`), jalur hierarki folder (`source_path`), dan pembuatan tautan unduhan langsung `/_layouts/15/download.aspx?SourceUrl=...`.
+
+---
+
+## 4. Mekanisme Registrasi dan Pemilihan Adapter
+
+Adapter dipilih secara otomatis berdasarkan URL target (auto-detect) atau dapat ditentukan secara eksplisit melalui parameter `crawler_adapter`:
 
 ```python
-from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Protocol
+from app.crawlers.registry import get_crawler, detect_crawler_adapter
 
-@dataclass(frozen=True)
-class PdfCandidate:
-    url: str                 # URL kandidat (akan dinormalisasi)
-    filename: str            # Nama berkas dari URL path / Content-Disposition
-    size_bytes: int | None   # Ukuran berkas dalam bytes (bisa None bila tidak diketahui)
-    found_on_page: str       # URL halaman tempat tautan ditemukan
-    depth: int               # Kedalaman penemuan (1 = halaman awal/paging-nya)
+# Auto-detect berdasarkan URL:
+adapter_name = detect_crawler_adapter("https://ojk.go.id/id/regulasi/default.aspx")
+# -> "sharepoint_postback"
 
-@dataclass
-class ScanResult:
-    candidates: list[PdfCandidate]
-    pages_visited: int
-    errors: list[str]        # Pesan kesalahan/peringatan dalam Bahasa Indonesia
-    truncated: bool          # True jika mencapai limit max_pages atau max_candidates
-
-@dataclass
-class FetchedFile:
-    content: bytes
-    filename: str
-    final_url: str
-    content_type: str | None
-
-class CrawlerError(Exception): ...
-class BlockedUrlError(CrawlerError): ...
-class FetchTooLargeError(CrawlerError): ...
-
-class Crawler(Protocol):
-    name: str
-
-    def scan(
-        self,
-        url: str,
-        depth: int,
-        *,
-        max_pages: int,
-        max_candidates: int,
-        progress: Callable[[int, int], None] | None = None,
-        should_cancel: Callable[[], bool] | None = None,
-    ) -> ScanResult:
-        """
-        Menjelajahi halaman web dan mengumpulkan kandidat PDF.
-        - progress(pages_visited, candidates_count) dipanggil secara berkala.
-        - should_cancel() diperiksa tiap halaman untuk mendeteksi pembatalan.
-        """
-        ...
-
-    def fetch(
-        self,
-        url: str,
-        *,
-        max_bytes: int,
-    ) -> FetchedFile:
-        """
-        Mengunduh berkas PDF target.
-        - Wajib melempar FetchTooLargeError bila ukuran melebihi max_bytes.
-        """
-        ...
+# Inisialisasi instance crawler:
+crawler = get_crawler(url="https://jdih.ojk.go.id/", adapter="jdih_api")
+scan_result = crawler.scan("https://jdih.ojk.go.id/", depth=5, max_pages=10)
 ```
-
-### 2.2 Cara Mengaktifkan Modul
-
-1. Pasang paket/modul Python Anda di environment backend.
-2. Konfigurasikan file `.env`:
-   ```env
-   CRAWLER_BACKEND=external_module
-   CRAWLER_MODULE=my_crawler_pkg.advanced_crawler:AdvancedSeleniumCrawler
-   ```
 
 ---
 
-## 3. Opsi B: Push Mode (Layanan Mikro Eksternal)
+## 5. Panduan Menambahkan Adapter Baru
 
-Dalam mode ini, backend HERO bertindak sebagai server antrean job, sedangkan worker crawler Data/ML melakukan polling/claiming job dan mengirimkan kandidat PDF secara bertahap.
+Untuk menambahkan adapter sumber regulasi baru (misal: Kementerian Keuangan, BI, Mahkamah Agung):
 
-Konfigurasi `.env`:
-```env
-CRAWLER_BACKEND=push
-INTERNAL_API_KEY=hero-internal-secret-key-change-in-production
-```
+1. **Buat Berkas Adapter**: Buat modul di `app/crawlers/<nama_adapter>.py`.
+2. **Implementasikan Antarmuka**:
+   ```python
+   class CustomPortalCrawler:
+       name: str = "custom_portal"
 
-### 3.1 Mengambil Antrean Sesi (`claim`)
+       def __init__(self, user_agent: str = ..., delay_seconds: float = 0.5, allow_private: bool = False, head_for_size: bool = True):
+           ...
 
-Worker crawler mengambil sesi pemindaian yang berstatus `antrian`.
-
-**Request:**
-`POST /api/v1/internal/scans/claim?limit=1`
-**Header:** `X-Internal-API-Key: <INTERNAL_API_KEY>`
-
-**Response (200 OK):**
-```json
-[
-  {
-    "scan_id": 1,
-    "start_url": "https://jdih.esdm.go.id",
-    "crawl_depth": 2,
-    "max_pages": 100,
-    "max_candidates": 2000
-  }
-]
-```
-
-### 3.2 Mengirimkan Kandidat Hasil Pindai (`candidates`)
-
-Worker crawler dapat mengirimkan hasil secara bertahap (batch streaming) atau sekaligus saat selesai.
-
-**Request:**
-`POST /api/v1/internal/scans/{scan_id}/candidates`
-**Header:** `X-Internal-API-Key: <INTERNAL_API_KEY>`
-
-**Body (Batch Parsial, `done: false`):**
-```json
-{
-  "candidates": [
-    {
-      "url": "https://jdih.esdm.go.id/storage/document/2026kmesdm365k.pdf",
-      "filename": "2026kmesdm365k.pdf",
-      "size_bytes": 879298,
-      "found_on_page": "https://jdih.esdm.go.id",
-      "depth": 1
-    }
-  ],
-  "pages_visited": 10,
-  "done": false,
-  "truncated": false,
-  "errors": []
-}
-```
-
-**Body (Selesai, `done: true`):**
-```json
-{
-  "candidates": [
-    {
-      "url": "https://jdih.esdm.go.id/storage/document/2026kmesdm369k.pdf",
-      "filename": "2026kmesdm369k.pdf",
-      "size_bytes": 7007305,
-      "found_on_page": "https://jdih.esdm.go.id/page/2",
-      "depth": 1
-    }
-  ],
-  "pages_visited": 25,
-  "done": true,
-  "truncated": false,
-  "errors": ["Halaman /private/ ditolak robots.txt"]
-}
-```
-
-**Perilaku Backend:**
-1. Backend melakukan normalisasi URL dan pemeriksaan SSRF untuk setiap kandidat yang masuk.
-2. Kandidat disimpan dengan idempotensi berbasis `url_hash`.
-3. Saat `done=true` diterima, backend secara otomatis menjalankan perbandingan duplikasi dengan Knowledge Base dan mengubah status sesi menjadi `siap_dipilih`.
-4. Jika terjadi kegagalan fatal pada worker crawler, kirim `"error": "Pesan error kegagalan"` agar status sesi berubah menjadi `gagal`.
+       def scan(self, url: str, depth: int = 1, *, max_pages: int = 200, max_candidates: int = 5000, progress=None, should_cancel=None) -> ScanResult:
+           ...
+   ```
+3. **Daftarkan di `app/crawlers/registry.py`**:
+   Tambahkan kelas ke `CRAWLER_REGISTRY` dan tambahkan aturan pengenalan domain pada `detect_crawler_adapter`.
+4. **Tulis Unit Test**: Tambahkan pengujian skenario berbasis fixture di `tests/test_crawler_robust.py`.
