@@ -32,7 +32,7 @@ build/
 credentials.json
 
 # Data & artefak proses — dokumen peraturan tunduk NDA, tidak masuk repo
-data/
+
 dataset/
 corpus/
 storage/
