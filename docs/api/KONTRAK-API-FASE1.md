@@ -585,18 +585,22 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
 ### 7.1 Daftar, Filter & Pencarian Dokumen KB
 - **Method & Path:** `GET /api/v1/documents/`
 - **Query Params:**
-  - `q` (string, opsional): Kata kunci / frasa teks hukum (contoh: `modal inti bank umum`).
-  - `mode` (string, opsional): Mode full-text PostgreSQL: `phrase` (default, frasa urut) | `all` (semua kata) | `web` (boolean websearch).
-  - `highlight` (boolean, opsional): `true` (default) untuk menyertakan cuplikan teks dengan tag `<b>...</b>`.
-  - `bidang` (string, opsional): Filter sektor regulasi (contoh: `Perbankan`, `Pasar Modal`, `BMKS`, `IKNB`).
-  - `category_id` (integer, opsional): Filter kategori KB.
+  - `q` (string, opsional): Kata kunci / frasa teks hukum (contoh: `modal inti bank umum`). Field `highlight` pada respons otomatis terisi cuplikan teks dengan tag `<mark>…</mark>` apabila parameter `q` diisi.
+  - `mode` (string, opsional): Mode full-text PostgreSQL: `phrase` (default, frasa berurutan) | `all` (semua kata) | `web` (boolean websearch).
+  - `regulation_number` (string, opsional): Pencocokan nomor regulasi via trigram (contoh: `POJK 10/POJK.03/2026`).
   - `regulation_type` (string, opsional): Filter jenis regulasi (contoh: `POJK`, `SEOJK`, `UU`, `PP`).
-  - `year` (integer, opsional): Filter tahun regulasi.
-  - `status_keberlakuan` (string, opsional): `berlaku`, `dicabut`, `diubah`, `tidak_diketahui`.
-  - `regulation_number` (string, opsional): Pencocokan nomor regulasi (contoh: `POJK 10/POJK.03/2026`).
-  - `access_classification` (string, opsional): `publik`, `non_publik`.
-  - `document_role` (string, opsional): `corpus_eksisting`, `draft_kajian`.
-  - `skip` (integer, opsional): Offset paginasi (default `0`).
+  - `category_id` (integer, opsional): Filter ID kategori folder KB.
+  - `include_subcategories` (boolean, opsional): Sertakan subkategori jika `category_id` diisi (default `true`).
+  - `status_keberlakuan` (string / array, opsional): Filter status keberlakuan: `berlaku`, `dicabut`, `diubah`, `tidak_diketahui`.
+  - `document_role` (string, opsional): Filter peran dokumen: `corpus_eksisting`, `draft_kajian`.
+  - `access_classification` (string, opsional): Filter klasifikasi akses: `publik`, `non_publik`.
+  - `processing_status` (string, opsional): Filter status pemrosesan dokumen: `diterima`, `diproses`, `perlu_koreksi`, `terindeks`, `gagal`, `ditolak`.
+  - `date_from` (string/date ISO `YYYY-MM-DD`, opsional): Filter tanggal rilis awal inklusif.
+  - `date_to` (string/date ISO `YYYY-MM-DD`, opsional): Filter tanggal rilis akhir inklusif.
+  - `year` (integer, opsional): Filter tahun rilis regulasi (contoh: `2026`).
+  - `bidang` (string, opsional): Filter sektor regulasi (contoh: `Perbankan`, `Pasar Modal`, `BMKS`, `IKNB`).
+  - `sort` (string, opsional): Pengurutan hasil pencarian: `relevance` (default bila `q` terisi), `release_date_desc` (default bila `q` kosong), `release_date_asc`, `created_desc`, `title_asc`.
+  - `skip` (integer, opsional): Offset paginasi (default `0`, min `0`).
   - `limit` (integer, opsional): Batas dokumen per halaman (default `20`, min `1`, max `100`).
 
 #### Contoh A: Daftar & Filter Dokumen (Tanpa Parameter `q`)
@@ -662,7 +666,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
 <!-- /AUTO:documents_list_response -->
 
 #### Contoh B: Pencarian Full-Text & Highlight (Dengan Parameter `q`)
-*Request:* `GET /api/v1/documents/?q=modal+inti&bidang=Perbankan&highlight=true`
+*Request:* `GET /api/v1/documents/?q=modal+inti&bidang=Perbankan`
 - **Respons (200 OK):**
 <!-- AUTO:documents_search_response -->
 ```json

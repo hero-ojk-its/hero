@@ -79,7 +79,7 @@ GET {{baseUrl}}/documents/?bidang=Perbankan&skip=0&limit=10
 Accept: application/json
 
 ### 11. Documents: Search Full-Text & Highlight
-GET {{baseUrl}}/documents/?q=modal+inti&bidang=Perbankan&highlight=true
+GET {{baseUrl}}/documents/?q=modal+inti&bidang=Perbankan
 Accept: application/json
 
 ### 12. Documents: Get Detail (Ganti ID)

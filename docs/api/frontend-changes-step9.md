@@ -99,7 +99,7 @@ Body request (opsional) untuk override format penamaan:
 
 ### 3.4 `GET /api/v1/documents/` (Daftar & Pencarian Full-Text)
 - Parameter filter baru: `bidang` (contoh: `GET /api/v1/documents/?bidang=Perbankan`).
-- Parameter pencarian teks: `q`, `mode` (`phrase` | `all` | `web`), dan `highlight=true`.
+- Parameter pencarian teks: `q` dan `mode` (`phrase` | `all` | `web`). Field `highlight` (<mark>...</mark>) otomatis terisi di respons jika `q` diisi.
 - Parameter pencarian nomor regulasi: `regulation_number` (pencarian trigram cepat).
 - Setiap objek dokumen di respons daftar dan detail kini memuat properti `bidang`, `naming_format`, dan `naming_separator`.
 
