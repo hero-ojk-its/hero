@@ -111,32 +111,42 @@ class JdihApiCrawler:
         self,
         client: httpx.Client,
         pdf_url: str,
+        referer: Optional[str] = None,
     ) -> Tuple[Optional[int], Optional[str], str]:
         """Menentukan ukuran berkas via HEAD / Range."""
+        ref = referer or "https://jdih.ojk.go.id/"
+        host = urlsplit(pdf_url).hostname or "jdih.ojk.go.id"
+        self._rate_limit(host)
+        headers = {
+            "User-Agent": self.user_agent,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Referer": ref,
+        }
+
         try:
             head_resp = client.head(
                 pdf_url,
-                headers={"User-Agent": self.user_agent, "Referer": "https://jdih.ojk.go.id/"},
+                headers=headers,
                 timeout=self.timeout_seconds,
                 follow_redirects=True,
             )
             self.requests_count += 1
             if head_resp.status_code == 200:
-                cd_name = extract_filename_from_cd(head_resp.headers.get("content-disposition"))
-                cl = head_resp.headers.get("content-length")
-                if cl and cl.isdigit() and int(cl) > 0:
-                    return int(cl), cd_name, "head"
+                ct = head_resp.headers.get("content-type", "").lower()
+                if "text/html" not in ct:
+                    cd_name = extract_filename_from_cd(head_resp.headers.get("content-disposition"))
+                    cl = head_resp.headers.get("content-length")
+                    if cl and cl.isdigit() and int(cl) > 0:
+                        return int(cl), cd_name, "head"
         except Exception:
             pass
 
         try:
+            self._rate_limit(host)
+            range_headers = {**headers, "Range": "bytes=0-0"}
             range_resp = client.get(
                 pdf_url,
-                headers={
-                    "User-Agent": self.user_agent,
-                    "Range": "bytes=0-0",
-                    "Referer": "https://jdih.ojk.go.id/",
-                },
+                headers=range_headers,
                 timeout=self.timeout_seconds,
                 follow_redirects=True,
             )
@@ -148,12 +158,13 @@ class JdihApiCrawler:
                 size = int(m.group(1)) if m else None
                 return size, cd_name, "range" if size else "unknown"
             elif range_resp.status_code == 200:
-                cl = range_resp.headers.get("content-length")
-                size = int(cl) if cl and cl.isdigit() else None
-                return size, cd_name, "head" if size else "unknown"
+                ct = range_resp.headers.get("content-type", "").lower()
+                if "text/html" not in ct:
+                    cl = range_resp.headers.get("content-length")
+                    size = int(cl) if cl and cl.isdigit() else None
+                    return size, cd_name, "head" if size else "unknown"
         except Exception:
             pass
-
         return None, None, "unknown"
 
     def scan(
@@ -300,9 +311,81 @@ class JdihApiCrawler:
                     # Probe ukuran dan nama berkas asli dari Content-Disposition jika diaktifkan
                     size_b, cd_fn, size_src = (None, None, "unknown")
                     if self.head_for_size:
-                        size_b, cd_fn, size_src = self._probe_pdf_size(client, norm_pdf_url)
+                        size_b, cd_fn, size_src = self._probe_pdf_size(client, norm_pdf_url, referer=detail_url)
 
-                    # Default filename dari title/nomor atau CD
+                    # Jika probe langsung tidak menghasilkan ukuran (misal GUID regulasi bukan GUID lampiran),
+                    # buka halaman detail untuk menemukan seluruh tautan lampiran PDF yang sebenarnya
+                    if (size_b is None or size_src == "unknown") and detail_url:
+                        try:
+                            self._rate_limit(base_host)
+                            self.requests_count += 1
+                            d_headers = {
+                                "User-Agent": self.user_agent,
+                                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                                "Referer": f"{api_base}/",
+                            }
+                            d_resp = client.get(detail_url, headers=d_headers)
+                            if d_resp.status_code == 200 and ("Request Rejected" in d_resp.text or len(d_resp.text) < 500):
+                                time.sleep(0.5)
+                                self._rate_limit(base_host)
+                                self.requests_count += 1
+                                d_resp = client.get(detail_url, headers=d_headers)
+
+                            if d_resp.status_code == 200 and "Request Rejected" not in d_resp.text:
+                                d_links = re.findall(
+                                    r'href=[\'"](/Web/ViewPeraturan/DownloadDokumen/([a-f0-9-]+))[\'"]',
+                                    d_resp.text,
+                                    re.IGNORECASE,
+                                )
+                                seen_att_guids = set()
+                                found_any_att = False
+                                for link_path, doc_guid in d_links:
+                                    if doc_guid in seen_att_guids:
+                                        continue
+                                    seen_att_guids.add(doc_guid)
+                                    att_url = normalize_url(urljoin(detail_url, link_path))
+                                    if att_url in candidates_map:
+                                        continue
+
+                                    asb, acdf, assrc = (None, None, "unknown")
+                                    if self.head_for_size:
+                                        asb, acdf, assrc = self._probe_pdf_size(client, att_url, referer=detail_url)
+
+                                    afn = acdf
+                                    if not afn:
+                                        safe_stem = re.sub(r'[\\/*?:"<>|]', '_', doc_title).strip()
+                                        afn = f"{safe_stem[:100]}.pdf"
+                                    adk = determine_doc_kind(afn)
+
+                                    cand = PdfCandidate(
+                                        url=att_url,
+                                        filename=afn,
+                                        size_bytes=asb,
+                                        found_on_page=detail_url,
+                                        depth=1,
+                                        document_title=doc_title,
+                                        detail_url=detail_url,
+                                        final_url=att_url,
+                                        doc_kind=adk,
+                                        regulation_number=reg_num,
+                                        regulation_type=reg_type,
+                                        bidang=bidang,
+                                        sub_bidang=None,
+                                        release_date=rel_date,
+                                        size_source=assrc,
+                                    )
+                                    candidates_map[att_url] = cand
+                                    found_any_att = True
+
+                                if found_any_att:
+                                    regulations_count += 1
+                                    if progress:
+                                        progress(len(visited_pages), len(candidates_map))
+                                    continue
+                        except Exception as det_ex:
+                            logger.debug(f"Gagal memeriksa lampiran detail {detail_url}: {det_ex}")
+
+                    # Fallback kandidat langsung jika detail tidak memberikan lampiran baru
                     default_fn = cd_fn
                     if not default_fn:
                         safe_stem = re.sub(r'[\\/*?:"<>|]', '_', doc_title).strip()
