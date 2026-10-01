@@ -222,12 +222,22 @@ class JdihApiCrawler:
                     f"&iDisplayStart={display_start}&iDisplayLength={page_size}&sEcho={echo_counter}"
                 )
 
-                self._rate_limit(base_host)
-                try:
-                    self.requests_count += 1
-                    resp = client.get(api_url, headers=headers)
-                except Exception as ex:
-                    errors.append(f"Gagal memanggil API JDIH pada offset {display_start}: {ex}")
+                resp = None
+                for offset_attempt in range(3):
+                    self._rate_limit(base_host)
+                    try:
+                        self.requests_count += 1
+                        r_try = client.get(api_url, headers=headers)
+                        if r_try.status_code == 200:
+                            resp = r_try
+                            break
+                        time.sleep(1.0)
+                    except Exception as ex:
+                        if offset_attempt == 2:
+                            errors.append(f"Gagal memanggil API JDIH pada offset {display_start}: {ex}")
+                        time.sleep(2.0)
+
+                if resp is None:
                     break
 
                 c_marker = detect_captcha_or_waf(resp.status_code, resp.headers, resp.text)

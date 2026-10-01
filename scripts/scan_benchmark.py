@@ -37,7 +37,7 @@ DEFAULT_SOURCES = {
         "url": "https://ojk.go.id/id/regulasi/default.aspx",
         "crawler_cls": SharepointPostbackCrawler,
         "adapter": "sharepoint_postback",
-        "default_pages": 5,
+        "default_pages": 500,  # Tanpa batas artifisial, ikuti halaman sampai selesai
         "ground_truth_num": 1700,
         "ground_truth_label": "± 1.700 regulasi",
     },
@@ -46,7 +46,7 @@ DEFAULT_SOURCES = {
         "url": "https://jdih.ojk.go.id/",
         "crawler_cls": JdihApiCrawler,
         "adapter": "jdih_api",
-        "default_pages": 5,
+        "default_pages": 200,  # 20 halaman @ 50 item = 986 records total
         "ground_truth_num": 450,
         "ground_truth_label": "± 400–500 regulasi",
     },
@@ -55,9 +55,9 @@ DEFAULT_SOURCES = {
         "url": "https://oneojk-my.sharepoint.com/:f:/g/personal/redacted_user_ojk_go_id/redacted_iduRwqT5X1zPBi_d1AAfA8Ec-W6i3BTN66ZgJI1rA?e=redacted_token",
         "crawler_cls": OneDriveShareCrawler,
         "adapter": "onedrive_share",
-        "default_pages": 500,
-        "ground_truth_num": 2612,
-        "ground_truth_label": "± 2.612 berkas",
+        "default_pages": 1000,
+        "ground_truth_num": None,
+        "ground_truth_label": "Belum ada dari mitra",
     },
 }
 
@@ -80,10 +80,13 @@ def export_csv(candidates: List[PdfCandidate], filepath: Path):
         "document_title",
         "doc_kind",
         "regulation_number",
+        "raw_regulation_number",
         "regulation_type",
         "bidang",
         "sub_bidang",
         "release_date",
+        "effective_date",
+        "match_warning",
         "size_bytes",
         "size_source",
         "source_path",
@@ -99,10 +102,13 @@ def export_csv(candidates: List[PdfCandidate], filepath: Path):
                 "document_title": c.document_title or "",
                 "doc_kind": c.doc_kind or "",
                 "regulation_number": c.regulation_number or "",
+                "raw_regulation_number": getattr(c, "raw_regulation_number", None) or "",
                 "regulation_type": c.regulation_type or "",
                 "bidang": c.bidang or "",
                 "sub_bidang": c.sub_bidang or "",
                 "release_date": c.release_date.isoformat() if c.release_date else "",
+                "effective_date": c.effective_date.isoformat() if getattr(c, "effective_date", None) else "",
+                "match_warning": getattr(c, "match_warning", None) or "",
                 "size_bytes": c.size_bytes if c.size_bytes is not None else "",
                 "size_source": c.size_source or "",
                 "source_path": c.source_path or "",
@@ -120,16 +126,18 @@ def run_benchmark_for_source(
     src_info = DEFAULT_SOURCES[src_key]
     effective_pages = limit_pages if limit_pages is not None else src_info["default_pages"]
 
+    page_boundary_label = f"limit_pages={limit_pages}" if limit_pages is not None else f"penuh (tanpa batas, default max={effective_pages})"
+
     print(f"\n=======================================================")
     print(f" Memulai Benchmark: {src_info['name']} ({src_key})")
     print(f" URL          : {src_info['url']}")
     print(f" Adapter      : {src_info['adapter']}")
     print(f" Ground Truth : {src_info['ground_truth_label']}")
-    print(f" Batas Scan   : max_pages={effective_pages}, max_candidates={max_candidates}, head_for_size={head_for_size}")
+    print(f" Batas Scan   : {page_boundary_label}, max_candidates={max_candidates}, head_for_size={head_for_size}")
     print(f"=======================================================")
 
     crawler_cls = src_info["crawler_cls"]
-    crawler = crawler_cls(delay_seconds=0.1, head_for_size=head_for_size, allow_private=False)
+    crawler = crawler_cls(delay_seconds=0.02, head_for_size=head_for_size, allow_private=False)
 
     t0 = time.time()
 
@@ -157,15 +165,18 @@ def run_benchmark_for_source(
     regulations_count = res.stats.get("regulations_found", candidates_count)
     ground_truth_num = src_info["ground_truth_num"]
 
-    # Selisih: jika OJK atau JDIH gunakan perbandingan regulasi jika ada, untuk onedrive gunakan total berkas
-    primary_metric = regulations_count if src_key in ("ojk", "jdih") else candidates_count
-    selisih_num = primary_metric - ground_truth_num
-    selisih_str = f"{selisih_num:+d}" if selisih_num != 0 else "0 (tepat)"
+    if ground_truth_num is not None:
+        primary_metric = regulations_count if src_key in ("ojk", "jdih") else candidates_count
+        selisih_num = primary_metric - ground_truth_num
+        selisih_str = f"{selisih_num:+d}" if selisih_num != 0 else "0 (tepat)"
+    else:
+        selisih_str = "Belum ada dari mitra"
 
     pct_size = round((with_size_count / max(1, candidates_count)) * 100, 1)
     pct_4_attr = round((complete_4_count / max(1, candidates_count)) * 100, 1)
 
     requests_made = res.stats.get("requests_made", getattr(crawler, "requests_count", 0))
+    match_warnings_count = res.stats.get("match_warnings_count", sum(1 for c in res.candidates if getattr(c, "match_warning", None)))
 
     summary = {
         "key": src_key,
@@ -175,6 +186,10 @@ def run_benchmark_for_source(
         "duration_sec": elapsed,
         "requests_made": requests_made,
         "pages_visited": res.pages_visited,
+        "page_boundary": page_boundary_label,
+        "records_total": res.stats.get("records_total"),
+        "subfolders_count": res.stats.get("subfolders_count"),
+        "match_warnings_count": match_warnings_count,
         "regulations_found": regulations_count,
         "candidates_count": candidates_count,
         "with_size_count": with_size_count,
@@ -195,6 +210,10 @@ def run_benchmark_for_source(
     print(f" - Durasi              : {elapsed} detik")
     print(f" - Jumlah Requests     : {requests_made}")
     print(f" - Halaman/Folder      : {res.pages_visited}")
+    if res.stats.get("records_total"):
+        print(f" - Total Rekod Situs   : {res.stats.get('records_total')}")
+    if res.stats.get("subfolders_count"):
+        print(f" - Rincian Subfolder   : {res.stats.get('subfolders_count')}")
     if src_key == "ojk":
         print(f" - Jumlah Regulasi     : {regulations_count}")
         print(f" - Jumlah Berkas PDF   : {candidates_count}")
@@ -203,6 +222,7 @@ def run_benchmark_for_source(
         print(f" - Jumlah Berkas PDF   : {candidates_count}")
     print(f" - Ukuran Terdeteksi   : {with_size_count} / {candidates_count} ({pct_size}%)")
     print(f" - Lengkap 4 Atribut   : {complete_4_count} / {candidates_count} ({pct_4_attr}%)")
+    print(f" - Match Warnings      : {match_warnings_count}")
     print(f" - Ground Truth        : {src_info['ground_truth_label']}")
     print(f" - Selisih vs GT       : {selisih_str}")
     print(f" - Rincian Doc Kind    : {res.stats.get('by_doc_kind', {})}")
@@ -242,15 +262,15 @@ def main():
 
     # Susun tabel ringkasan Markdown
     md_lines = [
-        f"# Hasil Live Scan Benchmark — HERO Backend (Langkah 10)",
+        f"# Hasil Live Scan Benchmark — HERO Backend (Langkah 10b)",
         f"",
         f"> **Tanggal Pengujian:** {datetime.now().strftime('%d %B %Y %H:%M:%S WIB')}  ",
         f"> **Metode:** Uji live benchmark penuh ke endpoint publik internet (tanpa Playwright / browser headless).",
         f"",
         f"## 1. Ringkasan Performa Benchmark dan Perbandingan Ground Truth",
         f"",
-        f"| Sumber Data | Adapter | Durasi | Requests | Halaman/Folder | Regulasi | PDF Ditemukan | Lengkap 4 Atribut | Ukuran Terdeteksi | Ground Truth | Selisih | Status |",
-        f"|---|---|---|---|---|---|---|---|---|---|---|---|",
+        f"| Sumber Data | Adapter | Batas Paging | Halaman Terakhir | Regulasi | PDF | Lengkap 4 Atribut | Match Warnings | Ground Truth | Selisih | Durasi | Requests | Status |",
+        f"|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
 
     for r in results:
@@ -258,11 +278,11 @@ def main():
         reg_count_display = str(r["regulations_found"])
         pdf_count_display = str(r["candidates_count"])
         comp_display = f"{r['complete_4_count']}/{r['candidates_count']} ({r['pct_4_attr']}%)"
-        size_display = f"{r['with_size_count']}/{r['candidates_count']} ({r['pct_size']}%)"
+        warn_display = str(r["match_warnings_count"])
         dur_display = f"{r['duration_sec']}s"
 
         md_lines.append(
-            f"| **{r['name']}** | `{r['adapter']}` | {dur_display} | {r['requests_made']} | {r['pages_visited']} | {reg_count_display} | {pdf_count_display} | {comp_display} | {size_display} | {r['ground_truth_label']} | {r['selisih_str']} | {status_str} |"
+            f"| **{r['name']}** | `{r['adapter']}` | {r['page_boundary']} | {r['pages_visited']} | {reg_count_display} | {pdf_count_display} | {comp_display} | {warn_display} | {r['ground_truth_label']} | {r['selisih_str']} | {dur_display} | {r['requests_made']} | {status_str} |"
         )
 
     md_lines.extend([
@@ -276,15 +296,23 @@ def main():
             f"### 2.{results.index(r)+1} {r['name']} (`{r['key']}`)",
             f"- **URL Target:** {r['url']}",
             f"- **Adapter:** `{r['adapter']}`",
+            f"- **Batas Paging:** {r['page_boundary']}",
             f"- **Waktu Eksekusi:** {r['duration_sec']} detik ({r['requests_made']} requests)",
             f"- **Halaman/Folder Dikunjungi:** {r['pages_visited']}",
             f"- **Jumlah Regulasi Ditemukan:** {r['regulations_found']}",
             f"- **Jumlah Berkas PDF Ditemukan:** {r['candidates_count']}",
             f"- **Lengkap 4 Atribut (URL, Judul, Nama Berkas, Ukuran):** {r['complete_4_count']}/{r['candidates_count']} ({r['pct_4_attr']}%)",
             f"- **Ukuran Terdeteksi:** {r['with_size_count']}/{r['candidates_count']} ({r['pct_size']}%)",
+            f"- **Jumlah Match Warnings:** {r['match_warnings_count']}",
             f"- **Ground Truth:** {r['ground_truth_label']} (Selisih: {r['selisih_str']})",
             f"- **Berkas CSV Ekspor:** [`{r['csv_path']}`]({r['csv_path']})",
             f"- **Rincian doc_kind:** `{r['stats'].get('by_doc_kind', {})}`",
+        ])
+        if r.get("records_total"):
+            md_lines.append(f"- **Total Rekod Situs (recordsTotal):** {r['records_total']}")
+        if r.get("subfolders_count"):
+            md_lines.append(f"- **Rincian Berkas per Subfolder:** `{r['subfolders_count']}`")
+        md_lines.extend([
             f"- **Statistik Lengkap:**",
             f"  ```json",
             f"  {r['stats']}",
