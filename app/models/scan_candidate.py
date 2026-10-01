@@ -110,6 +110,16 @@ class ScanCandidate(Base):
         nullable=True,
         comment="Tanggal rilis/penetapan regulasi yang terbaca dari situs",
     )
+    effective_date = Column(
+        Date,
+        nullable=True,
+        comment="Tanggal mulai berlaku regulasi yang terbaca dari situs",
+    )
+    match_warning = Column(
+        Text,
+        nullable=True,
+        comment="Peringatan ketidakcocokan metadata regulasi dengan nama berkas",
+    )
     size_source = Column(
         String(10),
         nullable=True,

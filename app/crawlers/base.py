@@ -24,7 +24,10 @@ class PdfCandidate:
     regulation_type: Optional[str] = None            # Jenis regulasi (dinormalisasi)
     bidang: Optional[str] = None                     # Sektor / bidang regulasi
     sub_bidang: Optional[str] = None                 # Sub-sektor regulasi
-    release_date: Optional[date] = None              # Tanggal penetapan / berlaku
+    release_date: Optional[date] = None              # Tanggal penetapan / terbit
+    effective_date: Optional[date] = None            # Tanggal mulai berlaku regulasi
+    raw_regulation_number: Optional[str] = None      # Nomor mentah sebelum diformat
+    match_warning: Optional[str] = None              # Peringatan ketidakcocokan nama berkas vs metadata regulasi
     size_source: Optional[str] = "unknown"           # listing | head | range | unknown
     source_path: Optional[str] = None                # Jalur folder relatif (OneDrive)
 

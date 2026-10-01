@@ -259,23 +259,41 @@ def extract_meta_or_js_redirect(html_content: str, base_url: str) -> Optional[st
     return None
 
 
-def determine_doc_kind(filename_or_title: Optional[str]) -> str:
+def determine_doc_kind(filename_or_title: Optional[str], label: Optional[str] = None) -> str:
     """
-    Menentukan doc_kind dokumen berdasarkan nama berkas atau judul:
-    - 'abstrak'  -> mengandung 'abstrak'
-    - 'faq'      -> mengandung 'faq' atau 'tanya jawab'
-    - 'lampiran' -> mengandung 'lampiran' / 'lamp'
-    - 'utama'    -> lainnya (default dokumen utama)
+    Menentukan peran dokumen: utama | abstrak | faq | lampiran.
+    Mengenali:
+    - Pola dengan spasi ('Abstrak POJK ...', 'FAQ POJK ...')
+    - Pola kode kompak tanpa spasi ('2026abspojk008.pdf', '2024faqseojk020.pdf', '2026abspadk004.pdf')
+    - Label terpisah bila disediakan dari situs/detail ('Abstrak', 'FAQ', 'Dokumen Utama', 'Lampiran')
+    - Penanda salinan resmi ('SAL POJK ...', 'Salinan ...') -> 'utama'
     """
-    if not filename_or_title:
+    targets = []
+    if label:
+        targets.append(label.lower().strip())
+    if filename_or_title:
+        targets.append(filename_or_title.lower().strip())
+
+    combined = " ".join(targets)
+    if not combined.strip():
         return "utama"
-    lower = filename_or_title.lower()
-    if "abstrak" in lower:
+
+    # 1. Abstrak
+    if re.search(r'\babstrak\b|abs(?:pojk|seojk|padk|pdk|kdk)|\babs\b|(?:\d{4})abs|^abs[-_]', combined):
         return "abstrak"
-    if "faq" in lower or "tanya jawab" in lower or "tanya_jawab" in lower:
+
+    # 2. FAQ / Tanya Jawab
+    if re.search(r'\bfaq\b|faq(?:pojk|seojk|padk|pdk|kdk)|(?:\d{4})faq|\btanya\s*jawab\b', combined):
         return "faq"
-    if "lampiran" in lower or "lamp_" in lower or "lamp-" in lower:
+
+    # 3. Lampiran
+    if re.search(r'\blampiran\b|\blamp[-_]|\blamp\b', combined):
         return "lampiran"
+
+    # 4. Salinan / Dokumen Utama: 'salinan', 'sal ' -> utama
+    if re.search(r'\bsalinan\b|^sal\s+|^sal[-_]', combined):
+        return "utama"
+
     return "utama"
 
 
@@ -285,11 +303,15 @@ CRAWLER_REGULATION_ALIASES: Dict[str, str] = {
     "PERATURAN OJK": "POJK",
     "SEOJK": "SEOJK",
     "SE OJK": "SEOJK",
+    "SE_OJK": "SEOJK",
     "SURAT EDARAN OTORITAS JASA KEUANGAN": "SEOJK",
     "SURAT EDARAN OJK": "SEOJK",
+    "SURAT EDARAN": "SEOJK",
     "PADK": "PADK",
+    "PERATURAN ADK": "PADK",
     "PERATURAN ANGGOTA DEWAN KOMISIONER": "PADK",
     "PERATURAN ANGGOTA DEWAN KOMISIONER OTORITAS JASA KEUANGAN": "PADK",
+    "PERATURAN ANGGOTA DEWAN KOMISIONER OJK": "PADK",
     "KDK": "KDK",
     "KEPUTUSAN DEWAN KOMISIONER": "KDK",
     "KEPUTUSAN DEWAN KOMISIONER OTORITAS JASA KEUANGAN": "KDK",
@@ -316,9 +338,186 @@ CRAWLER_REGULATION_ALIASES: Dict[str, str] = {
 }
 
 
-def normalize_crawler_regulation_type(raw: Optional[str]) -> Optional[str]:
-    """Normalisasi jenis regulasi untuk crawler."""
+def normalize_crawler_regulation_type(raw: Optional[str], title: Optional[str] = None) -> Optional[str]:
+    """
+    Normalisasi jenis regulasi untuk crawler.
+    Mendukung pemetaan dari label mentah maupun inferensi dari judul regulasi
+    (misal bila label mentah berupa kategori gabungan).
+    """
+    # 1. Inferensi dari judul jika judul tersedia
+    if title:
+        t_low = title.lower()
+        if "peraturan anggota dewan komisioner" in t_low or re.search(r'\bpadk\b', t_low):
+            return "PADK"
+        if "surat edaran" in t_low or re.search(r'\bseojk\b', t_low):
+            return "SEOJK"
+        if "peraturan otoritas jasa keuangan" in t_low or re.search(r'\bpojk\b', t_low):
+            return "POJK"
+        if "keputusan dewan komisioner" in t_low or re.search(r'\bkdk\b', t_low):
+            return "KDK"
+        if "peraturan dewan komisioner" in t_low or re.search(r'\bpdk\b', t_low):
+            return "PDK"
+
     if not raw or not raw.strip():
         return None
+
     cleaned = re.sub(r"\s+", " ", raw.strip()).upper()
+
+    # Jika label mentah adalah label gabungan JDIH
+    if "SURAT EDARAN" in cleaned and "PERATURAN ANGGOTA DEWAN KOMISIONER" in cleaned:
+        if title:
+            t_low = title.lower()
+            if "peraturan anggota dewan komisioner" in t_low:
+                return "PADK"
+            if "surat edaran" in t_low:
+                return "SEOJK"
+        return "PADK"
+
     return CRAWLER_REGULATION_ALIASES.get(cleaned, cleaned)
+
+
+def validate_regulation_filename_match(
+    filename: str,
+    regulation_number: Optional[str] = None,
+    release_date: Optional[Any] = None,
+    document_title: Optional[str] = None,
+    regulation_type: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Memvalidasi kecocokan antara nama berkas PDF dengan metadata regulasi (nomor dan tahun).
+    Toleran terhadap format:
+    - '2026pojk008.pdf', '2026abspojk008.pdf'
+    - 'SAL POJK 72 - ...'
+    - 'POJK 17 Tahun 2023.pdf'
+    - 'Salinan POJK Nomor 19 Tahun 2023.pdf'
+    - 'Peraturan_OJK_3_2015.pdf'
+    Jika nomor atau tahun bertentangan secara jelas, mengembalikan pesan peringatan.
+    Jika cocok atau data tidak cukup untuk disimpulkan, mengembalikan None.
+    """
+    if not filename:
+        return None
+
+    fn_lower = filename.lower()
+
+    # 1. Ekstrak tahun dari berkas
+    fn_years = re.findall(r'(?:^|[\W_])(20\d\d|19\d\d)(?:[\W_]|$)', fn_lower)
+    if not fn_years:
+        prefix_y = re.match(r'^(20\d\d|19\d\d)', fn_lower)
+        if prefix_y:
+            fn_years = [prefix_y.group(1)]
+
+    # Ekstrak tahun dari metadata regulasi
+    reg_year = None
+    if release_date and hasattr(release_date, "year") and release_date.year:
+        reg_year = release_date.year
+    elif document_title:
+        title_y = re.findall(r'(?:^|[\W_])(20\d\d|19\d\d)(?:[\W_]|$)', document_title)
+        if title_y:
+            reg_year = int(title_y[0])
+
+    # 2. Ekstrak nomor regulasi dari metadata
+    reg_num_int = None
+    if regulation_number:
+        num_m = re.search(r'\b(\d+)\b', regulation_number)
+        if num_m:
+            reg_num_int = int(num_m.group(1))
+    elif document_title:
+        num_m = re.search(r'nomor\s*[:\s]*(\d+)', document_title, re.IGNORECASE)
+        if num_m:
+            reg_num_int = int(num_m.group(1))
+
+    # 3. Ekstrak nomor dari nama berkas
+    fn_num_ints = []
+    # Pola pojk008 / abspojk008 / padk004
+    code_m = re.search(r'(?:pojk|seojk|padk|pdk|kdk)[-_]?0*(\d+)', fn_lower)
+    if code_m:
+        fn_num_ints.append(int(code_m.group(1)))
+
+    # Pola nomor 19 / no. 19 / no 19
+    no_m = re.search(r'(?:nomor|no\.?)[-_ ]*0*(\d+)', fn_lower)
+    if no_m:
+        fn_num_ints.append(int(no_m.group(1)))
+
+    # Pola angka setelah jenis: peraturan_ojk_3 / pojk_17 / pojk 17 / sal pojk 72
+    after_kind_m = re.search(r'(?:peraturan_ojk|pojk|seojk|padk|pdk|kdk)[-_ ]+0*(\d+)', fn_lower)
+    if after_kind_m:
+        fn_num_ints.append(int(after_kind_m.group(1)))
+
+    warnings = []
+
+    # Cek konflik tahun jika berkas dan regulasi sama-sama punya tahun
+    if fn_years and reg_year:
+        fn_y_ints = [int(y) for y in fn_years]
+        if reg_year not in fn_y_ints:
+            warnings.append(f"Tahun berkas ({fn_years[0]}) != regulasi ({reg_year})")
+
+    # Cek konflik nomor jika berkas dan regulasi sama-sama punya nomor
+    if fn_num_ints and reg_num_int is not None:
+        if reg_num_int not in fn_num_ints:
+            warnings.append(f"Nomor berkas ({fn_num_ints[0]}) != regulasi ({reg_num_int})")
+
+    if warnings:
+        return "; ".join(warnings)
+    return None
+
+
+def parse_onedrive_filename_metadata(filename: str) -> Dict[str, Any]:
+    """
+    Mengekstrak metadata (jenis, nomor, tahun/release_date) dari nama berkas OneDrive.
+    Contoh:
+    - Peraturan_OJK_3_2015.pdf -> jenis POJK, nomor 3, tahun 2015
+    - POJK_17_2023.pdf -> jenis POJK, nomor 17, tahun 2023
+    - SEOJK_46_2017.pdf -> jenis SEOJK, nomor 46, tahun 2017
+    - PADK_4_2026.pdf -> jenis PADK, nomor 4, tahun 2026
+    """
+    if not filename:
+        return {}
+
+    stem = re.sub(r'\.pdf$', '', filename.strip(), flags=re.IGNORECASE)
+
+    # 1. Deteksi jenis
+    stem_lower = stem.lower()
+    reg_type = None
+    if "peraturan_ojk" in stem_lower or stem_lower.startswith("pojk"):
+        reg_type = "POJK"
+    elif "surat_edaran" in stem_lower or stem_lower.startswith("seojk") or stem_lower.startswith("se_ojk"):
+        reg_type = "SEOJK"
+    elif "peraturan_adk" in stem_lower or stem_lower.startswith("padk"):
+        reg_type = "PADK"
+    elif "keputusan_dewan" in stem_lower or stem_lower.startswith("kdk"):
+        reg_type = "KDK"
+    elif "peraturan_dewan" in stem_lower or stem_lower.startswith("pdk"):
+        reg_type = "PDK"
+
+    # 2. Deteksi tahun (4 digit)
+    year = None
+    year_m = re.findall(r'(?:^|[\W_])(20\d\d|19\d\d)(?:[\W_]|$)', stem)
+    if year_m:
+        year = int(year_m[-1])
+
+    # 3. Deteksi nomor
+    num_str = None
+    # Pola: Peraturan_OJK_3_2015 atau POJK_17_2023
+    num_m = re.search(r'(?:peraturan_ojk|pojk|seojk|se_ojk|padk|kdk|pdk)[-_ ]+0*(\d+)', stem, re.IGNORECASE)
+    if num_m:
+        num_str = num_m.group(1)
+    else:
+        # Cari angka pertama yang bukan tahun
+        for token in re.split(r'[-_ ]+', stem):
+            if token.isdigit() and token != (str(year) if year else ""):
+                num_str = token
+                break
+
+    if not reg_type and not num_str and not year:
+        return {}
+
+    from datetime import date as d_date
+    res: Dict[str, Any] = {
+        "regulation_type": reg_type,
+        "regulation_number": num_str,
+        "year": year,
+        "release_date": d_date(year, 1, 1) if year else None,
+    }
+    return res
+
+

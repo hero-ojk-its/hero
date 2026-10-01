@@ -572,6 +572,26 @@ def test_s11_jdih_api_crawler_two_pages(robust_server, monkeypatch):
 
     srv.routes["/Web/ViewPeraturanHome/ListDataPeraturan"] = jdih_handler
 
+    # Mock halaman detail untuk masing-masing regulasi (Langkah 10b: URL berkas dari lampiran detail)
+    for guid, num, name in [
+        ("11111111-1111-1111-1111-111111111111", "1", "2024pojk001.pdf"),
+        ("22222222-2222-2222-2222-222222222222", "2", "2024seojk002.pdf"),
+        ("33333333-3333-3333-3333-333333333333", "3", "2024padk003.pdf"),
+        ("44444444-4444-4444-4444-444444444444", "4", "2024kdk004.pdf"),
+    ]:
+        att_guid = f"att-{guid[:8]}"
+        detail_html = f"""
+        <html><body><table><tr>
+            <th style="width:200px"><h4>Peraturan</h4></th>
+            <td><a download href="/Web/ViewPeraturan/DownloadDokumen/{att_guid}" onclick="downloadDokumen('{name}','~/Dokumen/{name}')">Unduh</a></td>
+        </tr></table></body></html>
+        """
+        srv.routes[f"/Web/ViewPeraturan/Detail/{guid}/All/"] = {
+            "status": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": detail_html,
+        }
+
     crawler = JdihApiCrawler(allow_private=True, delay_seconds=0, head_for_size=False)
     res = crawler.scan(base_url, depth=1, max_pages=10)
 
@@ -854,3 +874,217 @@ def test_s16_filter_candidates_query_params(client: TestClient, db_session: Sess
     assert r_q.status_code == 200
     assert r_q.json()["total"] == 1
     assert r_q.json()["items"][0]["document_title"] == "Bursa Karbon Efek"
+
+
+# ==============================================================================
+# LANGKAH 10B: PERBAIKAN KEBENARAN DATA SCAN & BENCHMARK PENUH (T01 - T06)
+# ==============================================================================
+
+def test_t01_jdih_detail_attachment_guids(robust_server, monkeypatch):
+    """
+    T01: Fixture detail JDIH asli dengan 3 lampiran -> URL berkas diambil dari
+    GUID lampiran di halaman detail, BUKAN dari GUID regulasi.
+    """
+    base_url, srv = robust_server
+    monkeypatch.setattr(settings, "crawl_allow_private_networks", True)
+    monkeypatch.setattr(settings, "crawl_delay_seconds", 0)
+
+    reg_guid = "95716c28-8ed1-5964-7ed5-592615a5b53c"
+    att_utama_guid = "ad5fef9e-4dc9-f433-636c-082bc8a95d90"
+    att_abs_guid = "525798ef-b7a2-733d-a056-b4896734e37c"
+    att_faq_guid = "f61670b2-df9d-037e-a684-485fd72e772b"
+
+    # 1. API ListDataPeraturan
+    api_data = {
+        "sEcho": 1,
+        "iTotalRecords": 1,
+        "iTotalDisplayRecords": 1,
+        "aaData": [
+            [
+                f"<a href='http://jdih.ojk.go.id/Web/ViewPeraturan/Detail/{reg_guid}/All/'>PADK Nomor 4 Tahun 2026 Wali Amanat</a>",
+                "4",
+                "Pasar Modal",
+                "-",
+                "-",
+                "Surat Edaran OJK / Peraturan Anggota Dewan Komisioner OJK",
+                "07-07-2026",
+            ]
+        ],
+    }
+    srv.routes["/Web/ViewPeraturanHome/ListDataPeraturan"] = {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps(api_data),
+    }
+
+    # 2. Halaman detail dengan 3 lampiran
+    detail_html = f"""
+    <html><body>
+    <table>
+      <tr>
+        <th style="width:200px"><h4>Peraturan</h4></th>
+        <td>
+          <a download href="/Web/ViewPeraturan/DownloadDokumen/{att_utama_guid}" onclick="downloadDokumen('2026padk004.pdf','~/Dokumen/Peraturan/2026padk004.pdf')">Unduh</a>
+        </td>
+      </tr>
+      <tr>
+        <th style="width:200px"><h4>Abstrak</h4></th>
+        <td>
+          <a download href="/Web/ViewPeraturan/DownloadDokumen/{att_abs_guid}" onclick="downloadDokumen('2026abspadk004.pdf','~/Dokumen/Peraturan/2026abspadk004.pdf')">Unduh</a>
+        </td>
+      </tr>
+      <tr>
+        <th style="width:200px"><h4>FAQ</h4></th>
+        <td>
+          <a download href="/Web/ViewPeraturan/DownloadDokumen/{att_faq_guid}" onclick="downloadDokumen('2026faqpadk004.pdf','~/Dokumen/Peraturan/2026faqpadk004.pdf')">Unduh</a>
+        </td>
+      </tr>
+    </table>
+    </body></html>
+    """
+    srv.routes[f"/Web/ViewPeraturan/Detail/{reg_guid}/All/"] = {
+        "status": 200,
+        "headers": {"Content-Type": "text/html"},
+        "body": detail_html,
+    }
+
+    # 3. Route lampiran HEAD
+    pdf_bytes = make_pdf("Dokumen Lampiran")
+    srv.routes[f"/Web/ViewPeraturan/DownloadDokumen/{att_utama_guid}"] = {
+        "status": 200,
+        "headers": {"Content-Type": "application/pdf", "Content-Disposition": 'attachment; filename="2026padk004.pdf"', "Content-Length": str(len(pdf_bytes))},
+        "body": pdf_bytes,
+    }
+    srv.routes[f"/Web/ViewPeraturan/DownloadDokumen/{att_abs_guid}"] = {
+        "status": 200,
+        "headers": {"Content-Type": "application/pdf", "Content-Disposition": 'attachment; filename="2026abspadk004.pdf"', "Content-Length": str(len(pdf_bytes))},
+        "body": pdf_bytes,
+    }
+    srv.routes[f"/Web/ViewPeraturan/DownloadDokumen/{att_faq_guid}"] = {
+        "status": 200,
+        "headers": {"Content-Type": "application/pdf", "Content-Disposition": 'attachment; filename="2026faqpadk004.pdf"', "Content-Length": str(len(pdf_bytes))},
+        "body": pdf_bytes,
+    }
+
+    crawler = JdihApiCrawler(allow_private=True, delay_seconds=0, head_for_size=True)
+    res = crawler.scan(f"{base_url}/", depth=1)
+
+    assert len(res.candidates) == 3
+    # Verifikasi URL TIDAK memakai GUID regulasi
+    assert all(reg_guid not in c.url for c in res.candidates)
+    # Verifikasi URL memakai GUID lampiran yang benar
+    candidate_urls = [c.url for c in res.candidates]
+    assert any(att_utama_guid in u for u in candidate_urls)
+    assert any(att_abs_guid in u for u in candidate_urls)
+    assert any(att_faq_guid in u for u in candidate_urls)
+
+    # Verifikasi doc_kind dan metadata
+    kinds = {c.filename: c.doc_kind for c in res.candidates}
+    assert kinds["2026padk004.pdf"] == "utama"
+    assert kinds["2026abspadk004.pdf"] == "abstrak"
+    assert kinds["2026faqpadk004.pdf"] == "faq"
+
+
+def test_t02_regulation_filename_mismatch_warning():
+    """
+    T02: Respons berkas yang nama berkasnya tidak cocok dengan nomor/tahun
+    regulasi -> match_warning terisi dan dihitung di ringkasan.
+    """
+    from app.crawlers.url_utils import validate_regulation_filename_match
+
+    # Kasus 1: Tahun dan nomor berkas dari regulasi lain (FAQ POJK 19/2023 pada PADK 4/2026)
+    warn1 = validate_regulation_filename_match(
+        filename="FAQ POJK Nomor 19 Tahun 2023.pdf",
+        regulation_number="4",
+        release_date=date(2026, 7, 7),
+        document_title="PADK Nomor 4 Tahun 2026 tentang Wali Amanat",
+        regulation_type="PADK",
+    )
+    assert warn1 is not None
+    assert "2023" in warn1 and "2026" in warn1
+    assert "19" in warn1 and "4" in warn1
+
+    # Kasus 2: Berkas yang cocok (2026padk004.pdf pada PADK 4/2026)
+    warn2 = validate_regulation_filename_match(
+        filename="2026padk004.pdf",
+        regulation_number="PADK Nomor 4 Tahun 2026",
+        release_date=date(2026, 7, 7),
+        document_title="PADK Nomor 4 Tahun 2026 tentang Wali Amanat",
+        regulation_type="PADK",
+    )
+    assert warn2 is None
+
+    # Kasus 3: Toleransi format SAL POJK 72 - Ketentuan.pdf
+    warn3 = validate_regulation_filename_match(
+        filename="SAL POJK 72 - Ketentuan.pdf",
+        regulation_number="72",
+        release_date=date(2020, 1, 1),
+        document_title="POJK Nomor 72 Tahun 2020",
+        regulation_type="POJK",
+    )
+    assert warn3 is None
+
+
+def test_t03_doc_kind_detection():
+    """
+    T03: Deteksi doc_kind untuk variasi nama file abstrak, faq, salinan, dsb.
+    Ekspektasi:
+    2026abspojk008.pdf -> abstrak
+    2024faqseojk020.pdf -> faq
+    SAL POJK 72 - … -> utama
+    Abstrak POJK … -> abstrak
+    FAQ … -> faq
+    """
+    from app.crawlers.url_utils import determine_doc_kind
+
+    assert determine_doc_kind("2026abspojk008.pdf") == "abstrak"
+    assert determine_doc_kind("2024faqseojk020.pdf") == "faq"
+    assert determine_doc_kind("SAL POJK 72 - Dokumen Regulasi.pdf") == "utama"
+    assert determine_doc_kind("Abstrak POJK 10 Tahun 2026.pdf") == "abstrak"
+    assert determine_doc_kind("FAQ POJK 10 Tahun 2026.pdf") == "faq"
+    # Kasus tambahan
+    assert determine_doc_kind("2026padk004.pdf") == "utama"
+    assert determine_doc_kind("Salinan POJK Nomor 19 Tahun 2023.pdf") == "utama"
+    assert determine_doc_kind("dokumen.pdf", label="Abstrak") == "abstrak"
+    assert determine_doc_kind("dokumen.pdf", label="FAQ") == "faq"
+
+
+def test_t04_regulation_type_normalization():
+    """
+    T04: Normalisasi jenis regulasi:
+    PERATURAN ADK -> PADK
+    Judul 'Peraturan Anggota Dewan Komisioner…' -> PADK
+    Judul 'Surat Edaran…' -> SEOJK
+    """
+    from app.crawlers.url_utils import normalize_crawler_regulation_type
+
+    assert normalize_crawler_regulation_type("PERATURAN ADK") == "PADK"
+    assert normalize_crawler_regulation_type(None, title="Peraturan Anggota Dewan Komisioner Nomor 4...") == "PADK"
+    assert normalize_crawler_regulation_type(None, title="Surat Edaran OJK Nomor 12...") == "SEOJK"
+    assert normalize_crawler_regulation_type(
+        "SURAT EDARAN OJK / PERATURAN ANGGOTA DEWAN KOMISIONER OJK",
+        title="Peraturan Anggota Dewan Komisioner Nomor 4 Tahun 2026"
+    ) == "PADK"
+    assert normalize_crawler_regulation_type(
+        "SURAT EDARAN OJK / PERATURAN ANGGOTA DEWAN KOMISIONER OJK",
+        title="Surat Edaran OJK Nomor 19/SEOJK.06/2024"
+    ) == "SEOJK"
+
+
+def test_t05_parse_onedrive_filename_metadata():
+    """
+    T05: Parse metadata dari nama berkas OneDrive Peraturan_OJK_3_2015.pdf:
+    jenis: POJK, nomor: 3, tahun: 2015
+    """
+    from app.crawlers.url_utils import parse_onedrive_filename_metadata
+
+    res = parse_onedrive_filename_metadata("Peraturan_OJK_3_2015.pdf")
+    assert res.get("regulation_type") == "POJK"
+    assert res.get("regulation_number") == "3"
+    assert res.get("year") == 2015
+    assert res.get("release_date") == date(2015, 1, 1)
+
+    res2 = parse_onedrive_filename_metadata("SEOJK_46_2017.pdf")
+    assert res2.get("regulation_type") == "SEOJK"
+    assert res2.get("regulation_number") == "46"
+    assert res2.get("year") == 2017

@@ -37,6 +37,7 @@ from app.crawlers.url_utils import (
     extract_filename_from_cd,
     determine_doc_kind,
     normalize_crawler_regulation_type,
+    validate_regulation_filename_match,
 )
 
 logger = logging.getLogger("hero.crawler.jdih_api")
@@ -292,129 +293,130 @@ class JdihApiCrawler:
                     if bidang in ("None", "", "-"):
                         bidang = None
 
-                    # Kolom 5: Jenis regulasi
+                    # Kolom 5: Jenis regulasi (dukung inferensi dari judul untuk kategori gabungan)
                     raw_jenis = str(row[5]).strip() if len(row) > 5 and row[5] is not None else None
-                    reg_type = normalize_crawler_regulation_type(raw_jenis) if raw_jenis and raw_jenis != "None" else None
+                    reg_type = normalize_crawler_regulation_type(raw_jenis, title=doc_title) if raw_jenis and raw_jenis != "None" else normalize_crawler_regulation_type(None, title=doc_title)
 
                     # Kolom 6: Tanggal rilis
                     raw_date = str(row[6]).strip() if len(row) > 6 and row[6] is not None else None
                     rel_date = _parse_jdih_date(raw_date) if raw_date and raw_date != "None" else None
 
-                    # URL unduh langsung dan URL detail
-                    pdf_url = f"{api_base}/Web/ViewPeraturan/DownloadDokumen/{guid}"
-                    norm_pdf_url = normalize_url(pdf_url)
+                    # Format regulation_number lengkap dan informatif
+                    formatted_reg_num = None
+                    slash_num_m = re.search(r'\b(\d+/[A-Z0-9\.]+(?:/\d{4})?)\b', doc_title)
+                    if slash_num_m:
+                        formatted_reg_num = slash_num_m.group(1)
+                    elif reg_num:
+                        year_val = rel_date.year if rel_date else None
+                        if not year_val:
+                            y_m = re.search(r'(?:^|[\W_])(20\d\d|19\d\d)(?:[\W_]|$)', doc_title)
+                            if y_m:
+                                year_val = int(y_m.group(1))
+                        type_label = reg_type or "Nomor"
+                        if year_val:
+                            formatted_reg_num = f"{type_label} {reg_num} Tahun {year_val}"
+                        else:
+                            formatted_reg_num = f"{type_label} Nomor {reg_num}"
+
+                    # URL detail regulasi: lampiran PDF HANYA diambil dari halaman detail sebenarnya
                     detail_url = f"{api_base}/Web/ViewPeraturan/Detail/{guid}/All/"
 
-                    if norm_pdf_url in candidates_map:
-                        continue
-
-                    # Probe ukuran dan nama berkas asli dari Content-Disposition jika diaktifkan
-                    size_b, cd_fn, size_src = (None, None, "unknown")
-                    if self.head_for_size:
-                        size_b, cd_fn, size_src = self._probe_pdf_size(client, norm_pdf_url, referer=detail_url)
-
-                    # Jika probe langsung tidak menghasilkan ukuran (misal GUID regulasi bukan GUID lampiran),
-                    # buka halaman detail untuk menemukan seluruh tautan lampiran PDF yang sebenarnya
-                    if (size_b is None or size_src == "unknown") and detail_url:
-                        try:
+                    # Ambil halaman detail untuk mendapatkan seluruh lampiran berkas asli
+                    d_html = ""
+                    try:
+                        self._rate_limit(base_host)
+                        self.requests_count += 1
+                        d_headers = {
+                            "User-Agent": self.user_agent,
+                            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                            "Referer": f"{api_base}/",
+                        }
+                        d_resp = client.get(detail_url, headers=d_headers)
+                        if d_resp.status_code == 200 and ("Request Rejected" in d_resp.text or len(d_resp.text) < 500):
+                            time.sleep(0.5)
                             self._rate_limit(base_host)
                             self.requests_count += 1
-                            d_headers = {
-                                "User-Agent": self.user_agent,
-                                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                                "Referer": f"{api_base}/",
-                            }
                             d_resp = client.get(detail_url, headers=d_headers)
-                            if d_resp.status_code == 200 and ("Request Rejected" in d_resp.text or len(d_resp.text) < 500):
-                                time.sleep(0.5)
-                                self._rate_limit(base_host)
-                                self.requests_count += 1
-                                d_resp = client.get(detail_url, headers=d_headers)
 
-                            if d_resp.status_code == 200 and "Request Rejected" not in d_resp.text:
-                                d_links = re.findall(
-                                    r'href=[\'"](/Web/ViewPeraturan/DownloadDokumen/([a-f0-9-]+))[\'"]',
-                                    d_resp.text,
-                                    re.IGNORECASE,
-                                )
-                                seen_att_guids = set()
-                                found_any_att = False
-                                for link_path, doc_guid in d_links:
-                                    if doc_guid in seen_att_guids:
-                                        continue
-                                    seen_att_guids.add(doc_guid)
-                                    att_url = normalize_url(urljoin(detail_url, link_path))
-                                    if att_url in candidates_map:
-                                        continue
+                        if d_resp.status_code == 200 and "Request Rejected" not in d_resp.text:
+                            d_html = d_resp.text
+                    except Exception as det_ex:
+                        logger.debug(f"Gagal memuat detail {detail_url}: {det_ex}")
 
-                                    asb, acdf, assrc = (None, None, "unknown")
-                                    if self.head_for_size:
-                                        asb, acdf, assrc = self._probe_pdf_size(client, att_url, referer=detail_url)
+                    attachments_found: List[Tuple[str, str, Optional[str]]] = []
+                    if d_html:
+                        # Cari blok <tr> yang memuat DownloadDokumen
+                        for tr in re.findall(r'<tr>(.*?)</tr>', d_html, re.DOTALL):
+                            if "DownloadDokumen" not in tr:
+                                continue
+                            th_m = re.search(r'<th[^>]*><h4>(.*?)</h4></th>', tr, re.DOTALL)
+                            lbl = th_m.group(1).strip() if th_m else ""
+                            guid_m_att = re.search(r'/DownloadDokumen/([^"\'\s>]+)', tr)
+                            if not guid_m_att:
+                                continue
+                            att_guid = guid_m_att.group(1).rstrip("/'\"")
+                            fn_m = re.search(r'downloadDokumen\([\'"]([^\'"]+\.pdf)[\'"]', tr, re.IGNORECASE)
+                            if not fn_m:
+                                fn_m = re.search(r'>\s*([^<>]+\.pdf)\s*</a>', tr, re.IGNORECASE)
+                            fn = fn_m.group(1).strip() if fn_m else None
+                            attachments_found.append((att_guid, lbl, fn))
 
-                                    afn = acdf
-                                    if not afn:
-                                        safe_stem = re.sub(r'[\\/*?:"<>|]', '_', doc_title).strip()
-                                        afn = f"{safe_stem[:100]}.pdf"
-                                    adk = determine_doc_kind(afn)
+                        # Fallback jika struktur <tr> tidak ditemukan
+                        if not attachments_found:
+                            for m in re.finditer(r'href=[\'"]/Web/ViewPeraturan/DownloadDokumen/([^"\'\s>]+)[\'"]', d_html):
+                                attachments_found.append((m.group(1).rstrip("/'\""), "", None))
 
-                                    cand = PdfCandidate(
-                                        url=att_url,
-                                        filename=afn,
-                                        size_bytes=asb,
-                                        found_on_page=detail_url,
-                                        depth=1,
-                                        document_title=doc_title,
-                                        detail_url=detail_url,
-                                        final_url=att_url,
-                                        doc_kind=adk,
-                                        regulation_number=reg_num,
-                                        regulation_type=reg_type,
-                                        bidang=bidang,
-                                        sub_bidang=None,
-                                        release_date=rel_date,
-                                        size_source=assrc,
-                                    )
-                                    candidates_map[att_url] = cand
-                                    found_any_att = True
+                    found_any_for_reg = False
+                    for att_guid, lbl, fn in attachments_found:
+                        att_url = normalize_url(f"{api_base}/Web/ViewPeraturan/DownloadDokumen/{att_guid}")
+                        if att_url in candidates_map:
+                            continue
 
-                                if found_any_att:
-                                    regulations_count += 1
-                                    if progress:
-                                        progress(len(visited_pages), len(candidates_map))
-                                    continue
-                        except Exception as det_ex:
-                            logger.debug(f"Gagal memeriksa lampiran detail {detail_url}: {det_ex}")
+                        asb, acdf, assrc = (None, None, "unknown")
+                        if self.head_for_size:
+                            asb, acdf, assrc = self._probe_pdf_size(client, att_url, referer=detail_url)
 
-                    # Fallback kandidat langsung jika detail tidak memberikan lampiran baru
-                    default_fn = cd_fn
-                    if not default_fn:
-                        safe_stem = re.sub(r'[\\/*?:"<>|]', '_', doc_title).strip()
-                        default_fn = f"{safe_stem[:100]}.pdf"
+                        final_fn = acdf or fn
+                        if not final_fn:
+                            safe_stem = re.sub(r'[\\/*?:"<>|]', '_', doc_title).strip()
+                            final_fn = f"{safe_stem[:100]}.pdf"
 
-                    doc_k = determine_doc_kind(default_fn)
+                        adk = determine_doc_kind(final_fn, label=lbl)
+                        match_warn = validate_regulation_filename_match(
+                            final_fn,
+                            regulation_number=formatted_reg_num or reg_num,
+                            release_date=rel_date,
+                            document_title=doc_title,
+                            regulation_type=reg_type,
+                        )
 
-                    cand = PdfCandidate(
-                        url=norm_pdf_url,
-                        filename=default_fn,
-                        size_bytes=size_b,
-                        found_on_page=detail_url,
-                        depth=1,
-                        document_title=doc_title,
-                        detail_url=detail_url,
-                        final_url=norm_pdf_url,
-                        doc_kind=doc_k,
-                        regulation_number=reg_num,
-                        regulation_type=reg_type,
-                        bidang=bidang,
-                        sub_bidang=None,
-                        release_date=rel_date,
-                        size_source=size_src,
-                    )
-                    candidates_map[norm_pdf_url] = cand
-                    regulations_count += 1
+                        cand = PdfCandidate(
+                            url=att_url,
+                            filename=final_fn,
+                            size_bytes=asb,
+                            found_on_page=detail_url,
+                            depth=1,
+                            document_title=doc_title,
+                            detail_url=detail_url,
+                            final_url=att_url,
+                            doc_kind=adk,
+                            regulation_number=formatted_reg_num or reg_num,
+                            raw_regulation_number=reg_num,
+                            regulation_type=reg_type,
+                            bidang=bidang,
+                            sub_bidang=None,
+                            release_date=rel_date,
+                            effective_date=None,
+                            match_warning=match_warn,
+                            size_source=assrc,
+                        )
+                        candidates_map[att_url] = cand
+                        found_any_for_reg = True
 
-                    if progress:
-                        progress(len(visited_pages), len(candidates_map))
+                    if found_any_for_reg:
+                        regulations_count += 1
+                        if progress:
+                            progress(len(visited_pages), len(candidates_map))
 
                 display_start += len(rows)
                 echo_counter += 1
@@ -425,13 +427,18 @@ class JdihApiCrawler:
         duration_sec = round(time.time() - start_time, 2)
         cand_list = list(candidates_map.values())
         doc_kinds: Dict[str, int] = {}
+        match_warnings_count = 0
         for c in cand_list:
             k = c.doc_kind or "utama"
             doc_kinds[k] = doc_kinds.get(k, 0) + 1
+            if c.match_warning:
+                match_warnings_count += 1
 
         stats = {
+            "records_total": total_records if 'total_records' in locals() else None,
             "regulations_found": regulations_count,
             "pdfs_found": len(cand_list),
+            "match_warnings_count": match_warnings_count,
             "by_doc_kind": doc_kinds,
             "pages_visited": len(visited_pages),
             "requests_made": self.requests_count,

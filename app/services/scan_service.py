@@ -310,6 +310,8 @@ class ScanService:
                         bidang=cand.bidang,
                         sub_bidang=cand.sub_bidang,
                         release_date=cand.release_date,
+                        effective_date=cand.effective_date,
+                        match_warning=cand.match_warning,
                         size_source=cand.size_source or "unknown",
                         source_path=cand.source_path,
                     )
@@ -1124,6 +1126,8 @@ class ScanService:
                     bidang=cand_in.bidang,
                     sub_bidang=cand_in.sub_bidang,
                     release_date=cand_in.release_date,
+                    effective_date=getattr(cand_in, "effective_date", None),
+                    match_warning=getattr(cand_in, "match_warning", None),
                     size_source=cand_in.size_source or "unknown",
                     source_path=cand_in.source_path,
                 )
