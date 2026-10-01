@@ -407,13 +407,26 @@ def validate_regulation_filename_match(
             fn_years = [prefix_y.group(1)]
 
     # Ekstrak tahun dari metadata regulasi
+    # Prioritaskan tahun dari nomor resmi atau judul regulasi (bukan release_date)
     reg_year = None
-    if release_date and hasattr(release_date, "year") and release_date.year:
+    if regulation_number:
+        # Contoh: "24/SEOJK.03/2016", "POJK 18 Tahun 2025", "18/2025"
+        rn_y = re.findall(r'(?:^|[\W_])(20\d\d|19\d\d)(?:[\W_]|$)', regulation_number)
+        if rn_y:
+            reg_year = int(rn_y[-1])
+
+    if not reg_year and document_title:
+        # Pola "Tahun 2025" atau 4-digit tahun di judul
+        t_y = re.search(r'\bTahun\s+(20\d\d|19\d\d)\b', document_title, re.IGNORECASE)
+        if t_y:
+            reg_year = int(t_y.group(1))
+        else:
+            title_y = re.findall(r'(?:^|[\W_])(20\d\d|19\d\d)(?:[\W_]|$)', document_title)
+            if title_y:
+                reg_year = int(title_y[0])
+
+    if not reg_year and release_date and hasattr(release_date, "year") and release_date.year:
         reg_year = release_date.year
-    elif document_title:
-        title_y = re.findall(r'(?:^|[\W_])(20\d\d|19\d\d)(?:[\W_]|$)', document_title)
-        if title_y:
-            reg_year = int(title_y[0])
 
     # 2. Ekstrak nomor regulasi dari metadata
     reg_num_int = None

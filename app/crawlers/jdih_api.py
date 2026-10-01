@@ -75,7 +75,7 @@ class JdihApiCrawler:
     def __init__(
         self,
         user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        delay_seconds: float = 0.5,
+        delay_seconds: float = 0.15,
         timeout_seconds: int = 25,
         respect_robots: bool = True,
         allow_private: bool = False,
@@ -307,31 +307,26 @@ class JdihApiCrawler:
                     raw_jenis = str(row[5]).strip() if len(row) > 5 and row[5] is not None else None
                     reg_type = normalize_crawler_regulation_type(raw_jenis, title=doc_title) if raw_jenis and raw_jenis != "None" else normalize_crawler_regulation_type(None, title=doc_title)
 
-                    # Kolom 6: Tanggal rilis
-                    raw_date = str(row[6]).strip() if len(row) > 6 and row[6] is not None else None
-                    rel_date = _parse_jdih_date(raw_date) if raw_date and raw_date != "None" else None
+                    # Ekstrak tahun dari judul terlebih dahulu (misal: "Nomor 18 Tahun 2025")
+                    title_year = None
+                    t_y_m = re.search(r'\bTahun\s+(20\d\d|19\d\d)\b', doc_title, re.IGNORECASE)
+                    if t_y_m:
+                        title_year = int(t_y_m.group(1))
+                    else:
+                        gen_y_m = re.search(r'(?:^|[\W_])(20\d\d|19\d\d)(?:[\W_]|$)', doc_title)
+                        if gen_y_m:
+                            title_year = int(gen_y_m.group(1))
 
-                    # Format regulation_number lengkap dan informatif
+                    # Format awal regulation_number lengkap dari judul jika ada format nomor slash
                     formatted_reg_num = None
                     slash_num_m = re.search(r'\b(\d+/[A-Z0-9\.]+(?:/\d{4})?)\b', doc_title)
                     if slash_num_m:
                         formatted_reg_num = slash_num_m.group(1)
-                    elif reg_num:
-                        year_val = rel_date.year if rel_date else None
-                        if not year_val:
-                            y_m = re.search(r'(?:^|[\W_])(20\d\d|19\d\d)(?:[\W_]|$)', doc_title)
-                            if y_m:
-                                year_val = int(y_m.group(1))
-                        type_label = reg_type or "Nomor"
-                        if year_val:
-                            formatted_reg_num = f"{type_label} {reg_num} Tahun {year_val}"
-                        else:
-                            formatted_reg_num = f"{type_label} Nomor {reg_num}"
 
                     # URL detail regulasi: lampiran PDF HANYA diambil dari halaman detail sebenarnya
                     detail_url = f"{api_base}/Web/ViewPeraturan/Detail/{guid}/All/"
 
-                    # Ambil halaman detail untuk mendapatkan seluruh lampiran berkas asli
+                    # Ambil halaman detail untuk mendapatkan seluruh lampiran berkas asli dan tanggal penetapan/berlaku
                     d_html = ""
                     try:
                         self._rate_limit(base_host)
@@ -352,6 +347,63 @@ class JdihApiCrawler:
                             d_html = d_resp.text
                     except Exception as det_ex:
                         logger.debug(f"Gagal memuat detail {detail_url}: {det_ex}")
+
+                    # Ekstrak tanggal dari tabel detail (Tanggal Penetapan, Tanggal Pengundangan, Status Peraturan)
+                    penetapan_date: Optional[date] = None
+                    pengundangan_date: Optional[date] = None
+                    effective_date: Optional[date] = None
+
+                    if d_html:
+                        for tr in re.findall(r'<tr[^>]*>(.*?)</tr>', d_html, re.DOTALL):
+                            th_m = re.search(r'<th[^>]*><h4>(.*?)</h4></th>', tr, re.DOTALL)
+                            if not th_m:
+                                continue
+                            hdr = th_m.group(1).strip().lower()
+                            tds = re.findall(r'<td[^>]*>(.*?)</td>', tr, re.DOTALL)
+                            val = ""
+                            if len(tds) >= 2:
+                                val = re.sub(r'<[^>]+>', '', tds[1]).replace('&nbsp;', ' ').strip()
+                            elif len(tds) == 1:
+                                val = re.sub(r'<[^>]+>', '', tds[0]).replace('&nbsp;', ' ').strip()
+
+                            if "penetapan" in hdr:
+                                dm = re.search(r'(\d{1,2}-\d{1,2}-\d{4})', val)
+                                if dm:
+                                    penetapan_date = _parse_jdih_date(dm.group(1))
+                            elif "pengundangan" in hdr:
+                                dm = re.search(r'(\d{1,2}-\d{1,2}-\d{4})', val)
+                                if dm:
+                                    pengundangan_date = _parse_jdih_date(dm.group(1))
+                            elif "status" in hdr:
+                                # Contoh: "Berlaku Sejak Tanggal 09-02-2026"
+                                dm = re.search(r'(\d{1,2}-\d{1,2}-\d{4})', val)
+                                if dm and "tidak berlaku" not in val.lower():
+                                    effective_date = _parse_jdih_date(dm.group(1))
+
+                    # release_date: penetapan -> pengundangan -> title_year (1 Jan)
+                    rel_date = penetapan_date or pengundangan_date
+                    if not rel_date and title_year:
+                        rel_date = date(title_year, 1, 1)
+
+                    # Fallback tanggal berlaku dari kolom 6 DataTables jika row[7] == 'Berlaku'
+                    raw_status_date = str(row[6]).strip() if len(row) > 6 and row[6] is not None else None
+                    status_label = str(row[7]).strip() if len(row) > 7 and row[7] is not None else ""
+                    dt_status_date = _parse_jdih_date(raw_status_date) if raw_status_date and raw_status_date != "None" else None
+
+                    if not effective_date and "berlaku" in status_label.lower() and "tidak" not in status_label.lower():
+                        effective_date = dt_status_date
+
+                    if not rel_date:
+                        rel_date = dt_status_date
+
+                    # Format regulation_number sintetis dengan tahun dari judul (atau rel_date jika judul tanpa tahun)
+                    if not formatted_reg_num and reg_num:
+                        year_val = title_year or (rel_date.year if rel_date else None)
+                        type_label = reg_type or "Nomor"
+                        if year_val:
+                            formatted_reg_num = f"{type_label} {reg_num} Tahun {year_val}"
+                        else:
+                            formatted_reg_num = f"{type_label} Nomor {reg_num}"
 
                     attachments_found: List[Tuple[str, str, Optional[str]]] = []
                     if d_html:
@@ -416,7 +468,7 @@ class JdihApiCrawler:
                             bidang=bidang,
                             sub_bidang=None,
                             release_date=rel_date,
-                            effective_date=None,
+                            effective_date=effective_date,
                             match_warning=match_warn,
                             size_source=assrc,
                         )
