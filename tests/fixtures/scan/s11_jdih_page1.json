@@ -1,27 +1,31 @@
 {
-    "sEcho": 1,
-    "iTotalRecords": [4],
-    "iTotalDisplayRecords": [4],
-    "aaData": [
-        [
-            "<a href='http://jdih.ojk.go.id/Web/ViewPeraturan/Detail/11111111-1111-1111-1111-111111111111/All/'>Peraturan Otoritas Jasa Keuangan Nomor 1 Tahun 2024</a>",
-            "1",
-            "Perbankan",
-            null,
-            null,
-            "Peraturan OJK",
-            "15-01-2024",
-            "Berlaku"
-        ],
-        [
-            "<a href='http://jdih.ojk.go.id/Web/ViewPeraturan/Detail/22222222-2222-2222-2222-222222222222/All/'>Surat Edaran Otoritas Jasa Keuangan Nomor 2 Tahun 2024</a>",
-            "2",
-            "Pasar Modal",
-            null,
-            null,
-            "Surat Edaran OJK",
-            "20-01-2024",
-            "Berlaku"
-        ]
+  "sEcho": 1,
+  "iTotalRecords": [
+    4
+  ],
+  "iTotalDisplayRecords": [
+    4
+  ],
+  "aaData": [
+    [
+      "<a href='http://jdih.ojk.go.id/Web/ViewPeraturan/Detail/95716c28-8ed1-5964-7ed5-592615a5b53c/All/'>Peraturan Anggota Dewan Komisioner Otoritas Jasa Keuangan Republik Indonesia Nomor 4 Tahun 2026 tentang Pedoman Penerapan Program Anti Pencucian Uang, Pencegahan Pendanaan Terorisme, dan Pencegahan Pendanaan Proliferasi Senjata Pemusnah Massal Bagi Wali Amanat</a>",
+      "4",
+      "Pasar Modal, Keuangan Derivatif, dan Bursa Karbon",
+      null,
+      null,
+      "Surat Edaran OJK / Peraturan Anggota Dewan Komisioner OJK",
+      "07-07-2026",
+      "Berlaku"
+    ],
+    [
+      "<a href='http://jdih.ojk.go.id/Web/ViewPeraturan/Detail/ffba8600-32dd-1c98-e8c3-68d0c8922808/All/'>Peraturan Otoritas Jasa Keuangan Republik Indonesia Nomor 10 Tahun 2026 tentang Perubahan Atas Peraturan Otoritas Jasa Keuangan Nomor 14 Tahun 2023 tentang Perdagangan Karbon Melalui Bursa Karbon</a>",
+      "10",
+      "Pasar Modal, Keuangan Derivatif, dan Bursa Karbon",
+      null,
+      null,
+      "Peraturan OJK",
+      "06-07-2026",
+      "Berlaku"
     ]
+  ]
 }

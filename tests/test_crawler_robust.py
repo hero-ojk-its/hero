@@ -369,13 +369,13 @@ def test_s04_sharepoint_postback_pagination(robust_server, monkeypatch):
 # S05: Halaman Detail OJK (Metadata + 3 Lampiran PDF dengan doc_kind)
 # ==============================================================================
 def test_s05_ojk_detail_page_metadata_and_attachments(robust_server, monkeypatch):
-    """S05: Halaman detail OJK -> Nomor, jenis, sektor, tanggal, dan 3 lampiran doc_kind benar."""
+    """S05: Halaman detail OJK (snapshot asli dipangkas) -> Nomor, jenis, sektor, tanggal, dan 3 lampiran doc_kind benar."""
     base_url, srv = robust_server
     monkeypatch.setattr(settings, "crawl_allow_private_networks", True)
     monkeypatch.setattr(settings, "crawl_delay_seconds", 0)
 
     html_detail = (FIXTURE_DIR / "s05_ojk_detail.html").read_text(encoding="utf-8")
-    srv.routes["/id/regulasi/Pages/POJK-17-2023.aspx"] = {
+    srv.routes["/id/regulasi/Pages/POJK-13-Tahun-2026.aspx"] = {
         "status": 200,
         "headers": {"Content-Type": "text/html"},
         "body": html_detail,
@@ -383,20 +383,21 @@ def test_s05_ojk_detail_page_metadata_and_attachments(robust_server, monkeypatch
 
     crawler = SharepointPostbackCrawler(allow_private=True, delay_seconds=0, head_for_size=False)
     with httpx.Client(follow_redirects=True) as client:
-        candidates = crawler._parse_detail_page(client, f"{base_url}/id/regulasi/Pages/POJK-17-2023.aspx", page_depth=1)
+        candidates = crawler._parse_detail_page(client, f"{base_url}/id/regulasi/Pages/POJK-13-Tahun-2026.aspx", page_depth=1)
 
     assert len(candidates) == 3
     kinds = {c.filename: c.doc_kind for c in candidates}
-    assert kinds["POJK 17 Tahun 2023.pdf"] == "utama"
-    assert kinds["Abstrak POJK 17 Tahun 2023.pdf"] == "abstrak"
-    assert kinds["FAQ POJK 17 Tahun 2023.pdf"] == "faq"
+    assert kinds["POJK 13 Tahun 2026 Pemegang Saham Bursa Efek.pdf"] == "utama"
+    assert kinds["Abstrak POJK 13 Tahun 2026 Pemegang Saham Bursa Efek.pdf"] == "abstrak"
+    assert kinds["FAQ POJK 13 Tahun 2026 Pemegang Saham Bursa Efek.pdf"] == "faq"
 
     cand0 = candidates[0]
-    assert cand0.regulation_number == "POJK 17/POJK.03/2023"
+    assert cand0.regulation_number == "13 Tahun 2026"
     assert cand0.regulation_type == "POJK"
-    assert cand0.bidang == "Perbankan"
-    assert cand0.sub_bidang == "Bank Umum"
-    assert cand0.release_date == date(2023, 9, 14)
+    assert cand0.bidang == "Pasar Modal"
+    assert cand0.sub_bidang == "Bursa Efek"
+    assert cand0.release_date == date(2026, 9, 15)
+    assert cand0.effective_date == date(2026, 9, 15)
 
 
 # ==============================================================================
@@ -572,12 +573,12 @@ def test_s11_jdih_api_crawler_two_pages(robust_server, monkeypatch):
 
     srv.routes["/Web/ViewPeraturanHome/ListDataPeraturan"] = jdih_handler
 
-    # Mock halaman detail untuk masing-masing regulasi (Langkah 10b: URL berkas dari lampiran detail)
-    for guid, num, name in [
-        ("11111111-1111-1111-1111-111111111111", "1", "2024pojk001.pdf"),
-        ("22222222-2222-2222-2222-222222222222", "2", "2024seojk002.pdf"),
-        ("33333333-3333-3333-3333-333333333333", "3", "2024padk003.pdf"),
-        ("44444444-4444-4444-4444-444444444444", "4", "2024kdk004.pdf"),
+    # Mock halaman detail untuk masing-masing regulasi (GUID asli dari fixture DataTables)
+    for guid, name in [
+        ("95716c28-8ed1-5964-7ed5-592615a5b53c", "2026padk004.pdf"),
+        ("ffba8600-32dd-1c98-e8c3-68d0c8922808", "2026pojk010.pdf"),
+        ("d123dff4-9d95-6f53-9568-5224e371a676", "2026pojk009.pdf"),
+        ("009e5e55-ce9b-5f02-6b0b-2fdb55e5675a", "2026pojk008.pdf"),
     ]:
         att_guid = f"att-{guid[:8]}"
         detail_html = f"""
@@ -598,14 +599,11 @@ def test_s11_jdih_api_crawler_two_pages(robust_server, monkeypatch):
     assert len(res.candidates) == 4
     types = [c.regulation_type for c in res.candidates]
     assert "POJK" in types
-    assert "SEOJK" in types
     assert "PADK" in types
-    assert "KDK" in types
 
     bidangs = [c.bidang for c in res.candidates]
-    assert "Perbankan" in bidangs
-    assert "Pasar Modal" in bidangs
-    assert "IKNB" in bidangs
+    assert any("Pasar Modal" in b for b in bidangs if b)
+    assert any("Lembaga Pembiayaan" in b for b in bidangs if b)
 
 
 # ==============================================================================
@@ -1088,3 +1086,157 @@ def test_t05_parse_onedrive_filename_metadata():
     assert res2.get("regulation_type") == "SEOJK"
     assert res2.get("regulation_number") == "46"
     assert res2.get("year") == 2017
+
+
+# ==============================================================================
+# U01–U04: Pengujian Tanggal, Nomor Sintetis, dan Validasi Berkas JDIH (Langkah 10c)
+# ==============================================================================
+def test_u01_jdih_penetapan_vs_effective_date(robust_server, monkeypatch):
+    """
+    U01: Item JDIH (fixture asli) dengan tanggal penetapan != tanggal berlaku.
+    Ekspektasi: release_date = penetapan, effective_date = berlaku.
+    """
+    base_url, srv = robust_server
+    monkeypatch.setattr(settings, "crawl_allow_private_networks", True)
+    monkeypatch.setattr(settings, "crawl_delay_seconds", 0)
+
+    guid = "406ece2b-a508-fc8c-31a4-c7a312908c2e"
+    api_payload = {
+        "sEcho": 1,
+        "iTotalRecords": [1],
+        "iTotalDisplayRecords": [1],
+        "aaData": [
+            [
+                f"<a href='http://jdih.ojk.go.id/Web/ViewPeraturan/Detail/{guid}/All/'>Peraturan Otoritas Jasa Keuangan Republik Indonesia Nomor 18 Tahun 2025 tentang Transparansi dan Publikasi Laporan Bank</a>",
+                "18",
+                "Perbankan",
+                None,
+                None,
+                "Peraturan OJK",
+                "09-02-2026",
+                "Berlaku"
+            ]
+        ]
+    }
+    import json
+    srv.routes["/Web/ViewPeraturanHome/ListDataPeraturan"] = {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps(api_payload),
+    }
+
+    # Halaman detail asli dengan penetapan: 04-08-2025, status berlaku: 09-02-2026
+    detail_html = f"""
+    <html><body><table>
+        <tr><th><h4>Tanggal Penetapan</h4></th><td>:</td><td>04-08-2025</td></tr>
+        <tr><th><h4>Tanggal Pengundangan</h4></th><td>:</td><td>08-08-2025</td></tr>
+        <tr><th><h4>Status Peraturan</h4></th><td>:</td><td>Berlaku Sejak Tanggal 09-02-2026</td></tr>
+        <tr>
+            <th><h4>Peraturan</h4></th>
+            <td><a download href="/Web/ViewPeraturan/DownloadDokumen/att-pojk18" onclick="downloadDokumen('2025pojk018.pdf','~/Dokumen/2025pojk018.pdf')">Unduh</a></td>
+        </tr>
+    </table></body></html>
+    """
+    srv.routes[f"/Web/ViewPeraturan/Detail/{guid}/All/"] = {
+        "status": 200,
+        "headers": {"Content-Type": "text/html"},
+        "body": detail_html,
+    }
+
+    crawler = JdihApiCrawler(allow_private=True, delay_seconds=0, head_for_size=False)
+    res = crawler.scan(base_url, depth=1, max_pages=1)
+    assert len(res.candidates) == 1
+    cand = res.candidates[0]
+    assert cand.release_date == date(2025, 8, 4)
+    assert cand.effective_date == date(2026, 2, 9)
+
+
+def test_u02_jdih_synthetic_number_year_from_title(robust_server, monkeypatch):
+    """
+    U02: Item JDIH tanpa nomor resmi lengkap, judul 'Nomor 18 Tahun 2025', tanggal berlaku 2026.
+    Ekspektasi: regulation_number = 'POJK 18 Tahun 2025' (tahun diambil dari judul, bukan 2026).
+    """
+    base_url, srv = robust_server
+    monkeypatch.setattr(settings, "crawl_allow_private_networks", True)
+    monkeypatch.setattr(settings, "crawl_delay_seconds", 0)
+
+    guid = "406ece2b-a508-fc8c-31a4-c7a312908c2e"
+    api_payload = {
+        "sEcho": 1,
+        "iTotalRecords": [1],
+        "iTotalDisplayRecords": [1],
+        "aaData": [
+            [
+                f"<a href='http://jdih.ojk.go.id/Web/ViewPeraturan/Detail/{guid}/All/'>Peraturan Otoritas Jasa Keuangan Nomor 18 Tahun 2025 tentang Transparansi</a>",
+                "18",
+                "Perbankan",
+                None,
+                None,
+                "Peraturan OJK",
+                "09-02-2026",
+                "Berlaku"
+            ]
+        ]
+    }
+    import json
+    srv.routes["/Web/ViewPeraturanHome/ListDataPeraturan"] = {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps(api_payload),
+    }
+
+    detail_html = f"""
+    <html><body><table>
+        <tr><th><h4>Tanggal Penetapan</h4></th><td>:</td><td>04-08-2025</td></tr>
+        <tr><th><h4>Status Peraturan</h4></th><td>:</td><td>Berlaku Sejak Tanggal 09-02-2026</td></tr>
+        <tr>
+            <th><h4>Peraturan</h4></th>
+            <td><a download href="/Web/ViewPeraturan/DownloadDokumen/att-pojk18" onclick="downloadDokumen('2025pojk018.pdf','~/Dokumen/2025pojk018.pdf')">Unduh</a></td>
+        </tr>
+    </table></body></html>
+    """
+    srv.routes[f"/Web/ViewPeraturan/Detail/{guid}/All/"] = {
+        "status": 200,
+        "headers": {"Content-Type": "text/html"},
+        "body": detail_html,
+    }
+
+    crawler = JdihApiCrawler(allow_private=True, delay_seconds=0, head_for_size=False)
+    res = crawler.scan(base_url, depth=1, max_pages=1)
+    assert len(res.candidates) == 1
+    cand = res.candidates[0]
+    assert cand.regulation_number == "POJK 18 Tahun 2025"
+    assert "2026" not in cand.regulation_number
+
+
+def test_u03_match_warning_2025pojk018_no_warning():
+    """
+    U03: 2025pojk018.pdf vs regulasi 18/2025 -> Tanpa warning.
+    """
+    from app.crawlers.url_utils import validate_regulation_filename_match
+
+    warn = validate_regulation_filename_match(
+        filename="2025pojk018.pdf",
+        regulation_number="POJK 18 Tahun 2025",
+        release_date=date(2025, 8, 4),
+        document_title="Peraturan Otoritas Jasa Keuangan Nomor 18 Tahun 2025",
+        regulation_type="POJK",
+    )
+    assert warn is None
+
+
+def test_u04_match_warning_real_mismatch_warning():
+    """
+    U04: Ringkasan POJK 4 Tahun 2023.pdf vs 23/POJK.04/2016 -> Warning.
+    """
+    from app.crawlers.url_utils import validate_regulation_filename_match
+
+    warn = validate_regulation_filename_match(
+        filename="Ringkasan POJK 4 Tahun 2023.pdf",
+        regulation_number="23/POJK.04/2016",
+        release_date=date(2016, 7, 14),
+        document_title="Peraturan Otoritas Jasa Keuangan Nomor 23/POJK.04/2016",
+        regulation_type="POJK",
+    )
+    assert warn is not None
+    assert "2023" in warn and "2016" in warn
