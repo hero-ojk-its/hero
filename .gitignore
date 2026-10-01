@@ -38,6 +38,8 @@ corpus/
 storage/
 *.pdf
 !docs/**/*.pdf
+# Pengecualian: modul kode frontend (bukan dokumen peraturan)
+!capstone-HERO/src/data/
 
 # Output sementara
 tmp/
