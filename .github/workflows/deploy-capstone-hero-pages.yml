@@ -1,10 +1,10 @@
 # Deploy capstone-HERO (Vite + React) ke GitHub Pages
 #
 # Pages repo ini disajikan dari branch gh-pages. Workflow ini mem-build
-# capstone-HERO lalu menaruh hasil dist/ di gh-pages/capstone-HERO/,
-# tanpa menyentuh isi gh-pages yang lain (keep_files).
+# capstone-HERO lalu menjadikan dist/ sebagai isi root gh-pages
+# (menggantikan template Next.js lama).
 #
-# URL: https://hero-ojk-its.github.io/hero/capstone-HERO/
+# URL: https://hero-ojk-its.github.io/hero/
 
 name: Deploy capstone-HERO (Pages)
 
@@ -40,5 +40,4 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: capstone-HERO/dist
-          destination_dir: capstone-HERO
-          keep_files: true
+          force_orphan: true
