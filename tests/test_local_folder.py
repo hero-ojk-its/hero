@@ -366,15 +366,15 @@ def test_l11_reject_invalid_source_types_and_inactive(client, tmp_path: Path, mo
     assert r1.status_code == 409
     assert "alur pindai: POST /api/v1/scans" in r1.json()["detail"]
 
-    # 2. onedrive_public -> 422
+    # 2. onedrive_public -> 409 (didukung lewat alur scan)
     resp_one = client.post(
         "/api/v1/scraping-sources/",
         json={"name": "OneDrive L11", "url": "https://1drv.ms/f/s!test1", "source_type": "onedrive_public"},
     )
     one_id = resp_one.json()["id"]
     r2 = client.post(f"/api/v1/scraping-sources/{one_id}/run")
-    assert r2.status_code == 422
-    assert "Konektor OneDrive langsung belum tersedia" in r2.json()["detail"]
+    assert r2.status_code == 409
+    assert "POST /api/v1/scans" in r2.json()["detail"]
 
     # 3. nonaktif -> 409
     resp_inact = client.post(

@@ -1,0 +1,27 @@
+{
+    "sEcho": 2,
+    "iTotalRecords": [4],
+    "iTotalDisplayRecords": [4],
+    "aaData": [
+        [
+            "<a href='http://jdih.ojk.go.id/Web/ViewPeraturan/Detail/33333333-3333-3333-3333-333333333333/All/'>Peraturan Anggota Dewan Komisioner Nomor 3 Tahun 2024</a>",
+            "3",
+            "IKNB",
+            null,
+            null,
+            "Peraturan Anggota Dewan Komisioner",
+            "25-01-2024",
+            "Berlaku"
+        ],
+        [
+            "<a href='http://jdih.ojk.go.id/Web/ViewPeraturan/Detail/44444444-4444-4444-4444-444444444444/All/'>Keputusan Dewan Komisioner Nomor 4 Tahun 2024</a>",
+            "4",
+            "Perbankan",
+            null,
+            null,
+            "Keputusan Dewan Komisioner",
+            "30-01-2024",
+            "Berlaku"
+        ]
+    ]
+}
