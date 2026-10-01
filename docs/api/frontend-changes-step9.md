@@ -12,10 +12,10 @@
 2. **Metadata Sektor / Bidang (`bidang`):**  
    Kolom baru untuk menyimpan sektor regulasi OJK (misal: `Perbankan`, `Pasar Modal`, `IKNB`, `BMKS`).
 3. **Kontrak API Fase 1 Lengkap (#91 AI-T12):**  
-   Dokumen resmi di [`docs/api/KONTRAK-API-FASE1.md`](file:///docs/api/KONTRAK-API-FASE1.md) yang memuat seluruh alur UI, contoh request/respons JSON nyata, tabel enum lengkap, dan kode galat.
+   Dokumen resmi di [`KONTRAK-API-FASE1.md`](KONTRAK-API-FASE1.md) yang memuat seluruh alur UI, contoh request/respons JSON nyata, tabel enum lengkap, dan kode galat.
 4. **Snapshot OpenAPI & REST Client:**  
-   - [`docs/api/openapi-fase1.json`](file:///docs/api/openapi-fase1.json) untuk type generator TypeScript (`openapi-typescript` / `orval`).
-   - [`docs/api/hero-fase1.http`](file:///docs/api/hero-fase1.http) untuk pengetesan langsung di VS Code.
+   - [`openapi-fase1.json`](openapi-fase1.json) untuk type generator TypeScript (`openapi-typescript` / `orval`).
+   - [`hero-fase1.http`](hero-fase1.http) untuk pengetesan langsung di VS Code.
 
 ---
 
@@ -97,8 +97,10 @@ Body request (opsional) untuk override format penamaan:
 }
 ```
 
-### 3.4 `GET /api/v1/documents/` & `GET /api/v1/documents/search`
+### 3.4 `GET /api/v1/documents/` (Daftar & Pencarian Full-Text)
 - Parameter filter baru: `bidang` (contoh: `GET /api/v1/documents/?bidang=Perbankan`).
+- Parameter pencarian teks: `q`, `mode` (`phrase` | `all` | `web`), dan `highlight=true`.
+- Parameter pencarian nomor regulasi: `regulation_number` (pencarian trigram cepat).
 - Setiap objek dokumen di respons daftar dan detail kini memuat properti `bidang`, `naming_format`, dan `naming_separator`.
 
 ### 3.5 `PATCH /api/v1/documents/{id}/metadata`

@@ -31,8 +31,8 @@ POST {{baseUrl}}/scraping-sources/
 Content-Type: application/json
 
 {
-  "name": "JDIH OJK Pusat",
-  "url": "https://jdih.ojk.go.id",
+  "name": "JDIH ESDM",
+  "url": "https://jdih.esdm.go.id",
   "source_type": "situs_web",
   "crawl_depth": 2,
   "default_access_classification": "publik",
@@ -78,8 +78,8 @@ Content-Type: application/json
 GET {{baseUrl}}/documents/?bidang=Perbankan&skip=0&limit=10
 Accept: application/json
 
-### 11. Documents: Search
-GET {{baseUrl}}/documents/search?q=modal+inti&bidang=Perbankan&highlight=true
+### 11. Documents: Search Full-Text & Highlight
+GET {{baseUrl}}/documents/?q=modal+inti&bidang=Perbankan&highlight=true
 Accept: application/json
 
 ### 12. Documents: Get Detail (Ganti ID)
@@ -87,7 +87,7 @@ GET {{baseUrl}}/documents/1
 Accept: application/json
 
 ### 13. Documents: Read Text (Ganti ID)
-GET {{baseUrl}}/documents/1/text?offset=0&limit=5000
+GET {{baseUrl}}/documents/1/text?offset=0&limit=20000
 Accept: application/json
 
 ### 14. Documents: Open PDF Inline (Ganti ID)
@@ -105,6 +105,23 @@ Content-Type: application/json
   "status_keberlakuan": "berlaku"
 }
 
-### 16. Dashboard: Summary
+### 16. Ingest: List Failures Queue
+GET {{baseUrl}}/ingest/failures
+Accept: application/json
+
+### 17. Ingest: Retry Failure (Ganti ID)
+POST {{baseUrl}}/ingest/failures/1/retry
+Accept: application/json
+
+### 18. Ingest: Ignore Failure (Ganti ID)
+PATCH {{baseUrl}}/ingest/failures/1
+Content-Type: application/json
+
+{
+  "follow_up_status": "diabaikan",
+  "handling_note": "Abaikan berkas corrupt hasil pengujian."
+}
+
+### 19. Dashboard: Summary
 GET {{baseUrl}}/dashboard/summary
 Accept: application/json

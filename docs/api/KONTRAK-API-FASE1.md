@@ -1,12 +1,19 @@
 # KONTRAK API HERO BACKEND — FASE 1 (MVP)
 
 > **Untuk Tim Frontend (Personil_D)**  
-> **Status:** Resmi Disepakati (Step 9 / Issue #91 AI-T12 & #90 US-20c)  
+> **Status:** DRAF v0.9 — untuk disepakati Personil_D & Personil_E (rapat internal 1 Okt 2026)  
 > **Basis Implementasi:** FastAPI · PostgreSQL 15.4 · SQLAlchemy 2.x  
 > **Artefak Pendamping:**
-> - [Koleksi Request Siap Eksekusi (REST Client / VS Code)](file:///docs/api/hero-fase1.http)
-> - [Snapshot Skema OpenAPI JSON untuk Type Generator](file:///docs/api/openapi-fase1.json)
-> - [Catatan Perubahan Frontend Step 9](file:///docs/api/frontend-changes-step9.md)
+> - [Koleksi Request Siap Eksekusi (REST Client / VS Code)](hero-fase1.http)
+> - [Snapshot Skema OpenAPI JSON untuk Type Generator](openapi-fase1.json)
+> - [Catatan Perubahan Frontend Step 9](frontend-changes-step9.md)
+
+### Tabel Persetujuan
+
+| Nama | Peran | Tanggal | Catatan |
+|---|---|---|---|
+| Personil_D | Frontend Lead | - | Belum ditandatangani |
+| Personil_E | Backend Lead / PM | - | Belum ditandatangani |
 
 ---
 
@@ -20,7 +27,7 @@
 6. [Alur 5: Unggah Berkas Manual & Sinkronisasi Folder Lokal](#6-alur-5-unggah-berkas-manual--sinkronisasi-folder-lokal)
 7. [Alur 6: Eksplorasi Knowledge Base & Pencarian Regulasi](#7-alur-6-eksplorasi-knowledge-base--pencarian-regulasi)
 8. [Alur 7: Detail Dokumen, Pembaca Teks & Penampil PDF](#8-alur-7-detail-dokumen-pembaca-teks--penampil-pdf)
-9. [Alur 8: Kurasi & Koreksi Metadata serta Penanganan Gagal](#9-alur-8-kurasi--koreksi-metadata-serta-penanganan-gagal)
+9. [Alur 8: Kurasi & Koreksi Metadata serta Antrean Penanganan Gagal](#9-alur-8-kurasi--koreksi-metadata-serta-antrean-penanganan-gagal)
 10. [Alur 9: Dashboard Ringkasan Eksekutif](#10-alur-9-dashboard-ringkasan-eksekutif)
 11. [Tabel Referensi Enum & Label Bahasa Indonesia](#11-tabel-referensi-enum--label-bahasa-indonesia)
 12. [Daftar Kode Galat HTTP & Penanganan di UI](#12-daftar-kode-galat-http--penanganan-di-ui)
@@ -50,8 +57,13 @@
 ### 1.3 Dua Bentuk Format Galat (Error Response)
 Frontend wajib menangani **2 format error**:
 
-1. **Galat Logika Bisnis Aplikasi (400, 403, 404, 409, 503):**
-   `detail` berupa **string pesan tunggal**:
+1. **Galat Logika Bisnis / HTTP 4xx (dari Backend Application):**
+   ```json
+   {
+     "detail": "Pesan galat dalam bahasa Indonesia yang ramah pengguna."
+   }
+   ```
+   *Contoh Riil 404 (Dokumen tidak ditemukan):*
 <!-- AUTO:error_404_sample -->
 ```json
 {
@@ -60,8 +72,19 @@ Frontend wajib menangani **2 format error**:
 ```
 <!-- /AUTO:error_404_sample -->
 
-2. **Galat Validasi Input Schema / Pydantic (422 Unprocessable Entity):**
-   `detail` berupa **array of objects**:
+2. **Galat Validasi Schema (HTTP 422 dari FastAPI/Pydantic):**
+   ```json
+   {
+     "detail": [
+       {
+         "loc": ["body", "naming_format", 1],
+         "msg": "Komponen naming_format tidak valid: 'warna_invalid'. Komponen yang didukung: 'nama', 'nomor', 'tahun', 'jenis', 'bidang'.",
+         "type": "value_error"
+       }
+     ]
+   }
+   ```
+   *Contoh Riil 422:*
 <!-- AUTO:error_422_sample -->
 ```json
 {
@@ -70,39 +93,33 @@ Frontend wajib menangani **2 format error**:
 ```
 <!-- /AUTO:error_422_sample -->
 
-> **Saran UI:**  
-> Buat interceptor response pada Axios / Fetch:  
-> `const errorMsg = typeof err.response.data.detail === 'string' ? err.response.data.detail : err.response.data.detail.map(e => e.msg).join(', ');`
+### 1.4 Status Autentikasi & CORS
+- **`AUTH_ENABLED=false` (Default Fase 1):** Header `Authorization: Bearer <token>` **tidak wajib** disertakan pada seluruh endpoint publik/operasional.
+- **CORS:** Backend mengizinkan origin yang didefinisikan pada `CORS_ORIGINS` di `.env` (misal: `http://localhost:3000,http://127.0.0.1:3000`).
 
-### 1.4 Status Autentikasi (Fase 1)
-- Pada Fase 1, `AUTH_ENABLED=false`. Frontend **tidak perlu mengirimkan header Authorization/Bearer token**.
-- Seluruh endpoint publik dapat diakses langsung.
-
-### 1.5 CORS (Cross-Origin Resource Sharing)
-- Backend mengizinkan origin frontend: `http://localhost:3000` dan `http://127.0.0.1:3000`.
-- Jika pengujian frontend berjalan di port lain, pastikan menambahkan port tersebut di konfigurasi `.env` (`CORS_ORIGINS`).
-
-### 1.6 Pola Operasi Panjang (Asynchronous Polling)
-Operasi berat seperti pemindaian situs web (`POST /scans/`), penarikan dokumen (`POST /scans/{id}/pull`), dan sinkronisasi folder (`POST /scraping-sources/{id}/run`):
-1. **Default (`wait=false`):** Backend merespons langsung dengan status **`202 Accepted`** berisi `scan_id` atau `job_id` dan status `"antrian"`.
-2. **Polling UI:** Frontend melakukan polling GET (`GET /api/v1/scans/{id}` atau `GET /api/v1/jobs/{id}`) tiap **2 detik**.
-3. **Status Final:** Polling berhenti saat status mencapai salah satu nilai final:
-   - `selesai` (sukses)
-   - `gagal` (terjadi kesalahan, lihat `error_message`)
-   - `dibatalkan` (dibatalkan oleh pengguna)
+### 1.5 Pola Operasi Panjang (Long-Running Operations)
+Operasi penarikan berkas (`/pull`) dan pemindaian situs (`/scans/`) menggunakan pola polling:
+1. Frontend mengirim request dengan query `wait=false` (default).
+2. Backend merespons langsung dengan status `202 Accepted` (atau `200 OK`) berisi `job_id` atau `scan_id`.
+3. Frontend melakukan polling `GET /api/v1/scans/{id}` atau `GET /api/v1/ingest/jobs/{job_id}` setiap 2 detik hingga mencapai **status final**: `selesai`, `gagal`, atau `dibatalkan`.
 
 ---
 
 ## 2. ALUR 1: TAMBAH & KELOLA SUMBER DOKUMEN
 
-### 2.1 Menambah Sumber Situs Web (JDIH OJK)
+Mendukung pendaftaran situs web dan folder lokal sebagai sumber regulasi.
+
+> [!NOTE]
+> Contoh URL menggunakan `https://jdih.esdm.go.id` yang telah divalidasi dengan crawler standar (`SimpleHttpCrawler`). Dukungan untuk situs berbasis SPA (seperti JDIH OJK) dan integrasi Microsoft OneDrive sedang dikerjakan pada isu terpisah (#88, #30).
+
+### 2.1 Tambah Sumber Situs Web
 - **Method & Path:** `POST /api/v1/scraping-sources/`
 - **Request Body:**
 <!-- AUTO:source_create_web_request -->
 ```json
 {
-  "name": "JDIH OJK Pusat",
-  "url": "https://jdih.ojk.go.id",
+  "name": "JDIH ESDM",
+  "url": "https://jdih.esdm.go.id",
   "source_type": "situs_web",
   "crawl_depth": 2,
   "default_access_classification": "publik",
@@ -122,9 +139,9 @@ Operasi berat seperti pemindaian situs web (`POST /scans/`), penarikan dokumen (
 ```json
 {
   "id": 1,
-  "name": "JDIH OJK Pusat",
-  "url": "https://jdih.ojk.go.id",
-  "address": "https://jdih.ojk.go.id",
+  "name": "JDIH ESDM",
+  "url": "https://jdih.esdm.go.id",
+  "address": "https://jdih.esdm.go.id",
   "source_type": "situs_web",
   "crawl_depth": 2,
   "recursive": true,
@@ -147,7 +164,7 @@ Operasi berat seperti pemindaian situs web (`POST /scans/`), penarikan dokumen (
 ```
 <!-- /AUTO:source_create_web_response -->
 
-### 2.2 Menambah Sumber Folder Lokal
+### 2.2 Tambah Sumber Folder Lokal
 - **Method & Path:** `POST /api/v1/scraping-sources/`
 - **Respons (201 Created):**
 <!-- AUTO:source_create_local_response -->
@@ -179,18 +196,17 @@ Operasi berat seperti pemindaian situs web (`POST /scans/`), penarikan dokumen (
 ```
 <!-- /AUTO:source_create_local_response -->
 
-### 2.3 Daftar Semua Sumber
+### 2.3 Daftar Sumber Dokumen
 - **Method & Path:** `GET /api/v1/scraping-sources/`
-- **Query Params:** `is_active` (boolean, opsional), `source_type` (JenisSumber, opsional).
 - **Respons (200 OK):**
 <!-- AUTO:source_list_response -->
 ```json
 [
   {
     "id": 1,
-    "name": "JDIH OJK Pusat",
-    "url": "https://jdih.ojk.go.id",
-    "address": "https://jdih.ojk.go.id",
+    "name": "JDIH ESDM",
+    "url": "https://jdih.esdm.go.id",
+    "address": "https://jdih.esdm.go.id",
     "source_type": "situs_web",
     "crawl_depth": 2,
     "recursive": true,
@@ -242,9 +258,8 @@ Operasi berat seperti pemindaian situs web (`POST /scans/`), penarikan dokumen (
 
 ## 3. ALUR 2: PEMINDAIAN SITUS WEB, SELEKSI & CENTANG KANDIDAT
 
-### 3.1 Memulai Pemindaian Situs
+### 3.1 Memulai Sesi Pemindaian
 - **Method & Path:** `POST /api/v1/scans/`
-- **Query Param:** `wait=false` (default) → 202 Accepted, `wait=true` → 200 OK setelah selesai.
 - **Request Body:**
 <!-- AUTO:scan_create_request -->
 ```json
@@ -266,7 +281,7 @@ Operasi berat seperti pemindaian situs web (`POST /scans/`), penarikan dokumen (
 ```
 <!-- /AUTO:scan_create_response -->
 
-### 3.2 Detail Status Sesi Pemindaian
+### 3.2 Memeriksa Detail & Status Sesi Pemindaian
 - **Method & Path:** `GET /api/v1/scans/{scan_id}`
 - **Respons (200 OK):**
 <!-- AUTO:scan_detail_response -->
@@ -274,7 +289,7 @@ Operasi berat seperti pemindaian situs web (`POST /scans/`), penarikan dokumen (
 {
   "id": 1,
   "source_id": 1,
-  "start_url": "https://jdih.ojk.go.id",
+  "start_url": "https://jdih.esdm.go.id",
   "crawl_depth": 1,
   "mode": "simple_http",
   "crawler_name": null,
@@ -307,9 +322,9 @@ Operasi berat seperti pemindaian situs web (`POST /scans/`), penarikan dokumen (
 ```
 <!-- /AUTO:scan_detail_response -->
 
-### 3.3 Menampilkan Daftar Kandidat PDF
+### 3.3 Mengambil Daftar Kandidat Berkas
 - **Method & Path:** `GET /api/v1/scans/{scan_id}/candidates`
-- **Query Params:** `match_status` (`baru` | `sudah_ada` | `mungkin_ada`), `selected` (boolean), `pull_outcome`, `q` (filter nama berkas), `skip`, `limit`.
+- **Query Params:** `match_status` (`baru`, `sudah_ada`, `mungkin_ada`), `selected` (`true`, `false`).
 - **Respons (200 OK):**
 <!-- AUTO:scan_candidates_response -->
 ```json
@@ -318,8 +333,8 @@ Operasi berat seperti pemindaian situs web (`POST /scans/`), penarikan dokumen (
     {
       "id": 1,
       "scan_id": 1,
-      "url": "https://jdih.ojk.go.id/docs/POJK_16_2026.pdf",
-      "filename": "POJK_16_2026.pdf",
+      "url": "https://jdih.esdm.go.id/docs/Permen_ESDM_16_2026.pdf",
+      "filename": "Permen_ESDM_16_2026.pdf",
       "size_bytes": 1048576,
       "found_on_page": null,
       "depth": 1,
@@ -337,8 +352,8 @@ Operasi berat seperti pemindaian situs web (`POST /scans/`), penarikan dokumen (
     {
       "id": 2,
       "scan_id": 1,
-      "url": "https://jdih.ojk.go.id/docs/SEOJK_05_2025.pdf",
-      "filename": "SEOJK_05_2025.pdf",
+      "url": "https://jdih.esdm.go.id/docs/Kepmen_05_2025.pdf",
+      "filename": "Kepmen_05_2025.pdf",
       "size_bytes": 524288,
       "found_on_page": null,
       "depth": 1,
@@ -361,12 +376,12 @@ Operasi berat seperti pemindaian situs web (`POST /scans/`), penarikan dokumen (
 ```
 <!-- /AUTO:scan_candidates_response -->
 
-### 3.4 Memperbarui Centang Pilihan (Selection)
+### 3.4 Mengubah Pilihan Centang Berkas (Selection)
 - **Method & Path:** `PATCH /api/v1/scans/{scan_id}/selection`
-- **Aksi Valid:**
-  - `select_all_new`: Centang semua kandidat berstatus `baru`.
-  - `select_none`: Kosongkan seluruh centang.
-  - `set`: Atur centang kandidat tertentu (`candidate_ids: [1, 2]`, `selected: true/false`).
+- **Aksi yang Didukung:**
+  - `select_all`: Centang semua berkas berstatus `baru`.
+  - `select_none`: Hapus semua centangan.
+  - `set`: Atur centang berkas tertentu berdasarkan daftar `candidate_ids`.
 - **Respons (200 OK):**
 <!-- AUTO:scan_selection_response -->
 ```json
@@ -390,7 +405,7 @@ Operasi berat seperti pemindaian situs web (`POST /scans/`), penarikan dokumen (
 
 Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`, `jenis`, `bidang`, `nomor`).
 
-### 4.1 Mendapatkan Komponen Penamaan Tersedia
+### 4.1 Mendapatkan Komponen & Aturan Penamaan
 - **Method & Path:** `GET /api/v1/naming/components`
 - **Respons (200 OK):**
 <!-- AUTO:naming_components_response -->
@@ -434,9 +449,9 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
 ```
 <!-- /AUTO:naming_components_response -->
 
-### 4.2 Pratinjau Nama Berkas Dinamis (Live Preview)
+### 4.2 Pratinjau Live Penamaan Berkas
 - **Method & Path:** `POST /api/v1/naming/preview`
-- **Contoh 1 (Sample Bawaan Sistem):**
+- **Respons Contoh Bawaan (Default Sample):**
 <!-- AUTO:naming_preview_default_response -->
 ```json
 {
@@ -445,7 +460,7 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
 }
 ```
 <!-- /AUTO:naming_preview_default_response -->
-- **Contoh 2 (Kustom Sample):**
+- **Respons Contoh Kustom (Custom Sample):**
 <!-- AUTO:naming_preview_custom_response -->
 ```json
 {
@@ -459,9 +474,8 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
 
 ## 5. ALUR 4: PENARIKAN BERKAS (KNOWLEDGE BASE & UNDUH ZIP)
 
-### 5.1 Tarik ke Knowledge Base (KB)
+### 5.1 Tarik ke Knowledge Base (Asinkron)
 - **Method & Path:** `POST /api/v1/scans/{scan_id}/pull`
-- **Body:** `destination: "knowledge_base"`, `naming_format` (array), `naming_separator` (opsional).
 - **Respons (202 Accepted):**
 <!-- AUTO:scan_pull_kb_response -->
 ```json
@@ -473,9 +487,8 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
 ```
 <!-- /AUTO:scan_pull_kb_response -->
 
-### 5.2 Tarik ke Folder Ekspor & Unduh ZIP
+### 5.2 Tarik ke Folder Unduhan (Arsip ZIP)
 - **Method & Path:** `POST /api/v1/scans/{scan_id}/pull`
-- **Body:** `destination: "unduh_folder"`, `naming_format` (array), `naming_separator` (opsional).
 - **Respons (202 Accepted):**
 <!-- AUTO:scan_pull_zip_response -->
 ```json
@@ -486,24 +499,21 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
 }
 ```
 <!-- /AUTO:scan_pull_zip_response -->
-
-- **Unduh Berkas ZIP Setelah Selesai:**
-  - `GET /api/v1/scans/{scan_id}/download` → Menghasilkan stream berkas `scan_{id}_export.zip` dengan nama berkas di dalam ZIP mengikuti format penamaan yang dipilih.
+- **Unduh ZIP:** `GET /api/v1/scans/{scan_id}/download` setelah status sesi `selesai`.
 
 ---
 
 ## 6. ALUR 5: UNGGAH BERKAS MANUAL & SINKRONISASI FOLDER LOKAL
 
-### 6.1 Unggah Manual Banyak Berkas (Multipart/form-data)
+### 6.1 Unggah Berkas PDF (Multipart Form Data)
 - **Method & Path:** `POST /api/v1/ingest/upload-pdf`
-- **Header:** `Content-Type: multipart/form-data`
-- **Form Fields:**
-  - `files`: Berkas-berkas PDF (bisa banyak berkas sekaligus).
-  - `access_classification`: `publik` atau `non_publik` (default: `publik`).
-  - `document_role`: `corpus_eksisting` atau `referensi_tambahan`.
+- **Form Data:**
+  - `files`: File PDF tunggal atau jamak.
+  - `access_classification`: `publik` | `non_publik` (Wajib).
+  - `document_role`: `corpus_eksisting` | `draft_kajian` (Wajib).
   - `naming_format`: String dipisah koma (contoh: `"nama,jenis,tahun,bidang"`).
   - `naming_separator`: `" "` | `"_"` | `"-"`.
-  - `bidang`: String sektor/bidang regulasi (contoh: `"Perbankan"`).
+  - `bidang`: Sektor regulasi (contoh: `"Perbankan"`).
 - **Respons (200 OK):**
 <!-- AUTO:upload_pdf_response -->
 ```json
@@ -524,8 +534,8 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
       "failure_id": null,
       "title": "POJK 10 Tahun 2026 Bank Umum",
       "regulation_number": null,
-      "file_size_bytes": 485,
-      "file_hash": "0f35783570e8a52fd9a66420f561727be83b22daa4d41bb9aae9f3740cbfa6cc",
+      "file_size_bytes": 754,
+      "file_hash": "2df8e641bbc42600c3546af4f941782fd956cb7fc91e56753f41dfd6a471468d",
       "message": null,
       "error": null,
       "reason_code": null,
@@ -541,10 +551,9 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
 ```
 <!-- /AUTO:upload_pdf_response -->
 
-### 6.2 Eksekusi Sinkronisasi Folder Lokal
+### 6.2 Sinkronisasi Folder Lokal
 - **Method & Path:** `POST /api/v1/scraping-sources/{source_id}/run`
-- **Body (Opsional):** `naming_format` (array), `naming_separator` (string).
-- **Respons (202 Accepted / 200 OK):**
+- **Respons (202 Accepted):**
 <!-- AUTO:source_run_response -->
 ```json
 {
@@ -555,7 +564,7 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
 ```
 <!-- /AUTO:source_run_response -->
 
-### 6.3 Daftar Berkas Sumber Lokal
+### 6.3 Daftar Berkas Sumber Folder
 - **Method & Path:** `GET /api/v1/scraping-sources/{source_id}/files`
 - **Respons (200 OK):**
 <!-- AUTO:source_files_response -->
@@ -571,17 +580,27 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
 
 ## 7. ALUR 6: EKSPLORASI KNOWLEDGE BASE & PENCARIAN REGULASI
 
-### 7.1 Daftar & Filter Dokumen KB
+Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** berbasis `tsvector` dan `tsquery` berbobot (`title` [A], `regulation_number` [A], `articles.content_text` [B], `full_text` [C]) serta pencocokan nomor regulasi via indeks trigram GIN. Belum ada pencarian berbasis model vektor atau embedding pada Fase 1.
+
+### 7.1 Daftar, Filter & Pencarian Dokumen KB
 - **Method & Path:** `GET /api/v1/documents/`
 - **Query Params:**
-  - `skip`, `limit`
-  - `bidang` (filter sektor, contoh: `Perbankan`, `Pasar Modal`, `BMKS`)
-  - `category_id` (filter kategori)
-  - `regulation_type` (filter jenis regulasi)
-  - `year` (filter tahun)
-  - `status_keberlakuan` (`berlaku`, `dicabut`, `diubah`, dll.)
-  - `processing_status` (`tersimpan`, `diekstraksi`, `terindeks`, `perlu_koreksi`)
-  - `access_classification` (`publik`, `non_publik`)
+  - `q` (string, opsional): Kata kunci / frasa teks hukum (contoh: `modal inti bank umum`).
+  - `mode` (string, opsional): Mode full-text PostgreSQL: `phrase` (default, frasa urut) | `all` (semua kata) | `web` (boolean websearch).
+  - `highlight` (boolean, opsional): `true` (default) untuk menyertakan cuplikan teks dengan tag `<b>...</b>`.
+  - `bidang` (string, opsional): Filter sektor regulasi (contoh: `Perbankan`, `Pasar Modal`, `BMKS`, `IKNB`).
+  - `category_id` (integer, opsional): Filter kategori KB.
+  - `regulation_type` (string, opsional): Filter jenis regulasi (contoh: `POJK`, `SEOJK`, `UU`, `PP`).
+  - `year` (integer, opsional): Filter tahun regulasi.
+  - `status_keberlakuan` (string, opsional): `berlaku`, `dicabut`, `diubah`, `tidak_diketahui`.
+  - `regulation_number` (string, opsional): Pencocokan nomor regulasi (contoh: `POJK 10/POJK.03/2026`).
+  - `access_classification` (string, opsional): `publik`, `non_publik`.
+  - `document_role` (string, opsional): `corpus_eksisting`, `draft_kajian`.
+  - `skip` (integer, opsional): Offset paginasi (default `0`).
+  - `limit` (integer, opsional): Batas dokumen per halaman (default `20`, min `1`, max `100`).
+
+#### Contoh A: Daftar & Filter Dokumen (Tanpa Parameter `q`)
+*Request:* `GET /api/v1/documents/?bidang=Perbankan&skip=0&limit=10`
 - **Respons (200 OK):**
 <!-- AUTO:documents_list_response -->
 ```json
@@ -591,25 +610,26 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
     {
       "id": 1,
       "title": "Penyelenggaraan Usaha Bank Umum",
-      "regulation_number": "POJK 10/2026",
-      "regulation_type": "Peraturan Otoritas Jasa Keuangan",
+      "regulation_number": "POJK 10/POJK.03/2026",
+      "regulation_type": "POJK",
       "release_date": "2026-03-15",
       "bidang": "Perbankan",
       "access_classification": "publik",
       "document_role": "corpus_eksisting",
-      "category_id": 1,
+      "category_id": 8,
       "category_path": [
-        "POJK"
+        "POJK",
+        "2026"
       ],
-      "status_keberlakuan": "berlaku",
+      "status_keberlakuan": "tidak_diketahui",
       "processing_status": "terindeks",
-      "extraction_method": null,
-      "file_path_pdf": "pdf/_inbox/POJK 10 Tahun 2026 Bank Umum_NA_NA_Perbankan__0f357835.pdf",
-      "file_hash": "0f35783570e8a52fd9a66420f561727be83b22daa4d41bb9aae9f3740cbfa6cc",
-      "file_size_bytes": 485,
-      "standardized_filename": "POJK 10 Tahun 2026 Bank Umum_NA_NA_Perbankan.pdf",
+      "extraction_method": "teks_langsung",
+      "file_path_pdf": "kb/POJK/2026/Penyelenggaraan Usaha Bank Umum_POJK_2026_Perbankan.pdf",
+      "file_hash": "2df8e641bbc42600c3546af4f941782fd956cb7fc91e56753f41dfd6a471468d",
+      "file_size_bytes": 754,
+      "standardized_filename": "Penyelenggaraan Usaha Bank Umum_POJK_2026_Perbankan.pdf",
       "source_url": null,
-      "is_placed": false,
+      "is_placed": true,
       "pdf_url": "/api/v1/documents/1/pdf",
       "restricted": false,
       "rank": null,
@@ -641,28 +661,64 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
 ```
 <!-- /AUTO:documents_list_response -->
 
-### 7.2 Pencarian Cerdas Regulasi (Full-Text & Semantik)
-- **Method & Path:** `GET /api/v1/documents/search`
-- **Query Params:**
-  - `q`: Kata kunci / frasa hukum (contoh: `modal inti bank umum`).
-  - `mode`: `phrase` (pencarian frasa tepat) | `all` (semua kata) | `web` (pencarian berbasis web/boolean).
-  - `bidang`: Filter sektor regulasi.
-  - `highlight`: `true` untuk menyertakan cuplikan teks dengan tag `<mark>`.
+#### Contoh B: Pencarian Full-Text & Highlight (Dengan Parameter `q`)
+*Request:* `GET /api/v1/documents/?q=modal+inti&bidang=Perbankan&highlight=true`
 - **Respons (200 OK):**
 <!-- AUTO:documents_search_response -->
 ```json
 {
-  "detail": [
+  "total": 1,
+  "items": [
     {
-      "type": "int_parsing",
-      "loc": [
-        "path",
-        "document_id"
+      "id": 1,
+      "title": "Penyelenggaraan Usaha Bank Umum",
+      "regulation_number": "POJK 10/POJK.03/2026",
+      "regulation_type": "POJK",
+      "release_date": "2026-03-15",
+      "bidang": "Perbankan",
+      "access_classification": "publik",
+      "document_role": "corpus_eksisting",
+      "category_id": 8,
+      "category_path": [
+        "POJK",
+        "2026"
       ],
-      "msg": "Input should be a valid integer, unable to parse string as an integer",
-      "input": "search"
+      "status_keberlakuan": "tidak_diketahui",
+      "processing_status": "terindeks",
+      "extraction_method": "teks_langsung",
+      "file_path_pdf": "kb/POJK/2026/Penyelenggaraan Usaha Bank Umum_POJK_2026_Perbankan.pdf",
+      "file_hash": "2df8e641bbc42600c3546af4f941782fd956cb7fc91e56753f41dfd6a471468d",
+      "file_size_bytes": 754,
+      "standardized_filename": "Penyelenggaraan Usaha Bank Umum_POJK_2026_Perbankan.pdf",
+      "source_url": null,
+      "is_placed": true,
+      "pdf_url": "/api/v1/documents/1/pdf",
+      "restricted": false,
+      "rank": 0.4,
+      "highlight": "Bank Umum adalah bank konvensional dan syariah. BAB II <mark>MODAL</mark> <mark>INTI</mark> Pasal 2: <mark>Modal</mark> <mark>inti</mark> minimum bagi Bank Umum ditetapkan sebesar Rp3.000.000.000.000 (tiga triliun rupiah",
+      "created_at": "2026-10-01T10:00:00Z",
+      "updated_at": "2026-10-01T10:00:00Z"
     }
-  ]
+  ],
+  "query": {
+    "q": "modal inti",
+    "mode": "phrase",
+    "regulation_number": null,
+    "regulation_type": null,
+    "category_id": null,
+    "include_subcategories": true,
+    "status_keberlakuan": null,
+    "document_role": null,
+    "access_classification": null,
+    "processing_status": null,
+    "date_from": null,
+    "date_to": null,
+    "year": null,
+    "bidang": "Perbankan",
+    "sort": "relevance",
+    "skip": 0,
+    "limit": 20
+  }
 }
 ```
 <!-- /AUTO:documents_search_response -->
@@ -679,8 +735,8 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
 {
   "id": 1,
   "title": "Penyelenggaraan Usaha Bank Umum",
-  "regulation_number": "POJK 10/2026",
-  "regulation_type": "Peraturan Otoritas Jasa Keuangan",
+  "regulation_number": "POJK 10/POJK.03/2026",
+  "regulation_type": "POJK",
   "release_date": "2026-03-15",
   "bidang": "Perbankan",
   "naming_format": [
@@ -692,27 +748,34 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
   "naming_separator": "_",
   "source_url": null,
   "original_filename": "POJK 10 Tahun 2026 Bank Umum.pdf",
-  "file_path_pdf": "pdf/_inbox/POJK 10 Tahun 2026 Bank Umum_NA_NA_Perbankan__0f357835.pdf",
-  "standardized_filename": "POJK 10 Tahun 2026 Bank Umum_NA_NA_Perbankan.pdf",
+  "file_path_pdf": "kb/POJK/2026/Penyelenggaraan Usaha Bank Umum_POJK_2026_Perbankan.pdf",
+  "standardized_filename": "Penyelenggaraan Usaha Bank Umum_POJK_2026_Perbankan.pdf",
   "access_classification": "publik",
   "document_role": "corpus_eksisting",
-  "status_keberlakuan": "berlaku",
+  "status_keberlakuan": "tidak_diketahui",
   "processing_status": "terindeks",
-  "extraction_method": null,
+  "extraction_method": "teks_langsung",
   "extraction_engine": null,
-  "category_id": 1,
+  "category_id": 8,
   "category_path": [
-    "POJK"
+    "POJK",
+    "2026"
   ],
-  "is_placed": false,
+  "is_placed": true,
   "job_id": 3,
   "pdf_url": "/api/v1/documents/1/pdf",
   "text_url": "/api/v1/documents/1/text",
-  "full_text_length": 0,
-  "extraction_confidence": null,
+  "full_text_length": 338,
+  "extraction_confidence": {
+    "title": 0.98,
+    "bidang": 0.92,
+    "release_date": 0.9,
+    "regulation_type": 0.95,
+    "regulation_number": 0.96
+  },
   "low_confidence_fields": [],
   "metadata_corrected_at": null,
-  "extracted_at": null,
+  "extracted_at": "2026-10-01T10:00:00Z",
   "created_at": "2026-10-01T10:00:00Z",
   "updated_at": "2026-10-01T10:00:00Z",
   "articles": [
@@ -721,7 +784,7 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
       "level": "pasal",
       "chapter_title": "BAB I KETENTUAN UMUM",
       "article_number": "Pasal 1",
-      "content_text": "Dalam Peraturan Otoritas Jasa Keuangan ini yang dimaksud dengan Bank Umum adalah...",
+      "content_text": "Dalam Peraturan Otoritas Jasa Keuangan ini yang dimaksud dengan Bank Umum adalah bank yang melaksanakan kegiatan usaha secara konvensional dan atau berdasarkan prinsip syariah yang dalam kegiatannya memberikan jasa dalam lalu lintas pembayaran.",
       "order_index": 1
     },
     {
@@ -729,7 +792,7 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
       "level": "pasal",
       "chapter_title": "BAB II MODAL INTI",
       "article_number": "Pasal 2",
-      "content_text": "Modal inti minimum bagi Bank Umum ditetapkan sebesar Rp3.000.000.000.000.",
+      "content_text": "Modal inti minimum bagi Bank Umum ditetapkan paling sedikit sebesar Rp3.000.000.000.000 (tiga triliun rupiah) yang wajib dipenuhi oleh setiap entitas perbankan.",
       "order_index": 2
     }
   ],
@@ -740,19 +803,19 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
 
 ### 8.2 Membaca Teks Mentah Dokumen
 - **Method & Path:** `GET /api/v1/documents/{document_id}/text`
-- **Query Params:** `offset` (karakter awal, default 0), `limit` (panjang karakter, default 10000).
+- **Query Params:** `offset` (karakter awal, default `0`), `limit` (panjang karakter, default `20000`, maks `100000`).
 - **Respons (200 OK):**
 <!-- AUTO:document_text_response -->
 ```json
 {
   "document_id": 1,
-  "total_length": 0,
+  "total_length": 338,
   "offset": 0,
   "limit": 20000,
-  "text": "",
-  "extraction_method": null,
+  "text": "Peraturan Otoritas Jasa Keuangan tentang Penyelenggaraan Usaha Bank Umum. BAB I KETENTUAN UMUM Pasal 1: Dalam Peraturan Otoritas Jasa Keuangan ini yang dimaksud dengan Bank Umum adalah bank konvensional dan syariah. BAB II MODAL INTI Pasal 2: Modal inti minimum bagi Bank Umum ditetapkan sebesar Rp3.000.000.000.000 (tiga triliun rupiah).",
+  "extraction_method": "teks_langsung",
   "extraction_engine": null,
-  "extracted_at": null
+  "extracted_at": "2026-10-01T10:00:00Z"
 }
 ```
 <!-- /AUTO:document_text_response -->
@@ -772,7 +835,7 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
 
 ---
 
-## 9. ALUR 8: KURASI & KOREKSI METADATA SERTA PENANGANAN GAGAL
+## 9. ALUR 8: KURASI & KOREKSI METADATA SERTA ANTREAN PENANGANAN GAGAL
 
 ### 9.1 Koreksi Metadata Dokumen
 - **Method & Path:** `PATCH /api/v1/documents/{document_id}/metadata`
@@ -784,7 +847,7 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
   "id": 1,
   "title": "Penyelenggaraan Usaha Bank Umum Terkoreksi",
   "regulation_number": "POJK 10/POJK.03/2026",
-  "regulation_type": "Peraturan Otoritas Jasa Keuangan",
+  "regulation_type": "POJK",
   "release_date": "2026-03-15",
   "bidang": "Perbankan",
   "naming_format": [
@@ -796,27 +859,34 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
   "naming_separator": "_",
   "source_url": null,
   "original_filename": "POJK 10 Tahun 2026 Bank Umum.pdf",
-  "file_path_pdf": "kb/POJK/Penyelenggaraan Usaha Bank Umum Terkoreksi_POJK_2026_Perbankan.pdf",
+  "file_path_pdf": "kb/POJK/2026/Penyelenggaraan Usaha Bank Umum Terkoreksi_POJK_2026_Perbankan.pdf",
   "standardized_filename": "Penyelenggaraan Usaha Bank Umum Terkoreksi_POJK_2026_Perbankan.pdf",
   "access_classification": "publik",
   "document_role": "corpus_eksisting",
-  "status_keberlakuan": "berlaku",
+  "status_keberlakuan": "tidak_diketahui",
   "processing_status": "terindeks",
-  "extraction_method": null,
+  "extraction_method": "teks_langsung",
   "extraction_engine": null,
-  "category_id": 1,
+  "category_id": 8,
   "category_path": [
-    "POJK"
+    "POJK",
+    "2026"
   ],
   "is_placed": true,
   "job_id": 3,
   "pdf_url": "/api/v1/documents/1/pdf",
   "text_url": "/api/v1/documents/1/text",
-  "full_text_length": 0,
-  "extraction_confidence": null,
+  "full_text_length": 338,
+  "extraction_confidence": {
+    "title": 0.98,
+    "bidang": 0.92,
+    "release_date": 0.9,
+    "regulation_type": 0.95,
+    "regulation_number": 0.96
+  },
   "low_confidence_fields": [],
   "metadata_corrected_at": "2026-10-01T10:00:00Z",
-  "extracted_at": null,
+  "extracted_at": "2026-10-01T10:00:00Z",
   "created_at": "2026-10-01T10:00:00Z",
   "updated_at": "2026-10-01T10:00:00Z",
   "articles": [
@@ -825,7 +895,7 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
       "level": "pasal",
       "chapter_title": "BAB I KETENTUAN UMUM",
       "article_number": "Pasal 1",
-      "content_text": "Dalam Peraturan Otoritas Jasa Keuangan ini yang dimaksud dengan Bank Umum adalah...",
+      "content_text": "Dalam Peraturan Otoritas Jasa Keuangan ini yang dimaksud dengan Bank Umum adalah bank yang melaksanakan kegiatan usaha secara konvensional dan atau berdasarkan prinsip syariah yang dalam kegiatannya memberikan jasa dalam lalu lintas pembayaran.",
       "order_index": 1
     },
     {
@@ -833,59 +903,173 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
       "level": "pasal",
       "chapter_title": "BAB II MODAL INTI",
       "article_number": "Pasal 2",
-      "content_text": "Modal inti minimum bagi Bank Umum ditetapkan sebesar Rp3.000.000.000.000.",
+      "content_text": "Modal inti minimum bagi Bank Umum ditetapkan paling sedikit sebesar Rp3.000.000.000.000 (tiga triliun rupiah) yang wajib dipenuhi oleh setiap entitas perbankan.",
       "order_index": 2
     }
   ],
   "legal_references": [],
   "changed_fields": [
-    "regulation_number",
     "title"
   ],
   "placement": {
     "document_id": 1,
     "placed": true,
     "reason": "ditempatkan",
-    "old_path": "pdf/_inbox/POJK 10 Tahun 2026 Bank Umum_NA_NA_Perbankan__0f357835.pdf",
-    "new_path": "kb/POJK/Penyelenggaraan Usaha Bank Umum Terkoreksi_POJK_2026_Perbankan.pdf",
-    "category_id": 1,
+    "old_path": "kb/POJK/2026/Penyelenggaraan Usaha Bank Umum_POJK_2026_Perbankan.pdf",
+    "new_path": "kb/POJK/2026/Penyelenggaraan Usaha Bank Umum Terkoreksi_POJK_2026_Perbankan.pdf",
+    "category_id": 8,
     "category_path": [
-      "POJK"
+      "POJK",
+      "2026"
     ]
   }
 }
 ```
 <!-- /AUTO:document_patch_metadata_response -->
 
-### 9.2 Daftar Antrian Gagal (Ingest Failures)
-- **Method & Path:** `GET /api/v1/failures/`
+### 9.2 Daftar Antrean Gagal (Ingest Failures)
+- **Method & Path:** `GET /api/v1/ingest/failures`
+- **Query Params:** `job_id`, `failure_type`, `follow_up_status` (`belum_ditangani`, `diproses_ulang`, `diabaikan`, `all`), `include_duplicates` (`false`), `skip` (`0`), `limit` (`50`).
 - **Respons (200 OK):**
 <!-- AUTO:failures_list_response -->
 ```json
 {
-  "detail": "Not Found"
+  "total": 2,
+  "items": [
+    {
+      "id": 2,
+      "job_id": 6,
+      "original_filename": "NA Regulasi_Retry_2026 NA.pdf",
+      "source_url": null,
+      "failure_type": "ekstraksi_gagal",
+      "reason_code": "ocr_timeout",
+      "message": "Proses OCR timeout saat ekstraksi berkas.",
+      "is_retryable": true,
+      "quarantine_path": null,
+      "file_hash": "1b8a579c5d1442d53c966ad651fefeb84b2fcb3f35c9e18cb9b5cc791c1ca298",
+      "file_size_bytes": 451,
+      "duplicate_of_document_id": null,
+      "duplicate_of_document": null,
+      "ingest_options": {},
+      "follow_up_status": "belum_ditangani",
+      "attempt_count": 0,
+      "last_retry_at": null,
+      "last_retry_job_id": null,
+      "resolved_document_id": null,
+      "handled_by_user_id": null,
+      "handling_note": null,
+      "created_at": "2026-10-01T10:00:00Z",
+      "updated_at": "2026-10-01T10:00:00Z"
+    },
+    {
+      "id": 1,
+      "job_id": 5,
+      "original_filename": "Peraturan_Rusak_2026.pdf",
+      "source_url": null,
+      "failure_type": "format_tidak_didukung",
+      "reason_code": "format_tidak_didukung",
+      "message": "Isi berkas bukan PDF yang valid meskipun berekstensi .pdf.",
+      "is_retryable": false,
+      "quarantine_path": null,
+      "file_hash": "df3a7b99e39e3c376acdc68a06f7335a7ff7246596c9ac32c40836c74d891a7e",
+      "file_size_bytes": 26,
+      "duplicate_of_document_id": null,
+      "duplicate_of_document": null,
+      "ingest_options": {
+        "metadata": {
+          "title": null,
+          "release_date": null,
+          "regulation_type": null,
+          "regulation_number": null
+        },
+        "category_id": null,
+        "document_role": "corpus_eksisting",
+        "access_classification": "publik"
+      },
+      "follow_up_status": "belum_ditangani",
+      "attempt_count": 0,
+      "last_retry_at": null,
+      "last_retry_job_id": null,
+      "resolved_document_id": null,
+      "handled_by_user_id": null,
+      "handling_note": null,
+      "created_at": "2026-10-01T10:00:00Z",
+      "updated_at": "2026-10-01T10:00:00Z"
+    }
+  ]
 }
 ```
 <!-- /AUTO:failures_list_response -->
 
 ### 9.3 Mencoba Ulang (Retry) Berkas Gagal
-- **Method & Path:** `POST /api/v1/failures/{failure_id}/retry`
+- **Method & Path:** `POST /api/v1/ingest/failures/{failure_id}/retry`
 - **Respons (200 OK):**
 <!-- AUTO:failure_retry_response -->
 ```json
 {
-  "detail": "Not Found"
+  "failure": {
+    "id": 2,
+    "job_id": 6,
+    "original_filename": "NA Regulasi_Retry_2026 NA.pdf",
+    "source_url": null,
+    "failure_type": "ekstraksi_gagal",
+    "reason_code": "ocr_timeout",
+    "message": "Proses OCR timeout saat ekstraksi berkas.",
+    "is_retryable": true,
+    "quarantine_path": null,
+    "file_hash": "1b8a579c5d1442d53c966ad651fefeb84b2fcb3f35c9e18cb9b5cc791c1ca298",
+    "file_size_bytes": 451,
+    "duplicate_of_document_id": null,
+    "duplicate_of_document": null,
+    "ingest_options": {},
+    "follow_up_status": "diproses_ulang",
+    "attempt_count": 1,
+    "last_retry_at": "2026-10-01T10:00:00Z",
+    "last_retry_job_id": null,
+    "resolved_document_id": null,
+    "handled_by_user_id": null,
+    "handling_note": null,
+    "created_at": "2026-10-01T10:00:00Z",
+    "updated_at": "2026-10-01T10:00:00Z"
+  },
+  "outcome": "requeued",
+  "document_id": 2,
+  "job_id": 6,
+  "message": "Dokumen ID 2 berhasil di-antrekan ulang untuk ekstraksi."
 }
 ```
 <!-- /AUTO:failure_retry_response -->
 
 ### 9.4 Mengabaikan (Ignore) Berkas Gagal
-- **Method & Path:** `POST /api/v1/failures/{failure_id}/ignore`
+- **Method & Path:** `PATCH /api/v1/ingest/failures/{failure_id}`
+- **Body:** `{"follow_up_status": "diabaikan", "handling_note": "Catatan alasan pengabaian"}`
 - **Respons (200 OK):**
 <!-- AUTO:failure_ignore_response -->
 ```json
 {
-  "detail": "Not Found"
+  "id": 2,
+  "job_id": 6,
+  "original_filename": "NA Regulasi_Retry_2026 NA.pdf",
+  "source_url": null,
+  "failure_type": "ekstraksi_gagal",
+  "reason_code": "ocr_timeout",
+  "message": "Proses OCR timeout saat ekstraksi berkas.",
+  "is_retryable": true,
+  "quarantine_path": null,
+  "file_hash": "1b8a579c5d1442d53c966ad651fefeb84b2fcb3f35c9e18cb9b5cc791c1ca298",
+  "file_size_bytes": 451,
+  "duplicate_of_document_id": null,
+  "duplicate_of_document": null,
+  "ingest_options": {},
+  "follow_up_status": "diabaikan",
+  "attempt_count": 1,
+  "last_retry_at": "2026-10-01T10:00:00Z",
+  "last_retry_job_id": null,
+  "resolved_document_id": null,
+  "handled_by_user_id": null,
+  "handling_note": "Abaikan berkas corrupt hasil pengujian.",
+  "created_at": "2026-10-01T10:00:00Z",
+  "updated_at": "2026-10-01T10:00:00Z"
 }
 ```
 <!-- /AUTO:failure_ignore_response -->
@@ -901,18 +1085,18 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
 ```json
 {
   "kb": {
-    "corpus_documents": 1,
+    "corpus_documents": 2,
     "draft_documents": 0,
     "target_fase1": 20,
     "target_met": false,
     "by_status_keberlakuan": {
-      "berlaku": 1,
+      "berlaku": 0,
       "diubah": 0,
       "dicabut": 0,
-      "tidak_diketahui": 0
+      "tidak_diketahui": 2
     },
     "by_processing_status": {
-      "diterima": 0,
+      "diterima": 1,
       "diproses": 0,
       "perlu_koreksi": 0,
       "terindeks": 1,
@@ -921,12 +1105,22 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
     },
     "by_regulation_type": [
       {
-        "regulation_type": "Peraturan Otoritas Jasa Keuangan",
-        "label": "Peraturan Otoritas Jasa Keuangan",
+        "regulation_type": "POJK",
+        "label": "POJK",
+        "count": 1
+      },
+      {
+        "regulation_type": null,
+        "label": "Belum diketahui",
         "count": 1
       }
     ],
     "by_year": [
+      {
+        "year": null,
+        "label": "Belum diketahui",
+        "count": 1
+      },
       {
         "year": 2026,
         "label": "2026",
@@ -934,13 +1128,39 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
       }
     ],
     "placed_documents": 1,
-    "inbox_documents": 0
+    "inbox_documents": 1
   },
   "ingest": {
     "open_failures": 1,
     "needs_review": 0,
     "active_scans": 1,
     "recent_jobs": [
+      {
+        "id": 6,
+        "job_type": "unggah_manual",
+        "status": "selesai",
+        "started_at": "2026-10-01T10:00:00Z",
+        "finished_at": "2026-10-01T10:00:00Z",
+        "success_count": 1,
+        "duplicate_count": 0,
+        "skipped_count": 0,
+        "failed_count": 0,
+        "processed_count": 1,
+        "total_found": 1
+      },
+      {
+        "id": 5,
+        "job_type": "unggah_manual",
+        "status": "gagal",
+        "started_at": "2026-10-01T10:00:00Z",
+        "finished_at": "2026-10-01T10:00:00Z",
+        "success_count": 0,
+        "duplicate_count": 0,
+        "skipped_count": 0,
+        "failed_count": 1,
+        "processed_count": 1,
+        "total_found": 1
+      },
       {
         "id": 4,
         "job_type": "sinkron_folder",
@@ -979,19 +1199,6 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
         "failed_count": 0,
         "processed_count": 0,
         "total_found": 1
-      },
-      {
-        "id": 1,
-        "job_type": "scraping",
-        "status": "antrian",
-        "started_at": "2026-10-01T10:00:00Z",
-        "finished_at": null,
-        "success_count": 0,
-        "duplicate_count": 0,
-        "skipped_count": 0,
-        "failed_count": 0,
-        "processed_count": 0,
-        "total_found": 1
       }
     ]
   },
@@ -1020,12 +1227,12 @@ Field respons/parameter: `source_type`
 
 | Nilai Enum (Backend) | Label UI Indonesia | Keterangan |
 |---|---|---|
-| `situs_web` | **Situs Web** | Situs eksternal (misal: JDIH OJK) untuk perayapan berkas. |
+| `situs_web` | **Situs Web** | Situs eksternal (misal: JDIH ESDM) untuk perayapan berkas. |
 | `folder_lokal` | **Folder Lokal** | Direktori penyimpanan lokal di peladen. |
 | `onedrive_public` | **OneDrive Publik** | Tautan folder publik Microsoft OneDrive. |
 
 
-### 11.9 Klasifikasi Akses Dokumen (`KlasifikasiAkses`)
+### 11.2 Klasifikasi Akses Dokumen (`KlasifikasiAkses`)
 
 Field respons/parameter: `access_classification`
 
@@ -1035,7 +1242,7 @@ Field respons/parameter: `access_classification`
 | `non_publik` | **Non-Publik** | Dokumen internal atau rahasia yang memerlukan autentikasi. |
 
 
-### 11.16 Peran Dokumen (`PeranDokumen`)
+### 11.3 Peran Dokumen (`PeranDokumen`)
 
 Field respons/parameter: `document_role`
 
@@ -1045,7 +1252,7 @@ Field respons/parameter: `document_role`
 | `draft_kajian` | **Draft Kajian** | Dokumen pendukung atau draft rancangan kajian regulasi. |
 
 
-### 11.23 Status Sesi Pemindaian (`StatusPindai`)
+### 11.4 Status Sesi Pemindaian (`StatusPindai`)
 
 Field respons/parameter: `status`
 
@@ -1060,7 +1267,7 @@ Field respons/parameter: `status`
 | `dibatalkan` | **Dibatalkan** | Sesi dibatalkan atas permintaan pengguna. |
 
 
-### 11.35 Status Kecocokan Kandidat (`StatusKandidat`)
+### 11.5 Status Kecocokan Kandidat (`StatusKandidat`)
 
 Field respons/parameter: `match_status`
 
@@ -1071,7 +1278,7 @@ Field respons/parameter: `match_status`
 | `mungkin_ada` | **Mungkin Ada** | Nama berkas mirip atau hash belum pasti (memerlukan tinjauan). |
 
 
-### 11.43 Tujuan Penarikan Berkas (`TujuanTarik`)
+### 11.6 Tujuan Penarikan Berkas (`TujuanTarik`)
 
 Field respons/parameter: `destination`
 
@@ -1081,7 +1288,7 @@ Field respons/parameter: `destination`
 | `unduh_folder` | **Unduh Folder (ZIP)** | Hanya diunduh sebagai berkas terkompresi ZIP tanpa diekstrak ke KB. |
 
 
-### 11.50 Hasil Penarikan Berkas (`HasilTarik`)
+### 11.7 Hasil Penarikan Berkas (`HasilTarik`)
 
 Field respons/parameter: `pull_outcome`
 
@@ -1093,7 +1300,7 @@ Field respons/parameter: `pull_outcome`
 | `diunduh` | **Diunduh** | Tersimpan di direktori ekspor untuk ZIP. |
 
 
-### 11.59 Status Pemrosesan Dokumen KB (`StatusPemrosesan`)
+### 11.8 Status Pemrosesan Dokumen KB (`StatusPemrosesan`)
 
 Field respons/parameter: `processing_status`
 
@@ -1107,7 +1314,7 @@ Field respons/parameter: `processing_status`
 | `ditolak` | **Ditolak** | Dokumen ditolak karena tidak memenuhi kriteria regulasi. |
 
 
-### 11.70 Status Keberlakuan Regulasi (`StatusKeberlakuan`)
+### 11.9 Status Keberlakuan Regulasi (`StatusKeberlakuan`)
 
 Field respons/parameter: `status_keberlakuan`
 
@@ -1119,7 +1326,7 @@ Field respons/parameter: `status_keberlakuan`
 | `tidak_diketahui` | **Tidak Diketahui** | Status keberlakuan belum dapat dipastikan. |
 
 
-### 11.79 Kategori Kegagalan Ingest (`JenisKegagalan`)
+### 11.10 Kategori Kegagalan Ingest (`JenisKegagalan`)
 
 Field respons/parameter: `failure_type`
 
@@ -1134,7 +1341,7 @@ Field respons/parameter: `failure_type`
 | `kesalahan_internal` | **Kesalahan Internal** | Kesalahan internal lainnya pada sistem. |
 
 
-### 11.91 Status Tindak Lanjut Kegagalan (`StatusTindakLanjut`)
+### 11.11 Status Tindak Lanjut Kegagalan (`StatusTindakLanjut`)
 
 Field respons/parameter: `follow_up_status`
 
@@ -1145,7 +1352,7 @@ Field respons/parameter: `follow_up_status`
 | `diabaikan` | **Diabaikan** | Kurator memutuskan untuk mengabaikan kegagalan ini. |
 
 
-### 11.99 Jenis Tugas Ingest (`JenisJobIngest`)
+### 11.12 Jenis Tugas Ingest (`JenisJobIngest`)
 
 Field respons/parameter: `job_type`
 
@@ -1156,7 +1363,7 @@ Field respons/parameter: `job_type`
 | `sinkron_folder` | **Sinkronisasi Folder** | Pemindaian folder lokal atau OneDrive. |
 
 
-### 11.107 Status Tugas Ingest (`StatusJobIngest`)
+### 11.13 Status Tugas Ingest (`StatusJobIngest`)
 
 Field respons/parameter: `job_status`
 
@@ -1180,7 +1387,7 @@ Field respons/parameter: `job_status`
 | **403 Forbidden** | Akses ditolak | Mengakses PDF non-publik saat mode proteksi aktif | Tampilkan dialog izin akses atau peringatan login. |
 | **404 Not Found** | Data tidak ditemukan | ID dokumen, scan, atau sumber tidak ditemukan | Arahkan pengguna kembali ke halaman daftar. |
 | **409 Conflict** | Konflik status | Sesi sedang berjalan atau mencoba retry job aktif | Berikan notifikasi bahwa proses sedang berjalan di latar belakang. |
-| **413 Payload Too Large** | Berkas melebihi batas | Ukuran unggah PDF melebihi batas (default 50 MB) | Peringatkan pengguna untuk mengunggah berkas lebih kecil. |
+| **413 Payload Too Large** | Berkas melebihi batas | Ukuran unggah PDF melebihi batas (default 100 MB) | Peringatkan pengguna untuk mengunggah berkas lebih kecil. |
 | **422 Unprocessable** | Validasi skema gagal | Komponen format nama salah, field wajib kosong | Sorot field formulir yang bersangkutan dengan pesan spesifik. |
 | **503 Service Unavailable** | Layanan database/AI sibuk | Koneksi database terputus atau komponen ML offline | Tampilkan pesan coba lagi beberapa saat. |
 
