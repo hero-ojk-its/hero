@@ -36,6 +36,8 @@ from app.crawlers.url_utils import (
     detect_captcha_or_waf,
     determine_doc_kind,
     normalize_crawler_regulation_type,
+    parse_onedrive_filename_metadata,
+    validate_regulation_filename_match,
 )
 
 logger = logging.getLogger("hero.crawler.onedrive_share")
@@ -233,6 +235,18 @@ class OneDriveShareCrawler:
                                 stem_title = posixpath.splitext(fname)[0].replace("_", " ")
                                 doc_k = determine_doc_kind(fname)
 
+                                meta = parse_onedrive_filename_metadata(fname)
+                                reg_type = meta.get("regulation_type")
+                                reg_num = meta.get("regulation_number")
+                                rel_date = meta.get("release_date")
+                                match_warn = validate_regulation_filename_match(
+                                    fname,
+                                    regulation_number=reg_num,
+                                    release_date=rel_date,
+                                    document_title=stem_title,
+                                    regulation_type=reg_type,
+                                )
+
                                 cand = PdfCandidate(
                                     url=norm_url,
                                     filename=fname,
@@ -243,29 +257,13 @@ class OneDriveShareCrawler:
                                     detail_url=folder_path,
                                     final_url=norm_url,
                                     doc_kind=doc_k,
-                                    regulation_number=None,
-                                    regulation_type=None,
+                                    regulation_number=reg_num,
+                                    regulation_type=reg_type,
                                     bidang=None,
                                     sub_bidang=None,
-                                    release_date=None,
-                                    size_source="listing",
-                                    source_path=file_source_path,
-                                strangers=None if hasattr(PdfCandidate, "strangers") else None,
-                                ) if False else PdfCandidate(
-                                    url=norm_url,
-                                    filename=fname,
-                                    size_bytes=size_bytes,
-                                    found_on_page=folder_path,
-                                    depth=cur_depth,
-                                    document_title=stem_title,
-                                    detail_url=folder_path,
-                                    final_url=norm_url,
-                                    doc_kind=doc_k,
-                                    regulation_number=None,
-                                    regulation_type=None,
-                                    bidang=None,
-                                    sub_bidang=None,
-                                    release_date=None,
+                                    release_date=rel_date,
+                                    effective_date=None,
+                                    match_warning=match_warn,
                                     size_source="listing",
                                     source_path=file_source_path,
                                 )
@@ -316,13 +314,21 @@ class OneDriveShareCrawler:
         duration_sec = round(time.time() - start_time, 2)
         cand_list = list(candidates_map.values())
         doc_kinds: Dict[str, int] = {}
+        subfolders_count: Dict[str, int] = {}
+        match_warnings_count = 0
         for c in cand_list:
             k = c.doc_kind or "utama"
             doc_kinds[k] = doc_kinds.get(k, 0) + 1
+            if c.match_warning:
+                match_warnings_count += 1
+            top_folder = c.source_path.split("/")[0] if c.source_path and "/" in c.source_path else (c.source_path or "root")
+            subfolders_count[top_folder] = subfolders_count.get(top_folder, 0) + 1
 
         stats = {
             "regulations_found": len(cand_list),
             "pdfs_found": len(cand_list),
+            "subfolders_count": subfolders_count,
+            "match_warnings_count": match_warnings_count,
             "by_doc_kind": doc_kinds,
             "pages_visited": len(visited_folders),
             "requests_made": self.requests_count,
