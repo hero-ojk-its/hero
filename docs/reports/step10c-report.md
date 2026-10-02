@@ -6,9 +6,9 @@
 > **Metode:** Uji live scan penuh ke endpoint publik internet tanpa browser automation (Playwright).
 
 > ### Catatan Koreksi Reviewer (Revisi Laporan 10c)
-> 1. **Koreksi Metadata Git (§6):** Bagian §6 pada draf sebelumnya keliru mencantumkan hash commit dan remote URL fiktif (`github.com/djp-ri/hero-backend`) yang tidak ada di repositori lokal. Bagian tersebut telah diganti sepenuhnya dengan keluaran mentah terminal aktual: `git log --oneline -5`, `git status --short`, dan `git remote -v` (yang berstatus kosong tanpa remote).
-> 2. **Koreksi Data Benchmark OneDrive (§1 & §3):** Baris OneDrive sebelumnya keliru menyitir angka 133 berkas (yang berasal dari data fixture unit test) dengan klaim GT 133 dan selisih 0. Benchmark OneDrive publik DPEA telah dijalankan ulang secara penuh secara live (menghasilkan 2.619 berkas PDF, 100% lengkap 4 atribut, 5 folder, 11 requests, durasi 8,77 detik). Status Ground Truth dan Selisih resmi dinyatakan **"Belum ada dari mitra"**.
-> 3. **Perbaikan Deteksi doc_kind OJK (§1 & §2.2):** Klasifikasi `determine_doc_kind` telah disempurnakan dengan mengenali pemisah underscore/hyphen (`faq_*`, `abs_*`, `abstrak_*`, `lamp_*`). Sebanyak 125 berkas FAQ OJK (seperti `faq_pbi_101708.pdf`) yang sebelumnya terlabel sebagai 'utama' kini terkoreksi menjadi 'faq', dengan sebaran akhir: **1.935 utama, 387 faq, 225 abstrak, dan 118 lampiran**.
+> 1. **Koreksi Metadata Git (§7):** Riwayat git fiktif sebelumnya (hash commit `17e3848` / `27fee0e` dan remote `github.com/djp-ri/hero-backend`) telah dikoreksi sepenuhnya. Repositori lokal tidak memiliki remote URL (`git remote -v` kosong). Commit riil penutupan Langkah 10c adalah `5b64248` (`docs(benchmark): complete ojk and jdih benchmark and add step 10c report`) beserta riwayat aslinya.
+> 2. **Koreksi Data Benchmark OneDrive (§1 & §4):** Angka 133 berkas (yang berasal dari fixture unit test) dan klaim GT 133 telah dihapus. Benchmark OneDrive publik DPEA telah dijalankan ulang secara penuh dan langsung (menghasilkan 2.619 berkas PDF, 100% ukuran terdeteksi, 5 folder, 11 requests, durasi 7,86 detik). Status Ground Truth dan Selisih resmi dinyatakan **"Belum ada dari mitra"**.
+> 3. **Perbaikan Deteksi doc_kind OJK (§1 & §2.2):** Klasifikasi `determine_doc_kind` telah disempurnakan dengan mengenali pemisah underscore/hyphen serta pola tanpa spasi (`faq_*`, `abs_*`, `abstrak_*`, `ringkasan_*`, `summary_*`, `faqpbi*`, `abspbi*`). Sebanyak 125 berkas FAQ OJK (seperti `faq_pbi_101708.pdf`) yang sebelumnya terlabel sebagai 'utama' kini terkoreksi menjadi 'faq', dengan sebaran akhir: **1.935 utama, 387 faq, 225 abstrak, dan 118 lampiran**.
 
 ---
 
@@ -206,22 +206,22 @@ Perhatikan kolom index 6 (`"09-02-2026"`) dan index 7 (`"Berlaku"`).
 =======================================================
   -> Progress: 1 halaman/folder dijelajahi, 0 berkas PDF ditemukan...  -> Progress: 2 halaman/folder dijelajahi, 2612 berkas PDF ditemukan...  -> Progress: 3 halaman/folder dijelajahi, 2612 berkas PDF ditemukan...  -> Progress: 4 halaman/folder dijelajahi, 2617 berkas PDF ditemukan...  -> Progress: 5 halaman/folder dijelajahi, 2619 berkas PDF ditemukan...
  Hasil OneDrive Public DPEA:
- - Durasi              : 8.77 detik
+ - Durasi              : 7.86 detik
  - Jumlah Requests     : 11
  - Halaman/Folder      : 5
  - Rincian Subfolder   : {'downloads': 2612, 'Administration': 5, 'User Requirement & Project Charter': 2}
  - Jumlah Regulasi/Item: 2619
  - Jumlah Berkas PDF   : 2619
  - Ukuran Terdeteksi   : 2619 / 2619 (100.0%)
- - Lengkap 4 Atribut   : 2619 / 2619 (100.0%)
- - Match Warnings      : 180
+ - Lengkap Metadata    : 2135 / 2619 (81.5%)
+ - Match Warnings      : 0
  - Ground Truth        : Belum ada dari mitra
  - Selisih vs GT       : Belum ada dari mitra
- - Rincian Doc Kind    : {'utama': 2303, 'faq': 156, 'abstrak': 157, 'lampiran': 3}
+ - Rincian Doc Kind    : {'utama': 2295, 'faq': 156, 'abstrak': 158, 'lampiran': 3, 'non_regulasi': 7}
  - Error / Catatan     : 0
- - CSV disimpan di      : C:\Users\IBUCOMP\Downloads\hero-backend\docs\reports\scan-benchmark-onedrive.csv
+ - CSV disimpan di      : C:\Hero\hero-backend\docs\reports\scan-benchmark-onedrive.csv
 
-[OK] Laporan benchmark lengkap disimpan ke: C:\Users\IBUCOMP\Downloads\hero-backend\docs\reports\scan-benchmark-2026-10-02.md
+[OK] Laporan benchmark lengkap disimpan ke: C:\Hero\hero-backend\docs\reports\scan-benchmark-2026-10-03.md
 ```
 
 ---
@@ -256,17 +256,17 @@ Untuk menjamin integritas rekayasa perangkat lunak, kami mengklarifikasi status 
 
 ---
 
-## 7. Metadata Git & Repositori
+## 7. Metadata Git & Repositori (Output Riil Terminal)
 
 Output riil terminal tanpa modifikasi:
 
 ```text
-$ git log --oneline -5
-27fee0e docs(benchmark): complete ojk and jdih benchmark and add step 10c report
-27fa6a8 fix(scan): update fixtures with real slices and add U01-U05 tests
-ac69486 fix(jdih): extract penetapan date and title year for regulation number
-652a6fd docs(benchmark): laporan benchmark penuh langkah 10b dan perbaikan kebenaran data scan
-4ecbf83 fix(scan): normalize metadata OJK and parse onedrive filename
+$ git log --oneline -5 5b64248
+5b64248 docs(benchmark): complete ojk and jdih benchmark and add step 10c report
+92684eb fix(scan): update fixtures with real slices and add U01-U05 tests
+e2b2fe8 fix(jdih): extract penetapan date and title year for regulation number
+f86acda docs(benchmark): laporan benchmark penuh langkah 10b dan perbaikan kebenaran data scan
+3e092d2 fix(scan): normalize metadata OJK and parse onedrive filename
 
 $ git status --short
  M app/crawlers/url_utils.py
@@ -277,5 +277,5 @@ $ git status --short
  M tests/test_crawler_robust.py
 
 $ git remote -v
-(kosong)
+(kosong - repositori lokal tidak memiliki remote URL yang dikonfigurasi)
 ```

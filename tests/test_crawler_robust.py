@@ -1065,8 +1065,14 @@ def test_t03_doc_kind_detection():
     assert determine_doc_kind("12 - Ringkasan SEOJK 14 - 2017.pdf") == "abstrak"
     assert determine_doc_kind("2020ringkasanseojk022.pdf") == "abstrak"
     assert determine_doc_kind("Ringkasan Eksekutif dan FAQ SEOJK 53.pdf") == "faq"
-    assert determine_doc_kind("SUMMARY POJK 22 - 04 - 2021.pdf") == "abstrak"
-    assert determine_doc_kind("RINGKASAN SEOJK 31 - 05 - 2023.pdf") == "abstrak"
+    # Pola tanpa spasi dan underscore tambahan
+    assert determine_doc_kind("faqpbi101708.pdf") == "faq"
+    assert determine_doc_kind("abspbi101708.pdf") == "abstrak"
+    assert determine_doc_kind("abstrakpojk12.pdf") == "abstrak"
+    assert determine_doc_kind("ringkasan_pojk_14.pdf") == "abstrak"
+    assert determine_doc_kind("ringkasanpojk14.pdf") == "abstrak"
+    assert determine_doc_kind("summary_pojk_22.pdf") == "abstrak"
+    assert determine_doc_kind("summarypojk22.pdf") == "abstrak"
 
 
 def test_t04_regulation_type_normalization():

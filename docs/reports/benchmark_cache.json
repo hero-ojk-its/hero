@@ -19,7 +19,7 @@
     "pct_legal": 100.0,
     "ground_truth_label": "\u00b1 1.700 regulasi",
     "ground_truth_num": 1700,
-    "selisih_str": "-123 (terhadap estimasi mitra ± 1.700)",
+    "selisih_str": "-123 (terhadap estimasi mitra \u00b1 1.700)",
     "stats": {
       "regulations_found": 1577,
       "pdfs_found": 2665,
@@ -86,7 +86,7 @@
     "name": "OneDrive Public DPEA",
     "adapter": "onedrive_share",
     "url": "[link share OneDrive DPEA]",
-    "duration_sec": 7.34,
+    "duration_sec": 7.86,
     "requests_made": 11,
     "pages_visited": 5,
     "page_boundary": "penuh (tanpa batas, default max=1000)",
@@ -125,7 +125,7 @@
       "pages_visited": 5,
       "requests_made": 11,
       "non_pdf_links": 1,
-      "duration_seconds": 7.34
+      "duration_seconds": 7.86
     },
     "errors": [],
     "blocked": false,
