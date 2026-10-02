@@ -1,0 +1,33 @@
+# CI frontend: lint + build untuk setiap PR.
+# Deploy ke GitHub Pages ditangani deploy-capstone-hero-pages.yml (branch gh-pages).
+
+name: Frontend CI
+
+on:
+  pull_request:
+    paths: ['frontend/**', '.github/workflows/frontend-ci.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Lint & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: frontend }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
