@@ -754,9 +754,29 @@ Frontend wajib menangani **2 format error**:
 {blocks['error_422_sample']}
 <!-- /AUTO:error_422_sample -->
 
-### 1.4 Status Autentikasi & CORS
+### 1.4 Status Autentikasi, CORS & Dukungan Integrasi Frontend
 - **`AUTH_ENABLED=false` (Default Fase 1):** Header `Authorization: Bearer <token>` **tidak wajib** disertakan pada seluruh endpoint publik/operasional.
-- **CORS:** Backend mengizinkan origin yang didefinisikan pada `CORS_ORIGINS` di `.env` (misal: `http://localhost:3000,http://127.0.0.1:3000`).
+- **CORS & Port Frontend yang Didukung:**
+  - Vite React frontend: port `5173` (`http://localhost:5173`, `http://127.0.0.1:5173`) dengan base path `/hero/`.
+  - Next.js / dev server alternatif: port `3000` (`http://localhost:3000`, `http://127.0.0.1:3000`).
+  - Didefinisikan via `CORS_ORIGINS` di `.env` (contoh: `http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000`).
+- **Exposed Headers:** Backend mengekspos `Access-Control-Expose-Headers: Content-Disposition, Content-Length` agar client browser/JavaScript lintas-origin dapat membaca nama berkas asli dan ukuran berkas.
+- **Cara Membaca Nama Berkas dari Header di Frontend:**
+  Header `Content-Disposition` menyertakan parameter `filename*=UTF-8''<percent-encoded>` (RFC 5987) untuk mendukung karakter non-ASCII dan spasi secara aman, disertai fallback `filename="<ascii>"`.
+  Contoh pembacaan di frontend (TypeScript/JavaScript):
+  ```ts
+  const disposition = response.headers.get("content-disposition") || "";
+  let filename = "dokumen.pdf";
+  const starMatch = disposition.match(/filename\\*=UTF-8''([^;\\s]+)/i);
+  if (starMatch) {{
+    filename = decodeURIComponent(starMatch[1]);
+  }} else {{
+    const regularMatch = disposition.match(/filename="?([^";]+)"?/i);
+    if (regularMatch) {{
+      filename = regularMatch[1];
+    }}
+  }}
+  ```
 
 ### 1.5 Pola Operasi Panjang (Long-Running Operations)
 Operasi penarikan berkas (`/pull`) dan pemindaian situs (`/scans/`) menggunakan pola polling:
@@ -976,15 +996,18 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
 
 ### 8.3 Menampilkan Berkas PDF Asli di Browser
 - **Method & Path:** `GET /api/v1/documents/{{document_id}}/pdf`
+- **Query Parameter:** `download` (boolean, opsional, default `false`). Jika `true`, header `Content-Disposition` bernilai `attachment` (memicu download berkas langsung). Jika `false`, bernilai `inline` (untuk pratinjau browser).
 - **Header Respons:**
   - `Content-Type: application/pdf`
-  - `Content-Disposition: inline; filename="Nama_Standar.pdf"`
-- **Integrasi Frontend:**
+  - `Content-Disposition: inline; filename="Nama Standar.pdf"; filename*=UTF-8''Nama%20Standar.pdf` (atau `attachment; ...` bila `download=true`)
+  - `Access-Control-Expose-Headers: Content-Disposition, Content-Length` (dapat diakses frontend via CORS)
+- **Integrasi Frontend & Pratinjau:**
   - Dapat langsung dimuat dalam tag `<iframe>`, `<embed>`, `<object>`, atau library PDF viewer seperti `pdf.js` / `@react-pdf-viewer`.
   - Contoh tag HTML:
     ```html
     <iframe src="http://localhost:8000/api/v1/documents/1/pdf" width="100%" height="800px" />
     ```
+  - **Membaca Nama Berkas Asli:** Gunakan parsing parameter `filename*` dari header `Content-Disposition` (lihat contoh kode di §1.4).
   - **Perilaku 403 Forbidden:** Jika dokumen berstatus `non_publik` dan autentikasi belum aktif, endpoint mengembalikan galat 403 dengan pesan `"Dokumen non-publik hanya dapat dibuka setelah login diaktifkan."`.
 
 ---

@@ -67,6 +67,40 @@ def _parse_jdih_date(raw_text: str) -> Optional[date]:
     return None
 
 
+def map_jdih_status_keberlakuan(
+    detail_status_text: Optional[str] = None,
+    datatables_label: Optional[str] = None,
+) -> str:
+    """
+    Memetakan status peraturan JDIH OJK ke enum StatusKeberlakuan:
+    - berlaku | dicabut | diubah | tidak_diketahui
+    Mengenali teks status detail ("Berlaku Sejak...", "Tidak Berlaku...", "Dicabut...", "Diubah...")
+    dan kolom 7 DataTables ("Berlaku", "Tidak Berlaku", "Berlaku (Perubahan) (Diubah)", "Berlaku (Dicabut Sebagian)", "Berlaku (Perubahan) (Mengubah)").
+    """
+    detail_lower = (detail_status_text or "").strip().lower()
+    dt_lower = (datatables_label or "").strip().lower()
+
+    # Prioritaskan detail text jika memuat penanda spesifik
+    if detail_lower:
+        if "dicabut sebagian" in detail_lower or "diubah" in detail_lower:
+            return "diubah"
+        if "tidak berlaku" in detail_lower or "dicabut" in detail_lower:
+            return "dicabut"
+        if "berlaku" in detail_lower:
+            return "berlaku"
+
+    # Evaluasi berdasarkan kolom 7 DataTables API
+    if dt_lower:
+        if "dicabut sebagian" in dt_lower or "diubah" in dt_lower:
+            return "diubah"
+        if "tidak berlaku" in dt_lower or "dicabut" in dt_lower:
+            return "dicabut"
+        if "berlaku" in dt_lower:
+            return "berlaku"
+
+    return "tidak_diketahui"
+
+
 class JdihApiCrawler:
     """Crawler adapter untuk JDIH OJK via API JSON."""
 
@@ -353,6 +387,7 @@ class JdihApiCrawler:
                     penetapan_date: Optional[date] = None
                     pengundangan_date: Optional[date] = None
                     effective_date: Optional[date] = None
+                    detail_status_text: Optional[str] = None
 
                     if d_html:
                         for tr in re.findall(r'<tr[^>]*>(.*?)</tr>', d_html, re.DOTALL):
@@ -376,9 +411,10 @@ class JdihApiCrawler:
                                 if dm:
                                     pengundangan_date = _parse_jdih_date(dm.group(1))
                             elif "status" in hdr:
-                                # Contoh: "Berlaku Sejak Tanggal 09-02-2026"
+                                # Contoh: "Berlaku Sejak Tanggal 09-02-2026", "Tidak Berlaku...", "Dicabut...", "Diubah..."
+                                detail_status_text = val
                                 dm = re.search(r'(\d{1,2}-\d{1,2}-\d{4})', val)
-                                if dm and "tidak berlaku" not in val.lower():
+                                if dm and "tidak berlaku" not in val.lower() and "dicabut" not in val.lower():
                                     effective_date = _parse_jdih_date(dm.group(1))
 
                     # release_date: penetapan -> pengundangan -> title_year (1 Jan)
@@ -390,6 +426,8 @@ class JdihApiCrawler:
                     raw_status_date = str(row[6]).strip() if len(row) > 6 and row[6] is not None else None
                     status_label = str(row[7]).strip() if len(row) > 7 and row[7] is not None else ""
                     dt_status_date = _parse_jdih_date(raw_status_date) if raw_status_date and raw_status_date != "None" else None
+
+                    status_keberlakuan = map_jdih_status_keberlakuan(detail_status_text, status_label)
 
                     if not effective_date and "berlaku" in status_label.lower() and "tidak" not in status_label.lower():
                         effective_date = dt_status_date
@@ -472,6 +510,7 @@ class JdihApiCrawler:
                             effective_date=effective_date,
                             match_warning=match_warn,
                             size_source=assrc,
+                            status_keberlakuan=status_keberlakuan,
                         )
                         candidates_map[att_url] = cand
                         found_any_for_reg = True

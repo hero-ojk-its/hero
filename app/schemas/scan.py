@@ -51,6 +51,9 @@ class CandidateResponse(BaseModel):
     bidang: Optional[str] = None
     sub_bidang: Optional[str] = None
     release_date: Optional[date] = None
+    effective_date: Optional[date] = None
+    match_warning: Optional[str] = None
+    status_keberlakuan: Optional[str] = "tidak_diketahui"
     size_source: Optional[str] = "unknown"
     source_path: Optional[str] = None
     depth: int
@@ -197,6 +200,9 @@ class InternalCandidateIn(BaseModel):
     bidang: Optional[str] = None
     sub_bidang: Optional[str] = None
     release_date: Optional[date] = None
+    effective_date: Optional[date] = None
+    match_warning: Optional[str] = None
+    status_keberlakuan: Optional[str] = "tidak_diketahui"
     size_source: Optional[str] = "unknown"
     source_path: Optional[str] = None
 

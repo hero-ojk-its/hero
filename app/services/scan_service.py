@@ -312,6 +312,7 @@ class ScanService:
                         release_date=cand.release_date,
                         effective_date=cand.effective_date,
                         match_warning=cand.match_warning,
+                        status_keberlakuan=cand.status_keberlakuan or "tidak_diketahui",
                         size_source=cand.size_source or "unknown",
                         source_path=cand.source_path,
                     )
@@ -759,6 +760,7 @@ class ScanService:
                             regulation_type=cand.regulation_type,
                             release_date=cand.release_date,
                             bidang=cand.bidang,
+                            status_keberlakuan=cand.status_keberlakuan,
                         )
                         opts = IngestOptions(
                             access_classification=source.default_access_classification if source else KlasifikasiAkses.publik,
@@ -1106,6 +1108,7 @@ class ScanService:
                 existing.bidang = cand_in.bidang
                 existing.sub_bidang = cand_in.sub_bidang
                 existing.release_date = cand_in.release_date
+                existing.status_keberlakuan = getattr(cand_in, "status_keberlakuan", "tidak_diketahui") or "tidak_diketahui"
                 existing.size_source = cand_in.size_source or "unknown"
                 existing.source_path = cand_in.source_path
             else:
@@ -1128,6 +1131,7 @@ class ScanService:
                     release_date=cand_in.release_date,
                     effective_date=getattr(cand_in, "effective_date", None),
                     match_warning=getattr(cand_in, "match_warning", None),
+                    status_keberlakuan=getattr(cand_in, "status_keberlakuan", "tidak_diketahui") or "tidak_diketahui",
                     size_source=cand_in.size_source or "unknown",
                     source_path=cand_in.source_path,
                 )

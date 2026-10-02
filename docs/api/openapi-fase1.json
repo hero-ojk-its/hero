@@ -3991,6 +3991,41 @@
             ],
             "title": "Release Date"
           },
+          "effective_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Date"
+          },
+          "match_warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Warning"
+          },
+          "status_keberlakuan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Keberlakuan",
+            "default": "tidak_diketahui"
+          },
           "size_source": {
             "anyOf": [
               {
@@ -5121,6 +5156,41 @@
               }
             ],
             "title": "Release Date"
+          },
+          "effective_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Date"
+          },
+          "match_warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Warning"
+          },
+          "status_keberlakuan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Keberlakuan",
+            "default": "tidak_diketahui"
           },
           "size_source": {
             "anyOf": [

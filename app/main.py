@@ -175,12 +175,19 @@ else:
     cors_origins = raw_origins
     cors_allow_credentials = True
 
+class CustomCORSMiddleware(CORSMiddleware):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "Access-Control-Expose-Headers" in self.simple_headers:
+            self.preflight_headers["Access-Control-Expose-Headers"] = self.simple_headers["Access-Control-Expose-Headers"]
+
 app.add_middleware(
-    CORSMiddleware,
+    CustomCORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition", "Content-Length"],
 )
 
 # DAFTARKAN ROUTER

@@ -61,6 +61,7 @@ class DocumentMetadataInput:
     regulation_type: Optional[str] = None
     release_date: Optional[date] = None
     bidang: Optional[str] = None
+    status_keberlakuan: Optional[StatusKeberlakuan] = None
 
 
 @dataclass
@@ -293,6 +294,17 @@ class IngestService:
             if options.metadata and options.metadata.bidang and options.metadata.bidang.strip():
                 doc_bidang = options.metadata.bidang.strip()[:150]
 
+            doc_status_keberlakuan = StatusKeberlakuan.tidak_diketahui
+            if options.metadata and options.metadata.status_keberlakuan:
+                raw_sk = options.metadata.status_keberlakuan
+                if isinstance(raw_sk, StatusKeberlakuan):
+                    doc_status_keberlakuan = raw_sk
+                elif isinstance(raw_sk, str):
+                    try:
+                        doc_status_keberlakuan = StatusKeberlakuan(raw_sk.strip().lower())
+                    except ValueError:
+                        doc_status_keberlakuan = StatusKeberlakuan.tidak_diketahui
+
             # 5. Hitung nama baku awal berdasarkan format pilihan pengguna
             naming_inp = NamingInput(
                 regulation_number=doc_reg_number,
@@ -356,7 +368,7 @@ class IngestService:
                 file_size_bytes=fp.size_bytes,
                 access_classification=options.access_classification,
                 document_role=options.document_role,
-                status_keberlakuan=StatusKeberlakuan.tidak_diketahui,
+                status_keberlakuan=doc_status_keberlakuan,
                 processing_status=StatusPemrosesan.diterima,
                 category_id=options.category_id,
                 job_id=job.id,

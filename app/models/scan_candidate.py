@@ -17,7 +17,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 from app.database import Base
-from app.models.enums import StatusKandidat
+from app.models.enums import StatusKandidat, StatusKeberlakuan
 
 
 class ScanCandidate(Base):
@@ -119,6 +119,13 @@ class ScanCandidate(Base):
         Text,
         nullable=True,
         comment="Peringatan ketidakcocokan metadata regulasi dengan nama berkas",
+    )
+    status_keberlakuan = Column(
+        SQLEnum(StatusKeberlakuan, native_enum=False),
+        nullable=True,
+        default=StatusKeberlakuan.tidak_diketahui,
+        server_default="tidak_diketahui",
+        comment="Status keberlakuan: berlaku | diubah | dicabut | tidak_diketahui",
     )
     size_source = Column(
         String(10),

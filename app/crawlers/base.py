@@ -31,6 +31,7 @@ class PdfCandidate:
     match_warning: Optional[str] = None              # Peringatan ketidakcocokan nama berkas vs metadata regulasi
     size_source: Optional[str] = "unknown"           # listing | head | range | unknown
     source_path: Optional[str] = None                # Jalur folder relatif (OneDrive)
+    status_keberlakuan: Optional[str] = "tidak_diketahui"  # berlaku | dicabut | diubah | tidak_diketahui
 
 
 @dataclass

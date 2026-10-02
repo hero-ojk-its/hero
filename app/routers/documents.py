@@ -392,8 +392,8 @@ def get_document_pdf(
         fname = f"{fname}.pdf"
 
     disp_type = "attachment" if download else "inline"
-    encoded_fname = urllib.parse.quote(fname.encode("utf-8"))
-    ascii_fname = re.sub(r"[^\x20-\x7E]", "_", fname)
+    encoded_fname = urllib.parse.quote(fname, safe="")
+    ascii_fname = re.sub(r'[^\x20-\x7E]|["\\]', "_", fname)
     content_disp = f'{disp_type}; filename="{ascii_fname}"; filename*=UTF-8\'\'{encoded_fname}'
 
     actor_user_id = current_user.id if current_user and getattr(current_user, "id", None) else None

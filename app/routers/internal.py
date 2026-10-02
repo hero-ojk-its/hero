@@ -211,8 +211,8 @@ def get_internal_document_pdf(
     if not fname.lower().endswith(".pdf"):
         fname = f"{fname}.pdf"
 
-    encoded_fname = urllib.parse.quote(fname.encode("utf-8"))
-    ascii_fname = re.sub(r"[^\x20-\x7E]", "_", fname)
+    encoded_fname = urllib.parse.quote(fname, safe="")
+    ascii_fname = re.sub(r'[^\x20-\x7E]|["\\]', "_", fname)
     content_disp = f'inline; filename="{ascii_fname}"; filename*=UTF-8\'\'{encoded_fname}'
 
     return FileResponse(
