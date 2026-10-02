@@ -90,7 +90,7 @@ Rincian lengkap hasil live scan benchmark 3 sumber data merujuk langsung pada be
   - Lengkap Metadata Hukum: 1.652 / 1.652 (100,0%)
   - Match Warnings: 67 warnings
   - Ground Truth: ± 400–500 regulasi (Selisih: +485 s.d. +585 [+535 terhadap titik tengah 450] dari 985 regulasi tersimpan; +486 s.d. +586 [+536 terhadap titik tengah 450] dari 986 total rekod API)
-  - Sebaran doc_kind: `{'utama': 1050, 'abstrak': 400, 'faq': 202}`
+  - Sebaran doc_kind: `{'utama': 990, 'abstrak': 460, 'faq': 202}`
   - HTTP Requests: 2.680 requests
   - Durasi Eksekusi: 837,12 detik (~13m 57s)
   - Total Rekod Portal API: 986 rekod
@@ -250,12 +250,15 @@ Pemeriksaan langsung terhadap berkas fisik hasil unduh dari URL `https://jdih.oj
 - **Tentang:** `TATA CARA PENYUSUNAN RENCANA KERJA DAN ANGGARAN TAHUNAN LEMBAGA ALTERNATIF PENYELESAIAN SENGKETA SEKTOR JASA KEUANGAN`
 - **Tujuan Surat:** `Yth. 1. Pengurus Lembaga Alternatif Penyelesaian Sengketa Sektor Jasa Keuangan; 2. Direksi/Pengurus Asosiasi di sektor jasa keuangan; dan 3. Direksi/Pengurus Pelaku Usaha Jasa Keuangan, di tempat.`
 
-Hasil pemeriksaan berkas fisik ini mengindikasikan dan membuktikan secara nyata bahwa dokumen yang tersimpan di endpoint tersebut memang berkas resmi milik `19/SEOJK.07/2022`, bukan `21/SEOJK.04/2021`.
-Terjadi **anomali relasi / tautan salah di database portal sumber JDIH OJK**: Identifier GUID `61e9d691...` yang bertindak sebagai ID entitas induk pada regulasi `21/SEOJK.04/2021` secara keliru dipakai ulang sebagai ID dokumen unduhan pada regulasi `19/SEOJK.07/2022`, sementara halaman detail `21/SEOJK.04/2021` tertinggal tanpa lampiran berkas resmi (`regulations_without_files = 1`).
+Hasil pemeriksaan berkas fisik ini membuktikan bahwa:
+- **Isi berkas fisik adalah SEOJK 19/2022** (atribusi crawler benar mengaitkan berkas unduhan tersebut ke regulasi `19/SEOJK.07/2022`).
+- **Regulasi 21/SEOJK.04/2021 terbukti tidak memiliki lampiran berkas** pada halaman detailnya (`regulations_without_files = 1`).
 
-### 6.4 Investigasi 22 PDF Tanpa Ukuran (`size_source="unknown"`) & Konsistensi doc_kind Lintas Sumber (Langkah 10h)
+Temuan ini **mengindikasikan** kemungkinan terjadinya kesalahan penautan dokumen pada CMS portal sumber JDIH OJK: identifier GUID `61e9d691...` yang bertindak sebagai ID entitas induk pada regulasi `21/SEOJK.04/2021` juga digunakan sebagai tautan unduhan dokumen pada regulasi `19/SEOJK.07/2022`, sementara halaman detail `21/SEOJK.04/2021` tertinggal tanpa lampiran berkas resmi.
+
+### 6.4 Investigasi 22 PDF Tanpa Ukuran (`size_source="unknown"`) & Konsistensi doc_kind Lintas Sumber (Langkah 10h–10i)
 - **Status Unduh Dokumen JDIH:** **PDF dapat diunduh: 1.630 dari 1.652 berkas**.
-- **Aturan `summary` & `ringkasan` pada `determine_doc_kind` (Langkah 10h):**
+- **Aturan `summary` & `ringkasan` pada `determine_doc_kind`:**
   Aturan deteksi peran dokumen `abstrak` diperluas untuk mengenali kata `"summary"` (kata utuh maupun awalan `"SUMMARY "`) serta `"ringkasan"`, dengan tetap mempertahankan hierarki prioritas `non_regulasi > lampiran > faq > abstrak > utama`.
 - **Sebaran `doc_kind` Lintas Sumber Data Pasca-Regenerasi (Tanpa Scan Ulang):**
   - **Portal Regulasi OJK (`scan-benchmark-ojk.csv`):**
@@ -265,7 +268,9 @@ Terjadi **anomali relasi / tautan salah di database portal sumber JDIH OJK**: Id
     - Sebaran lama: `{'utama': 2296, 'abstrak': 157, 'faq': 156, 'non_regulasi': 7, 'lampiran': 3}`
     - **Sebaran baru:** `{'utama': 2295, 'abstrak': 158, 'faq': 156, 'non_regulasi': 7, 'lampiran': 3}` (1 berkas beralih ke `abstrak`).
   - **Portal JDIH OJK (`scan-benchmark-jdih.csv`):**
-    - **Sebaran:** `{'utama': 1050, 'abstrak': 400, 'faq': 202}`.
+    - Sebaran awal (Langkah 10f): `{'utama': 1231, 'abstrak': 219, 'faq': 202}`
+    - Sebaran pasca-ringkasan (Langkah 10g): `{'utama': 1050, 'abstrak': 400, 'faq': 202}` (181 berkas "ringkasan" beralih)
+    - **Sebaran akhir (Langkah 10i):** `{'utama': 990, 'abstrak': 460, 'faq': 202}` (60 berkas "summary ..." beralih dari `utama` ke `abstrak`).
 - Sebanyak 22 berkas lampiran/ringkasan lama tertentu mengembalikan **HTTP 500 Internal Server Error** (dengan badan respons HTML) saat diakses oleh crawler pada endpoint dokumen lampiran JDIH (`https://jdih.ojk.go.id/Web/ViewPeraturan/DownloadDokumen/<UUID>`), sehingga crawler mencatat `size_bytes = None` dan `size_source = "unknown"`.
 
 Berikut adalah daftar lengkap status HTTP hasil pengujian langsung terhadap seluruh 22 UUID dokumen:
@@ -340,7 +345,7 @@ venv\Lib\site-packages\starlette\testclient.py:53
     _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-212 passed, 1 skipped, 2 warnings in 223.30s (0:03:43)
+212 passed, 1 skipped, 2 warnings in 210.25s (0:03:30)
 ```
 
 ### 7.4 Log Commit Terakhir (`git log --oneline -5`)
@@ -361,6 +366,6 @@ d956629 fix(security): sanitize onedrive share url and redact personnel metadata
 1. Seluruh tautan sensitif, kredensial OneDrive, 3 formDigestValue HTML fixture, dan nama personil telah dibersihkan secara permanen dari HEAD dan riwayat commit (terverifikasi 0 objek pada git cat-file dan git fsck bersih).
 2. Regresi parser OneDrive berhasil diselesaikan dengan 0 match warning dan penjelasan transparan atas 7 nomor false-positive dari Langkah 10c.
 3. Seluruh angka benchmark dan pencocokan telah dihitung secara matematis dan diverifikasi dari CSV/cache aktif.
-4. Konsistensi `doc_kind` lintas sumber berhasil dicapai dengan penambahan pengenalan `"summary"` dan `"ringkasan"` ke peran `abstrak` (OJK: 1.650 utama, 509 abstrak, 387 faq, 119 lampiran; OneDrive: 2.295 utama, 158 abstrak, 156 faq, 7 non-regulasi, 3 lampiran; JDIH: 1.050 utama, 400 abstrak, 202 faq).
-5. Investigasi teknis JDIH dan inspeksi langsung berkas fisik `DownloadDokumen/61e9d691...` membuktikan isi fisik adalah `19/SEOJK.07/2022` (bukan 21/SEOJK.04/2021), mengindikasikan anomali relasi pada CMS sumber, dan mencatat `regulations_without_files = 1` dengan selisih ground truth dihitung serentak dari 985 dan 986 rekod.
+4. Konsistensi `doc_kind` lintas sumber berhasil dicapai dengan penambahan pengenalan `"summary"` dan `"ringkasan"` ke peran `abstrak` (OJK: 1.650 utama, 509 abstrak, 387 faq, 119 lampiran; OneDrive: 2.295 utama, 158 abstrak, 156 faq, 7 non-regulasi, 3 lampiran; JDIH: 990 utama, 460 abstrak, 202 faq).
+5. Investigasi teknis JDIH dan inspeksi langsung berkas fisik `DownloadDokumen/61e9d691...` membuktikan isi berkas fisik adalah SEOJK 19/2022 (atribusi crawler benar), sedangkan 21/SEOJK.04/2021 terbukti tidak memiliki lampiran (`regulations_without_files = 1`). Kesamaan GUID mengindikasikan kemungkinan kesalahan penautan dokumen di CMS portal sumber. Selisih ground truth dilaporkan serentak dari 985 regulasi tersimpan dan 986 rekod API.
 6. Kode backend dan dokumentasi laporan berada dalam kondisi stabil dan terverifikasi penuh.

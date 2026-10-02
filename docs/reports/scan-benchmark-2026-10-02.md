@@ -46,11 +46,11 @@
 - **Jumlah Match Warnings:** 67
 - **Ground Truth:** ± 400–500 regulasi (Selisih: +485 s.d. +585 [+535 terhadap titik tengah 450] dari 985 regulasi tersimpan; +486 s.d. +586 [+536 terhadap titik tengah 450] dari 986 total rekod API)
 - **Berkas CSV Ekspor:** [`docs/reports/scan-benchmark-jdih.csv`](docs/reports/scan-benchmark-jdih.csv)
-- **Rincian doc_kind:** `{'utama': 1050, 'abstrak': 400, 'faq': 202}`
+- **Rincian doc_kind:** `{'utama': 990, 'abstrak': 460, 'faq': 202}`
 - **Total Rekod Situs (recordsTotal):** 986
 - **Statistik Lengkap:**
   ```json
-  {'regulations_found': 985, 'regulations_without_files': 1, 'pdfs_found': 1652, 'by_doc_kind': {'utama': 1050, 'abstrak': 400, 'faq': 202}, 'pages_visited': 20, 'requests_made': 2680, 'records_total': 986, 'match_warnings_count': 67, 'duration_seconds': 837.12}
+  {'regulations_found': 985, 'regulations_without_files': 1, 'pdfs_found': 1652, 'by_doc_kind': {'utama': 990, 'abstrak': 460, 'faq': 202}, 'pages_visited': 20, 'requests_made': 2680, 'records_total': 986, 'match_warnings_count': 67, 'duration_seconds': 837.12}
   ```
 
 ### 2.3 OneDrive Public DPEA (`onedrive`)
