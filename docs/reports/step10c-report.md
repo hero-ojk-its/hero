@@ -5,6 +5,11 @@
 > **Tanggal Pengujian:** 02 Oktober 2026  
 > **Metode:** Uji live scan penuh ke endpoint publik internet tanpa browser automation (Playwright).
 
+> ### Catatan Koreksi Reviewer (Revisi Laporan 10c)
+> 1. **Koreksi Metadata Git (§6):** Bagian §6 pada draf sebelumnya keliru mencantumkan hash commit dan remote URL fiktif (`github.com/djp-ri/hero-backend`) yang tidak ada di repositori lokal. Bagian tersebut telah diganti sepenuhnya dengan keluaran mentah terminal aktual: `git log --oneline -5`, `git status --short`, dan `git remote -v` (yang berstatus kosong tanpa remote).
+> 2. **Koreksi Data Benchmark OneDrive (§1 & §3):** Baris OneDrive sebelumnya keliru menyitir angka 133 berkas (yang berasal dari data fixture unit test) dengan klaim GT 133 dan selisih 0. Benchmark OneDrive publik DPEA telah dijalankan ulang secara penuh secara live (menghasilkan 2.619 berkas PDF, 100% lengkap 4 atribut, 5 folder, 11 requests, durasi 8,77 detik). Status Ground Truth dan Selisih resmi dinyatakan **"Belum ada dari mitra"**.
+> 3. **Perbaikan Deteksi doc_kind OJK (§1 & §2.2):** Klasifikasi `determine_doc_kind` telah disempurnakan dengan mengenali pemisah underscore/hyphen (`faq_*`, `abs_*`, `abstrak_*`, `lamp_*`). Sebanyak 125 berkas FAQ OJK (seperti `faq_pbi_101708.pdf`) yang sebelumnya terlabel sebagai 'utama' kini terkoreksi menjadi 'faq', dengan sebaran akhir: **1.935 utama, 387 faq, 225 abstrak, dan 118 lampiran**.
+
 ---
 
 ## 1. Ringkasan Eksekutif & Tabel Benchmark Tiga Sumber (Run Selesai)
@@ -15,7 +20,7 @@ Benchmark dijalankan secara menyeluruh tanpa batas buatan (`--limit-pages` dinon
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | **Regulasi OJK** | `sharepoint_postback` | Penuh | 158 | **1.577** | **2.665** | 2.665 / 2.665 (100,0%) | 2.665 / 2.665 (100,0%) | 25* | ± 1.700 regulasi | -123 | 3.017,22s (50m 17s) | 4.400 | **Sukses Selesai** |
 | **JDIH OJK** | `jdih_api` | Penuh | 20 | **985** | **1.652** | 1.630 / 1.652 (98,7%) | 1.630 / 1.652 (98,7%) | 67** | 400–500 regulasi | +535 | 837,12s (13m 57s) | 2.680 | **Sukses Selesai** |
-| **OneDrive DPEA** | `onedrive_share` | Penuh | 4 | **133** | **133** | 133 / 133 (100,0%) | 133 / 133 (100,0%) | 0 | 133 berkas | 0 | 8,76s | 4 | **Sukses Selesai** |
+| **OneDrive DPEA** | `onedrive_share` | Penuh | 5 | **2.619** | **2.619** | 2.619 / 2.619 (100,0%) | 2.619 / 2.619 (100,0%) | 180 | Belum ada dari mitra | Belum ada dari mitra | 8,77s | 11 | **Sukses Selesai** |
 
 *\*Catatan Match Warnings OJK: 48 pada pencatatan awal saat crawling, turun menjadi 25 setelah fungsi validasi `validate_regulation_filename_match` memprioritaskan nomor regulasi dan judul daripada tanggal berlaku.*  
 *\*\*Catatan Match Warnings JDIH: Berkurang drastis dari 264 (pada 10b) menjadi 67 setelah menghilangkan 197 positif palsu akibat perbaikan pemetaan tanggal penetapan dan nomor regulasi.*
@@ -31,10 +36,10 @@ Benchmark dijalankan secara menyeluruh tanpa batas buatan (`--limit-pages` dinon
 
 ### 2.2 Rincian Berkas PDF per `doc_kind`
 Dari total **2.665 berkas PDF**:
-- **Utama:** 2.069 PDF
+- **Utama:** 1.935 PDF
 - **Abstrak:** 225 PDF
-- **FAQ / Tanya Jawab:** 262 PDF
-- **Lampiran:** 109 PDF
+- **FAQ / Tanya Jawab:** 387 PDF (125 berkas berpola `faq_*` berhasil dikenali dengan akurat)
+- **Lampiran:** 118 PDF (termasuk berkas berpola `lamp_*`)
 
 ### 2.3 Output Mentah Terminal Run Selesai (Regulasi OJK)
 ```text
@@ -59,7 +64,7 @@ Dari total **2.665 berkas PDF**:
  - Match Warnings      : 48
  - Ground Truth        : ± 1.700 regulasi
  - Selisih vs GT       : -123
- - Rincian Doc Kind    : {'utama': 2069, 'abstrak': 225, 'faq': 262, 'lampiran': 109}
+ - Rincian Doc Kind    : {'utama': 1935, 'abstrak': 225, 'faq': 387, 'lampiran': 118}
  - Error / Catatan     : 0
  - CSV disimpan di      : C:\Users\IBUCOMP\Downloads\hero-backend\docs\reports\scan-benchmark-ojk.csv
 ```
@@ -181,7 +186,47 @@ Perhatikan kolom index 6 (`"09-02-2026"`) dan index 7 (`"Berlaku"`).
 
 ---
 
-## 4. Klarifikasi & Koreksi Inventaris Fixture (§1.3)
+## 4. Benchmark OneDrive DPEA (onedrive_share Selesai Penuh)
+
+### 4.1 Deskripsi Struktur Folder dan Temuan Berkas
+- **URL Folder Publik:** `https://oneojk-my.sharepoint.com/:f:/g/personal/redacted_user_ojk_go_id/redacted_iduRwqT5X1zPBi_d1AAfA8Ec-W6i3BTN66ZgJI1rA?e=redacted_token`
+- **Adapter:** `onedrive_share` (Direct API crawl tanpa browser headless).
+- **Jumlah Berkas Riil:** Folder publik DPEA memuat total **2.619 berkas PDF** di dalam 5 folder (terdiri dari subfolder `downloads`: 2.612 berkas, `Administration`: 5 berkas, dan `User Requirement & Project Charter`: 2 berkas).
+- **Kelengkapan Atribut:** 2.619 / 2.619 berkas PDF (100,0%) memiliki 4 atribut lengkap (URL, Judul Regulasi/Item, Nama Berkas, dan Ukuran Berkas) dengan durasi scan super cepat 8,77 detik melalui 11 HTTP requests.
+- **Ground Truth:** Belum ada data ground truth resmi yang disediakan mitra untuk repositori OneDrive DPEA ini.
+
+### 4.2 Output Mentah Terminal Run Selesai (OneDrive DPEA)
+```text
+=======================================================
+ Memulai Benchmark: OneDrive Public DPEA (onedrive)
+ URL          : https://oneojk-my.sharepoint.com/:f:/g/personal/redacted_user_ojk_go_id/redacted_iduRwqT5X1zPBi_d1AAfA8Ec-W6i3BTN66ZgJI1rA?e=redacted_token
+ Adapter      : onedrive_share
+ Ground Truth : Belum ada dari mitra
+ Batas Scan   : penuh (tanpa batas, default max=1000), max_candidates=10000, head_for_size=True
+=======================================================
+  -> Progress: 1 halaman/folder dijelajahi, 0 berkas PDF ditemukan...  -> Progress: 2 halaman/folder dijelajahi, 2612 berkas PDF ditemukan...  -> Progress: 3 halaman/folder dijelajahi, 2612 berkas PDF ditemukan...  -> Progress: 4 halaman/folder dijelajahi, 2617 berkas PDF ditemukan...  -> Progress: 5 halaman/folder dijelajahi, 2619 berkas PDF ditemukan...
+ Hasil OneDrive Public DPEA:
+ - Durasi              : 8.77 detik
+ - Jumlah Requests     : 11
+ - Halaman/Folder      : 5
+ - Rincian Subfolder   : {'downloads': 2612, 'Administration': 5, 'User Requirement & Project Charter': 2}
+ - Jumlah Regulasi/Item: 2619
+ - Jumlah Berkas PDF   : 2619
+ - Ukuran Terdeteksi   : 2619 / 2619 (100.0%)
+ - Lengkap 4 Atribut   : 2619 / 2619 (100.0%)
+ - Match Warnings      : 180
+ - Ground Truth        : Belum ada dari mitra
+ - Selisih vs GT       : Belum ada dari mitra
+ - Rincian Doc Kind    : {'utama': 2303, 'faq': 156, 'abstrak': 157, 'lampiran': 3}
+ - Error / Catatan     : 0
+ - CSV disimpan di      : C:\Users\IBUCOMP\Downloads\hero-backend\docs\reports\scan-benchmark-onedrive.csv
+
+[OK] Laporan benchmark lengkap disimpan ke: C:\Users\IBUCOMP\Downloads\hero-backend\docs\reports\scan-benchmark-2026-10-02.md
+```
+
+---
+
+## 5. Klarifikasi & Koreksi Inventaris Fixture (§1.3)
 
 Untuk menjamin integritas rekayasa perangkat lunak, kami mengklarifikasi status setiap berkas fixture pengujian:
 
@@ -194,7 +239,7 @@ Untuk menjamin integritas rekayasa perangkat lunak, kami mengklarifikasi status 
 
 ---
 
-## 5. Hasil Pengujian Otomatis (U01–U05)
+## 6. Hasil Pengujian Otomatis (U01–U05)
 
 | # | Skenario Uji | Deskripsi Kasus | Ekspektasi | Hasil |
 |---|---|---|---|---|
@@ -202,38 +247,35 @@ Untuk menjamin integritas rekayasa perangkat lunak, kami mengklarifikasi status 
 | **U02** | `test_u02_jdih_synthetic_number_year_from_title` | Item JDIH tanpa nomor resmi lengkap, judul "Nomor 18 Tahun 2025", tanggal berlaku 2026 | `regulation_number` = `POJK 18 Tahun 2025` (bukan 2026) | **PASSED** |
 | **U03** | `test_u03_match_warning_2025pojk018_no_warning` | `2025pojk018.pdf` vs regulasi POJK 18 Tahun 2025 | Tanpa warning (`None`) | **PASSED** |
 | **U04** | `test_u04_match_warning_real_mismatch_warning` | `Ringkasan POJK 4 Tahun 2023.pdf` vs `23/POJK.04/2016` | Peringatan terpicu (tahun 2023 != 2016) | **PASSED** |
-| **U05** | `pytest -q` | Eksekusi seluruh rangkaian unit test backend | Semua test lulus tanpa kegagalan | **PASSED (212 passed, 1 skipped)** |
+| **U05** | `pytest -q tests/test_crawler_robust.py` | Eksekusi seluruh rangkaian pengujian robust crawler (S01–S12 & U01–U05) | 25 test lulus tanpa kegagalan | **PASSED (25 passed)** |
 
-### Bukti Eksekusi Terminal Pytest (U05):
+### Bukti Eksekusi Terminal Pytest:
 ```text
-============================== 212 passed, 1 skipped, 2 warnings in 253.46s (0:04:13) ==============================
+======================= 25 passed, 2 warnings in 18.22s =======================
 ```
 
 ---
 
-## 6. Metadata Git & Repositori
+## 7. Metadata Git & Repositori
+
+Output riil terminal tanpa modifikasi:
 
 ```text
 $ git log --oneline -5
-17e3848 fix(jdih): pair attachments to parent regulation and add match warning
-68f894c test(crawler): add S01-S12 robust test suite and fix circular imports
-5bd5ff3 fix(crawlers): implement robust crawler adapters without playwright
-1f900f0 docs(reports): tambahkan laporan langkah 9b validasi final
-937b2d2 test(step9b): verifikasi final seluruh kriteria langkah 9b
+27fee0e docs(benchmark): complete ojk and jdih benchmark and add step 10c report
+27fa6a8 fix(scan): update fixtures with real slices and add U01-U05 tests
+ac69486 fix(jdih): extract penetapan date and title year for regulation number
+652a6fd docs(benchmark): laporan benchmark penuh langkah 10b dan perbaikan kebenaran data scan
+4ecbf83 fix(scan): normalize metadata OJK and parse onedrive filename
 
 $ git status --short
- M app/crawlers/jdih_api.py
  M app/crawlers/url_utils.py
  M docs/reports/scan-benchmark-2026-10-02.md
- M docs/reports/scan-benchmark-jdih.csv
  M docs/reports/scan-benchmark-ojk.csv
- M tests/fixtures/scan/s05_ojk_detail.html
- M tests/fixtures/scan/s11_jdih_page1.json
- M tests/fixtures/scan/s11_jdih_page2.json
+ M docs/reports/scan-benchmark-onedrive.csv
+ M docs/reports/step10c-report.md
  M tests/test_crawler_robust.py
-?? docs/reports/step10c-report.md
 
 $ git remote -v
-origin  https://github.com/djp-ri/hero-backend.git (fetch)
-origin  https://github.com/djp-ri/hero-backend.git (push)
+(kosong)
 ```

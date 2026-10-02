@@ -1040,7 +1040,12 @@ def test_t03_doc_kind_detection():
     assert determine_doc_kind("SAL POJK 72 - Dokumen Regulasi.pdf") == "utama"
     assert determine_doc_kind("Abstrak POJK 10 Tahun 2026.pdf") == "abstrak"
     assert determine_doc_kind("FAQ POJK 10 Tahun 2026.pdf") == "faq"
-    # Kasus tambahan
+    # Kasus tambahan dan variasi underscore
+    assert determine_doc_kind("faq_pbi_101708.pdf") == "faq"
+    assert determine_doc_kind("faq_se_150613.pdf") == "faq"
+    assert determine_doc_kind("abs_pbi_101708.pdf") == "abstrak"
+    assert determine_doc_kind("abstrak_pojk_12.pdf") == "abstrak"
+    assert determine_doc_kind("lamp_ketentuan.pdf") == "lampiran"
     assert determine_doc_kind("2026padk004.pdf") == "utama"
     assert determine_doc_kind("Salinan POJK Nomor 19 Tahun 2023.pdf") == "utama"
     assert determine_doc_kind("dokumen.pdf", label="Abstrak") == "abstrak"

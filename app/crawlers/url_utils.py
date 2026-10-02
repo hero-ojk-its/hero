@@ -264,6 +264,7 @@ def determine_doc_kind(filename_or_title: Optional[str], label: Optional[str] = 
     Menentukan peran dokumen: utama | abstrak | faq | lampiran.
     Mengenali:
     - Pola dengan spasi ('Abstrak POJK ...', 'FAQ POJK ...')
+    - Pola dengan underscore/hyphen ('faq_pbi_101708.pdf', 'abs_pbi_101708.pdf', 'abstrak_pojk_12.pdf')
     - Pola kode kompak tanpa spasi ('2026abspojk008.pdf', '2024faqseojk020.pdf', '2026abspadk004.pdf')
     - Label terpisah bila disediakan dari situs/detail ('Abstrak', 'FAQ', 'Dokumen Utama', 'Lampiran')
     - Penanda salinan resmi ('SAL POJK ...', 'Salinan ...') -> 'utama'
@@ -278,20 +279,20 @@ def determine_doc_kind(filename_or_title: Optional[str], label: Optional[str] = 
     if not combined.strip():
         return "utama"
 
-    # 1. Abstrak
-    if re.search(r'\babstrak\b|abs(?:pojk|seojk|padk|pdk|kdk)|\babs\b|(?:\d{4})abs|^abs[-_]', combined):
+    # 1. Abstrak (termasuk abs_, abstrak_, dll.)
+    if re.search(r'(?:^|[\W_])(?:abstrak|abs)(?:[\W_]|$)|abs(?:pojk|seojk|padk|pdk|kdk)|(?:\d{4})abs', combined):
         return "abstrak"
 
-    # 2. FAQ / Tanya Jawab
-    if re.search(r'\bfaq\b|faq(?:pojk|seojk|padk|pdk|kdk)|(?:\d{4})faq|\btanya\s*jawab\b', combined):
+    # 2. FAQ / Tanya Jawab (termasuk faq_, tanya jawab, dll.)
+    if re.search(r'(?:^|[\W_])(?:faq|tanya\s*jawab)(?:[\W_]|$)|faq(?:pojk|seojk|padk|pdk|kdk)|(?:\d{4})faq', combined):
         return "faq"
 
-    # 3. Lampiran
-    if re.search(r'\blampiran\b|\blamp[-_]|\blamp\b', combined):
+    # 3. Lampiran (termasuk lamp_, lampiran_, dll.)
+    if re.search(r'(?:^|[\W_])(?:lampiran|lamp)(?:[\W_]|$)', combined):
         return "lampiran"
 
     # 4. Salinan / Dokumen Utama: 'salinan', 'sal ' -> utama
-    if re.search(r'\bsalinan\b|^sal\s+|^sal[-_]', combined):
+    if re.search(r'(?:^|[\W_])salinan(?:[\W_]|$)|(?:^|[\W_])sal[-_\s]', combined):
         return "utama"
 
     return "utama"
