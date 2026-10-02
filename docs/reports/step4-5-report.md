@@ -212,7 +212,7 @@ POST     | 8b. /ingest/upload-pdf (Non-PDF Check)             | 200     | OK (fa
 
 ## 5. Perubahan Kontrak API untuk Frontend (Personil_D)
 
-Rincian lengkap tertuang pada berkas: [frontend-changes-step4-5.md](file:///c:/Users/IBUCOMP/Downloads/hero-backend/docs/api/frontend-changes-step4-5.md).
+Rincian lengkap tertuang pada berkas: [frontend-changes-step4-5.md](docs/api/frontend-changes-step4-5.md).
 - **Pencarian Knowledge Base (`GET /api/v1/documents/`):** Parameter `q`, `mode` (`phrase`, `all`, `web`), `regulation_number`, `regulation_type`, `category_id`, `include_subcategories`, `status_keberlakuan` (multi-select), `sort`, `skip`, `limit` (max 100). Item respon diperkaya dengan `rank`, `highlight` (`<mark>...</mark>`), `category_path`, `pdf_url`, `is_placed`.
 - **Buka PDF & Teks:** `GET /documents/{id}/pdf` (`inline` / `?download=true`), `GET /documents/{id}/text` (paginated text).
 - **Koreksi Metadata:** `PATCH /documents/{id}/metadata` (mendukung `null` untuk mengosongkan, validasi tanggal ≤ hari ini, otomatis re-placement ke folder KB).
@@ -224,7 +224,7 @@ Rincian lengkap tertuang pada berkas: [frontend-changes-step4-5.md](file:///c:/U
 
 ## 6. Kontrak Integrasi Data/ML (Fathir)
 
-Rincian lengkap tertuang pada berkas: [ingest-extraction-contract.md](file:///c:/Users/IBUCOMP/Downloads/hero-backend/docs/api/ingest-extraction-contract.md).
+Rincian lengkap tertuang pada berkas: [ingest-extraction-contract.md](docs/api/ingest-extraction-contract.md).
 - Header otentikasi wajib: `X-Internal-API-Key`.
 - Mendukung field bahasa Inggris dan alias Bahasa Indonesia (`judul`, `nomor_peraturan`, `jenis_peraturan`, `tanggal_terbit`, `metode_ekstraksi`, `teks_lengkap`, `confidence`, `error`).
 - Alur kerja: `POST /claim` (`FOR UPDATE SKIP LOCKED`) -> `GET /{id}/pdf` -> `PATCH /{id}/extraction` (atau `POST /requeue/{id}`).

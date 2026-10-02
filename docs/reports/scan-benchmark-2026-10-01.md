@@ -48,7 +48,7 @@
   ```
 
 ### 2.3 OneDrive Public DPEA (`onedrive`)
-- **URL Target:** https://oneojk-my.sharepoint.com/:f:/g/personal/redacted_user_ojk_go_id/redacted_iduRwqT5X1zPBi_d1AAfA8Ec-W6i3BTN66ZgJI1rA?e=redacted_token
+- **URL Target:** [link share OneDrive DPEA]
 - **Adapter:** `onedrive_share`
 - **Waktu Eksekusi:** 7.54 detik (11 requests)
 - **Halaman/Folder Dikunjungi:** 5

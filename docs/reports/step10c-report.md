@@ -189,7 +189,7 @@ Perhatikan kolom index 6 (`"09-02-2026"`) dan index 7 (`"Berlaku"`).
 ## 4. Benchmark OneDrive DPEA (onedrive_share Selesai Penuh)
 
 ### 4.1 Deskripsi Struktur Folder dan Temuan Berkas
-- **URL Folder Publik:** `https://oneojk-my.sharepoint.com/:f:/g/personal/redacted_user_ojk_go_id/redacted_iduRwqT5X1zPBi_d1AAfA8Ec-W6i3BTN66ZgJI1rA?e=redacted_token`
+- **URL Folder Publik:** [link share OneDrive DPEA]
 - **Adapter:** `onedrive_share` (Direct API crawl tanpa browser headless).
 - **Jumlah Berkas Riil:** Folder publik DPEA memuat total **2.619 berkas PDF** di dalam 5 folder (terdiri dari subfolder `downloads`: 2.612 berkas, `Administration`: 5 berkas, dan `User Requirement & Project Charter`: 2 berkas).
 - **Kelengkapan Atribut:** 2.619 / 2.619 berkas PDF (100,0%) memiliki 4 atribut lengkap (URL, Judul Regulasi/Item, Nama Berkas, dan Ukuran Berkas) dengan durasi scan super cepat 8,77 detik melalui 11 HTTP requests.
@@ -199,7 +199,7 @@ Perhatikan kolom index 6 (`"09-02-2026"`) dan index 7 (`"Berlaku"`).
 ```text
 =======================================================
  Memulai Benchmark: OneDrive Public DPEA (onedrive)
- URL          : https://oneojk-my.sharepoint.com/:f:/g/personal/redacted_user_ojk_go_id/redacted_iduRwqT5X1zPBi_d1AAfA8Ec-W6i3BTN66ZgJI1rA?e=redacted_token
+ URL          : [link share OneDrive DPEA]
  Adapter      : onedrive_share
  Ground Truth : Belum ada dari mitra
  Batas Scan   : penuh (tanpa batas, default max=1000), max_candidates=10000, head_for_size=True
@@ -235,7 +235,7 @@ Untuk menjamin integritas rekayasa perangkat lunak, kami mengklarifikasi status 
 | `tests/fixtures/scan/s05_ojk_detail.html` | Mock sintetis (29 baris) | **Snapshot Asli Dipangkas** (4.439 byte) | Diambil dari `tests/fixtures/live_snapshots/ojk_regulasi_detail_sample.html` (halaman asli POJK 13 Tahun 2026). Mempertahankan struktur asli SharePoint: class `list-regulasi-display`, `sektor-regulasi-display`, `display-date-text tanggal-2`, dan kontainer lampiran. | Menguji penguraian detail SharePoint asli (S05). |
 | `tests/fixtures/scan/s11_jdih_page1.json` | Mock sintetis | **Snapshot Asli Dipangkas** (1.193 byte) | Diambil langsung dari respons live API `/Web/ViewPeraturanHome/ListDataPeraturan` JDIH OJK (PADK 4 Tahun 2026 & POJK 10 Tahun 2026). | Menguji paginasi API DataTables halaman 1 (S11). |
 | `tests/fixtures/scan/s11_jdih_page2.json` | Mock sintetis | **Snapshot Asli Dipangkas** (1.153 byte) | Diambil langsung dari respons live API `/Web/ViewPeraturanHome/ListDataPeraturan` JDIH OJK (POJK 9 Tahun 2026 & POJK 8 Tahun 2026). | Menguji paginasi API DataTables halaman 2 (S11). |
-| `tests/fixtures/live_snapshots/onedrive_live.html` | Dicatat `1drv.ms` (Laporan 10b) | **Snapshot Asli Terverifikasi** (393.842 byte) | **Dikonfirmasi 100% snapshot asli folder Pak Faris.** Disimpan langsung dari `https://oneojk-my.sharepoint.com/personal/redacted_user_ojk_go_id/`. Bukti baris 63: `"webAbsoluteUrl":"https://oneojk-my.sharepoint.com/personal/redacted_user_ojk_go_id"`, `"mySiteOwner":"REDACTED_OWNER@example.com"`, `"webTitle":"REDACTED_PERSON"`. Tautan `1drv.ms` pada laporan 10b murni kekeliruan penulisan sitasi teks pada markdown laporan. | Menguji ekstraksi metadata OneDrive DPEA (S12). |
+| `tests/fixtures/live_snapshots/onedrive_live.html` | Dicatat `1drv.ms` (Laporan 10b) | **Snapshot Asli Terverifikasi** (393.842 byte) | **Dikonfirmasi 100% snapshot asli folder mitra.** Disimpan langsung dari [link share OneDrive DPEA]. Bukti baris 63: `"webAbsoluteUrl":"https://oneojk-my.sharepoint.com/personal/redacted_user_ojk_go_id"`, `"mySiteOwner":"REDACTED_OWNER@example.com"`, `"webTitle":"REDACTED_PERSON"`. Tautan `1drv.ms` pada laporan 10b murni kekeliruan penulisan sitasi teks pada markdown laporan. | Menguji ekstraksi metadata OneDrive DPEA (S12). |
 
 ---
 

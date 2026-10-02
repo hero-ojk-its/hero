@@ -244,7 +244,7 @@ Benchmark dijalankan secara langsung (*live execution*) ke situs resmi OJK, port
 ```text
 =======================================================
  Memulai Benchmark: OneDrive Public DPEA (onedrive)
- URL          : https://oneojk-my.sharepoint.com/:f:/g/personal/redacted_user_ojk_go_id/redacted_iduRwqT5X1zPBi_d1AAfA8Ec-W6i3BTN66ZgJI1rA?e=redacted_token
+ URL          : [link share OneDrive DPEA]
  Adapter      : onedrive_share
  Ground Truth : Belum ada dari mitra
  Batas Scan   : penuh (tanpa batas, default max=1000), max_candidates=10000, head_for_size=True

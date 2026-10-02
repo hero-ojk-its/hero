@@ -555,12 +555,12 @@ Respons Dashboard (Raw JSON):
 - **Polling Progres Job:** Polling `GET /api/v1/ingest/jobs/{job_id}` menyediakan `progress_percent`, `total_found`, `processed_count`, dan `skipped_count`.
 - **Tabel Berkas Sumber:** `GET /api/v1/scraping-sources/{id}/files` mendukung pagination dan filter `last_outcome`.
 - **Statistik Sumber di Dashboard:** `GET /api/v1/dashboard/summary` menyediakan `sources.by_type` (`situs_web`, `folder_lokal`, `onedrive_public`).
-- Panduan lengkap tersedia di [`docs/api/frontend-changes-step6.md`](file:///c:/Users/IBUCOMP/Downloads/hero-backend/docs/api/frontend-changes-step6.md).
+- Panduan lengkap tersedia di [`docs/api/frontend-changes-step6.md`](docs/api/frontend-changes-step6.md).
 
 ### 5.2 Tim Data/ML
 - **Ekstraksi Engine:** Field `extraction_engine` (alias `mesin_ekstraksi`) didukung secara opsional pada `PATCH /api/v1/internal/documents/{id}/extraction`.
 - **Pembersihan Contoh API Key:** Placeholder `<INTERNAL_API_KEY>` menggantikan kunci dev pada dokumentasi kontrak.
-- Kontrak diperbarui pada [`docs/api/ingest-extraction-contract.md`](file:///c:/Users/IBUCOMP/Downloads/hero-backend/docs/api/ingest-extraction-contract.md).
+- Kontrak diperbarui pada [`docs/api/ingest-extraction-contract.md`](docs/api/ingest-extraction-contract.md).
 
 ---
 

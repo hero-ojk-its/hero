@@ -1,7 +1,7 @@
 # KONTRAK API HERO BACKEND — FASE 1 (MVP)
 
-> **Untuk Tim Frontend (Personil_D)**  
-> **Status:** DRAF v0.9 — untuk disepakati Personil_D & Personil_E (rapat internal 1 Okt 2026)  
+> **Untuk Tim Frontend**  
+> **Status:** DRAF v0.9 — untuk disepakati Tim Frontend & Tim Backend (rapat internal 1 Okt 2026)  
 > **Basis Implementasi:** FastAPI · PostgreSQL 15.4 · SQLAlchemy 2.x  
 > **Artefak Pendamping:**
 > - [Koleksi Request Siap Eksekusi (REST Client / VS Code)](hero-fase1.http)
@@ -10,10 +10,10 @@
 
 ### Tabel Persetujuan
 
-| Nama | Peran | Tanggal | Catatan |
-|---|---|---|---|
-| Personil_D | Frontend Lead | - | Belum ditandatangani |
-| Personil_E | Backend Lead / PM | - | Belum ditandatangani |
+| Nama / Peran | Tanggal | Catatan |
+|---|---|---|
+| Frontend Lead | - | Belum ditandatangani |
+| Backend Lead / PM | - | Belum ditandatangani |
 
 ---
 

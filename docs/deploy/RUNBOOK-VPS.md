@@ -1,6 +1,6 @@
 # RUNBOOK DEPLOYMENT VPS — HERO Backend
 > **Panduan Resmi Kesiapan & Operasional Produksi (Fase 1)**  
-> **Target Audiens:** Hamdan (DevOps/Infra) & Personil_E (Backend Engineer)  
+> **Target Audiens:** Tim DevOps/Infra & Tim Backend Engineer  
 > **Stack:** FastAPI · PostgreSQL 15 · Caddy 2 Reverse Proxy · Docker Compose
 
 ---

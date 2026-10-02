@@ -1052,7 +1052,7 @@ def test_t03_doc_kind_detection():
     # Prioritas lampiran bila diawali Lampiran
     assert determine_doc_kind("Lampiran SP - FAQ Ketentuan POJK.pdf") == "lampiran"
     # Berkas non-regulasi
-    assert determine_doc_kind("NDA Personil Moh. Personil_E Gusti S._Backend.pdf") == "non_regulasi"
+    assert determine_doc_kind("NDA Personil Synthetic Name_Backend.pdf") == "non_regulasi"
     assert determine_doc_kind("HERO_User_Requirement_Document.pdf") == "non_regulasi"
     assert determine_doc_kind("Project Charter Mitra_OJK.pdf") == "non_regulasi"
     assert determine_doc_kind("2026padk004.pdf") == "utama"
@@ -1114,6 +1114,44 @@ def test_t05_parse_onedrive_filename_metadata():
     assert res5.get("regulation_type") == "POJK"
     assert res5.get("regulation_number") == "3"
     assert res5.get("release_year") == 2025
+
+    # Kasus regresi _20, _29, PBI, dan awalan indeks
+    res6 = parse_onedrive_filename_metadata("Surat_Edaran_OJK_20_2017.pdf")
+    assert res6.get("regulation_type") == "SEOJK"
+    assert res6.get("regulation_number") == "20"
+    assert res6.get("release_year") == 2017
+
+    res7 = parse_onedrive_filename_metadata("Surat_Edaran_OJK_20_2014.pdf")
+    assert res7.get("regulation_type") == "SEOJK"
+    assert res7.get("regulation_number") == "20"
+    assert res7.get("release_year") == 2014
+
+    res8 = parse_onedrive_filename_metadata("Peraturan_Bank_Indonesia_20_2008.pdf")
+    assert res8.get("regulation_type") == "PBI"
+    assert res8.get("regulation_number") == "20"
+    assert res8.get("release_year") == 2008
+
+    res9 = parse_onedrive_filename_metadata("Surat_Edaran_OJK_29_2016.pdf")
+    assert res9.get("regulation_type") == "SEOJK"
+    assert res9.get("regulation_number") == "29"
+    assert res9.get("release_year") == 2016
+
+    res10 = parse_onedrive_filename_metadata("Surat_Edaran_OJK_29_2025.pdf")
+    assert res10.get("regulation_type") == "SEOJK"
+    assert res10.get("regulation_number") == "29"
+    assert res10.get("release_year") == 2025
+
+    res11 = parse_onedrive_filename_metadata("43_-_Rijksblaad_dari_Daerah_Paku_Alaman_Tahun_1937_Nomor_9.pdf")
+    assert res11.get("regulation_number") == "9"
+    assert res11.get("release_year") == 1937
+
+    res12 = parse_onedrive_filename_metadata("42_-_Staatsblad_Tahun_1929_Nomor_357.pdf")
+    assert res12.get("regulation_number") == "357"
+    assert res12.get("release_year") == 1929
+
+    from app.crawlers.url_utils import validate_regulation_filename_match
+    assert validate_regulation_filename_match("43_-_Rijksblaad_dari_Daerah_Paku_Alaman_Tahun_1937_Nomor_9.pdf", regulation_number="9", release_year=1937) is None
+    assert validate_regulation_filename_match("42_-_Staatsblad_Tahun_1929_Nomor_357.pdf", regulation_number="357", release_year=1929) is None
 
 
 # ==============================================================================

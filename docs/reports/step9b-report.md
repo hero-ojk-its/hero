@@ -54,8 +54,8 @@
 ### 1.5 Status dan Format Dokumen
 - **Perbaikan:**
   1. Mengubah header kontrak dari "Resmi Disepakati" menjadi:  
-     `Status: DRAF v0.9 — untuk disepakati Personil_D & Personil_E (rapat internal 1 Okt 2026)`
-  2. Menambahkan tabel kosong **Persetujuan** (Nama · Peran · Tanggal · Catatan).
+     `Status: DRAF v0.9 — untuk disepakati Tim Frontend & Tim Backend (rapat internal 1 Okt 2026)`
+  2. Menambahkan tabel kosong **Persetujuan** (Nama / Peran · Tanggal · Catatan).
   3. Memperbaiki seluruh tautan file lokal `file:///docs/api/...` menjadi tautan relatif GitHub (`hero-fase1.http`, `openapi-fase1.json`, `frontend-changes-step9.md`).
   4. Memperbaiki penomoran tabel enum (§11) menjadi urut `11.1` sampai `11.13` menggunakan indeks perulangan `enumerate(..., 1)`.
   5. Mengganti contoh sumber situs web perayapan dari JDIH OJK (SPA) ke `https://jdih.esdm.go.id` (HTML murni) dan menambahkan catatan teknis mengenai backlog dukungan SPA (#88) dan OneDrive (#30).
@@ -75,7 +75,7 @@
 | §7 (Jenis Search) | "Pencarian Semantik" | **PostgreSQL Full-Text Search (tsvector/tsquery & trigram)** | `app/services/document_search_service.py` |
 | §3.1, §5.1, §5.2, §6.2 | "Respons (200 OK)" | **Respons (202 Accepted)** | `app/routers/scans.py` & `app/routers/scraping_sources.py` |
 | §11 (Penomoran Enum) | Loncat `11.9`, `11.16`, `11.23`, ... | **`11.1` – `11.13` berurutan** | `scripts/build_api_contract.py:generate_enum_tables` |
-| Header Dokumen | "Status: Resmi Disepakati" | **"Status: DRAF v0.9 — untuk disepakati Personil_D & Personil_E"** | Kesepakatan kerja tim (belum ditandatangani) |
+| Header Dokumen | "Status: Resmi Disepakati" | **"Status: DRAF v0.9 — untuk disepakati Tim Frontend & Tim Backend"** | Kesepakatan kerja tim (belum ditandatangani) |
 
 ---
 

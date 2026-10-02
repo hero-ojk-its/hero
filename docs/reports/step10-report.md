@@ -11,7 +11,7 @@
 
 ## 1. RINGKASAN EKSEKUTIF
 
-Langkah 10 menyelesaikan penguatan kemampuan pemindaian dokumen (web scanning & cloud folder) untuk memenuhi kriteria penerimaan mitra (Weekly #4, Pak Faris):
+Langkah 10 menyelesaikan penguatan kemampuan pemindaian dokumen (web scanning & cloud folder) untuk memenuhi kriteria penerimaan mitra (Weekly #4, mitra DPEA OJK):
 1. **Issue #88 (US-13c - Robust Web Scanning)**:
    - Menghubungkan crawler dengan pagination link HTML standar, link navigasi tengah tersembunyi (*hidden middle pages*), dan ASP.NET WebForms SharePoint postback (`__doPostBack`).
    - Mencegah perulangan tak terbatas (*loop detection*) berbasis URL visit set dan content hash.
@@ -114,7 +114,7 @@ Pengujian benchmark langsung ke 3 target sumber data menggunakan skrip `scripts/
 
 =======================================================
  Memulai Benchmark: OneDrive Public DPEA (onedrive)
- URL          : https://oneojk-my.sharepoint.com/:f:/g/personal/redacted_user_ojk_go_id/redacted_iduRwqT5X1zPBi_d1AAfA8Ec-W6i3BTN66ZgJI1rA?e=redacted_token
+ URL          : [link share OneDrive DPEA]
  Adapter      : onedrive_share
  Ground Truth : ± 2.612 berkas
  Batas Scan   : max_pages=500, max_candidates=10000, head_for_size=True

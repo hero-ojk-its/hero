@@ -262,7 +262,7 @@ Sesuai Aturan Main 0.3, tidak ada path atau kunci respon lama yang diubah/dihapu
 
 ---
 
-## 9. Panduan Pengujian Manual untuk Personil_E (Swagger UI)
+## 9. Panduan Pengujian Manual untuk Backend Engineer (Swagger UI)
 
 Buka Swagger UI di browser: `http://localhost:8000/docs`.
 

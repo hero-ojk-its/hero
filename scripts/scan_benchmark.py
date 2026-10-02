@@ -29,6 +29,12 @@ from typing import Dict, Any, List, Optional
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from app.crawlers.sharepoint_postback import SharepointPostbackCrawler
 from app.crawlers.jdih_api import JdihApiCrawler
 from app.crawlers.onedrive_share import OneDriveShareCrawler
@@ -55,7 +61,10 @@ DEFAULT_SOURCES = {
     },
     "onedrive": {
         "name": "OneDrive Public DPEA",
-        "url": "https://oneojk-my.sharepoint.com/:f:/g/personal/[link share OneDrive DPEA]/redacted_iduRwqT5X1zPBi_d1AAfA8Ec-W6i3BTN66ZgJI1rA?e=redacted_token",
+        "url": os.getenv(
+            "SCAN_ONEDRIVE_URL",
+            "https://oneojk-my.sharepoint.com/:f:/g/personal/placeholder_user_ojk_go_id/placeholder_share_token",
+        ),
         "crawler_cls": OneDriveShareCrawler,
         "adapter": "onedrive_share",
         "default_pages": 1000,
