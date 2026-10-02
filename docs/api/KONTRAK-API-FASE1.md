@@ -1138,13 +1138,13 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
     },
     "by_regulation_type": [
       {
-        "regulation_type": "POJK",
-        "label": "POJK",
+        "regulation_type": null,
+        "label": "Belum diketahui",
         "count": 1
       },
       {
-        "regulation_type": null,
-        "label": "Belum diketahui",
+        "regulation_type": "POJK",
+        "label": "POJK",
         "count": 1
       }
     ],
