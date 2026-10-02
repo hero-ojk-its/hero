@@ -36,6 +36,7 @@ from app.crawlers.url_utils import (
     detect_captcha_or_waf,
     determine_doc_kind,
     normalize_crawler_regulation_type,
+    clean_onedrive_filename,
     parse_onedrive_filename_metadata,
     validate_regulation_filename_match,
 )
@@ -232,19 +233,23 @@ class OneDriveShareCrawler:
                                 download_url = f"{site_base}/_layouts/15/download.aspx?SourceUrl={quote(f_rel_url)}"
                                 norm_url = normalize_url(download_url)
 
-                                stem_title = posixpath.splitext(fname)[0].replace("_", " ")
+                                stem_title = clean_onedrive_filename(fname) or posixpath.splitext(fname)[0].replace("_", " ")
                                 doc_k = determine_doc_kind(fname)
+                                if rel_path_prefix and any(p.lower() in ("administration", "user requirement & project charter") for p in rel_path_prefix.split("/")):
+                                    doc_k = "non_regulasi"
 
                                 meta = parse_onedrive_filename_metadata(fname)
                                 reg_type = meta.get("regulation_type")
                                 reg_num = meta.get("regulation_number")
                                 rel_date = meta.get("release_date")
+                                rel_year = meta.get("release_year")
                                 match_warn = validate_regulation_filename_match(
                                     fname,
                                     regulation_number=reg_num,
                                     release_date=rel_date,
                                     document_title=stem_title,
                                     regulation_type=reg_type,
+                                    release_year=rel_year,
                                 )
 
                                 cand = PdfCandidate(
@@ -262,6 +267,7 @@ class OneDriveShareCrawler:
                                     bidang=None,
                                     sub_bidang=None,
                                     release_date=rel_date,
+                                    release_year=rel_year,
                                     effective_date=None,
                                     match_warning=match_warn,
                                     size_source="listing",

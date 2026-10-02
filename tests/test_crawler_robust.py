@@ -1022,16 +1022,19 @@ def test_t02_regulation_filename_mismatch_warning():
     )
     assert warn3 is None
 
+    # Kasus pola ADK dengan perubahan regulasi lain di judulnya (jangan memicu false positive)
+    warn_adk = validate_regulation_filename_match(
+        "Peraturan_ADK_19_Tahun_2015_PERUBAHAN_KEEMPAT_SURAT_EDARAN_DEWAN_KOMISIONER_OTORITAS_JASA_KEUANGAN_NOMOR_33_SEDK.02_2013_TENTANG_PEDOMAN_TATA_NASKAH_DINAS_OTORITAS_JASA_KEUANGAN.pdf",
+        regulation_number="19",
+        release_year=2015,
+        regulation_type="PADK",
+    )
+    assert warn_adk is None
+
 
 def test_t03_doc_kind_detection():
     """
-    T03: Deteksi doc_kind untuk variasi nama file abstrak, faq, salinan, dsb.
-    Ekspektasi:
-    2026abspojk008.pdf -> abstrak
-    2024faqseojk020.pdf -> faq
-    SAL POJK 72 - … -> utama
-    Abstrak POJK … -> abstrak
-    FAQ … -> faq
+    T03: Deteksi doc_kind untuk variasi nama file abstrak, faq, salinan, non_regulasi, dsb.
     """
     from app.crawlers.url_utils import determine_doc_kind
 
@@ -1046,6 +1049,12 @@ def test_t03_doc_kind_detection():
     assert determine_doc_kind("abs_pbi_101708.pdf") == "abstrak"
     assert determine_doc_kind("abstrak_pojk_12.pdf") == "abstrak"
     assert determine_doc_kind("lamp_ketentuan.pdf") == "lampiran"
+    # Prioritas lampiran bila diawali Lampiran
+    assert determine_doc_kind("Lampiran SP - FAQ Ketentuan POJK.pdf") == "lampiran"
+    # Berkas non-regulasi
+    assert determine_doc_kind("NDA Personil Moh. Personil_E Gusti S._Backend.pdf") == "non_regulasi"
+    assert determine_doc_kind("HERO_User_Requirement_Document.pdf") == "non_regulasi"
+    assert determine_doc_kind("Project Charter Mitra_OJK.pdf") == "non_regulasi"
     assert determine_doc_kind("2026padk004.pdf") == "utama"
     assert determine_doc_kind("Salinan POJK Nomor 19 Tahun 2023.pdf") == "utama"
     assert determine_doc_kind("dokumen.pdf", label="Abstrak") == "abstrak"
@@ -1076,21 +1085,35 @@ def test_t04_regulation_type_normalization():
 
 def test_t05_parse_onedrive_filename_metadata():
     """
-    T05: Parse metadata dari nama berkas OneDrive Peraturan_OJK_3_2015.pdf:
-    jenis: POJK, nomor: 3, tahun: 2015
+    T05: Parse metadata dari berbagai pola penamaan berkas OneDrive
     """
     from app.crawlers.url_utils import parse_onedrive_filename_metadata
 
-    res = parse_onedrive_filename_metadata("Peraturan_OJK_3_2015.pdf")
-    assert res.get("regulation_type") == "POJK"
-    assert res.get("regulation_number") == "3"
-    assert res.get("year") == 2015
-    assert res.get("release_date") == date(2015, 1, 1)
+    res1 = parse_onedrive_filename_metadata("Peraturan_OJK_3_2015.pdf")
+    assert res1.get("regulation_type") == "POJK"
+    assert res1.get("regulation_number") == "3"
+    assert res1.get("release_year") == 2015
+    assert res1.get("release_date") is None
 
-    res2 = parse_onedrive_filename_metadata("SEOJK_46_2017.pdf")
+    res2 = parse_onedrive_filename_metadata("SEOJKNo02Tahun2013_1395202423.pdf")
     assert res2.get("regulation_type") == "SEOJK"
-    assert res2.get("regulation_number") == "46"
-    assert res2.get("year") == 2017
+    assert res2.get("regulation_number") == "2"
+    assert res2.get("release_year") == 2013
+
+    res3 = parse_onedrive_filename_metadata("SK_Dir_28-83-KEP-DIR-1995_Perubahan_SK_Dir_No._27121KEPDIR.pdf")
+    assert res3.get("regulation_type") == "KEPDIR"
+    assert res3.get("regulation_number") == "28-83-KEP-DIR-1995"
+    assert res3.get("release_year") == 1995
+
+    res4 = parse_onedrive_filename_metadata("Peraturan_ADK_19_Tahun_2015_PERUBAHAN_KEEMPAT_SURAT_EDARAN_DEWAN_KOMISIONER_OTORITAS_JASA_KEUANGAN_NOMOR_33_SEDK.02_2013_TENTANG_PEDOMAN_TATA_NASKAH_DINAS_OTORITAS_JASA_KEUANGAN.pdf")
+    assert res4.get("regulation_type") == "PADK"
+    assert res4.get("regulation_number") == "19"
+    assert res4.get("release_year") == 2015
+
+    res5 = parse_onedrive_filename_metadata("POJK_203_20Tahun_202025_20Penatalaksanaan_20Lembaga_20Sertifikasi_20Profesi_20di_20Sektor_20Jasa_20Keuangan.pdf")
+    assert res5.get("regulation_type") == "POJK"
+    assert res5.get("regulation_number") == "3"
+    assert res5.get("release_year") == 2025
 
 
 # ==============================================================================

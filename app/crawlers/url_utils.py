@@ -261,8 +261,10 @@ def extract_meta_or_js_redirect(html_content: str, base_url: str) -> Optional[st
 
 def determine_doc_kind(filename_or_title: Optional[str], label: Optional[str] = None) -> str:
     """
-    Menentukan peran dokumen: utama | abstrak | faq | lampiran.
+    Menentukan peran dokumen: utama | abstrak | faq | lampiran | non_regulasi.
     Mengenali:
+    - Pola non-regulasi (NDA personil, project charter, user requirement)
+    - Pola awalan lampiran ('Lampiran SP - FAQ ...') -> diprioritaskan sebagai 'lampiran'
     - Pola dengan spasi ('Abstrak POJK ...', 'FAQ POJK ...')
     - Pola dengan underscore/hyphen ('faq_pbi_101708.pdf', 'abs_pbi_101708.pdf', 'abstrak_pojk_12.pdf')
     - Pola kode kompak tanpa spasi ('2026abspojk008.pdf', '2024faqseojk020.pdf', '2026abspadk004.pdf')
@@ -279,19 +281,27 @@ def determine_doc_kind(filename_or_title: Optional[str], label: Optional[str] = 
     if not combined.strip():
         return "utama"
 
-    # 1. Abstrak (termasuk abs_, abstrak_, dll.)
+    # 0. Non regulasi (NDA personil, Project Charter, User Requirement, CV)
+    if re.search(r'(?:^|[\W_])(?:nda|project[-_ ]*charter|user[-_ ]*requirement|surat[-_ ]*perjanjian|curriculum[-_ ]*vitae)(?:[\W_]|$)|^cv_', combined):
+        return "non_regulasi"
+
+    # 1. Lampiran (prioritas tinggi bila diawali Lampiran, mis. 'Lampiran SP - FAQ ...')
+    if re.search(r'^(?:lampiran|lamp)[\W_]', combined):
+        return "lampiran"
+
+    # 2. Abstrak (termasuk abs_, abstrak_, dll.)
     if re.search(r'(?:^|[\W_])(?:abstrak|abs)(?:[\W_]|$)|abs(?:pojk|seojk|padk|pdk|kdk)|(?:\d{4})abs', combined):
         return "abstrak"
 
-    # 2. FAQ / Tanya Jawab (termasuk faq_, tanya jawab, dll.)
+    # 3. FAQ / Tanya Jawab (termasuk faq_, tanya jawab, dll.)
     if re.search(r'(?:^|[\W_])(?:faq|tanya\s*jawab)(?:[\W_]|$)|faq(?:pojk|seojk|padk|pdk|kdk)|(?:\d{4})faq', combined):
         return "faq"
 
-    # 3. Lampiran (termasuk lamp_, lampiran_, dll.)
+    # 4. Lampiran umum
     if re.search(r'(?:^|[\W_])(?:lampiran|lamp)(?:[\W_]|$)', combined):
         return "lampiran"
 
-    # 4. Salinan / Dokumen Utama: 'salinan', 'sal ' -> utama
+    # 5. Salinan / Dokumen Utama: 'salinan', 'sal ' -> utama
     if re.search(r'(?:^|[\W_])salinan(?:[\W_]|$)|(?:^|[\W_])sal[-_\s]', combined):
         return "utama"
 
@@ -336,6 +346,10 @@ CRAWLER_REGULATION_ALIASES: Dict[str, str] = {
     "PERATURAN DAERAH": "PERDA",
     "INPRES": "INPRES",
     "INSTRUKSI PRESIDEN": "INPRES",
+    "SKDIR": "KEPDIR",
+    "SK DIR": "KEPDIR",
+    "KEPDIR": "KEPDIR",
+    "KEP DIR": "KEPDIR",
 }
 
 
@@ -377,47 +391,59 @@ def normalize_crawler_regulation_type(raw: Optional[str], title: Optional[str] =
     return CRAWLER_REGULATION_ALIASES.get(cleaned, cleaned)
 
 
+def clean_onedrive_filename(filename: str) -> str:
+    """Membersihkan nama berkas OneDrive dari encoding URL/SharePoint dan trailing hash/suffix."""
+    if not filename:
+        return ""
+    stem = re.sub(r'\.pdf$', '', filename.strip(), flags=re.IGNORECASE)
+    stem = unquote(stem).replace('%20', ' ')
+    # 1. SharePoint _20 diikuti 4-digit tahun (misal _202025 -> ' 2025')
+    stem = re.sub(r'_20(?=(?:20\d\d|19\d\d)\b)', ' ', stem)
+    # 2. SharePoint _20 yang bukan bagian dari tahun 4-digit (misal _20Tahun, _203_20, tapi bukan _2015)
+    stem = re.sub(r'_20(?!\d{2}(?:[^\d]|$))', ' ', stem)
+    # 3. SharePoint _28 / _29 kurung buka/tutup
+    stem = re.sub(r'_28(?=[A-Za-z])', '(', stem)
+    stem = re.sub(r'_29(?=[_\s]|$)', ')', stem)
+    # 4. Hapus suffix angka panjang SharePoint di akhir nama file (misal _1395202423)
+    stem = re.sub(r'_\d{8,}$', '', stem)
+    return stem
+
+
 def validate_regulation_filename_match(
     filename: str,
     regulation_number: Optional[str] = None,
     release_date: Optional[Any] = None,
     document_title: Optional[str] = None,
     regulation_type: Optional[str] = None,
+    release_year: Optional[int] = None,
 ) -> Optional[str]:
     """
     Memvalidasi kecocokan antara nama berkas PDF dengan metadata regulasi (nomor dan tahun).
-    Toleran terhadap format:
-    - '2026pojk008.pdf', '2026abspojk008.pdf'
-    - 'SAL POJK 72 - ...'
-    - 'POJK 17 Tahun 2023.pdf'
-    - 'Salinan POJK Nomor 19 Tahun 2023.pdf'
-    - 'Peraturan_OJK_3_2015.pdf'
+    Toleran terhadap format dan mengabaikan nomor regulasi lama pada judul perubahan/pencabutan.
     Jika nomor atau tahun bertentangan secara jelas, mengembalikan pesan peringatan.
     Jika cocok atau data tidak cukup untuk disimpulkan, mengembalikan None.
     """
     if not filename:
         return None
 
-    fn_lower = filename.lower()
+    stem_clean = clean_onedrive_filename(filename)
+    # Pisahkan bagian utama sebelum kata perubahan / pencabutan / tentang
+    parts = re.split(r'[-_ ]+(?:PERUBAHAN|PENCABUTAN|TENTANG)[-_ ]+', stem_clean, flags=re.IGNORECASE)
+    main_part = parts[0].strip().lower()
 
-    # 1. Ekstrak tahun dari berkas
-    fn_years = re.findall(r'(?:^|[\W_])(20\d\d|19\d\d)(?:[\W_]|$)', fn_lower)
+    # 1. Ekstrak tahun dari berkas (prioritaskan main_part)
+    fn_years = re.findall(r'(?:^|[\W_])(20\d\d|19\d\d)(?:[\W_]|$)', main_part)
     if not fn_years:
-        prefix_y = re.match(r'^(20\d\d|19\d\d)', fn_lower)
-        if prefix_y:
-            fn_years = [prefix_y.group(1)]
+        fn_years = re.findall(r'(?:^|[\W_])(20\d\d|19\d\d)(?:[\W_]|$)', stem_clean.lower())
 
     # Ekstrak tahun dari metadata regulasi
-    # Prioritaskan tahun dari nomor resmi atau judul regulasi (bukan release_date)
-    reg_year = None
-    if regulation_number:
-        # Contoh: "24/SEOJK.03/2016", "POJK 18 Tahun 2025", "18/2025"
-        rn_y = re.findall(r'(?:^|[\W_])(20\d\d|19\d\d)(?:[\W_]|$)', regulation_number)
+    reg_year = release_year
+    if not reg_year and regulation_number:
+        rn_y = re.findall(r'(?:^|[\W_])(20\d\d|19\d\d)(?:[\W_]|$)', str(regulation_number))
         if rn_y:
             reg_year = int(rn_y[-1])
 
     if not reg_year and document_title:
-        # Pola "Tahun 2025" atau 4-digit tahun di judul
         t_y = re.search(r'\bTahun\s+(20\d\d|19\d\d)\b', document_title, re.IGNORECASE)
         if t_y:
             reg_year = int(t_y.group(1))
@@ -429,33 +455,26 @@ def validate_regulation_filename_match(
     if not reg_year and release_date and hasattr(release_date, "year") and release_date.year:
         reg_year = release_date.year
 
-    # 2. Ekstrak nomor regulasi dari metadata
-    reg_num_int = None
-    if regulation_number:
-        num_m = re.search(r'\b(\d+)\b', regulation_number)
-        if num_m:
-            reg_num_int = int(num_m.group(1))
-    elif document_title:
-        num_m = re.search(r'nomor\s*[:\s]*(\d+)', document_title, re.IGNORECASE)
-        if num_m:
-            reg_num_int = int(num_m.group(1))
-
-    # 3. Ekstrak nomor dari nama berkas
+    # 2. Ekstrak nomor dari nama berkas (prioritaskan main_part)
     fn_num_ints = []
-    # Pola pojk008 / abspojk008 / padk004
-    code_m = re.search(r'(?:pojk|seojk|padk|pdk|kdk)[-_]?0*(\d+)', fn_lower)
+    # Pola pojk008 / seojk020 / padk004 / seojkno02
+    code_m = re.search(r'(?:pojk|seojk|padk|pdk|kdk)[-_ ]*(?:no\.?|nomor)?[-_ ]*0*(\d+)', main_part)
     if code_m:
         fn_num_ints.append(int(code_m.group(1)))
 
-    # Pola nomor 19 / no. 19 / no 19
-    no_m = re.search(r'(?:nomor|no\.?)[-_ ]*0*(\d+)', fn_lower)
+    no_m = re.search(r'(?:nomor|no\.?)[-_ ]*0*(\d+)', main_part)
     if no_m:
         fn_num_ints.append(int(no_m.group(1)))
 
-    # Pola angka setelah jenis: peraturan_ojk_3 / pojk_17 / pojk 17 / sal pojk 72
-    after_kind_m = re.search(r'(?:peraturan_ojk|pojk|seojk|padk|pdk|kdk)[-_ ]+0*(\d+)', fn_lower)
+    after_kind_m = re.search(r'(?:peraturan[-_ ]ojk|peraturan[-_ ]adk|surat[-_ ]edaran|pojk|seojk|padk|pdk|kdk)[-_ ]+0*(\d+)', main_part)
     if after_kind_m:
         fn_num_ints.append(int(after_kind_m.group(1)))
+
+    # Fallback nomor dari filename jika main_part tidak memuat nomor
+    if not fn_num_ints:
+        code_m_raw = re.search(r'(?:pojk|seojk|padk|pdk|kdk)[-_ ]*(?:no\.?|nomor)?[-_ ]*0*(\d+)', stem_clean.lower())
+        if code_m_raw:
+            fn_num_ints.append(int(code_m_raw.group(1)))
 
     warnings = []
 
@@ -466,9 +485,15 @@ def validate_regulation_filename_match(
             warnings.append(f"Tahun berkas ({fn_years[0]}) != regulasi ({reg_year})")
 
     # Cek konflik nomor jika berkas dan regulasi sama-sama punya nomor
-    if fn_num_ints and reg_num_int is not None:
-        if reg_num_int not in fn_num_ints:
-            warnings.append(f"Nomor berkas ({fn_num_ints[0]}) != regulasi ({reg_num_int})")
+    if fn_num_ints and regulation_number is not None:
+        try:
+            num_m_str = re.search(r'\b\d+\b', str(regulation_number))
+            if num_m_str:
+                reg_num_int = int(num_m_str.group(0))
+                if reg_num_int not in fn_num_ints:
+                    warnings.append(f"Nomor berkas ({fn_num_ints[0]}) != regulasi ({reg_num_int})")
+        except Exception:
+            pass
 
     if warnings:
         return "; ".join(warnings)
@@ -477,61 +502,107 @@ def validate_regulation_filename_match(
 
 def parse_onedrive_filename_metadata(filename: str) -> Dict[str, Any]:
     """
-    Mengekstrak metadata (jenis, nomor, tahun/release_date) dari nama berkas OneDrive.
-    Contoh:
-    - Peraturan_OJK_3_2015.pdf -> jenis POJK, nomor 3, tahun 2015
-    - POJK_17_2023.pdf -> jenis POJK, nomor 17, tahun 2023
-    - SEOJK_46_2017.pdf -> jenis SEOJK, nomor 46, tahun 2017
-    - PADK_4_2026.pdf -> jenis PADK, nomor 4, tahun 2026
+    Mengekstrak metadata (jenis, nomor, release_year) dari nama berkas OneDrive.
+    Mendukung pola:
+    - Peraturan_ADK_19_Tahun_2015_PERUBAHAN_... -> jenis PADK, nomor 19, release_year 2015
+    - SEOJKNo02Tahun2013_1395202423.pdf -> jenis SEOJK, nomor 2, release_year 2013
+    - SK_Dir_28-83-KEP-DIR-1995_..._No._27121KEPDIR.pdf -> jenis KEPDIR, nomor 28-83-KEP-DIR-1995, release_year 1995
+    - POJK_203_20Tahun_202025_... -> jenis POJK, nomor 3, release_year 2025
+    - Peraturan_OJK_3_2015.pdf -> jenis POJK, nomor 3, release_year 2015
     """
     if not filename:
         return {}
 
-    stem = re.sub(r'\.pdf$', '', filename.strip(), flags=re.IGNORECASE)
+    stem_clean = clean_onedrive_filename(filename)
 
-    # 1. Deteksi jenis
-    stem_lower = stem.lower()
+    # Pisahkan bagian utama sebelum kata perubahan / pencabutan / tentang
+    parts = re.split(r'[-_ ]+(?:PERUBAHAN|PENCABUTAN|TENTANG)[-_ ]+', stem_clean, flags=re.IGNORECASE)
+    main_part = parts[0].strip()
+    main_lower = main_part.lower()
+
+    # 1. Deteksi jenis regulasi dari main_part
     reg_type = None
-    if "peraturan_ojk" in stem_lower or stem_lower.startswith("pojk"):
-        reg_type = "POJK"
-    elif "surat_edaran" in stem_lower or stem_lower.startswith("seojk") or stem_lower.startswith("se_ojk"):
-        reg_type = "SEOJK"
-    elif "peraturan_adk" in stem_lower or stem_lower.startswith("padk"):
+    if "peraturan_adk" in main_lower or "peraturan adk" in main_lower or main_lower.startswith("padk") or "peraturan anggota dewan komisioner" in main_lower:
         reg_type = "PADK"
-    elif "keputusan_dewan" in stem_lower or stem_lower.startswith("kdk"):
+    elif "peraturan_ojk" in main_lower or "peraturan ojk" in main_lower or main_lower.startswith("pojk") or "peraturan otoritas jasa keuangan" in main_lower:
+        reg_type = "POJK"
+    elif "surat_edaran" in main_lower or "surat edaran" in main_lower or main_lower.startswith("seojk") or main_lower.startswith("se_ojk") or main_lower.startswith("se ojk"):
+        reg_type = "SEOJK"
+    elif "keputusan_dewan" in main_lower or "keputusan dewan" in main_lower or main_lower.startswith("kdk"):
         reg_type = "KDK"
-    elif "peraturan_dewan" in stem_lower or stem_lower.startswith("pdk"):
+    elif "peraturan_dewan" in main_lower or "peraturan dewan" in main_lower or main_lower.startswith("pdk"):
         reg_type = "PDK"
+    elif "sk_dir" in main_lower or "kep_dir" in main_lower or "sk dir" in main_lower or "kep dir" in main_lower or "kepdir" in main_lower:
+        reg_type = "KEPDIR"
+    elif re.search(r'\bpbi\b', main_lower):
+        reg_type = "PBI"
+    elif re.search(r'\bsebi\b', main_lower):
+        reg_type = "SEBI"
+    elif re.search(r'\buu\b|\bundang', main_lower):
+        reg_type = "UU"
+    elif re.search(r'\bpp\b|\bpemerintah', main_lower):
+        reg_type = "PP"
 
-    # 2. Deteksi tahun (4 digit)
+    # Fallback jenis dari seluruh stem jika belum ketemu di main_part
+    if not reg_type:
+        stem_lower = stem_clean.lower()
+        if "peraturan_adk" in stem_lower or "peraturan adk" in stem_lower or stem_lower.startswith("padk") or "peraturan anggota dewan komisioner" in stem_lower:
+            reg_type = "PADK"
+        elif "peraturan_ojk" in stem_lower or "peraturan ojk" in stem_lower or stem_lower.startswith("pojk") or "peraturan otoritas jasa keuangan" in stem_lower:
+            reg_type = "POJK"
+        elif "surat_edaran" in stem_lower or "surat edaran" in stem_lower or stem_lower.startswith("seojk") or stem_lower.startswith("se_ojk"):
+            reg_type = "SEOJK"
+        elif "keputusan_dewan" in stem_lower or "keputusan dewan" in stem_lower or stem_lower.startswith("kdk"):
+            reg_type = "KDK"
+        elif "peraturan_dewan" in stem_lower or "peraturan dewan" in stem_lower or stem_lower.startswith("pdk"):
+            reg_type = "PDK"
+
+    # 2. Deteksi tahun dari main_part (prioritas) atau seluruh nama berkas
     year = None
-    year_m = re.findall(r'(?:^|[\W_])(20\d\d|19\d\d)(?:[\W_]|$)', stem)
-    if year_m:
-        year = int(year_m[-1])
-
-    # 3. Deteksi nomor
-    num_str = None
-    # Pola: Peraturan_OJK_3_2015 atau POJK_17_2023
-    num_m = re.search(r'(?:peraturan_ojk|pojk|seojk|se_ojk|padk|kdk|pdk)[-_ ]+0*(\d+)', stem, re.IGNORECASE)
-    if num_m:
-        num_str = num_m.group(1)
+    y_m = re.search(r'Tahun[-_ ]*(\d{4})', main_part, re.IGNORECASE)
+    if y_m:
+        year = int(y_m.group(1))
     else:
-        # Cari angka pertama yang bukan tahun
-        for token in re.split(r'[-_ ]+', stem):
-            if token.isdigit() and token != (str(year) if year else ""):
-                num_str = token
-                break
+        all_y = re.findall(r'(?:^|[\W_])(20\d\d|19\d\d)(?:[\W_]|$)', main_part)
+        if all_y:
+            year = int(all_y[0])
+        else:
+            all_y_raw = re.findall(r'(?:^|[\W_])(20\d\d|19\d\d)(?:[\W_]|$)', filename)
+            if all_y_raw:
+                year = int(all_y_raw[0])
+
+    # 3. Deteksi nomor dari main_part
+    num_str = None
+    # Kasus khusus SK Dir: SK_Dir_28-83-KEP-DIR-1995
+    sk_m = re.search(r'(?:sk[-_ ]*dir|kep[-_ ]*dir)[-_ ]*([0-9a-zA-Z\-/]+)', main_part, re.IGNORECASE)
+    if sk_m and ('-' in sk_m.group(1) or '/' in sk_m.group(1)):
+        num_str = sk_m.group(1).replace('_', '-').strip('-')
+    else:
+        num_m = re.search(r'(?:peraturan[-_ ]adk|padk|peraturan[-_ ]ojk|pojk|surat[-_ ]edaran|seojk|se[-_ ]ojk|kdk|pdk)[-_ ]*(?:no\.?|nomor)?[-_ ]*0*(\d+)', main_part, re.IGNORECASE)
+        if num_m:
+            num_str = num_m.group(1)
+        else:
+            tokens = re.split(r'[-_ ]+', main_part)
+            for t in tokens:
+                if t.isdigit() and t != (str(year) if year else "") and len(t) <= 6:
+                    num_str = str(int(t))
+                    break
+
+    # Fallback nomor dari filename asli jika belum dapat
+    if not num_str:
+        num_m_raw = re.search(r'(?:peraturan[-_ ]adk|padk|peraturan[-_ ]ojk|pojk|surat[-_ ]edaran|seojk|se[-_ ]ojk|kdk|pdk)[-_ ]*(?:no\.?|nomor)?[-_ ]*0*(\d+)', filename, re.IGNORECASE)
+        if num_m_raw:
+            num_str = num_m_raw.group(1)
 
     if not reg_type and not num_str and not year:
         return {}
 
-    from datetime import date as d_date
-    res: Dict[str, Any] = {
+    return {
         "regulation_type": reg_type,
         "regulation_number": num_str,
-        "year": year,
-        "release_date": d_date(year, 1, 1) if year else None,
+        "release_year": year,
+        "release_date": None,  # Kosongkan release_date placeholder (Butir 4)
     }
-    return res
+
 
 

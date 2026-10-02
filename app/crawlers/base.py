@@ -25,6 +25,7 @@ class PdfCandidate:
     bidang: Optional[str] = None                     # Sektor / bidang regulasi
     sub_bidang: Optional[str] = None                 # Sub-sektor regulasi
     release_date: Optional[date] = None              # Tanggal penetapan / terbit
+    release_year: Optional[int] = None               # Tahun penetapan / terbit (terutama untuk OneDrive)
     effective_date: Optional[date] = None            # Tanggal mulai berlaku regulasi
     raw_regulation_number: Optional[str] = None      # Nomor mentah sebelum diformat
     match_warning: Optional[str] = None              # Peringatan ketidakcocokan nama berkas vs metadata regulasi
