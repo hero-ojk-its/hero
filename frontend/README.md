@@ -59,3 +59,10 @@ Untuk menghubungkan Frontend dengan Backend FastAPI:
    npm run dev
    `
    Buka peramban di http://localhost:5173.
+
+## Detail Dokumen & Integrasi PDF/Teks (US-28)
+
+Pada halaman Detail Dokumen (/knowledge/detail/:id):
+- Berkas PDF asli dimuat dari endpoint GET /api/v1/documents/:id/pdf (ditampilkan di viewer atau dibuka di tab baru).
+- Teks mentah hasil ekstraksi dimuat dari endpoint GET /api/v1/documents/:id/text dan ditampilkan di area teks dokumen.
+- Jika API tidak dikonfigurasi (VITE_API_BASE_URL kosong), halaman berjalan dalam mode contoh menggunakan data statis.

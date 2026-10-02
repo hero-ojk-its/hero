@@ -69,9 +69,41 @@ function getAuthToken(): string | null {
 }
 
 /**
- * Klien fetch seragam untuk backend FastAPI.
+ * Helper untuk mengekstrak nama berkas dari header Content-Disposition.
  */
-export async function apiFetch<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
+export function parseContentDispositionFilename(header: string | null): string | undefined {
+  if (!header) return undefined;
+  // RFC 5987 / RFC 6266: filename*=UTF-8''filename.ext
+  const utf8Match = header.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match && utf8Match[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1].trim());
+    } catch {
+      // fallback
+    }
+  }
+  // Format standar: filename="filename.ext"
+  const quotedMatch = header.match(/filename="([^"]+)"/i);
+  if (quotedMatch && quotedMatch[1]) {
+    return quotedMatch[1].trim();
+  }
+  // Format tanpa kutip: filename=filename.ext
+  const simpleMatch = header.match(/filename=([^;]+)/i);
+  if (simpleMatch && simpleMatch[1]) {
+    return simpleMatch[1].trim();
+  }
+  return undefined;
+}
+
+/**
+ * Eksekutor fetch bersama untuk apiFetch dan apiFetchBlob.
+ * Menangani URL resolution, timeout, authorization, dan listener cleanup.
+ */
+async function prepareAndFetchResponse(
+  endpoint: string,
+  options: FetchOptions = {},
+  defaultAccept: string = 'application/json'
+): Promise<Response> {
   const { timeout = 15000, signal, headers: customHeaders, ...fetchOpts } = options;
 
   const url = endpoint.startsWith('http://') || endpoint.startsWith('https://')
@@ -80,7 +112,7 @@ export async function apiFetch<T>(endpoint: string, options: FetchOptions = {}):
 
   const headers = new Headers(customHeaders);
   if (!headers.has('Accept')) {
-    headers.set('Accept', 'application/json');
+    headers.set('Accept', defaultAccept);
   }
 
   // Header Authorization bila token ada (login ditunda; auth backend nonaktif)
@@ -117,39 +149,36 @@ export async function apiFetch<T>(endpoint: string, options: FetchOptions = {}):
       signal: controller.signal,
     });
 
-    // Parsing JSON respons jika ada
-    const contentType = response.headers.get('content-type') || '';
-    const isJson = contentType.includes('application/json');
-
-    let bodyData: unknown = null;
-    if (isJson) {
-      try {
-        bodyData = await response.json();
-      } catch {
-        bodyData = null;
-      }
-    } else {
-      try {
-        bodyData = await response.text();
-      } catch {
-        bodyData = null;
-      }
-    }
-
     if (!response.ok) {
-      let errorDetail: unknown = bodyData;
-      if (bodyData && typeof bodyData === 'object' && 'detail' in (bodyData as Record<string, unknown>)) {
-        errorDetail = (bodyData as Record<string, unknown>).detail;
-      } else if (typeof bodyData === 'string' && bodyData.trim() !== '') {
-        errorDetail = bodyData;
+      let errorDetail: unknown = null;
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        try {
+          const bodyData = await response.json();
+          errorDetail =
+            bodyData && typeof bodyData === 'object' && 'detail' in (bodyData as Record<string, unknown>)
+              ? (bodyData as Record<string, unknown>).detail
+              : bodyData;
+        } catch {
+          errorDetail = null;
+        }
       } else {
+        try {
+          const textData = await response.text();
+          errorDetail = textData.trim() ? textData : null;
+        } catch {
+          errorDetail = null;
+        }
+      }
+
+      if (!errorDetail) {
         errorDetail = response.statusText || `Galat HTTP ${response.status}`;
       }
 
       throw new ApiError(response.status, errorDetail);
     }
 
-    return bodyData as T;
+    return response;
   } catch (error: unknown) {
     if (error instanceof ApiError) {
       throw error;
@@ -172,6 +201,51 @@ export async function apiFetch<T>(endpoint: string, options: FetchOptions = {}):
       signal.removeEventListener('abort', onExternalAbort);
     }
   }
+}
+
+/**
+ * Klien fetch seragam untuk backend FastAPI (mengembalikan JSON atau text).
+ */
+export async function apiFetch<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
+  const response = await prepareAndFetchResponse(endpoint, options, 'application/json');
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return (await response.json()) as T;
+  }
+  return (await response.text()) as unknown as T;
+}
+
+export interface DocumentBlob extends Blob {
+  filename?: string;
+  contentType?: string;
+}
+
+/**
+ * Klien fetch untuk mengunduh atau membaca berkas biner (Blob) seperti PDF.
+ * Menyertakan nama berkas dari header Content-Disposition jika tersedia.
+ */
+export async function apiFetchBlob(endpoint: string, options: FetchOptions = {}): Promise<DocumentBlob> {
+  const response = await prepareAndFetchResponse(
+    endpoint,
+    options,
+    'application/pdf, application/octet-stream, */*'
+  );
+  const blob = (await response.blob()) as DocumentBlob;
+  const contentDisposition = response.headers.get('content-disposition');
+  blob.filename = parseContentDispositionFilename(contentDisposition);
+  blob.contentType = response.headers.get('content-type') || 'application/pdf';
+  return blob;
+}
+
+export interface DocumentTextResponse {
+  document_id: number;
+  total_length: number;
+  offset: number;
+  limit: number;
+  text: string;
+  extraction_method?: string | null;
+  extraction_engine?: string | null;
+  extracted_at?: string | null;
 }
 
 /**
