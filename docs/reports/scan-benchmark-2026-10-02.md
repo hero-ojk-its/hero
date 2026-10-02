@@ -1,15 +1,15 @@
 # Hasil Live Scan Benchmark — HERO Backend (Langkah 10d)
 
-> **Tanggal Pengujian:** 02 October 2026 14:21:09 WIB  
+> **Tanggal Pengujian:** 02 October 2026 15:35:28 WIB  
 > **Metode:** Uji live benchmark penuh ke endpoint publik internet (tanpa Playwright / browser headless).
 
 ## 1. Ringkasan Performa Benchmark dan Perbandingan Ground Truth
 
 | Sumber Data | Adapter | Batas Paging | Halaman Terakhir | Regulasi | PDF | Lengkap Metadata Hukum | Match Warnings | Ground Truth | Selisih | Durasi | Requests | Status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| **Regulasi OJK** | `sharepoint_postback` | penuh (tanpa batas, default max=500) | 158 | 1577 | 2665 | 2665/2665 (100.0%) | 25 | ± 1.700 regulasi | -123 (terhadap estimasi mitra ± 1.700) | 3017.22s | 4400 | Sukses |
+| **Regulasi OJK** | `sharepoint_postback` | penuh (tanpa batas, default max=500) | 158 | 1577 | 2665 | 2665/2665 (100.0%) | 25 | ± 1.700 regulasi | -123 (Berdasarkan repositori aktif) | 3017.22s | 4400 | Sukses |
 | **JDIH OJK** | `jdih_api` | penuh (tanpa batas, default max=200) | 20 | 985 | 1652 | 1652/1652 (100.0%) | 67 | ± 400–500 regulasi | +535 (Di atas rentang mitra 400–500) | 837.12s | 2680 | Sukses |
-| **OneDrive Public DPEA** | `onedrive_share` | penuh (tanpa batas, default max=1000) | 5 | 2619 | 2619 | 2086/2619 (79.6%) | 2 | Belum ada dari mitra | Belum ada dari mitra | 6.98s | 11 | Sukses |
+| **OneDrive Public DPEA** | `onedrive_share` | penuh (tanpa batas, default max=1000) | 5 | 2619 | 2619 | 2135/2619 (81.5%) | 0 | Belum ada dari mitra | Belum ada dari mitra | 7.34s | 11 | Sukses |
 
 ## 2. Rincian dan Berkas CSV Hasil Pemindaian
 
@@ -24,7 +24,7 @@
 - **Lengkap Metadata Hukum (Jenis + Nomor + Tahun/Tanggal):** 2665/2665 (100.0%)
 - **Ukuran Terdeteksi:** 2665/2665 (100.0%)
 - **Jumlah Match Warnings:** 25
-- **Ground Truth:** ± 1.700 regulasi (Selisih: -123 (terhadap estimasi mitra ± 1.700))
+- **Ground Truth:** ± 1.700 regulasi (Selisih: -123 (Berdasarkan repositori aktif))
 - **Berkas CSV Ekspor:** [`docs/reports/scan-benchmark-ojk.csv`](docs/reports/scan-benchmark-ojk.csv)
 - **Rincian doc_kind:** `{'utama': 1935, 'abstrak': 225, 'faq': 387, 'lampiran': 118}`
 - **Statistik Lengkap:**
@@ -56,18 +56,18 @@
 - **URL Target:** [link share OneDrive DPEA]
 - **Adapter:** `onedrive_share`
 - **Batas Paging:** penuh (tanpa batas, default max=1000)
-- **Waktu Eksekusi:** 6.98 detik (11 requests)
+- **Waktu Eksekusi:** 7.34 detik (11 requests)
 - **Halaman/Folder Dikunjungi:** 5
 - **Jumlah Regulasi Ditemukan:** 2619
 - **Jumlah Berkas PDF Ditemukan:** 2619
-- **Lengkap Metadata Hukum (Jenis + Nomor + Tahun/Tanggal):** 2086/2619 (79.6%)
+- **Lengkap Metadata Hukum (Jenis + Nomor + Tahun/Tanggal):** 2135/2619 (81.5%)
 - **Ukuran Terdeteksi:** 2619/2619 (100.0%)
-- **Jumlah Match Warnings:** 2
+- **Jumlah Match Warnings:** 0
 - **Ground Truth:** Belum ada dari mitra (Selisih: Belum ada dari mitra)
 - **Berkas CSV Ekspor:** [`docs\reports\scan-benchmark-onedrive.csv`](docs\reports\scan-benchmark-onedrive.csv)
 - **Rincian doc_kind:** `{'utama': 2296, 'faq': 156, 'abstrak': 157, 'lampiran': 3, 'non_regulasi': 7}`
 - **Rincian Berkas per Subfolder:** `{'downloads': 2612, 'Administration': 5, 'User Requirement & Project Charter': 2}`
 - **Statistik Lengkap:**
   ```json
-  {'regulations_found': 2619, 'pdfs_found': 2619, 'subfolders_count': {'downloads': 2612, 'Administration': 5, 'User Requirement & Project Charter': 2}, 'match_warnings_count': 2, 'by_doc_kind': {'utama': 2296, 'faq': 156, 'abstrak': 157, 'lampiran': 3, 'non_regulasi': 7}, 'pages_visited': 5, 'requests_made': 11, 'non_pdf_links': 1, 'duration_seconds': 6.98}
+  {'regulations_found': 2619, 'pdfs_found': 2619, 'subfolders_count': {'downloads': 2612, 'Administration': 5, 'User Requirement & Project Charter': 2}, 'match_warnings_count': 0, 'by_doc_kind': {'utama': 2296, 'faq': 156, 'abstrak': 157, 'lampiran': 3, 'non_regulasi': 7}, 'pages_visited': 5, 'requests_made': 11, 'non_pdf_links': 1, 'duration_seconds': 7.34}
   ```

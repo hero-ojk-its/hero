@@ -397,15 +397,23 @@ def clean_onedrive_filename(filename: str) -> str:
         return ""
     stem = re.sub(r'\.pdf$', '', filename.strip(), flags=re.IGNORECASE)
     stem = unquote(stem).replace('%20', ' ')
-    # 1. SharePoint _20 diikuti 4-digit tahun (misal _202025 -> ' 2025')
-    stem = re.sub(r'_20(?=(?:20\d\d|19\d\d)\b)', ' ', stem)
-    # 2. SharePoint _20 yang bukan bagian dari tahun 4-digit (misal _20Tahun, _203_20, tapi bukan _2015)
-    stem = re.sub(r'_20(?!\d{2}(?:[^\d]|$))', ' ', stem)
-    # 3. SharePoint _28 / _29 kurung buka/tutup
-    stem = re.sub(r'_28(?=[A-Za-z])', '(', stem)
-    stem = re.sub(r'_29(?=[_\s]|$)', ')', stem)
-    # 4. Hapus suffix angka panjang SharePoint di akhir nama file (misal _1395202423)
+
+    # 1. Hapus awalan indeks spesifik '^\d+_-_' (mis. '43_-_Rijksblaad...', '42_-_Staatsblad...')
+    stem = re.sub(r'^\d+_-_', '', stem)
+
+    # 2. Hapus suffix angka panjang SharePoint di akhir nama file (misal _1395202423)
     stem = re.sub(r'_\d{8,}$', '', stem)
+
+    # 3. Cek apakah berkas merupakan format SharePoint encoded (memiliki _20 diikuti huruf atau _28/_29)
+    if re.search(r'_20[A-Za-z]', stem) or re.search(r'_20_28|_28[A-Za-z]', stem):
+        # SharePoint _20 diikuti 4-digit tahun (misal _202025 -> ' 2025')
+        stem = re.sub(r'_20(?=(?:20\d\d|19\d\d)\b)', ' ', stem)
+        # SharePoint _28 / _29 kurung buka/tutup
+        stem = re.sub(r'_28_?', ' (', stem)
+        stem = re.sub(r'_?_29', ') ', stem)
+        # Ganti semua _20 sisanya menjadi spasi
+        stem = stem.replace('_20', ' ')
+
     return stem
 
 
@@ -457,8 +465,8 @@ def validate_regulation_filename_match(
 
     # 2. Ekstrak nomor dari nama berkas (prioritaskan main_part)
     fn_num_ints = []
-    # Pola pojk008 / seojk020 / padk004 / seojkno02
-    code_m = re.search(r'(?:pojk|seojk|padk|pdk|kdk)[-_ ]*(?:no\.?|nomor)?[-_ ]*0*(\d+)', main_part)
+    # Pola pojk008 / seojk020 / padk004 / seojkno02 / pbi / sebi
+    code_m = re.search(r'(?:pojk|seojk|padk|pdk|kdk|pbi|sebi)[-_ ]*(?:no\.?|nomor)?[-_ ]*0*(\d+)', main_part)
     if code_m:
         fn_num_ints.append(int(code_m.group(1)))
 
@@ -466,13 +474,13 @@ def validate_regulation_filename_match(
     if no_m:
         fn_num_ints.append(int(no_m.group(1)))
 
-    after_kind_m = re.search(r'(?:peraturan[-_ ]ojk|peraturan[-_ ]adk|surat[-_ ]edaran|pojk|seojk|padk|pdk|kdk)[-_ ]+0*(\d+)', main_part)
+    after_kind_m = re.search(r'(?:peraturan[-_ ]ojk|peraturan[-_ ]adk|surat[-_ ]edaran|pojk|seojk|padk|pdk|kdk|pbi|sebi|peraturan[-_ ]bank[-_ ]indonesia)[-_ ]+0*(\d+)', main_part)
     if after_kind_m:
         fn_num_ints.append(int(after_kind_m.group(1)))
 
     # Fallback nomor dari filename jika main_part tidak memuat nomor
     if not fn_num_ints:
-        code_m_raw = re.search(r'(?:pojk|seojk|padk|pdk|kdk)[-_ ]*(?:no\.?|nomor)?[-_ ]*0*(\d+)', stem_clean.lower())
+        code_m_raw = re.search(r'(?:pojk|seojk|padk|pdk|kdk|pbi|sebi)[-_ ]*(?:no\.?|nomor)?[-_ ]*0*(\d+)', stem_clean.lower())
         if code_m_raw:
             fn_num_ints.append(int(code_m_raw.group(1)))
 
@@ -509,6 +517,8 @@ def parse_onedrive_filename_metadata(filename: str) -> Dict[str, Any]:
     - SK_Dir_28-83-KEP-DIR-1995_..._No._27121KEPDIR.pdf -> jenis KEPDIR, nomor 28-83-KEP-DIR-1995, release_year 1995
     - POJK_203_20Tahun_202025_... -> jenis POJK, nomor 3, release_year 2025
     - Peraturan_OJK_3_2015.pdf -> jenis POJK, nomor 3, release_year 2015
+    - 43_-_Rijksblaad_dari_Daerah_Paku_Alaman_Tahun_1937_Nomor_9.pdf -> nomor 9, release_year 1937
+    - 42_-_Staatsblad_Tahun_1929_Nomor_357.pdf -> nomor 357, release_year 1929
     """
     if not filename:
         return {}
@@ -534,9 +544,9 @@ def parse_onedrive_filename_metadata(filename: str) -> Dict[str, Any]:
         reg_type = "PDK"
     elif "sk_dir" in main_lower or "kep_dir" in main_lower or "sk dir" in main_lower or "kep dir" in main_lower or "kepdir" in main_lower:
         reg_type = "KEPDIR"
-    elif re.search(r'\bpbi\b', main_lower):
+    elif re.search(r'\bpbi\b|peraturan[-_ ]*bank[-_ ]*indonesia', main_lower):
         reg_type = "PBI"
-    elif re.search(r'\bsebi\b', main_lower):
+    elif re.search(r'\bsebi\b|surat[-_ ]*edaran[-_ ]*bank[-_ ]*indonesia', main_lower):
         reg_type = "SEBI"
     elif re.search(r'\buu\b|\bundang', main_lower):
         reg_type = "UU"
@@ -578,7 +588,7 @@ def parse_onedrive_filename_metadata(filename: str) -> Dict[str, Any]:
     if sk_m and ('-' in sk_m.group(1) or '/' in sk_m.group(1)):
         num_str = sk_m.group(1).replace('_', '-').strip('-')
     else:
-        num_m = re.search(r'(?:peraturan[-_ ]adk|padk|peraturan[-_ ]ojk|pojk|surat[-_ ]edaran|seojk|se[-_ ]ojk|kdk|pdk)[-_ ]*(?:no\.?|nomor)?[-_ ]*0*(\d+)', main_part, re.IGNORECASE)
+        num_m = re.search(r'(?:peraturan[-_ ]adk|padk|peraturan[-_ ]ojk|pojk|surat[-_ ]edaran|seojk|se[-_ ]ojk|kdk|pdk|pbi|sebi|peraturan[-_ ]bank[-_ ]indonesia|surat[-_ ]edaran[-_ ]bank[-_ ]indonesia|nomor|no\.?)[-_ ]*(?:no\.?|nomor)?[-_ ]*0*(\d+)', main_part, re.IGNORECASE)
         if num_m:
             num_str = num_m.group(1)
         else:
@@ -590,9 +600,11 @@ def parse_onedrive_filename_metadata(filename: str) -> Dict[str, Any]:
 
     # Fallback nomor dari filename asli jika belum dapat
     if not num_str:
-        num_m_raw = re.search(r'(?:peraturan[-_ ]adk|padk|peraturan[-_ ]ojk|pojk|surat[-_ ]edaran|seojk|se[-_ ]ojk|kdk|pdk)[-_ ]*(?:no\.?|nomor)?[-_ ]*0*(\d+)', filename, re.IGNORECASE)
-        if num_m_raw:
-            num_str = num_m_raw.group(1)
+        tokens = re.split(r'[-_ ]+', stem_clean)
+        for t in tokens:
+            if t.isdigit() and t != (str(year) if year else "") and len(t) <= 6:
+                num_str = str(int(t))
+                break
 
     if not reg_type and not num_str and not year:
         return {}

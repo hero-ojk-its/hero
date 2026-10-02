@@ -84,7 +84,7 @@
     "name": "OneDrive Public DPEA",
     "adapter": "onedrive_share",
     "url": "[link share OneDrive DPEA]",
-    "duration_sec": 6.98,
+    "duration_sec": 7.34,
     "requests_made": 11,
     "pages_visited": 5,
     "page_boundary": "penuh (tanpa batas, default max=1000)",
@@ -94,13 +94,13 @@
       "Administration": 5,
       "User Requirement & Project Charter": 2
     },
-    "match_warnings_count": 2,
+    "match_warnings_count": 0,
     "regulations_found": 2619,
     "candidates_count": 2619,
     "with_size_count": 2619,
     "pct_size": 100.0,
-    "complete_legal_count": 2086,
-    "pct_legal": 79.6,
+    "complete_legal_count": 2135,
+    "pct_legal": 81.5,
     "ground_truth_label": "Belum ada dari mitra",
     "ground_truth_num": null,
     "selisih_str": "Belum ada dari mitra",
@@ -112,7 +112,7 @@
         "Administration": 5,
         "User Requirement & Project Charter": 2
       },
-      "match_warnings_count": 2,
+      "match_warnings_count": 0,
       "by_doc_kind": {
         "utama": 2296,
         "faq": 156,
@@ -123,7 +123,7 @@
       "pages_visited": 5,
       "requests_made": 11,
       "non_pdf_links": 1,
-      "duration_seconds": 6.98
+      "duration_seconds": 7.34
     },
     "errors": [],
     "blocked": false,
