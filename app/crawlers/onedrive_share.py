@@ -51,6 +51,8 @@ class OneDriveShareCrawler:
     """Crawler adapter untuk folder OneDrive for Business / SharePoint yang dibagikan publik."""
 
     name: str = "onedrive_share"
+    _shared_cookies: Dict[str, str] = {}
+    _shared_origin_url: Optional[str] = None
 
     def __init__(
         self,
@@ -166,6 +168,8 @@ class OneDriveShareCrawler:
         with httpx.Client(verify=ssl_ctx, http2=False, timeout=self.timeout_seconds) as client:
             try:
                 site_base, root_folder_path, root_name = self._resolve_session_and_root(client, url)
+                OneDriveShareCrawler._shared_cookies = dict(client.cookies)
+                OneDriveShareCrawler._shared_origin_url = url
             except Exception as ex:
                 return ScanResult(
                     candidates=[],
@@ -361,11 +365,32 @@ class OneDriveShareCrawler:
         src_url = qs.get("SourceUrl", [""])[0]
 
         with httpx.Client(verify=ssl_ctx, http2=False, timeout=self.timeout_seconds) as client:
+            if OneDriveShareCrawler._shared_cookies:
+                client.cookies.update(OneDriveShareCrawler._shared_cookies)
+            else:
+                share_fallback = os.getenv("SCAN_ONEDRIVE_URL") or OneDriveShareCrawler._shared_origin_url
+                if share_fallback:
+                    try:
+                        client.get(share_fallback, headers={"User-Agent": self.user_agent}, follow_redirects=True)
+                        OneDriveShareCrawler._shared_cookies = dict(client.cookies)
+                    except Exception:
+                        pass
+
             resp = client.get(
                 url,
                 headers={"User-Agent": self.user_agent},
                 follow_redirects=True,
             )
+            if resp.status_code == 403:
+                share_fallback = os.getenv("SCAN_ONEDRIVE_URL") or OneDriveShareCrawler._shared_origin_url
+                if share_fallback:
+                    try:
+                        client.get(share_fallback, headers={"User-Agent": self.user_agent}, follow_redirects=True)
+                        OneDriveShareCrawler._shared_cookies = dict(client.cookies)
+                        resp = client.get(url, headers={"User-Agent": self.user_agent}, follow_redirects=True)
+                    except Exception:
+                        pass
+
             if resp.status_code >= 400:
                 resp.close()
                 raise CrawlerError(f"HTTP {resp.status_code} saat mengunduh berkas dari {url}")

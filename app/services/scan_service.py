@@ -162,7 +162,7 @@ class ScanService:
             requested_by_user_id=actor_user_id,
             errors=[],
             blocked=False,
-            stats={},
+            stats={"max_pages": effective_max_pages},
         )
         self.db.add(session)
         self.db.flush()
@@ -270,10 +270,11 @@ class ScanService:
                     return bool(session.cancel_requested)
 
                 # 4. Eksekusi pemindaian situs
+                scan_max_pages = (session.stats or {}).get("max_pages") or settings.crawl_max_pages
                 scan_res = crawler.scan(
                     session.start_url,
                     session.crawl_depth,
-                    max_pages=settings.crawl_max_pages,
+                    max_pages=scan_max_pages,
                     max_candidates=settings.crawl_max_candidates,
                     progress=progress_cb,
                     should_cancel=cancel_cb,
@@ -634,15 +635,20 @@ class ScanService:
             job = db.query(JobIngest).filter(JobIngest.id == session.pull_job_id).first()
             source = db.query(ScrapingSource).filter(ScrapingSource.id == session.source_id).first() if session.source_id else None
 
-            # Dapatkan advisory lock
+            # Dapatkan advisory lock khusus penarikan (magic: 1396924751) dengan toleransi retry
             lock_acquired = False
             lock_key = session.source_id or scan_id
-            try:
-                res = db.execute(text(f"SELECT pg_try_advisory_lock(1396924750, {lock_key})")).scalar()
-                lock_acquired = bool(res)
-            except Exception as e:
-                logger.warning(f"[Pull] Gagal memanggil pg_try_advisory_lock: {e}")
-                lock_acquired = True
+            for _ in range(5):
+                try:
+                    res = db.execute(text(f"SELECT pg_try_advisory_lock(1396924751, {lock_key})")).scalar()
+                    lock_acquired = bool(res)
+                    if lock_acquired:
+                        break
+                except Exception as e:
+                    logger.warning(f"[Pull] Gagal memanggil pg_try_advisory_lock: {e}")
+                    lock_acquired = True
+                    break
+                time.sleep(0.5)
 
             if not lock_acquired:
                 session.status = StatusPindai.gagal
@@ -873,7 +879,7 @@ class ScanService:
             finally:
                 if lock_acquired:
                     try:
-                        db.execute(text(f"SELECT pg_advisory_unlock(1396924750, {lock_key})"))
+                        db.execute(text(f"SELECT pg_advisory_unlock(1396924751, {lock_key})"))
                         db.commit()
                     except Exception:
                         pass
