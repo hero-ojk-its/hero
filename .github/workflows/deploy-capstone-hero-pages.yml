@@ -11,7 +11,7 @@ name: Deploy capstone-HERO (Pages)
 on:
   push:
     branches: [main]
-    paths: ['capstone-HERO/**', '.github/workflows/deploy-capstone-hero-pages.yml']
+    paths: ['frontend/**', '.github/workflows/deploy-capstone-hero-pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -25,19 +25,19 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     defaults:
-      run: { working-directory: capstone-HERO }
+      run: { working-directory: frontend }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: capstone-HERO/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run build
       - uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
-          publish_dir: capstone-HERO/dist
+          publish_dir: frontend/dist
           force_orphan: true

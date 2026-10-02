@@ -12,9 +12,9 @@ name: Deploy Frontend (GitHub Pages)
 on:
   push:
     branches: [main]
-    paths: ['capstone-HERO/**', '.github/workflows/deploy-frontend-pages.yml']
+    paths: ['frontend/**', '.github/workflows/deploy-frontend-pages.yml']
   pull_request:
-    paths: ['capstone-HERO/**', '.github/workflows/deploy-frontend-pages.yml']
+    paths: ['frontend/**', '.github/workflows/deploy-frontend-pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -29,14 +29,14 @@ jobs:
     name: Lint & Build
     runs-on: ubuntu-latest
     defaults:
-      run: { working-directory: capstone-HERO }
+      run: { working-directory: frontend }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: capstone-HERO/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run lint
       - run: npm run build
@@ -47,7 +47,7 @@ jobs:
       - run: cp dist/index.html dist/404.html
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: capstone-HERO/dist
+          path: frontend/dist
 
   deploy:
     name: Deploy
