@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -20,6 +20,11 @@ import {
   Plus
 } from 'lucide-react';
 import { regulasiData } from '../data/regulasiData';
+import type { RegulasiItem } from '../data/regulasiData';
+import { isApiConfigured, apiFetch, ApiError, adaptDocumentToDetail } from '../lib/api';
+import type { DocumentItem, AdaptedRegulasiDoc } from '../lib/api';
+import { LoadingState } from '../components/LoadingState';
+import { ErrorState } from '../components/ErrorState';
 
 // Garuda Pancasila SVG component
 function GarudaEmblem() {
@@ -43,11 +48,60 @@ export default function DetailDokumen() {
   const navigate = useNavigate();
   const { id } = useParams();
 
-  // Retrieve regulation from location.state or fallback to mock data by id
-  const regulasi = location.state?.regulasi || 
-    regulasiData.find(r => r.id === Number(id)) || 
-    regulasiData[0];
-  
+  const stateRegulasi = location.state?.regulasi as (RegulasiItem | AdaptedRegulasiDoc) | undefined;
+
+  const [fetchedDoc, setFetchedDoc] = useState<AdaptedRegulasiDoc | null>(null);
+  const [loading, setLoading] = useState<boolean>(!stateRegulasi && isApiConfigured && Boolean(id));
+  const [notFound, setNotFound] = useState<boolean>(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  const fetchDoc = useCallback(() => {
+    if (stateRegulasi || !isApiConfigured || !id) return;
+
+    queueMicrotask(() => {
+      setLoading(true);
+      setNotFound(false);
+      setApiError(null);
+    });
+
+    const controller = new AbortController();
+
+    apiFetch<DocumentItem>(`/api/v1/documents/${id}`, { signal: controller.signal })
+      .then((doc) => {
+        const adapted = adaptDocumentToDetail(doc);
+        setFetchedDoc(adapted);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (err instanceof Error && err.name === 'AbortError') return;
+
+        if (err instanceof ApiError && err.status === 404) {
+          setNotFound(true);
+        } else {
+          const msg = err instanceof Error ? err.message : 'Gagal memuat dokumen dari server';
+          setApiError(msg);
+        }
+        setLoading(false);
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [id, stateRegulasi]);
+
+  useEffect(() => {
+    fetchDoc();
+  }, [fetchDoc]);
+
+  // Retrieve regulation from location.state, fetched API, or fallback to mock data by id
+  const regulasi = stateRegulasi || fetchedDoc || (
+    !isApiConfigured
+      ? (regulasiData.find((r) => r.id === Number(id)) || regulasiData[0])
+      : null
+  );
+
   const [showViewer, setShowViewer] = useState(false);
   const [zoom, setZoom] = useState(100);
   const [currentPage, setCurrentPage] = useState(1);
@@ -55,7 +109,82 @@ export default function DetailDokumen() {
   const totalPages = 6;
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  const fileName = `${regulasi.nomor.replace(/[/.]/g, '_')}.pdf`;
+  if (loading) {
+    return (
+      <div className="max-w-[1200px] mx-auto space-y-6">
+        <div className="text-xs text-gray-500">
+          Dashboard / Knowledge Base / <span className="font-semibold text-gray-900">Detail</span>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+          <LoadingState message="Memuat detail dokumen dari server..." />
+        </div>
+      </div>
+    );
+  }
+
+  if (notFound) {
+    return (
+      <div className="max-w-[1200px] mx-auto space-y-6">
+        <div className="text-xs text-gray-500">
+          Dashboard / Knowledge Base / <span className="font-semibold text-gray-900">Detail</span>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Dokumen tidak ditemukan</h2>
+          <p className="text-sm text-gray-500 mb-6">
+            Dokumen dengan ID {id} tidak ditemukan di sistem.
+          </p>
+          <button
+            onClick={() => navigate('/knowledge')}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Kembali ke Knowledge Base</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (apiError) {
+    return (
+      <div className="max-w-[1200px] mx-auto space-y-6">
+        <div className="text-xs text-gray-500">
+          Dashboard / Knowledge Base / <span className="font-semibold text-gray-900">Detail</span>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+          <ErrorState
+            title="Gagal Memuat Dokumen"
+            message={apiError}
+            onRetry={fetchDoc}
+            retryText="Coba lagi"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (!regulasi) {
+    return (
+      <div className="max-w-[1200px] mx-auto space-y-6">
+        <div className="text-xs text-gray-500">
+          Dashboard / Knowledge Base / <span className="font-semibold text-gray-900">Detail</span>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Dokumen tidak ditemukan</h2>
+          <p className="text-sm text-gray-500 mb-6">Data dokumen tidak dapat ditemukan.</p>
+          <button
+            onClick={() => navigate('/knowledge')}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Kembali ke Knowledge Base</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const fileName = `${(regulasi.nomor || 'dokumen').replace(/[/.]/g, '_')}.pdf`;
   const pdfUrl = `/documents/${fileName}`;
 
   // Handle zoom
@@ -116,8 +245,17 @@ export default function DetailDokumen() {
   };
 
   // Dynamic source badge and icon
+  // Dynamic source badge and icon
   const getSourceDisplay = (sumber: string) => {
     const s = (sumber || '').toLowerCase();
+    if (!sumber || s === '-') {
+      return {
+        label: '-',
+        subLabel: '-',
+        icon: <Info className="w-3.5 h-3.5 text-gray-500" />,
+        badgeClass: 'bg-gray-50 text-gray-700 border-gray-200/60'
+      };
+    }
     if (s.includes('folder') || s.includes('lokal')) {
       return {
         label: 'Folder Lokal',
@@ -134,11 +272,27 @@ export default function DetailDokumen() {
         badgeClass: 'bg-sky-50 text-sky-800 border-sky-200/60'
       };
     }
+    if (s.includes('scraping') || s.startsWith('http')) {
+      return {
+        label: s.startsWith('http') ? 'Situs Web' : 'Scraping Otomatis',
+        subLabel: s.startsWith('http') ? sumber : 'Scraping Portal OJK',
+        icon: <Globe className="w-3.5 h-3.5 text-blue-700" />,
+        badgeClass: 'bg-blue-50 text-blue-800 border-blue-200/60'
+      };
+    }
+    if (s.includes('upload') || s.includes('manual')) {
+      return {
+        label: 'Upload Manual',
+        subLabel: 'Upload Manual Pengguna',
+        icon: <Info className="w-3.5 h-3.5 text-red-700" />,
+        badgeClass: 'bg-red-50 text-red-800 border-red-200/60'
+      };
+    }
     return {
-      label: 'Scraping Otomatis',
-      subLabel: 'Scraping Portal OJK',
-      icon: <Globe className="w-3.5 h-3.5 text-blue-700" />,
-      badgeClass: 'bg-blue-50 text-blue-800 border-blue-200/60'
+      label: sumber,
+      subLabel: sumber,
+      icon: <Info className="w-3.5 h-3.5 text-gray-600" />,
+      badgeClass: 'bg-gray-50 text-gray-700 border-gray-200/60'
     };
   };
 
@@ -149,6 +303,18 @@ export default function DetailDokumen() {
     : regulasi.status === 'Diubah' 
     ? 'bg-amber-50 text-amber-700 border-amber-200/60' 
     : 'bg-red-50 text-red-700 border-red-200/60';
+
+  const displayTanggalPublikasi = ('tanggalPublikasi' in regulasi && regulasi.tanggalPublikasi)
+    ? regulasi.tanggalPublikasi
+    : regulasi.tahun === '-'
+    ? '-'
+    : typeof regulasi.tahun === 'number'
+    ? `12 ${regulasi.tahun === 2024 ? 'Maret' : 'Oktober'} ${regulasi.tahun}`
+    : regulasi.tahun;
+
+  const displayUkuran = ('ukuran' in regulasi && regulasi.ukuran && regulasi.ukuran !== '-')
+    ? regulasi.ukuran
+    : ('ukuran' in regulasi && regulasi.ukuran === '-' ? '-' : '2.4 MB');
 
 
 
@@ -675,7 +841,7 @@ export default function DetailDokumen() {
           <div className="flex items-center gap-2.5 text-xs text-gray-500 pt-1 flex-wrap font-medium">
             <span>{regulasi.nomor}</span>
             <span className="text-gray-300">•</span>
-            <span>12 {regulasi.tahun === 2024 ? 'Maret' : 'Oktober'} {regulasi.tahun}</span>
+            <span>{displayTanggalPublikasi}</span>
             <span className="text-gray-300">•</span>
             <span className="font-semibold text-gray-700">{regulasi.kategori}</span>
             <span className="text-gray-300">•</span>
@@ -736,7 +902,7 @@ export default function DetailDokumen() {
             {/* Tanggal Publikasi */}
             <div className="flex flex-col gap-1.5">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tanggal Publikasi</span>
-              <p className="text-sm font-medium text-gray-900">12 {regulasi.tahun === 2024 ? 'Maret' : 'Oktober'} {regulasi.tahun}</p>
+              <p className="text-sm font-medium text-gray-900">{displayTanggalPublikasi}</p>
             </div>
 
             {/* Kategori Industri */}
@@ -770,7 +936,7 @@ export default function DetailDokumen() {
               <div>
                 <h4 className="font-bold text-gray-900 text-sm mb-1">{fileName}</h4>
                 <p className="text-xs text-gray-500 font-medium">
-                  PDF Resmi OJK • 2.4 MB
+                  PDF Resmi OJK • {displayUkuran}
                   {regulasi.sha256 && (
                     <span className="ml-1 text-gray-400 font-mono text-[11px]">• SHA-256: {regulasi.sha256}</span>
                   )}

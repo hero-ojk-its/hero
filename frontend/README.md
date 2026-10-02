@@ -30,3 +30,32 @@ If you are developing a production application, we recommend enabling type-aware
 ```
 
 See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+
+## Menjalankan Frontend dan Backend
+
+Untuk menghubungkan Frontend dengan Backend FastAPI:
+
+1. **Konfigurasi Environment Variable**
+   Salin berkas .env.example menjadi .env.local:
+   `ash
+   cp .env.example .env.local
+   `
+   Pastikan variabel VITE_API_BASE_URL mengarah ke alamat backend (default: http://localhost:8000):
+   `env
+   VITE_API_BASE_URL=http://localhost:8000
+   `
+   *Catatan: Bila VITE_API_BASE_URL kosong atau tidak ada, Frontend otomatis berjalan dalam mode contoh (data statis).*
+
+2. **Menjalankan Backend**
+   Jalankan server FastAPI (dari direktori backend):
+   `ash
+   uvicorn app.main:app --reload --port 8000
+   `
+
+3. **Menjalankan Frontend**
+   Dari direktori rontend/:
+   `ash
+   npm install
+   npm run dev
+   `
+   Buka peramban di http://localhost:5173.

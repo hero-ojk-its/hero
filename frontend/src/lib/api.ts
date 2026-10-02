@@ -1,0 +1,368 @@
+/**
+ * Client API HERO untuk komunikasi dengan Backend FastAPI.
+ */
+
+export interface ValidationErrorItem {
+  loc?: (string | number)[];
+  msg?: string;
+  type?: string;
+}
+
+export class ApiError extends Error {
+  status: number;
+  detail: string | ValidationErrorItem[] | unknown;
+
+  constructor(status: number, detail: string | ValidationErrorItem[] | unknown) {
+    let formattedMessage = `API Error ${status}`;
+    if (typeof detail === 'string') {
+      formattedMessage = detail;
+    } else if (Array.isArray(detail)) {
+      // Menangani format error validasi FastAPI (HTTP 422)
+      formattedMessage = detail
+        .map((item) => {
+          if (typeof item === 'string') return item;
+          if (item && typeof item === 'object' && 'msg' in item) {
+            const loc = Array.isArray(item.loc) && item.loc.length > 0 ? `${item.loc.join('.')}: ` : '';
+            return `${loc}${item.msg}`;
+          }
+          return JSON.stringify(item);
+        })
+        .join('; ');
+    } else if (detail && typeof detail === 'object') {
+      const obj = detail as Record<string, unknown>;
+      if (typeof obj.message === 'string') {
+        formattedMessage = obj.message;
+      } else if (typeof obj.detail === 'string') {
+        formattedMessage = obj.detail;
+      } else {
+        formattedMessage = JSON.stringify(detail);
+      }
+    }
+
+    super(formattedMessage);
+    this.name = 'ApiError';
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+const rawBaseUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) || '';
+export const API_BASE_URL = rawBaseUrl.replace(/\/+$/, '');
+export const isApiConfigured: boolean = Boolean(rawBaseUrl && rawBaseUrl.trim() !== '');
+
+export interface FetchOptions extends RequestInit {
+  timeout?: number;
+}
+
+/**
+ * Mengambil token autentikasi jika tersedia di browser storage.
+ */
+function getAuthToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return (
+    localStorage.getItem('hero_token') ||
+    localStorage.getItem('token') ||
+    localStorage.getItem('auth_token') ||
+    sessionStorage.getItem('hero_token') ||
+    sessionStorage.getItem('token')
+  );
+}
+
+/**
+ * Klien fetch seragam untuk backend FastAPI.
+ */
+export async function apiFetch<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
+  const { timeout = 15000, signal, headers: customHeaders, ...fetchOpts } = options;
+
+  const url = endpoint.startsWith('http://') || endpoint.startsWith('https://')
+    ? endpoint
+    : `${API_BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+
+  const headers = new Headers(customHeaders);
+  if (!headers.has('Accept')) {
+    headers.set('Accept', 'application/json');
+  }
+
+  // Header Authorization bila token ada (login ditunda; auth backend nonaktif)
+  const token = getAuthToken();
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  // Pengaturan Timeout dengan AbortController
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort(new Error(`Permintaan ke ${url} melebihi batas waktu (${timeout} ms)`));
+  }, timeout);
+
+  const onExternalAbort = () => {
+    clearTimeout(timeoutId);
+    controller.abort(signal?.reason);
+  };
+
+  // Jika ada signal eksternal, dengarkan pembatalannya
+  if (signal) {
+    if (signal.aborted) {
+      clearTimeout(timeoutId);
+      controller.abort(signal.reason);
+    } else {
+      signal.addEventListener('abort', onExternalAbort);
+    }
+  }
+
+  try {
+    const response = await fetch(url, {
+      ...fetchOpts,
+      headers,
+      signal: controller.signal,
+    });
+
+    // Parsing JSON respons jika ada
+    const contentType = response.headers.get('content-type') || '';
+    const isJson = contentType.includes('application/json');
+
+    let bodyData: unknown = null;
+    if (isJson) {
+      try {
+        bodyData = await response.json();
+      } catch {
+        bodyData = null;
+      }
+    } else {
+      try {
+        bodyData = await response.text();
+      } catch {
+        bodyData = null;
+      }
+    }
+
+    if (!response.ok) {
+      let errorDetail: unknown = bodyData;
+      if (bodyData && typeof bodyData === 'object' && 'detail' in (bodyData as Record<string, unknown>)) {
+        errorDetail = (bodyData as Record<string, unknown>).detail;
+      } else if (typeof bodyData === 'string' && bodyData.trim() !== '') {
+        errorDetail = bodyData;
+      } else {
+        errorDetail = response.statusText || `Galat HTTP ${response.status}`;
+      }
+
+      throw new ApiError(response.status, errorDetail);
+    }
+
+    return bodyData as T;
+  } catch (error: unknown) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw error;
+    }
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    const friendlyMessage =
+      message.toLowerCase().includes('failed to fetch') || message.toLowerCase().includes('fetch failed')
+        ? 'Gagal terhubung ke peladen backend. Pastikan server backend sedang aktif di ' + (API_BASE_URL || 'http://localhost:8000') + '.'
+        : message || 'Gagal terhubung ke peladen API backend.';
+    throw new ApiError(0, friendlyMessage);
+  } finally {
+    clearTimeout(timeoutId);
+    if (signal) {
+      signal.removeEventListener('abort', onExternalAbort);
+    }
+  }
+}
+
+/**
+ * Membantu membuat query string yang valid untuk endpoint FastAPI.
+ */
+export function buildQueryString(params: Record<string, unknown>): string {
+  const searchParams = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null || value === undefined || value === '') {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item !== null && item !== undefined && item !== '') {
+          searchParams.append(key, String(item));
+        }
+      }
+    } else {
+      searchParams.append(key, String(value));
+    }
+  }
+
+  const qs = searchParams.toString();
+  return qs ? `?${qs}` : '';
+}
+
+// -------------------------------------------------------------
+// Tipe Data Kontrak API HERO
+// -------------------------------------------------------------
+
+export interface DocumentItem {
+  id: number;
+  title: string;
+  regulation_number: string | null;
+  regulation_type: string | null;
+  release_date: string | null;
+  bidang: string | null;
+  category_id: number | null;
+  category_path: string[] | null;
+  status_keberlakuan: 'berlaku' | 'diubah' | 'dicabut' | 'tidak_diketahui' | string;
+  processing_status: 'diterima' | 'diproses' | 'perlu_koreksi' | 'terindeks' | 'gagal' | 'ditolak' | string;
+  file_size_bytes: number | null;
+  source_url: string | null;
+  pdf_url: string;
+  is_placed: boolean;
+  restricted: boolean;
+  created_at: string;
+  updated_at?: string | null;
+  standardized_filename?: string | null;
+  original_filename?: string | null;
+  file_hash?: string | null;
+  file_path_pdf?: string | null;
+  rank?: number | null;
+  highlight?: string | null;
+}
+
+export interface DocumentsResponse {
+  total: number;
+  items: DocumentItem[];
+  query?: Record<string, unknown>;
+}
+
+export interface CategoryNode {
+  id: number;
+  name: string;
+  parent_id: number | null;
+  auto_created?: boolean;
+  document_count: number;
+  total_document_count: number;
+  children: CategoryNode[];
+}
+
+export interface DashboardSummaryResponse {
+  kb: {
+    corpus_documents: number;
+    draft_documents: number;
+    target_fase1: number;
+    target_met: boolean;
+    by_status_keberlakuan: Record<string, number>;
+    by_processing_status: Record<string, number>;
+    by_regulation_type: Array<{
+      regulation_type: string | null;
+      label: string;
+      count: number;
+    }>;
+    by_year: Array<{
+      year: number | null;
+      label: string;
+      count: number;
+    }>;
+    placed_documents: number;
+    inbox_documents: number;
+  };
+  ingest?: Record<string, unknown>;
+  sources?: Record<string, unknown>;
+  generated_at?: string;
+}
+
+export interface AdaptedRegulasiDoc {
+  id: number;
+  judul: string;
+  jenis: string;
+  nomor: string;
+  kategori: string;
+  topik: string;
+  tahun: number | string;
+  status: string;
+  sumber: string;
+  ukuran?: string;
+  sha256?: string;
+  tanggalPublikasi?: string;
+}
+
+/**
+ * Format ukuran byte menjadi B, KB, atau MB. Mengembalikan '-' jika tidak ada atau tidak valid.
+ */
+export function formatFileSize(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined || isNaN(bytes) || bytes <= 0) {
+    return '-';
+  }
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Mengadaptasi DocumentItem dari Backend API menjadi model data untuk DetailDokumen.
+ * Menghilangkan nilai karangan (fallback fiktif):
+ * - sumber: nilai asli backend atau '-' jika tidak ada.
+ * - tahun: tahun dari release_date atau created_at, atau '-' jika keduanya kosong.
+ * - ukuran: format nyata dari file_size_bytes atau '-' jika tidak ada.
+ */
+export function adaptDocumentToDetail(doc: DocumentItem): AdaptedRegulasiDoc {
+  let tahun: number | string = '-';
+  if (doc.release_date) {
+    const d = new Date(doc.release_date);
+    if (!isNaN(d.getTime())) {
+      tahun = d.getFullYear();
+    }
+  }
+  if (tahun === '-' && doc.created_at) {
+    const d = new Date(doc.created_at);
+    if (!isNaN(d.getTime())) {
+      tahun = d.getFullYear();
+    }
+  }
+
+  let tanggalPublikasi: string | undefined = undefined;
+  if (doc.release_date) {
+    try {
+      const d = new Date(doc.release_date);
+      if (!isNaN(d.getTime())) {
+        tanggalPublikasi = d.toLocaleDateString('id-ID', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        });
+      }
+    } catch {
+      tanggalPublikasi = doc.release_date;
+    }
+  }
+
+  const statusMap: Record<string, string> = {
+    berlaku: 'Aktif',
+    diubah: 'Diubah',
+    dicabut: 'Dicabut',
+    tidak_diketahui: 'Tidak diketahui',
+  };
+
+  return {
+    id: doc.id,
+    judul: doc.title || '-',
+    jenis: doc.regulation_type || '-',
+    nomor: doc.regulation_number || '-',
+    kategori:
+      doc.category_path && doc.category_path.length > 0
+        ? doc.category_path.join(' / ')
+        : doc.bidang || '-',
+    topik: doc.bidang || '-',
+    tahun,
+    tanggalPublikasi,
+    status: statusMap[doc.status_keberlakuan] || doc.status_keberlakuan || 'Tidak diketahui',
+    sumber: doc.source_url || '-',
+    ukuran: formatFileSize(doc.file_size_bytes),
+    sha256: doc.file_hash || undefined,
+  };
+}
+
