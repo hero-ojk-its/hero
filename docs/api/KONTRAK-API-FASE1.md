@@ -330,7 +330,9 @@ Mendukung pendaftaran situs web dan folder lokal sebagai sumber regulasi.
     "terpilih": 1
   },
   "truncated": false,
-  "stats": {},
+  "stats": {
+    "max_pages": 10
+  },
   "errors": [],
   "error_message": null,
   "destination": null,
@@ -1167,13 +1169,13 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
     },
     "by_regulation_type": [
       {
-        "regulation_type": "POJK",
-        "label": "POJK",
+        "regulation_type": null,
+        "label": "Belum diketahui",
         "count": 1
       },
       {
-        "regulation_type": null,
-        "label": "Belum diketahui",
+        "regulation_type": "POJK",
+        "label": "POJK",
         "count": 1
       }
     ],
