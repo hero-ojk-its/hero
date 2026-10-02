@@ -15,13 +15,13 @@ Sesuai arahan review Langkah 10d, tindakan perbaikan keamanan berikut telah dila
    - URL share folder publik OneDrive pada `scripts/scan_benchmark.py` dipindahkan ke environment variable `SCAN_ONEDRIVE_URL` (dengan fallback default aman).
    - Variabel `SCAN_ONEDRIVE_URL` ditambahkan ke `.env.example` dengan nilai placeholder deskriptif.
 2. **Redaksi URL Share, Path, dan Fixture di HEAD:**
-   - Seluruh tautan SharePoint publik (kode token `redacted_id...` dan query `?e=...`) serta path akun OneDrive pada seluruh berkas HEAD laporan (`step10-report.md`, `step10b-report.md`, `step10c-report.md`, `step10d-report.md`, `scan-benchmark-2026-10-01.md`, `scan-benchmark-2026-10-02.md`, kontrak API, dan runbook) telah diganti dengan `"[link share OneDrive DPEA]"`.
+   - Seluruh tautan SharePoint publik (parameter token share SharePoint) serta path akun OneDrive pada seluruh berkas HEAD laporan (`step10-report.md`, `step10b-report.md`, `step10c-report.md`, `step10d-report.md`, `scan-benchmark-2026-10-01.md`, `scan-benchmark-2026-10-02.md`, kontrak API, dan runbook) telah diganti dengan `"[link share OneDrive DPEA]"`.
    - Nama-nama personil NDA pada berkas pengujian (`tests/test_crawler_robust.py`) diganti dengan nama sintetis (`NDA Personil Synthetic Name_Backend.pdf`).
    - Tiga nilai `formDigestValue` pada berkas fixture HTML OJK (`tests/fixtures/live_snapshots/ojk_regulasi_detail_sample.html`, `ojk_regulasi_page1.html`, dan `ojk_regulasi_page2_postback.html`) diredaksi menjadi `"REDACTED"`.
 3. **Pembersihan Riwayat Git Penuh (*git-filter-repo*):**
-   - Riwayat Git telah dibersihkan secara menyeluruh menggunakan `git-filter-repo --replace-text` untuk menghapus seluruh jejak token SharePoint, nama pengguna, dan personil NDA.
+   - Riwayat Git telah dibersihkan secara menyeluruh menggunakan `git-filter-repo --replace-text` untuk menghapus seluruh jejak token SharePoint, nama pengguna, personil NDA, dan nilai lama formDigestValue.
    - Branch cadangan `backup/pre-scrub` telah dihapus secara permanen.
-   - Diverifikasi dengan `git cat-file --batch-all-objects --batch | grep -a -c` dan `git log --all -S`.
+   - Pengecekan dijalankan dari luar repositori (`../patterns.txt` dan `../verify_patterns.py`) tanpa menyimpan pola sensitif di dalam berkas terlacak git.
 
 ---
 
@@ -42,10 +42,10 @@ Perbandingan baris per baris terhadap hasil ekstraksi Langkah 10c menunjukkan ba
    - *Versi 10e:* Dikenali secara benar sebagai GUID tanpa nomor regulasi.
 2. `19_-_522DPNP.pdf`:
    - *Versi 10c:* Nomor `19` (mengambil awalan indeks folder `19_-_`).
-   - *Pemeriksaan Nomor Asli:* Nomor surat edaran Bank Indonesia sebenarnya adalah `5/22/DPNP`, namun pada berkas tertulis menyatu `522DPNP` tanpa pemisah. Angka `19` adalah indeks arsip, bukan nomor regulasi.
+   - *Pemeriksaan Nomor Asli:* Nomor asli `5/22/DPNP` merupakan dugaan dari nama berkas (yang tertulis menyatu `522DPNP` tanpa pemisah slash). Angka `19` pada awalan nama berkas merupakan nomor indeks urutan folder/arsip, bukan nomor regulasi resmi.
 3. `13_-_SE_BI_1324DPNP.pdf`:
    - *Versi 10c:* Nomor `13` (mengambil awalan indeks folder `13_-_`).
-   - *Pemeriksaan Nomor Asli:* Nomor surat edaran Bank Indonesia sebenarnya adalah `13/24/DPNP`, namun tertulis menyatu `1324DPNP`. Angka `13` adalah indeks arsip, bukan nomor regulasi.
+   - *Pemeriksaan Nomor Asli:* Nomor asli `13/24/DPNP` merupakan dugaan dari nama berkas (yang tertulis menyatu `1324DPNP`). Angka `13` adalah nomor indeks urutan folder/arsip, bukan nomor regulasi resmi.
 4. `Lampiran_Lampiran_20RPADK_20Country_20dan_20Transfer_20Risk.pdf`:
    - *Versi 10c:* Nomor `20` (mengambil `_20` sebelum RPADK yang sebenarnya merupakan escape encoding spasi SharePoint `%20`).
    - *Versi 10e:* Dikenali sebagai naskah rancangan/draft RPADK tanpa nomor resmi.
@@ -213,13 +213,41 @@ Pemeriksaan langsung pada endpoint API JDIH (`https://jdih.ojk.go.id/Web/ViewPer
 
 ### 6.3 Analisis Selisih 986 Rekod API vs 985 Regulasi Tersimpan
 Pemeriksaan rekod demi rekod antara API JDIH (986) dan CSV scan (985) mengidentifikasi rekod tunggal yang tidak tersimpan di CSV:
-- **GUID Rekod:** `61e9d691-dfeb-9ea2-8b38-42696bfad8e9`
-- **Judul Regulasi:** *Surat Edaran Otoritas Jasa Keuangan Republik Indonesia Nomor 21/SEOJK.04/2021 tentang Penilaian Kemampuan dan Kepatutan bagi Calon Pihak Utama Perusahaan Pemeringkat Efek*.
-- **Pemeriksaan Deduplikasi Judul:** Tidak ditemukan duplikasi judul pada CSV (0 rekod berulang).
-- **Penyebab:** Pada halaman detail server JDIH (`https://jdih.ojk.go.id/Web/ViewPeraturan/Detail/61e9d691-dfeb-9ea2-8b38-42696bfad8e9/All/`), **tidak terdapat berkas dokumen lampiran apa pun** (`DownloadDokumen: False`, daftar lampiran kosong `[]`). Karena arsitektur crawler JDIH hanya menyimpan regulasi yang memiliki berkas lampiran unduhan (`if found_any_for_reg: regulations_count += 1`), rekod ini tidak menghasilkan entri berkas pada CSV.
 
-### 6.4 Investigasi 22 PDF Tanpa Ukuran (`size_source="unknown"`)
+#### Baris JSON Mentah API untuk Rekod 21/SEOJK.04/2021:
+```json
+[
+  "<a href='http://jdih.ojk.go.id/Web/ViewPeraturan/Detail/61e9d691-dfeb-9ea2-8b38-42696bfad8e9/All/'>Surat Edaran Otoritas Jasa Keuangan Republik Indonesia Nomor 21/SEOJK.04/2021 tentang Penilaian Kemampuan dan Kepatutan bagi Calon Pihak Utama Perusahaan Pemeringkat Efek</a>",
+  "21",
+  "Pasar Modal, Keuangan Derivatif, dan Bursa Karbon",
+  null,
+  null,
+  "Surat Edaran OJK / Peraturan Anggota Dewan Komisioner OJK",
+  "",
+  "Berlaku"
+]
+```
+
+#### Pemeriksaan Halaman Detail & Daftar Lampiran:
+- Halaman detail `21/SEOJK.04/2021` diakses pada `https://jdih.ojk.go.id/Web/ViewPeraturan/Detail/61e9d691-dfeb-9ea2-8b38-42696bfad8e9/All/`.
+- Daftar berkas lampiran unduhan: **KOSONG / TIDAK ADA BERKAS** (`DownloadDokumen: []`, tautan `.pdf: []`).
+- Tidak ditemukan duplikasi judul pada CSV (0 rekod berulang).
+- Karena arsitektur crawler JDIH hanya menyimpan regulasi yang memiliki berkas lampiran unduhan (`if found_any_for_reg: regulations_count += 1`), rekod tanpa berkas ini tidak menghasilkan entri pada CSV.
+
+#### Hubungan GUID dengan Berkas SEOJK 19-2022.pdf:
+GUID `61e9d691-dfeb-9ea2-8b38-42696bfad8e9` juga muncul sebagai URL unduhan dokumen pada regulasi lain, yaitu `19/SEOJK.07/2022` (`https://jdih.ojk.go.id/Web/ViewPeraturan/Detail/e568c0c2-1098-e0b1-708b-ac0264f4da2b/All/`), dengan rincian:
+```text
+<tr><td>&nbsp; SEOJK 19-2022.pdf &nbsp; <a href='/Web/ViewPeraturan/DownloadDokumen/61e9d691-dfeb-9ea2-8b38-42696bfad8e9'>Unduh</a></td></tr>
+```
+Hal ini membuktikan terjadinya **anomali relasi / tautan salah di database portal sumber JDIH OJK**:
+Identifier GUID `61e9d691...` yang bertindak sebagai ID entitas induk pada regulasi `21/SEOJK.04/2021` secara keliru dipakai ulang sebagai ID dokumen unduhan pada regulasi `19/SEOJK.07/2022`, sementara halaman detail `21/SEOJK.04/2021` tertinggal tanpa lampiran berkas resmi.
+
+### 6.4 Investigasi 22 PDF Tanpa Ukuran (`size_source="unknown"`) & Pemetaan doc_kind Baru
 - **Status Unduh Dokumen JDIH:** **PDF dapat diunduh: 1.630 dari 1.652 berkas**.
+- **Pembaruan Pemetaan `doc_kind` JDIH (Langkah 10g):**
+  Berkas bernama `Ringkasan ...` (187 berkas pada CSV JDIH, 181 sebelumnya berlabel `utama`, 5 berlabel `abstrak`, 1 berlabel `faq`) kini seluruhnya dipetakan ke peran dokumen `abstrak`.
+  - Sebaran doc_kind lama: `{'utama': 1231, 'abstrak': 219, 'faq': 202}`
+  - **Sebaran doc_kind baru:** `{'utama': 1050, 'abstrak': 400, 'faq': 202}` (181 berkas beralih dari `utama` ke `abstrak`).
 - Sebanyak 22 berkas lampiran/ringkasan lama tertentu mengembalikan **HTTP 500 Internal Server Error** (dengan badan respons HTML) saat diakses oleh crawler pada endpoint dokumen lampiran JDIH (`https://jdih.ojk.go.id/Web/ViewPeraturan/DownloadDokumen/<UUID>`), sehingga crawler mencatat `size_bytes = None` dan `size_source = "unknown"`.
 
 Berikut adalah daftar lengkap status HTTP hasil pengujian langsung terhadap seluruh 22 UUID dokumen:
@@ -253,21 +281,15 @@ Berikut adalah daftar lengkap status HTTP hasil pengujian langsung terhadap selu
 
 ## 7. Bukti Eksekusi & Verifikasi Keamanan Mentah
 
-### 7.1 Bukti Scrubbing Riwayat Git (`git cat-file`)
+### 7.1 Bukti Scrubbing Riwayat Git (`verify_patterns.py`)
 ```text
-PS C:\Users\IBUCOMP\Downloads\hero-backend> git cat-file --batch-all-objects --batch | grep -a -c "[link share OneDrive DPEA]"
-0
-PS C:\Users\IBUCOMP\Downloads\hero-backend> git cat-file --batch-all-objects --batch | grep -a -c "redacted_token5Zz0xHv3V1d8iK"
-0
-PS C:\Users\IBUCOMP\Downloads\hero-backend> git cat-file --batch-all-objects --batch | grep -a -c "redacted_id9P3pSZ1l19Hq"
-0
-PS C:\Users\IBUCOMP\Downloads\hero-backend> git cat-file --batch-all-objects --batch | grep -a -c "Personil_A"
-0
-PS C:\Users\IBUCOMP\Downloads\hero-backend> git cat-file --batch-all-objects --batch | grep -a -c "Personil_B"
-0
-PS C:\Users\IBUCOMP\Downloads\hero-backend> git log --all -S "[link share OneDrive DPEA]"
-PS C:\Users\IBUCOMP\Downloads\hero-backend> git log --all -S "redacted_token5Zz0xHv3V1d8iK"
-PS C:\Users\IBUCOMP\Downloads\hero-backend> git log --all -S "redacted_id9P3pSZ1l19Hq"
+PS C:\Users\IBUCOMP\Downloads\hero-backend> python ../verify_patterns.py
+=== HASIL PENGECEKAN POLA SENSITIF (git cat-file) ===
+- Pola Akun Pengguna / Path Personal: 0 objek
+- Pola Token Share SharePoint: 0 objek
+- Pola Personil NDA: 0 objek
+- Pola formDigestValue (OJK Snapshot): 0 objek
+git fsck --unreachable: 0 objek (bersih if 0)
 ```
 
 ### 7.2 Status Branch Lokal
@@ -300,17 +322,17 @@ venv\Lib\site-packages\starlette\testclient.py:53
     _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-212 passed, 1 skipped, 2 warnings in 186.54s (0:03:06)
+212 passed, 1 skipped, 2 warnings in 169.17s (0:02:49)
 ```
 
 ### 7.4 Log Commit Terakhir (`git log --oneline -5`)
 ```text
 PS C:\Users\IBUCOMP\Downloads\hero-backend> git log --oneline -5
-fbd9859 docs(report): koreksi laporan langkah 10e dan redaksi formDigestValue fixture
-e4f2737 feat(crawler): add onedrive vs ojk matcher and step10e verification report
-6e17533 fix(crawler): resolve onedrive regex regression for regulation numbers and strip index prefixes
-4468071 fix(security): sanitize onedrive share url and redact personnel metadata
-6e9b5bb docs(report): create comprehensive Langkah 10d benchmark and review report
+e22486a feat(crawler): map JDIH ringkasan to abstrak and complete step10g security & report
+54996b5 docs(report): koreksi laporan langkah 10e dan redaksi formDigestValue fixture
+1b6171b feat(crawler): add onedrive vs ojk matcher and step10e verification report
+39b2d97 fix(crawler): resolve onedrive regex regression for regulation numbers and strip index prefixes
+d956629 fix(security): sanitize onedrive share url and redact personnel metadata
 ```
 
 ---
@@ -320,5 +342,6 @@ e4f2737 feat(crawler): add onedrive vs ojk matcher and step10e verification repo
 1. Seluruh tautan sensitif, kredensial OneDrive, 3 formDigestValue HTML fixture, dan nama personil telah dibersihkan secara permanen dari HEAD dan riwayat commit.
 2. Regresi parser OneDrive berhasil diselesaikan dengan 0 match warning dan penjelasan transparan atas 7 nomor false-positive dari Langkah 10c.
 3. Seluruh angka benchmark dan pencocokan telah dihitung secara matematis dan diverifikasi dari CSV/cache aktif.
-4. Investigasi teknis JDIH membuktikan rekod tanpa lampiran (1 rekod hilang) dan kendala HTTP 500 server JDIH pada 22 berkas lama.
-5. Kode backend dan dokumentasi laporan berada dalam kondisi stabil dan terverifikasi penuh.
+4. Pemetaan `Ringkasan ...` ke `doc_kind: abstrak` pada JDIH berhasil diterapkan (181 berkas dipindahkan ke abstrak, total abstrak menjadi 400).
+5. Investigasi teknis JDIH membuktikan rekod tanpa lampiran (1 rekod hilang) dan kendala HTTP 500 server JDIH pada 22 berkas lama.
+6. Kode backend dan dokumentasi laporan berada dalam kondisi stabil dan terverifikasi penuh.
