@@ -192,6 +192,7 @@ class JdihApiCrawler:
         visited_pages: Set[str] = set()
         candidates_map: Dict[str, PdfCandidate] = {}
         regulations_count = 0
+        regulations_without_files = 0
         errors: List[str] = []
         truncated = False
         blocked = False
@@ -479,6 +480,8 @@ class JdihApiCrawler:
                         regulations_count += 1
                         if progress:
                             progress(len(visited_pages), len(candidates_map))
+                    else:
+                        regulations_without_files += 1
 
                 display_start += len(rows)
                 echo_counter += 1
@@ -499,6 +502,7 @@ class JdihApiCrawler:
         stats = {
             "records_total": total_records if 'total_records' in locals() else None,
             "regulations_found": regulations_count,
+            "regulations_without_files": regulations_without_files,
             "pdfs_found": len(cand_list),
             "match_warnings_count": match_warnings_count,
             "by_doc_kind": doc_kinds,

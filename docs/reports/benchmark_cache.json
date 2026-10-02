@@ -24,10 +24,10 @@
       "regulations_found": 1577,
       "pdfs_found": 2665,
       "by_doc_kind": {
-        "utama": 1935,
-        "abstrak": 225,
+        "utama": 1650,
+        "abstrak": 509,
         "faq": 387,
-        "lampiran": 118
+        "lampiran": 119
       },
       "pages_visited": 158,
       "requests_made": 4400,
@@ -52,6 +52,7 @@
     "subfolders_count": null,
     "match_warnings_count": 67,
     "regulations_found": 985,
+    "regulations_without_files": 1,
     "candidates_count": 1652,
     "with_size_count": 1630,
     "pct_size": 98.7,
@@ -59,9 +60,10 @@
     "pct_legal": 100.0,
     "ground_truth_label": "\u00b1 400\u2013500 regulasi",
     "ground_truth_num": 450,
-    "selisih_str": "+535 (Di atas rentang mitra 400\u2013500)",
+    "selisih_str": "+485 s.d. +585 (+535 terhadap titik tengah 450) dari 985 regulasi tersimpan; +486 s.d. +586 (+536 terhadap titik tengah 450) dari 986 total rekod API",
     "stats": {
       "regulations_found": 985,
+      "regulations_without_files": 1,
       "pdfs_found": 1652,
       "by_doc_kind": {
         "utama": 1050,
@@ -114,9 +116,9 @@
       },
       "match_warnings_count": 0,
       "by_doc_kind": {
-        "utama": 2296,
+        "utama": 2295,
         "faq": 156,
-        "abstrak": 157,
+        "abstrak": 158,
         "lampiran": 3,
         "non_regulasi": 7
       },

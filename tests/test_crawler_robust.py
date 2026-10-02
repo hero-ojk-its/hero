@@ -1059,12 +1059,14 @@ def test_t03_doc_kind_detection():
     assert determine_doc_kind("Salinan POJK Nomor 19 Tahun 2023.pdf") == "utama"
     assert determine_doc_kind("dokumen.pdf", label="Abstrak") == "abstrak"
     assert determine_doc_kind("dokumen.pdf", label="FAQ") == "faq"
-    # Berkas Ringkasan JDIH dipetakan ke abstrak
+    # Berkas Ringkasan & Summary dipetakan ke abstrak
     assert determine_doc_kind("Ringkasan POJK 14.pdf") == "abstrak"
     assert determine_doc_kind("Ringkasan SEOJK 12 - 2017.pdf") == "abstrak"
     assert determine_doc_kind("12 - Ringkasan SEOJK 14 - 2017.pdf") == "abstrak"
     assert determine_doc_kind("2020ringkasanseojk022.pdf") == "abstrak"
     assert determine_doc_kind("Ringkasan Eksekutif dan FAQ SEOJK 53.pdf") == "faq"
+    assert determine_doc_kind("SUMMARY POJK 22 - 04 - 2021.pdf") == "abstrak"
+    assert determine_doc_kind("RINGKASAN SEOJK 31 - 05 - 2023.pdf") == "abstrak"
 
 
 def test_t04_regulation_type_normalization():

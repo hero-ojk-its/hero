@@ -293,8 +293,8 @@ def determine_doc_kind(filename_or_title: Optional[str], label: Optional[str] = 
     if re.search(r'(?:^|[\W_])(?:faq|tanya\s*jawab)(?:[\W_]|$)|faq(?:pojk|seojk|padk|pdk|kdk)|(?:\d{4})faq', combined):
         return "faq"
 
-    # 3. Abstrak / Ringkasan (termasuk abs_, abstrak_, ringkasan, dll.)
-    if re.search(r'(?:^|[\W_])(?:abstrak|abs|ringkasan)(?:[\W_]|$)|abs(?:pojk|seojk|padk|pdk|kdk)|(?:\d{4})(?:abs|ringkasan)|ringkasan', combined):
+    # 3. Abstrak / Ringkasan / Summary (termasuk abs_, abstrak_, ringkasan, summary, dll.)
+    if re.search(r'(?:^|[\W_])(?:abstrak|abs|ringkasan|summary)(?:[\W_]|$)|abs(?:pojk|seojk|padk|pdk|kdk)|(?:\d{4})(?:abs|ringkasan|summary)|ringkasan|summary', combined):
         return "abstrak"
 
     # 4. Lampiran umum

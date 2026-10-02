@@ -78,16 +78,19 @@ Rincian lengkap hasil live scan benchmark 3 sumber data merujuk langsung pada be
   - Lengkap Metadata Hukum: 2.665 / 2.665 (100,0%)
   - Match Warnings: 25 warnings
   - Ground Truth: ± 1.700 regulasi (Selisih: -123)
+  - Sebaran doc_kind: `{'utama': 1650, 'abstrak': 509, 'faq': 387, 'lampiran': 119}`
   - HTTP Requests: 4.400 requests
   - Durasi Eksekusi: 3.017,22 detik (~50m 17s)
   - Status: Sukses
 - **Portal JDIH OJK (`jdih_api`):**
   - Halaman Terakhir: 20 batch offset (iDisplayStart 0–985)
-  - Jumlah Regulasi Ditemukan: 985 regulasi
+  - Jumlah Regulasi Ditemukan (dengan berkas): 985 regulasi
+  - Jumlah Regulasi Tanpa Berkas: 1 regulasi (rekod 21/SEOJK.04/2021)
   - Jumlah Berkas PDF Ditemukan: 1.652 berkas
   - Lengkap Metadata Hukum: 1.652 / 1.652 (100,0%)
   - Match Warnings: 67 warnings
-  - Ground Truth: ± 400–500 regulasi (Selisih: +535 terhadap titik tengah 450)
+  - Ground Truth: ± 400–500 regulasi (Selisih: +485 s.d. +585 [+535 terhadap titik tengah 450] dari 985 regulasi tersimpan; +486 s.d. +586 [+536 terhadap titik tengah 450] dari 986 total rekod API)
+  - Sebaran doc_kind: `{'utama': 1050, 'abstrak': 400, 'faq': 202}`
   - HTTP Requests: 2.680 requests
   - Durasi Eksekusi: 837,12 detik (~13m 57s)
   - Total Rekod Portal API: 986 rekod
@@ -97,6 +100,7 @@ Rincian lengkap hasil live scan benchmark 3 sumber data merujuk langsung pada be
   - Total Berkas Ditemukan: 2.619 berkas (2.612 berkas di subfolder `downloads`, 7 berkas non-regulasi pada subfolder `Administration` dan `User Requirement & Project Charter`)
   - Berkas Berkunci Hukum Lengkap: 2.135 / 2.619 (81,5%)
   - Match Warnings: 0 warning
+  - Sebaran doc_kind: `{'utama': 2295, 'abstrak': 158, 'faq': 156, 'non_regulasi': 7, 'lampiran': 3}`
   - Ground Truth: Belum ada dari mitra
   - HTTP Requests: 11 requests
   - Durasi Eksekusi: 7,34 detik
@@ -239,15 +243,29 @@ GUID `61e9d691-dfeb-9ea2-8b38-42696bfad8e9` juga muncul sebagai URL unduhan doku
 ```text
 <tr><td>&nbsp; SEOJK 19-2022.pdf &nbsp; <a href='/Web/ViewPeraturan/DownloadDokumen/61e9d691-dfeb-9ea2-8b38-42696bfad8e9'>Unduh</a></td></tr>
 ```
-Hal ini membuktikan terjadinya **anomali relasi / tautan salah di database portal sumber JDIH OJK**:
-Identifier GUID `61e9d691...` yang bertindak sebagai ID entitas induk pada regulasi `21/SEOJK.04/2021` secara keliru dipakai ulang sebagai ID dokumen unduhan pada regulasi `19/SEOJK.07/2022`, sementara halaman detail `21/SEOJK.04/2021` tertinggal tanpa lampiran berkas resmi.
 
-### 6.4 Investigasi 22 PDF Tanpa Ukuran (`size_source="unknown"`) & Pemetaan doc_kind Baru
+Pemeriksaan langsung terhadap berkas fisik hasil unduh dari URL `https://jdih.ojk.go.id/Web/ViewPeraturan/DownloadDokumen/61e9d691-dfeb-9ea2-8b38-42696bfad8e9` (ukuran: 472.176 bytes, nama berkas unduhan: `SEOJK 19-2022.pdf`) pada halaman pertama mengonfirmasi:
+- **Salinan & Instansi:** `SALINAN SURAT EDARAN OTORITAS JASA KEUANGAN REPUBLIK INDONESIA`
+- **Nomor Regulasi:** `NOMOR 19/SEOJK.07/2022`
+- **Tentang:** `TATA CARA PENYUSUNAN RENCANA KERJA DAN ANGGARAN TAHUNAN LEMBAGA ALTERNATIF PENYELESAIAN SENGKETA SEKTOR JASA KEUANGAN`
+- **Tujuan Surat:** `Yth. 1. Pengurus Lembaga Alternatif Penyelesaian Sengketa Sektor Jasa Keuangan; 2. Direksi/Pengurus Asosiasi di sektor jasa keuangan; dan 3. Direksi/Pengurus Pelaku Usaha Jasa Keuangan, di tempat.`
+
+Hasil pemeriksaan berkas fisik ini mengindikasikan dan membuktikan secara nyata bahwa dokumen yang tersimpan di endpoint tersebut memang berkas resmi milik `19/SEOJK.07/2022`, bukan `21/SEOJK.04/2021`.
+Terjadi **anomali relasi / tautan salah di database portal sumber JDIH OJK**: Identifier GUID `61e9d691...` yang bertindak sebagai ID entitas induk pada regulasi `21/SEOJK.04/2021` secara keliru dipakai ulang sebagai ID dokumen unduhan pada regulasi `19/SEOJK.07/2022`, sementara halaman detail `21/SEOJK.04/2021` tertinggal tanpa lampiran berkas resmi (`regulations_without_files = 1`).
+
+### 6.4 Investigasi 22 PDF Tanpa Ukuran (`size_source="unknown"`) & Konsistensi doc_kind Lintas Sumber (Langkah 10h)
 - **Status Unduh Dokumen JDIH:** **PDF dapat diunduh: 1.630 dari 1.652 berkas**.
-- **Pembaruan Pemetaan `doc_kind` JDIH (Langkah 10g):**
-  Berkas bernama `Ringkasan ...` (187 berkas pada CSV JDIH, 181 sebelumnya berlabel `utama`, 5 berlabel `abstrak`, 1 berlabel `faq`) kini seluruhnya dipetakan ke peran dokumen `abstrak`.
-  - Sebaran doc_kind lama: `{'utama': 1231, 'abstrak': 219, 'faq': 202}`
-  - **Sebaran doc_kind baru:** `{'utama': 1050, 'abstrak': 400, 'faq': 202}` (181 berkas beralih dari `utama` ke `abstrak`).
+- **Aturan `summary` & `ringkasan` pada `determine_doc_kind` (Langkah 10h):**
+  Aturan deteksi peran dokumen `abstrak` diperluas untuk mengenali kata `"summary"` (kata utuh maupun awalan `"SUMMARY "`) serta `"ringkasan"`, dengan tetap mempertahankan hierarki prioritas `non_regulasi > lampiran > faq > abstrak > utama`.
+- **Sebaran `doc_kind` Lintas Sumber Data Pasca-Regenerasi (Tanpa Scan Ulang):**
+  - **Portal Regulasi OJK (`scan-benchmark-ojk.csv`):**
+    - Sebaran lama: `{'utama': 1935, 'abstrak': 225, 'faq': 387, 'lampiran': 118}`
+    - **Sebaran baru:** `{'utama': 1650, 'abstrak': 509, 'faq': 387, 'lampiran': 119}` (285 berkas beralih dari `utama` ke `abstrak` berkat pengenalan `ringkasan` dan `summary`).
+  - **OneDrive Public DPEA (`scan-benchmark-onedrive.csv`):**
+    - Sebaran lama: `{'utama': 2296, 'abstrak': 157, 'faq': 156, 'non_regulasi': 7, 'lampiran': 3}`
+    - **Sebaran baru:** `{'utama': 2295, 'abstrak': 158, 'faq': 156, 'non_regulasi': 7, 'lampiran': 3}` (1 berkas beralih ke `abstrak`).
+  - **Portal JDIH OJK (`scan-benchmark-jdih.csv`):**
+    - **Sebaran:** `{'utama': 1050, 'abstrak': 400, 'faq': 202}`.
 - Sebanyak 22 berkas lampiran/ringkasan lama tertentu mengembalikan **HTTP 500 Internal Server Error** (dengan badan respons HTML) saat diakses oleh crawler pada endpoint dokumen lampiran JDIH (`https://jdih.ojk.go.id/Web/ViewPeraturan/DownloadDokumen/<UUID>`), sehingga crawler mencatat `size_bytes = None` dan `size_source = "unknown"`.
 
 Berikut adalah daftar lengkap status HTTP hasil pengujian langsung terhadap seluruh 22 UUID dokumen:
@@ -322,13 +340,14 @@ venv\Lib\site-packages\starlette\testclient.py:53
     _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-212 passed, 1 skipped, 2 warnings in 169.17s (0:02:49)
+212 passed, 1 skipped, 2 warnings in 223.30s (0:03:43)
 ```
 
 ### 7.4 Log Commit Terakhir (`git log --oneline -5`)
+*(Log sebelum commit laporan ini)*
 ```text
 PS C:\Users\IBUCOMP\Downloads\hero-backend> git log --oneline -5
-e22486a feat(crawler): map JDIH ringkasan to abstrak and complete step10g security & report
+a88a4c8 feat(crawler): map JDIH ringkasan to abstrak and complete step10g security & report
 54996b5 docs(report): koreksi laporan langkah 10e dan redaksi formDigestValue fixture
 1b6171b feat(crawler): add onedrive vs ojk matcher and step10e verification report
 39b2d97 fix(crawler): resolve onedrive regex regression for regulation numbers and strip index prefixes
@@ -339,9 +358,9 @@ d956629 fix(security): sanitize onedrive share url and redact personnel metadata
 
 ## 8. Kesimpulan & Status Akhir
 
-1. Seluruh tautan sensitif, kredensial OneDrive, 3 formDigestValue HTML fixture, dan nama personil telah dibersihkan secara permanen dari HEAD dan riwayat commit.
+1. Seluruh tautan sensitif, kredensial OneDrive, 3 formDigestValue HTML fixture, dan nama personil telah dibersihkan secara permanen dari HEAD dan riwayat commit (terverifikasi 0 objek pada git cat-file dan git fsck bersih).
 2. Regresi parser OneDrive berhasil diselesaikan dengan 0 match warning dan penjelasan transparan atas 7 nomor false-positive dari Langkah 10c.
 3. Seluruh angka benchmark dan pencocokan telah dihitung secara matematis dan diverifikasi dari CSV/cache aktif.
-4. Pemetaan `Ringkasan ...` ke `doc_kind: abstrak` pada JDIH berhasil diterapkan (181 berkas dipindahkan ke abstrak, total abstrak menjadi 400).
-5. Investigasi teknis JDIH membuktikan rekod tanpa lampiran (1 rekod hilang) dan kendala HTTP 500 server JDIH pada 22 berkas lama.
+4. Konsistensi `doc_kind` lintas sumber berhasil dicapai dengan penambahan pengenalan `"summary"` dan `"ringkasan"` ke peran `abstrak` (OJK: 1.650 utama, 509 abstrak, 387 faq, 119 lampiran; OneDrive: 2.295 utama, 158 abstrak, 156 faq, 7 non-regulasi, 3 lampiran; JDIH: 1.050 utama, 400 abstrak, 202 faq).
+5. Investigasi teknis JDIH dan inspeksi langsung berkas fisik `DownloadDokumen/61e9d691...` membuktikan isi fisik adalah `19/SEOJK.07/2022` (bukan 21/SEOJK.04/2021), mengindikasikan anomali relasi pada CMS sumber, dan mencatat `regulations_without_files = 1` dengan selisih ground truth dihitung serentak dari 985 dan 986 rekod.
 6. Kode backend dan dokumentasi laporan berada dalam kondisi stabil dan terverifikasi penuh.
