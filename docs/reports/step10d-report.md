@@ -17,11 +17,11 @@
 ## §1. Keamanan Fixture & Sanitasi Riwayat Git
 
 ### 1.1 Redaksi Berkas Fixture
-Berkas [onedrive_live.html](file:///c:/Users/IBUCOMP/Downloads/hero-backend/tests/fixtures/live_snapshots/onedrive_live.html) dibersihkan dari informasi sensitif:
+Berkas [onedrive_live.html](tests/fixtures/live_snapshots/onedrive_live.html) dibersihkan dari informasi sensitif:
 - `AccessToken` & `rtFa` -> `"REDACTED_ACCESS_TOKEN"` / `"REDACTED"`
 - `formDigestValue` -> `"REDACTED_FORM_DIGEST_VALUE"`
 - `mySiteOwner` & `webTitle` -> `"REDACTED_OWNER@example.com"` & `"REDACTED_PERSON"`
-- Struktur JSON DOM SharePoint dipertahankan secara utuh sehingga pengujian ekstraksi token dan metadata ([S12](file:///c:/Users/IBUCOMP/Downloads/hero-backend/tests/test_crawler_robust.py)) tetap lulus 100%.
+- Struktur JSON DOM SharePoint dipertahankan secara utuh sehingga pengujian ekstraksi token dan metadata ([S12](tests/test_crawler_robust.py)) tetap lulus 100%.
 
 ### 1.2 Pembersihan Riwayat Git (Git Filter-Repo)
 Prosedur pembersihan:
@@ -44,12 +44,12 @@ Tabel berikut dihasilkan langsung oleh runner benchmark `scripts/scan_benchmark.
 
 | Sumber Data | Adapter | Batas Paging | Halaman / Folder Terakhir | Regulasi | PDF | Lengkap Metadata Hukum | Match Warnings | Ground Truth | Selisih | Durasi | Requests | Status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| **Regulasi OJK** | `sharepoint_postback` | penuh (max=500) | 158 | 1.577 | 2.665 | 2.665 / 2.665 (100.0%) | 25 | ± 1.700 regulasi | -123 (terhadap estimasi mitra ± 1.700) | 3017.22s | 4.400 | Sukses |
+| **Regulasi OJK** | `sharepoint_postback` | penuh (max=500) | 158 | 1.577 | 2.665 | 2.665 / 2.665 (100.0%) | 25 | ± 1.700 regulasi | -123 (Berdasarkan repositori aktif) | 3017.22s | 4.400 | Sukses |
 | **JDIH OJK** | `jdih_api` | penuh (max=200) | 20 | 985 | 1.652 | 1.652 / 1.652 (100.0%) | 67 | ± 400–500 regulasi | +535 (Di atas rentang mitra 400–500) | 837.12s | 2.680 | Sukses |
 | **OneDrive Public DPEA** | `onedrive_share` | penuh (max=1000) | 5 | 2.619 | 2.619 | 2.086 / 2.619 (79.6%) | 2 | Belum ada dari mitra | Belum ada dari mitra | 6.98s | 11 | Sukses |
 
 ### Rumus Perhitungan Selisih:
-- **Regulasi OJK:** $\text{Selisih} = \text{Regulasi Ditemukan} - \text{Ground Truth} = 1.577 - 1.700 = -123$ (Berada dalam rentang wajar estimasi mitra ± 1.700).
+- **Regulasi OJK:** $\text{Selisih} = \text{Regulasi Ditemukan} - \text{Ground Truth} = 1.577 - 1.700 = -123$ (estimasi mitra ± 1.700).
 - **JDIH OJK:** $\text{Selisih} = \text{Regulasi Ditemukan} - \text{Ground Truth (Titik Tengah 450)} = 985 - 450 = +535$ (Di atas rentang mitra 400–500).
 - **OneDrive Public DPEA:** Ground truth belum disediakan oleh mitra DPEA OJK (folder publik berisi berkas repositori kerja).
 
@@ -60,7 +60,7 @@ Tabel berikut dihasilkan langsung oleh runner benchmark `scripts/scan_benchmark.
 ### 3.1 Eliminasi Positif Palsu (180 $\rightarrow$ 2 Warnings)
 Pada Langkah 10c, OneDrive menghasilkan 180 `match_warning` yang 178 di antaranya merupakan *false positive* karena nomor regulasi lama pada judul perubahan/pencabutan (mis. *"PERUBAHAN ... NOMOR 33 SEDK.02 2013"*) dibandingkan dengan nomor regulasi induk berkas itu sendiri.
 
-Perbaikan di [url_utils.py](file:///c:/Users/IBUCOMP/Downloads/hero-backend/app/crawlers/url_utils.py):
+Perbaikan di [url_utils.py](app/crawlers/url_utils.py):
 1. **Pemisahan `main_part`:** Nama berkas dipisahkan sebelum kata kunci `PERUBAHAN`, `PENCABUTAN`, dan `TENTANG` untuk mengekstrak nomor dan tahun regulasi utama yang tepat.
 2. **Pembersihan URL/SharePoint Encodings (`clean_onedrive_filename`):**
    - Penanganan hex SharePoint `_202025` $\rightarrow$ `2025` (tahun 4-digit).
@@ -126,7 +126,7 @@ Menggunakan normalizer jenis, nomor, dan tahun yang sama antara berkas OneDrive 
 ## §6. Penyelidikan JDIH OJK (985 Rekod & 22 PDF Tanpa Ukuran)
 
 ### 6.1 Mengapa JDIH (985) Berada di Atas Estimasi Mitra (400–500)?
-Berdasarkan analisis distribusi data [scan-benchmark-jdih.csv](file:///c:/Users/IBUCOMP/Downloads/hero-backend/docs/reports/scan-benchmark-jdih.csv):
+Berdasarkan analisis distribusi data [scan-benchmark-jdih.csv](docs/reports/scan-benchmark-jdih.csv):
 - **Sebaran Jenis Regulasi JDIH:**
   - `POJK`: **565 regulasi**
   - `SEOJK`: **392 regulasi**
@@ -148,7 +148,7 @@ Berdasarkan analisis distribusi data [scan-benchmark-jdih.csv](file:///c:/Users/
   - Crawler secara aman menandai `size_source=None` tanpa menggugurkan proses scan (Error: 0).
 
 ### 6.4 Penandaan Dokumen Awalan Lampiran (Koreksi Kecil)
-Berkas dengan nama seperti `"Lampiran SP - FAQ Ketentuan POJK.pdf"` kini diprioritaskan sebagai `doc_kind="lampiran"` (bukan `faq`), karena penanda `Lampiran` di awal nama dokumen menunjukkan sifat dokumen sebagai berkas lampiran pendukung. Pengujian [T03](file:///c:/Users/IBUCOMP/Downloads/hero-backend/tests/test_crawler_robust.py) telah ditambahkan dan lulus.
+Berkas dengan nama seperti `"Lampiran SP - FAQ Ketentuan POJK.pdf"` kini diprioritaskan sebagai `doc_kind="lampiran"` (bukan `faq`), karena penanda `Lampiran` di awal nama dokumen menunjukkan sifat dokumen sebagai berkas lampiran pendukung. Pengujian [T03](tests/test_crawler_robust.py) telah ditambahkan dan lulus.
 
 ---
 
