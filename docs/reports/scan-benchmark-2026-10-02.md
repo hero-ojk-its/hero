@@ -1,4 +1,4 @@
-# Hasil Live Scan Benchmark — HERO Backend (Langkah 10d)
+# Hasil Live Scan Benchmark — HERO Backend (Langkah 10e)
 
 > **Tanggal Pengujian:** 02 October 2026 15:35:28 WIB  
 > **Metode:** Uji live benchmark penuh ke endpoint publik internet (tanpa Playwright / browser headless).
