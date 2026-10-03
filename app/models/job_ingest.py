@@ -44,6 +44,13 @@ class JobIngest(Base):
         nullable=True,
         comment="FK ke baris ingest_failures jika job ini merupakan retry",
     )
+    category_id = Column(
+        Integer,
+        ForeignKey("categories.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="FK ke kategori target KB",
+    )
     started_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),

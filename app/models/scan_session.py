@@ -159,6 +159,13 @@ class ScanSession(Base):
         nullable=True,
         comment="Pemisah komponen penamaan berkas",
     )
+    category_id = Column(
+        Integer,
+        ForeignKey("categories.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="FK ke kategori target KB saat penarikan dokumen",
+    )
     pull_job_id = Column(
         Integer,
         ForeignKey("job_ingest.id", ondelete="SET NULL"),

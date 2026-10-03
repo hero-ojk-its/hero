@@ -96,7 +96,7 @@ class ScanCandidate(Base):
         comment="Jenis regulasi ternormalisasi",
     )
     bidang = Column(
-        String(100),
+        String(150),
         nullable=True,
         comment="Sektor/bidang regulasi yang terbaca dari situs",
     )
