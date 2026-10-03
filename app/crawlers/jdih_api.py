@@ -38,6 +38,7 @@ from app.crawlers.url_utils import (
     determine_doc_kind,
     normalize_crawler_regulation_type,
     validate_regulation_filename_match,
+    normalize_bidang,
 )
 
 logger = logging.getLogger("hero.crawler.jdih_api")
@@ -334,9 +335,8 @@ class JdihApiCrawler:
                         reg_num = None
 
                     # Kolom 2: Sektor -> bidang
-                    bidang = str(row[2]).strip() if len(row) > 2 and row[2] is not None else None
-                    if bidang in ("None", "", "-"):
-                        bidang = None
+                    raw_bidang = str(row[2]).strip() if len(row) > 2 and row[2] is not None else None
+                    bidang = normalize_bidang(raw_bidang) if raw_bidang not in ("None", "", "-") else None
 
                     # Kolom 5: Jenis regulasi (dukung inferensi dari judul untuk kategori gabungan)
                     raw_jenis = str(row[5]).strip() if len(row) > 5 and row[5] is not None else None

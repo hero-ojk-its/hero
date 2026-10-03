@@ -39,6 +39,7 @@ from app.crawlers.url_utils import (
     determine_doc_kind,
     normalize_crawler_regulation_type,
     validate_regulation_filename_match,
+    normalize_bidang,
 )
 
 logger = logging.getLogger("hero.crawler.sharepoint_postback")
@@ -305,7 +306,7 @@ class SharepointPostbackCrawler:
         if not sektor_m:
             sektor_m = re.search(r"(?:Sektor)\s*:\s*([^\r\n<]+)", clean_plain, re.IGNORECASE)
         if sektor_m:
-            bidang = html.unescape(sektor_m.group(1)).strip()
+            bidang = normalize_bidang(html.unescape(sektor_m.group(1)).strip())
 
         sub_m = re.search(r"Sub\s*Sektor\s*:\s*<span[^>]*>([^<]+)</span>", html_text, re.IGNORECASE)
         if not sub_m:
@@ -333,8 +334,29 @@ class SharepointPostbackCrawler:
             if det_tgl_m:
                 rel_date = _parse_indonesian_date(det_tgl_m.group(1))
 
+        # Ekstraksi tahun dari nomor atau judul untuk fallback release_date (seperti JDIH di 10c)
+        parsed_year = None
+        if nomor_reg:
+            ym = re.search(r"\b(19\d\d|20\d\d)\b", nomor_reg)
+            if ym:
+                parsed_year = int(ym.group(1))
+        if not parsed_year and title:
+            ym = re.search(r"\b(19\d\d|20\d\d)\b", title)
+            if ym:
+                parsed_year = int(ym.group(1))
+
         if not rel_date:
-            rel_date = eff_date
+            if eff_date:
+                # Bila eff_date melompat tahun ke masa depan dibanding tahun regulasi, gunakan tahun regulasi
+                if parsed_year and eff_date.year > parsed_year:
+                    rel_date = date(parsed_year, 1, 1)
+                else:
+                    rel_date = eff_date
+            elif parsed_year:
+                rel_date = date(parsed_year, 1, 1)
+        elif parsed_year and rel_date.year > parsed_year:
+            # Bila rel_date terisi dari tanggal berlaku masa depan padahal nomor regulasi bertahun lebih awal
+            rel_date = date(parsed_year, 1, 1)
 
         # Jika jenis/nomor belum dapat, ekstrak dari slug URL atau judul
         if not jenis_reg:

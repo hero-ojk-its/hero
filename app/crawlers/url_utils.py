@@ -606,15 +606,39 @@ def parse_onedrive_filename_metadata(filename: str) -> Dict[str, Any]:
                 num_str = str(int(t))
                 break
 
-    if not reg_type and not num_str and not year:
+    formatted_reg_num = None
+    if sk_m and num_str and ('-' in num_str or '/' in num_str):
+        formatted_reg_num = num_str
+    elif reg_type and num_str and year:
+        formatted_reg_num = f"{reg_type} {num_str} Tahun {year}"
+
+    if not reg_type and not formatted_reg_num and not year:
         return {}
 
     return {
         "regulation_type": reg_type,
-        "regulation_number": num_str,
+        "regulation_number": formatted_reg_num,
         "release_year": year,
         "release_date": None,  # Kosongkan release_date placeholder (Butir 4)
     }
+
+
+def normalize_bidang(bidang: Optional[str]) -> Optional[str]:
+    """
+    Normalisasi spasi dan koma pada nama bidang/sektor regulasi:
+    - trim spasi di awal dan akhir
+    - rapatkan spasi ganda
+    - hapus spasi sebelum koma (misal: 'Penjaminan , dan' -> 'Penjaminan, dan')
+    - pastikan tepat satu spasi setelah koma
+    """
+    if not bidang:
+        return None
+    val = re.sub(r'\s+', ' ', str(bidang)).strip()
+    val = re.sub(r'\s+,', ',', val)
+    val = re.sub(r',\s*', ', ', val).strip()
+    if val.endswith(','):
+        val = val[:-1].strip()
+    return val or None
 
 
 

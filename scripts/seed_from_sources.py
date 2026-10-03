@@ -50,7 +50,7 @@ DEFAULT_SOURCES_SPEC = {
         "source_type": "situs_web",
         "url": "https://jdih.ojk.go.id/",
         "crawl_depth": 1,
-        "max_pages": 2,
+        "max_pages": 4,
         "is_jdih": True,
     },
     "onedrive": {
@@ -177,10 +177,12 @@ def select_diverse_candidates(candidates: List[dict], n: int, is_jdih: bool = Fa
     for c in pool:
         if c["id"] in seen_ids:
             continue
+        rel_date_raw = str(c.get("release_date") or "")
+        rel_year = rel_date_raw[:4] if len(rel_date_raw) >= 4 and rel_date_raw[:4].isdigit() else "N/A"
         key = (
             str(c.get("bidang") or "Umum"),
             str(c.get("regulation_type") or "Lainnya"),
-            str(c.get("release_year") or "N/A"),
+            rel_year,
         )
         buckets.setdefault(key, []).append(c)
 
@@ -345,7 +347,8 @@ def main():
             bidang_str = dc.get("bidang") or "-"
             status_str = dc.get("status_keberlakuan") or "-"
             jenis_str = dc.get("regulation_type") or "-"
-            tahun_str = str(dc.get("release_year") or "-")
+            rel_date_raw = str(dc.get("release_date") or "")
+            tahun_str = rel_date_raw[:4] if len(rel_date_raw) >= 4 and rel_date_raw[:4].isdigit() else "-"
             nomor_str = dc.get("regulation_number") or "-"
             print(f"          {idx:02d}. [ID:{dc['id']}] {nomor_str} ({jenis_str}, {tahun_str}) | Bidang: {bidang_str} | Status: {status_str}")
 
