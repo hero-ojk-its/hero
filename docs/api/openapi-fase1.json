@@ -2240,6 +2240,28 @@
         }
       }
     },
+    "/api/v1/scraping-sources/folder-options": {
+      "get": {
+        "tags": [
+          "Scraping Sources"
+        ],
+        "summary": "Daftar opsi folder lokal yang tersedia",
+        "description": "[US-16] Mengembalikan subfolder di dalam local_source_roots sampai kedalaman 2:\npath, name, pdf_count, already_registered_source_id.\nPath di luar root dan symlink yang keluar dari root tidak boleh bocor.",
+        "operationId": "get_folder_options_api_v1_scraping_sources_folder_options_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderOptionsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/scraping-sources/{source_id}": {
       "get": {
         "tags": [
@@ -4771,6 +4793,58 @@
         ],
         "title": "FailureStatusUpdateRequest"
       },
+      "FolderOptionItem": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "pdf_count": {
+            "type": "integer",
+            "title": "Pdf Count"
+          },
+          "already_registered_source_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Already Registered Source Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "name",
+          "pdf_count"
+        ],
+        "title": "FolderOptionItem",
+        "description": "Item subfolder lokal yang tersedia untuk didaftarkan sebagai sumber folder lokal"
+      },
+      "FolderOptionsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FolderOptionItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "FolderOptionsResponse",
+        "description": "Daftar subfolder yang tersedia dari direktori akar lokal"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -6015,6 +6089,18 @@
             "$ref": "#/components/schemas/TujuanTarik",
             "description": "Tujuan penarikan: 'knowledge_base' atau 'unduh_folder'"
           },
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id",
+            "description": "ID kategori target di Knowledge Base"
+          },
           "naming_format": {
             "anyOf": [
               {
@@ -6269,6 +6355,17 @@
               }
             ],
             "title": "Pull Job Id"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
           },
           "pull_progress": {
             "anyOf": [
@@ -6674,6 +6771,18 @@
       },
       "ScrapingSourceRunRequest": {
         "properties": {
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id",
+            "description": "ID kategori target di Knowledge Base"
+          },
           "naming_format": {
             "anyOf": [
               {

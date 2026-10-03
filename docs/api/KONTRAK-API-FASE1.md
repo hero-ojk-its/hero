@@ -339,6 +339,7 @@ Mendukung pendaftaran situs web dan folder lokal sebagai sumber regulasi.
   "naming_format": null,
   "naming_separator": null,
   "pull_job_id": null,
+  "category_id": null,
   "pull_progress": null,
   "download_url": null,
   "claimed_at": null,
