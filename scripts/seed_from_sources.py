@@ -141,14 +141,28 @@ def run_reset(repo_root: Path) -> None:
     print("[RESET KONFIRMASI] Operasional database dan berkas staging fisik telah dikosongkan secara bersih.\n")
 
 
-def select_diverse_candidates(candidates: List[dict], n: int, is_jdih: bool = False) -> List[dict]:
+def select_diverse_candidates(
+    candidates: List[dict],
+    n: int,
+    is_jdih: bool = False,
+    status_filter: Optional[str] = None,
+) -> List[dict]:
     """
     Memilih n kandidat beragam berdasarkan doc_kind == 'utama', bidang, jenis regulasi,
-    tahun penetapan, dan status keberlakuan (khusus JDIH).
+    tahun penetapan, dan status keberlakuan.
+    Wajib melewati kandidat match_status != 'baru' dan kandidat yang sudah ditarik.
     """
     cands = [c for c in candidates if c.get("doc_kind") == "utama"]
-    baru_cands = [c for c in cands if c.get("match_status") == "baru"]
-    pool = baru_cands if baru_cands else cands
+    # Seleksi harus melewati kandidat match_status != 'baru' dan yang sudah ditarik
+    pool = [
+        c for c in cands
+        if c.get("match_status") == "baru" and c.get("pull_outcome") not in ("berhasil", "duplikat")
+    ]
+
+    # Filter status keberlakuan spesifik jika diminta
+    if status_filter:
+        allowed = [s.strip().lower() for s in status_filter.split(",") if s.strip()]
+        pool = [c for c in pool if (c.get("status_keberlakuan") or "").lower() in allowed]
 
     if not pool:
         return []
@@ -158,8 +172,8 @@ def select_diverse_candidates(candidates: List[dict], n: int, is_jdih: bool = Fa
     selected: List[dict] = []
     seen_ids = set()
 
-    # Khusus JDIH: jamin perwakilan status non-berlaku (dicabut, diubah)
-    if is_jdih:
+    # Khusus JDIH tanpa status_filter spesifik: jamin perwakilan status non-berlaku (dicabut, diubah)
+    if is_jdih and not status_filter:
         by_status: Dict[str, List[dict]] = {}
         for c in pool:
             st = c.get("status_keberlakuan") or "tidak_diketahui"
@@ -220,6 +234,8 @@ def main():
     parser.add_argument("--sources", type=str, default="ojk,jdih,onedrive", help="Daftar sumber dipisah koma (default: ojk,jdih,onedrive).")
     parser.add_argument("--naming-format", type=str, default="nama,jenis,tahun", help="Format penamaan baku KB (default: nama,jenis,tahun).")
     parser.add_argument("--reset", action="store_true", help="Jalankan demo_reset.py sebelum seeding.")
+    parser.add_argument("--append", action="store_true", help="Tambahkan dokumen baru ke KB tanpa me-reset database.")
+    parser.add_argument("--status", type=str, default=None, help="Filter status keberlakuan kandidat (misal: diubah, berlaku, dicabut).")
     parser.add_argument("--base-url", type=str, default="http://127.0.0.1:8000", help="Base URL REST API server (default: http://127.0.0.1:8000).")
     args = parser.parse_args()
 
@@ -231,12 +247,17 @@ def main():
     print(f"Base API URL   : {args.base_url}")
     print(f"Target Sumber  : {', '.join(active_sources)}")
     print(f"Per Sumber     : {args.per_source} dokumen")
+    print(f"Filter Status  : {args.status or 'semua'}")
     print(f"Format Penamaan: {naming_components}")
+    print(f"Mode Append    : {'Ya' if args.append else 'Tidak'}")
     print(f"Reset Database : {'Ya' if args.reset else 'Tidak'}")
     print("=================================================================")
 
-    # 1. Eksekusi Reset jika diminta
+    # 1. Eksekusi Reset jika diminta (dilarang bila mode append aktif)
     if args.reset:
+        if args.append:
+            print("[ERROR] Opsi --reset tidak dapat digunakan bersamaan dengan --append!")
+            sys.exit(1)
         run_reset(REPO_ROOT)
 
     # 2. Cek Kesehatan API Server
@@ -295,48 +316,79 @@ def main():
             source_id = create_res["id"]
             print(f"  [1/4] Sumber berhasil didaftarkan (Source ID: {source_id}).")
 
-        # 4.2 Mulai Pemindaian (Scan)
-        print(f"  [2/4] Menjadwalkan pemindaian (POST /api/v1/scans/, depth={crawl_depth}, max_pages={max_pages})...")
-        scan_payload = {
-            "source_id": source_id,
-            "crawl_depth": crawl_depth,
-            "max_pages": max_pages,
-        }
-        code, scan_res = http_request(args.base_url, "POST", "/api/v1/scans/", scan_payload, timeout=60)
-        if code not in (200, 201, 202) or not isinstance(scan_res, dict):
-            print(f"  [GAGAL] Pemindaian gagal dimulai (HTTP {code}): {scan_res}")
-            continue
+        # 4.2 Mulai Pemindaian (Scan) atau Gunakan Sesi Terakhir (Append)
+        scan_id = None
+        if args.append:
+            code, s_scans = http_request(args.base_url, "GET", f"/api/v1/scans/?source_id={source_id}")
+            items_scans = s_scans.get("items", []) if isinstance(s_scans, dict) else []
+            valid_scans = [s for s in items_scans if s.get("status") in ("siap_dipilih", "selesai")]
+            if valid_scans:
+                scan_id = valid_scans[0]["id"]
+                print(f"  [2/4] Mode append: Menggunakan sesi pemindaian eksisting (Scan #{scan_id}, Status: {valid_scans[0].get('status')}).")
 
-        scan_id = scan_res.get("id") or scan_res.get("scan_id")
-        scan_status = scan_res.get("status")
+        if not scan_id:
+            print(f"  [2/4] Menjadwalkan pemindaian (POST /api/v1/scans/, depth={crawl_depth}, max_pages={max_pages})...")
+            scan_payload = {
+                "source_id": source_id,
+                "crawl_depth": crawl_depth,
+                "max_pages": max_pages,
+            }
+            code, scan_res = http_request(args.base_url, "POST", "/api/v1/scans/", scan_payload, timeout=60)
+            if code not in (200, 201, 202) or not isinstance(scan_res, dict):
+                print(f"  [GAGAL] Pemindaian gagal dimulai (HTTP {code}): {scan_res}")
+                continue
 
-        # Safeguard jika masih memindai (polling)
-        poll_count = 0
-        while scan_status in ("antrian", "memindai"):
-            time.sleep(2)
-            poll_count += 1
-            code, poll_res = http_request(args.base_url, "GET", f"/api/v1/scans/{scan_id}")
-            if code == 200 and isinstance(poll_res, dict):
-                scan_status = poll_res.get("status")
-                scan_res = poll_res
-                pages = poll_res.get("pages_visited", 0)
-                c_cnt = poll_res.get("candidates_summary", {}).get("total", 0)
-                if poll_count % 5 == 0:
-                    print(f"        [Memindai...] Halaman: {pages}, Kandidat: {c_cnt}")
-            if poll_count > 300:  # batas maksimal 10 menit
-                print(f"        [TIMEOUT] Waktu tunggu pemindaian melebihi batas 10 menit.")
+            scan_id = scan_res.get("id") or scan_res.get("scan_id")
+            scan_status = scan_res.get("status")
+
+            # Safeguard jika masih memindai (polling)
+            poll_count = 0
+            while scan_status in ("antrian", "memindai"):
+                time.sleep(2)
+                poll_count += 1
+                code, poll_res = http_request(args.base_url, "GET", f"/api/v1/scans/{scan_id}")
+                if code == 200 and isinstance(poll_res, dict):
+                    scan_status = poll_res.get("status")
+                    scan_res = poll_res
+                    pages = poll_res.get("pages_visited", 0)
+                    c_cnt = poll_res.get("candidates_summary", {}).get("total", 0)
+                    if poll_count % 5 == 0:
+                        print(f"        [Memindai...] Halaman: {pages}, Kandidat: {c_cnt}")
+                if poll_count > 300:  # batas maksimal 10 menit
+                    print(f"        [TIMEOUT] Waktu tunggu pemindaian melebihi batas 10 menit.")
+                    break
+
+            total_cands = scan_res.get("candidates_summary", {}).get("total", 0) if isinstance(scan_res.get("candidates_summary"), dict) else 0
+            print(f"        Pemindaian selesai (Scan #{scan_id}, Status: {scan_status}). Total kandidat PDF ditemukan: {total_cands}")
+
+        # 4.3 Ambil Seluruh Kandidat melalui Paginasi
+        candidate_items = []
+        skip_offset = 0
+        page_limit = 100
+        while True:
+            code, cands_resp = http_request(
+                args.base_url,
+                "GET",
+                f"/api/v1/scans/{scan_id}/candidates?skip={skip_offset}&limit={page_limit}",
+            )
+            if code != 200 or not isinstance(cands_resp, dict):
+                break
+            items = cands_resp.get("items", [])
+            candidate_items.extend(items)
+            total_cand_count = cands_resp.get("total", len(candidate_items))
+            skip_offset += len(items)
+            if not items or skip_offset >= total_cand_count:
                 break
 
-        total_cands = scan_res.get("candidates_summary", {}).get("total", 0) if isinstance(scan_res.get("candidates_summary"), dict) else 0
-        print(f"        Pemindaian selesai (Scan #{scan_id}, Status: {scan_status}). Total kandidat PDF ditemukan: {total_cands}")
-
-        # 4.3 Ambil Daftar Kandidat
-        code, cands_resp = http_request(args.base_url, "GET", f"/api/v1/scans/{scan_id}/candidates?limit=200")
-        candidate_items = cands_resp.get("items", []) if isinstance(cands_resp, dict) else []
-        print(f"  [3/4] Menganalisis {len(candidate_items)} kandidat berkas...")
+        print(f"  [3/4] Menganalisis total {len(candidate_items)} kandidat berkas...")
 
         # 4.4 Pilih N Kandidat Bervariasi (hanya doc_kind == 'utama')
-        diverse_cands = select_diverse_candidates(candidate_items, args.per_source, is_jdih=is_jdih)
+        diverse_cands = select_diverse_candidates(
+            candidate_items,
+            args.per_source,
+            is_jdih=is_jdih,
+            status_filter=args.status,
+        )
         if not diverse_cands:
             print(f"        [PERINGATAN] Tidak ada kandidat 'utama' yang dapat ditarik untuk {s_key}.")
             continue
@@ -389,11 +441,29 @@ def main():
                 print(f"        [TIMEOUT] Waktu tunggu penarikan melebihi batas 10 menit.")
                 break
 
-        # Ambil statistik penarikan dari kandidat
-        code, updated_cands_resp = http_request(args.base_url, "GET", f"/api/v1/scans/{scan_id}/candidates?limit=200")
-        up_cands = updated_cands_resp.get("items", []) if isinstance(updated_cands_resp, dict) else []
-        pulled_success = sum(1 for c in up_cands if c.get("id") in selected_ids and c.get("pull_outcome") in ("berhasil", "success", "diunduh"))
-        print(f"        Penarikan selesai. Berhasil di-ingest ke Knowledge Base: {pulled_success}/{len(selected_ids)} dokumen.\n")
+        # Ambil statistik penarikan dari seluruh kandidat terpilih (melalui paginasi)
+        up_cands = []
+        up_skip = 0
+        while True:
+            code, u_resp = http_request(args.base_url, "GET", f"/api/v1/scans/{scan_id}/candidates?skip={up_skip}&limit=100")
+            if code != 200 or not isinstance(u_resp, dict):
+                break
+            u_items = u_resp.get("items", [])
+            up_cands.extend(u_items)
+            u_total = u_resp.get("total", len(up_cands))
+            up_skip += len(u_items)
+            if not u_items or up_skip >= u_total:
+                break
+
+        new_doc_ids = []
+        for c in up_cands:
+            if c.get("id") in selected_ids and c.get("pull_outcome") in ("berhasil", "success", "diunduh"):
+                if c.get("document_id"):
+                    new_doc_ids.append(c.get("document_id"))
+        pulled_success = len(new_doc_ids)
+        print(f"        Penarikan selesai. Berhasil di-ingest ke Knowledge Base: {pulled_success}/{len(selected_ids)} dokumen.")
+        if new_doc_ids:
+            print(f"        ID Dokumen Baru di KB: {new_doc_ids}\n")
 
         seeding_stats.append({
             "key": s_key,
