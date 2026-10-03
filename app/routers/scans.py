@@ -73,36 +73,15 @@ def _build_session_response(session: ScanSession, db: Session, request: Optional
     if session.destination == TujuanTarik.unduh_folder and session.status == StatusPindai.selesai:
         download_url = f"/api/v1/scans/{session.id}/download"
 
-    return ScanSessionResponse(
-        id=session.id,
-        source_id=session.source_id,
-        start_url=session.start_url,
-        crawl_depth=session.crawl_depth,
-        mode=session.mode,
-        crawler_name=session.crawler_name,
-        crawler_adapter=session.crawler_adapter,
-        status=session.status,
-        cancel_requested=session.cancel_requested,
-        blocked=session.blocked or False,
-        pages_visited=session.pages_visited,
-        candidates_summary=summary,
-        truncated=session.truncated,
-        stats=session.stats,
-        errors=session.errors or [],
-        error_message=session.error_message,
-        destination=session.destination,
-        naming_format=session.naming_format,
-        naming_separator=session.naming_separator,
-        pull_job_id=session.pull_job_id,
-        pull_progress=pull_prog,
-        download_url=download_url,
-        claimed_at=session.claimed_at,
-        started_at=session.started_at,
-        scanned_at=session.scanned_at,
-        finished_at=session.finished_at,
-        created_at=session.created_at,
-        updated_at=session.updated_at,
-    )
+    session_dict = {c.name: getattr(session, c.name) for c in session.__table__.columns}
+    session_dict["candidates_summary"] = summary
+    session_dict["pull_progress"] = pull_prog
+    session_dict["download_url"] = download_url
+    if session_dict.get("blocked") is None:
+        session_dict["blocked"] = False
+    if session_dict.get("errors") is None:
+        session_dict["errors"] = []
+    return ScanSessionResponse(**session_dict)
 
 
 @router.post(
@@ -272,46 +251,10 @@ def list_scan_candidates(
 
     items = []
     for c in candidates:
-        match_doc_info = None
+        cand_resp = CandidateResponse.model_validate(c)
         if c.match_document:
-            match_doc_info = CandidateMatchDocument(
-                id=c.match_document.id,
-                title=c.match_document.title,
-                regulation_number=c.match_document.regulation_number,
-            )
-
-        items.append(
-            CandidateResponse(
-                id=c.id,
-                scan_id=c.scan_id,
-                url=c.url,
-                filename=c.filename,
-                size_bytes=c.size_bytes,
-                found_on_page=c.found_on_page,
-                document_title=c.document_title,
-                detail_url=c.detail_url,
-                final_url=c.final_url,
-                doc_kind=c.doc_kind or "utama",
-                regulation_number=c.regulation_number,
-                regulation_type=c.regulation_type,
-                bidang=c.bidang,
-                sub_bidang=c.sub_bidang,
-                release_date=c.release_date,
-                size_source=c.size_source or "unknown",
-                source_path=c.source_path,
-                depth=c.depth,
-                match_status=c.match_status,
-                match_reason=c.match_reason,
-                match_document_id=c.match_document_id,
-                match_document=match_doc_info,
-                selected=c.selected,
-                pull_outcome=c.pull_outcome,
-                document_id=c.document_id,
-                failure_id=c.failure_id,
-                export_path=c.export_path,
-                message=c.message,
-            )
-        )
+            cand_resp.match_document = CandidateMatchDocument.model_validate(c.match_document)
+        items.append(cand_resp)
 
     return CandidateListResponse(items=items, total=total, skip=effective_skip, limit=limit)
 
