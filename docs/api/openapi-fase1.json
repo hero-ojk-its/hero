@@ -4025,6 +4025,17 @@
             ],
             "title": "Effective Date"
           },
+          "regulation_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Year"
+          },
           "match_warning": {
             "anyOf": [
               {
@@ -5243,6 +5254,17 @@
             ],
             "title": "Effective Date"
           },
+          "regulation_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Year"
+          },
           "match_warning": {
             "anyOf": [
               {
@@ -5915,6 +5937,17 @@
               }
             ],
             "title": "Bidang"
+          },
+          "regulation_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Year"
           }
         },
         "type": "object",
@@ -7286,6 +7319,17 @@
               }
             ],
             "title": "Release Date"
+          },
+          "regulation_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Year"
           },
           "bidang": {
             "anyOf": [

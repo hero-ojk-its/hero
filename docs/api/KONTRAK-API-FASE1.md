@@ -377,6 +377,7 @@ Mendukung pendaftaran situs web dan folder lokal sebagai sumber regulasi.
       "sub_bidang": null,
       "release_date": null,
       "effective_date": null,
+      "regulation_year": null,
       "match_warning": null,
       "status_keberlakuan": "tidak_diketahui",
       "size_source": "unknown",
@@ -410,6 +411,7 @@ Mendukung pendaftaran situs web dan folder lokal sebagai sumber regulasi.
       "sub_bidang": null,
       "release_date": null,
       "effective_date": null,
+      "regulation_year": null,
       "match_warning": null,
       "status_keberlakuan": "tidak_diketahui",
       "size_source": "unknown",
@@ -601,7 +603,7 @@ Mendukung personalisasi nama berkas sesuai urutan tombol di UI (`nama`, `tahun`,
         "placed": false,
         "reason": "metadata_belum_cukup",
         "category_path": null,
-        "standardized_filename": "POJK 10 Tahun 2026 Bank Umum_NA_NA_Perbankan.pdf"
+        "standardized_filename": "POJK 10 Tahun 2026 Bank Umum_NA_2026_Perbankan.pdf"
       }
     }
   ]
@@ -675,6 +677,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "regulation_number": "POJK 10/POJK.03/2026",
       "regulation_type": "POJK",
       "release_date": "2026-03-15",
+      "regulation_year": 2026,
       "bidang": "Perbankan",
       "access_classification": "publik",
       "document_role": "corpus_eksisting",
@@ -737,6 +740,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "regulation_number": "POJK 10/POJK.03/2026",
       "regulation_type": "POJK",
       "release_date": "2026-03-15",
+      "regulation_year": 2026,
       "bidang": "Perbankan",
       "access_classification": "publik",
       "document_role": "corpus_eksisting",
@@ -800,6 +804,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
   "regulation_number": "POJK 10/POJK.03/2026",
   "regulation_type": "POJK",
   "release_date": "2026-03-15",
+  "regulation_year": 2026,
   "bidang": "Perbankan",
   "naming_format": [
     "nama",
@@ -914,6 +919,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
   "regulation_number": "POJK 10/POJK.03/2026",
   "regulation_type": "POJK",
   "release_date": "2026-03-15",
+  "regulation_year": 2026,
   "bidang": "Perbankan",
   "naming_format": [
     "nama",
@@ -1004,7 +1010,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
     {
       "id": 2,
       "job_id": 6,
-      "original_filename": "NA Regulasi_Retry_2026 NA.pdf",
+      "original_filename": "NA Regulasi_Retry_2026 2026.pdf",
       "source_url": null,
       "failure_type": "ekstraksi_gagal",
       "reason_code": "ocr_timeout",
@@ -1075,7 +1081,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
   "failure": {
     "id": 2,
     "job_id": 6,
-    "original_filename": "NA Regulasi_Retry_2026 NA.pdf",
+    "original_filename": "NA Regulasi_Retry_2026 2026.pdf",
     "source_url": null,
     "failure_type": "ekstraksi_gagal",
     "reason_code": "ocr_timeout",
@@ -1114,7 +1120,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
 {
   "id": 2,
   "job_id": 6,
-  "original_filename": "NA Regulasi_Retry_2026 NA.pdf",
+  "original_filename": "NA Regulasi_Retry_2026 2026.pdf",
   "source_url": null,
   "failure_type": "ekstraksi_gagal",
   "reason_code": "ocr_timeout",
@@ -1182,14 +1188,9 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
     ],
     "by_year": [
       {
-        "year": null,
-        "label": "Belum diketahui",
-        "count": 1
-      },
-      {
         "year": 2026,
         "label": "2026",
-        "count": 1
+        "count": 2
       }
     ],
     "placed_documents": 1,

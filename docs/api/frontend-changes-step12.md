@@ -84,3 +84,26 @@ Pada UI modal penarikan dan registrasi scraping, pengguna dapat memilih kategori
   - Format standar: `{Jenis} {Nomor} Tahun {Tahun}` (Contoh: `POJK 3 Tahun 2015`, `PADK 19 Tahun 2015`, `SEOJK 6 Tahun 2016`, `PBI 7 Tahun 1992`, `UU 17 Tahun 2012`).
   - Format Keputusan Direksi Bank Indonesia: `27-164-KEP-DIR-1995`, `26-68-KEP-DIR-1993`.
   - Berkas tanpa informasi jenis/nomor/tahun yang meyakinkan (misal nama acak UUID `708a41f0-9685-...pdf`) dikosongkan (`null`), bukan angka parsial fiktif.
+
+---
+
+## 6. Tahun Regulasi Riil (`regulation_year`) & Perbaikan `release_date`
+Pada Langkah 12b, dilakukan koreksi penting terkait tanggal regulasi untuk mencegah "mengarang tanggal" (seperti pengisian 1 Januari semu):
+1. **`release_date` Bersih & Murni:**
+   - `release_date` hanya diisi bila tanggal **penetapan/pengundangan resmi** benar-benar tercantum di sumber dokumen.
+   - Bila tidak tercantum, `release_date` bernilai `null` (bukan fallback semu ke 1 Januari atau tanggal berlaku). Tanggal berlaku tetap disimpan di `effective_date`.
+2. **Kolom & Field Baru `regulation_year`:**
+   - Ditambahkan pada objek respons:
+     - `CandidateResponse` (`GET /api/v1/scans/{id}/candidates`)
+     - `DocumentResponse` (`GET /api/v1/documents/{id}`, `GET /api/v1/documents/`)
+     - `NamingSampleInput` (`POST /api/v1/naming/preview`)
+   - Tipe data: `integer` (nullable, e.g. `2015`, `2024`, `2026`).
+   - Urutan penentuan tahun:
+     1. Tahun dari nomor regulasi resmi (misal `POJK 3 Tahun 2015` -> `2015`).
+     2. Tahun dari judul/perihal dokumen.
+     3. Tahun dari nama berkas (misal berkas OneDrive `Peraturan_OJK_3_2015.pdf` -> `2015`).
+     4. Tahun dari `release_date` (jika tanggal penetapan ada).
+3. **Penyelarasan Komponen Sistem:**
+   - **Filter Tahun (`GET /api/v1/documents/?year={year}`):** Menyaring dokumen berdasarkan `regulation_year` (dengan fallback ke tahun `release_date`), sehingga dokumen OneDrive atau dokumen tanpa tanggal penetapan tetap dapat difilter sesuai tahun aslinya.
+   - **Statistik Dashboard (`GET /api/v1/dashboard/summary`):** Agregasi `by_year` kini menggunakan `regulation_year`, sehingga tidak ada dokumen regulasi yang hilang dari distribusi tahun.
+   - **Pratinjau & Standarisasi Nama Dokumen:** Komponen `tahun` menggunakan `regulation_year` jika `release_date` kosong, sehingga tidak menghasilkan placeholder `NA` untuk dokumen resmi yang memiliki tahun pada nomor atau nama berkasnya.
