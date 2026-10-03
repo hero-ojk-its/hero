@@ -19,6 +19,7 @@ from app.models.enums import (
     JenisSumber,
     StatusJobIngest,
 )
+from app.models.category import Category
 from app.models.ingest_failure import IngestFailure
 from app.models.job_ingest import JobIngest
 from app.models.scraping_source import ScrapingSource
@@ -51,6 +52,7 @@ class SourceRunner:
         ip_address: Optional[str] = None,
         naming_format: Optional[List[str]] = None,
         naming_separator: Optional[str] = None,
+        category_id: Optional[int] = None,
     ) -> JobIngest:
         """
         Validasi dan inisialisasi job eksekusi sumber.
@@ -83,6 +85,15 @@ class SourceRunner:
                 detail="Sumber OneDrive publik dijalankan melalui alur pindai: POST /api/v1/scans.",
             )
 
+        # Validasi kategori jika diberikan
+        if category_id is not None:
+            cat = self.db.query(Category).filter(Category.id == category_id).first()
+            if not cat:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Kategori dengan ID {category_id} tidak ditemukan.",
+                )
+
         # Cek apakah ada job yang sedang berjalan/antrian untuk sumber ini
         running_job = (
             self.db.query(JobIngest)
@@ -102,6 +113,7 @@ class SourceRunner:
         job = JobIngest(
             job_type=JenisJobIngest.sinkron_folder,
             source_id=source.id,
+            category_id=category_id,
             source_ref=source.name[:255] if source.name else None,
             triggered_by=actor_username or "manual_run",
             status=StatusJobIngest.antrian,
@@ -335,6 +347,7 @@ class SourceRunner:
                     document_role=source.default_document_role,
                     naming_format=effective_naming_format,
                     naming_separator=effective_naming_separator,
+                    category_id=job.category_id,
                 )
                 res = ingest_svc.ingest_one(job, item, options)
                 results.append(res)

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.models.category import Category
 from app.models.enums import JenisSumber, KlasifikasiAkses, PeranDokumen
 from app.models.job_ingest import JobIngest
 from app.models.scraping_source import ScrapingSource
@@ -19,6 +20,8 @@ from app.schemas.scraping_source import (
     ScrapingSourceUpdate,
     ScrapingSourceResponse,
     ScrapingSourceRunRequest,
+    FolderOptionItem,
+    FolderOptionsResponse,
     SourceFileItem,
     SourceFileListResponse,
     validate_http_url,
@@ -30,6 +33,7 @@ from app.services.audit_service import (
     UPDATE_SOURCE,
     DELETE_SOURCE,
 )
+from app.services.folder_connector import _is_hidden, _is_temp_file
 from app.services.naming_service import validate_naming_format, validate_naming_separator
 from app.services.source_runner import SourceRunner
 
@@ -220,6 +224,135 @@ def list_scraping_sources(
     if source_type is not None:
         query = query.filter(ScrapingSource.source_type == source_type)
     return query.order_by(ScrapingSource.id.asc()).all()
+
+
+@router.get(
+    "/folder-options",
+    response_model=FolderOptionsResponse,
+    summary="Daftar opsi folder lokal yang tersedia",
+)
+def get_folder_options(
+    db: Session = Depends(get_db),
+):
+    """
+    [US-16] Mengembalikan subfolder di dalam local_source_roots sampai kedalaman 2:
+    path, name, pdf_count, already_registered_source_id.
+    Path di luar root dan symlink yang keluar dari root tidak boleh bocor.
+    """
+    allowed_roots = _get_allowed_source_roots()
+    registered_sources = (
+        db.query(ScrapingSource)
+        .filter(ScrapingSource.source_type == JenisSumber.folder_lokal)
+        .all()
+    )
+    reg_map = {}
+    for s in registered_sources:
+        try:
+            reg_map[str(Path(s.url).resolve())] = s.id
+        except Exception:
+            reg_map[s.url] = s.id
+
+    options: List[FolderOptionItem] = []
+    seen_paths = set()
+
+    for root in allowed_roots:
+        if not root.exists() or not root.is_dir():
+            continue
+
+        try:
+            entries = list(root.iterdir())
+        except (PermissionError, OSError):
+            continue
+
+        for entry in sorted(entries, key=lambda x: x.name.lower()):
+            if not entry.is_dir() or _is_hidden(entry):
+                continue
+
+            try:
+                resolved_entry = entry.resolve()
+            except (PermissionError, OSError):
+                continue
+
+            try:
+                if not resolved_entry.is_relative_to(root):
+                    continue
+            except (ValueError, AttributeError):
+                try:
+                    resolved_entry.relative_to(root)
+                except ValueError:
+                    continue
+
+            p_str = str(resolved_entry)
+            if p_str in seen_paths:
+                continue
+            seen_paths.add(p_str)
+
+            pdf_count = 0
+            try:
+                pdf_count = sum(
+                    1 for f in resolved_entry.glob("*.pdf")
+                    if not _is_hidden(f) and not _is_temp_file(f.name)
+                )
+            except (PermissionError, OSError):
+                pass
+
+            options.append(
+                FolderOptionItem(
+                    path=p_str,
+                    name=entry.name,
+                    pdf_count=pdf_count,
+                    already_registered_source_id=reg_map.get(p_str),
+                )
+            )
+
+            # Kedalaman 2: subfolder di dalam entry
+            try:
+                sub_entries = list(resolved_entry.iterdir())
+            except (PermissionError, OSError):
+                continue
+
+            for sub_entry in sorted(sub_entries, key=lambda x: x.name.lower()):
+                if not sub_entry.is_dir() or _is_hidden(sub_entry):
+                    continue
+
+                try:
+                    resolved_sub = sub_entry.resolve()
+                except (PermissionError, OSError):
+                    continue
+
+                try:
+                    if not resolved_sub.is_relative_to(root):
+                        continue
+                except (ValueError, AttributeError):
+                    try:
+                        resolved_sub.relative_to(root)
+                    except ValueError:
+                        continue
+
+                sub_p_str = str(resolved_sub)
+                if sub_p_str in seen_paths:
+                    continue
+                seen_paths.add(sub_p_str)
+
+                sub_pdf_count = 0
+                try:
+                    sub_pdf_count = sum(
+                        1 for f in resolved_sub.glob("*.pdf")
+                        if not _is_hidden(f) and not _is_temp_file(f.name)
+                    )
+                except (PermissionError, OSError):
+                    pass
+
+                options.append(
+                    FolderOptionItem(
+                        path=sub_p_str,
+                        name=f"{entry.name}/{sub_entry.name}",
+                        pdf_count=sub_pdf_count,
+                        already_registered_source_id=reg_map.get(sub_p_str),
+                    )
+                )
+
+    return FolderOptionsResponse(items=options)
 
 
 @router.get(
@@ -432,7 +565,17 @@ def run_scraping_source(
     """
     naming_fmt = None
     naming_sep = None
+    category_id = None
     if payload:
+        if payload.category_id is not None:
+            cat = db.query(Category).filter(Category.id == payload.category_id).first()
+            if not cat:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Kategori dengan ID {payload.category_id} tidak ditemukan.",
+                )
+            category_id = payload.category_id
+
         if payload.naming_format is not None:
             try:
                 validate_naming_format(payload.naming_format)
@@ -464,6 +607,7 @@ def run_scraping_source(
         ip_address=client_ip,
         naming_format=naming_fmt,
         naming_separator=naming_sep,
+        category_id=category_id,
     )
 
     if wait:

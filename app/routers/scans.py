@@ -312,6 +312,7 @@ def start_scan_pull(
         destination=payload.destination,
         naming_format=payload.naming_format,
         naming_separator=payload.naming_separator,
+        category_id=payload.category_id,
         actor_user_id=actor_user_id,
         actor_username=actor_username,
         ip_address=client_ip,

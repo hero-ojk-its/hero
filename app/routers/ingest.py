@@ -12,6 +12,7 @@ from sqlalchemy import desc
 from app.config import settings
 from app.database import get_db
 from app.models.document import Document
+from app.models.category import Category
 from app.models.enums import (
     JenisJobIngest,
     KlasifikasiAkses,

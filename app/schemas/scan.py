@@ -110,6 +110,7 @@ class ScanSessionResponse(BaseModel):
     naming_format: Optional[List[str]] = None
     naming_separator: Optional[str] = None
     pull_job_id: Optional[int] = None
+    category_id: Optional[int] = None
     pull_progress: Optional[PullProgress] = None
     download_url: Optional[str] = None
     claimed_at: Optional[datetime] = None
@@ -164,6 +165,10 @@ class ScanPullRequest(BaseModel):
     destination: TujuanTarik = Field(
         ...,
         description="Tujuan penarikan: 'knowledge_base' atau 'unduh_folder'",
+    )
+    category_id: Optional[int] = Field(
+        default=None,
+        description="ID kategori target di Knowledge Base",
     )
     naming_format: Optional[List[str]] = Field(
         default=None,

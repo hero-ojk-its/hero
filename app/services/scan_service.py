@@ -8,8 +8,11 @@ import hashlib
 import io
 import logging
 import zipfile
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
+from pathlib import Path
 from typing import Optional, List, Tuple, Dict, Any
+from urllib.parse import urlsplit
+from urllib.request import url2pathname
 
 from fastapi import HTTPException, status
 from sqlalchemy import desc, text
@@ -17,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
+from app.models.category import Category
 from app.models.enums import (
     JenisSumber,
     StatusPindai,
@@ -35,10 +39,11 @@ from app.models.scan_session import ScanSession
 from app.models.scan_candidate import ScanCandidate
 from app.models.ingest_failure import IngestFailure
 
-from app.crawlers.base import BlockedUrlError, FetchTooLargeError, CrawlerError
+from app.crawlers.base import BlockedUrlError, FetchTooLargeError, CrawlerError, FetchedFile
 from app.crawlers.registry import get_crawler
 from app.crawlers.simple_http import SimpleHttpCrawler
-from app.crawlers.url_utils import normalize_url, guard_url
+from app.crawlers.url_utils import normalize_url, guard_url, parse_onedrive_filename_metadata, determine_doc_kind
+from app.services.folder_connector import list_pdf_files, FolderAccessError
 
 from app.schemas.scan import (
     ScanCreate,
@@ -102,10 +107,10 @@ class ScanService:
                 detail="Sumber nonaktif.",
             )
 
-        if source.source_type not in (JenisSumber.situs_web, JenisSumber.onedrive_public):
+        if source.source_type not in (JenisSumber.situs_web, JenisSumber.onedrive_public, JenisSumber.folder_lokal):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=f"Sumber bertipe '{source.source_type.value}' bukan merupakan situs_web atau onedrive_public. Pemindaian hanya untuk situs web dan OneDrive publik.",
+                detail=f"Sumber bertipe '{source.source_type.value}' bukan merupakan situs_web, onedrive_public, atau folder_lokal.",
             )
 
         # 2. Cek apakah ada sesi pemindaian yang masih aktif untuk sumber ini
@@ -128,12 +133,15 @@ class ScanService:
             )
 
         # 3. Validasi kedalaman dan batas halaman
-        effective_depth = payload.crawl_depth or source.crawl_depth or 1
-        if effective_depth < 1 or effective_depth > 5:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Kedalaman crawling (crawl_depth) harus berada dalam rentang 1-5.",
-            )
+        if source.source_type == JenisSumber.folder_lokal:
+            effective_depth = 1
+        else:
+            effective_depth = payload.crawl_depth or source.crawl_depth or 1
+            if effective_depth < 1 or effective_depth > 5:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail="Kedalaman crawling (crawl_depth) harus berada dalam rentang 1-5.",
+                )
 
         effective_max_pages = payload.max_pages or settings.crawl_max_pages
         if effective_max_pages < 1 or effective_max_pages > settings.crawl_max_pages:
@@ -142,14 +150,15 @@ class ScanService:
                 detail=f"Batas halaman (max_pages) harus berada dalam rentang 1-{settings.crawl_max_pages}.",
             )
 
-        # 4. Perlindungan SSRF sebelum sesi dibuat
-        try:
-            guard_url(source.url, allow_private=settings.crawl_allow_private_networks)
-        except BlockedUrlError as bue:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=f"URL sumber tidak lolos pemeriksaan keamanan SSRF: {bue}",
-            )
+        # 4. Perlindungan SSRF sebelum sesi dibuat (hanya untuk URL situs web/OneDrive)
+        if source.source_type in (JenisSumber.situs_web, JenisSumber.onedrive_public):
+            try:
+                guard_url(source.url, allow_private=settings.crawl_allow_private_networks)
+            except BlockedUrlError as bue:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail=f"URL sumber tidak lolos pemeriksaan keamanan SSRF: {bue}",
+                )
 
         # 5. Buat entri ScanSession baru
         session = ScanSession(
@@ -234,7 +243,137 @@ class ScanService:
                 if session.mode == "push":
                     return
 
-                # 3. Dapatkan crawler aktif
+                # 3a. Penanganan khusus sumber folder_lokal
+                if source and source.source_type == JenisSumber.folder_lokal:
+                    session.crawler_name = "local_folder"
+                    try:
+                        folder_entries = list_pdf_files(
+                            Path(source.url),
+                            recursive=source.recursive,
+                            max_files=settings.local_source_max_files_per_run,
+                        )
+                    except FolderAccessError as fae:
+                        session.status = StatusPindai.gagal
+                        session.error_message = str(fae)
+                        session.finished_at = datetime.now(timezone.utc)
+                        if source:
+                            source.last_run_status = "gagal"
+                            source.last_run_message = str(fae)
+                        db.commit()
+                        return
+
+                    c_total = len(folder_entries)
+                    c_new = 0
+                    c_exist = 0
+                    c_uncert = 0
+
+                    for entry in folder_entries:
+                        try:
+                            f_bytes = entry.absolute_path.read_bytes()
+                            f_hash = hashlib.sha256(f_bytes).hexdigest()
+                        except Exception as e:
+                            logger.warning(f"Gagal membaca file {entry.absolute_path}: {e}")
+                            continue
+
+                        f_url = entry.absolute_path.as_uri()
+                        u_hash = hashlib.sha256(f_url.encode("utf-8")).hexdigest()
+
+                        meta = parse_onedrive_filename_metadata(entry.absolute_path.name)
+                        rel_d = date(meta["release_year"], 1, 1) if meta.get("release_year") else None
+
+                        # Cocokkan terhadap KB:
+                        # 1. hash + size sama -> sudah_ada
+                        matched_doc = (
+                            db.query(Document)
+                            .filter(
+                                Document.file_hash == f_hash,
+                                Document.file_size_bytes == entry.size_bytes,
+                            )
+                            .first()
+                        )
+
+                        if matched_doc:
+                            m_status = StatusKandidat.sudah_ada
+                            m_reason = "hash_dan_ukuran_sama"
+                            m_doc_id = matched_doc.id
+                            is_selected = False
+                            c_exist += 1
+                        else:
+                            # 2. Periksa nama (clean) & ukuran sama -> mungkin_ada
+                            clean_fname = sanitize_filename(entry.absolute_path.name).lower()
+                            size_matches = (
+                                db.query(Document)
+                                .filter(Document.file_size_bytes == entry.size_bytes)
+                                .all()
+                            )
+                            fuzzy_doc = None
+                            for d in size_matches:
+                                orig_c = sanitize_filename(d.original_filename or "").lower()
+                                std_c = sanitize_filename(d.standardized_filename or "").lower()
+                                if clean_fname and (clean_fname == orig_c or clean_fname == std_c):
+                                    fuzzy_doc = d
+                                    break
+
+                            if fuzzy_doc:
+                                m_status = StatusKandidat.mungkin_ada
+                                m_reason = "nama_dan_ukuran_sama"
+                                m_doc_id = fuzzy_doc.id
+                                is_selected = False
+                                c_uncert += 1
+                            else:
+                                m_status = StatusKandidat.baru
+                                m_reason = None
+                                m_doc_id = None
+                                is_selected = True
+                                c_new += 1
+
+                        cand_row = ScanCandidate(
+                            scan_id=session.id,
+                            url=f_url,
+                            url_hash=u_hash,
+                            filename=entry.absolute_path.name,
+                            size_bytes=entry.size_bytes,
+                            found_on_page=f"folder://{source.id}",
+                            depth=1,
+                            document_title=entry.absolute_path.stem.replace("_", " "),
+                            detail_url=None,
+                            final_url=f_url,
+                            doc_kind=determine_doc_kind(entry.absolute_path.name) or "utama",
+                            regulation_number=meta.get("regulation_number"),
+                            regulation_type=meta.get("regulation_type"),
+                            release_date=rel_d,
+                            size_source="local",
+                            source_path=entry.relative_path,
+                            match_status=m_status,
+                            match_reason=m_reason,
+                            match_document_id=m_doc_id,
+                            selected=is_selected,
+                        )
+                        db.add(cand_row)
+
+                    session.candidates_total = c_total
+                    session.candidates_new = c_new
+                    session.candidates_existing = c_exist
+                    session.candidates_uncertain = c_uncert
+                    session.pages_visited = 1
+                    session.truncated = False
+                    session.errors = []
+                    session.blocked = False
+                    session.stats = {"total_found": c_total}
+                    session.scanned_at = datetime.now(timezone.utc)
+                    session.status = StatusPindai.siap_dipilih
+
+                    if source:
+                        source.last_run_at = datetime.now(timezone.utc)
+                        source.last_run_status = "selesai"
+                        source.last_run_message = (
+                            f"Dipindai folder lokal: {c_total} PDF "
+                            f"(baru {c_new}, sudah ada {c_exist}, mungkin ada {c_uncert})."
+                        )
+                    db.commit()
+                    return
+
+                # 3b. Dapatkan crawler aktif untuk situs web / onedrive
                 try:
                     crawler = get_crawler(
                         settings,
@@ -525,6 +664,7 @@ class ScanService:
         destination: TujuanTarik,
         naming_format: Optional[List[str]] = None,
         naming_separator: Optional[str] = None,
+        category_id: Optional[int] = None,
         actor_user_id: Optional[int] = None,
         actor_username: Optional[str] = None,
         ip_address: Optional[str] = None,
@@ -545,6 +685,24 @@ class ScanService:
                 detail=f"Penarikan hanya dapat dimulai dari status 'siap_dipilih' (status saat ini: '{session.status.value}').",
             )
 
+        source = self.db.query(ScrapingSource).filter(ScrapingSource.id == session.source_id).first() if session.source_id else None
+
+        # Tolak tujuan 'unduh_folder' untuk sumber folder lokal (Butir 2)
+        if source and source.source_type == JenisSumber.folder_lokal and destination == TujuanTarik.unduh_folder:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Tujuan 'unduh_folder' tidak didukung untuk sumber folder lokal. Berkas folder lokal sudah berada di penyimpanan lokal.",
+            )
+
+        # Validasi kategori jika diberikan (Butir 4)
+        if category_id is not None:
+            cat = self.db.query(Category).filter(Category.id == category_id).first()
+            if not cat:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail=f"Kategori dengan ID {category_id} tidak ditemukan.",
+                )
+
         selected_count = (
             self.db.query(ScanCandidate)
             .filter(ScanCandidate.scan_id == scan_id, ScanCandidate.selected == True)
@@ -556,7 +714,6 @@ class ScanService:
                 detail="Tidak ada kandidat PDF yang dipilih untuk ditarik. Silakan pilih minimal 1 berkas.",
             )
 
-        source = self.db.query(ScrapingSource).filter(ScrapingSource.id == session.source_id).first() if session.source_id else None
         eff_format = naming_format
         eff_separator = naming_separator
         if eff_format is None and source and source.default_naming_format:
@@ -577,9 +734,11 @@ class ScanService:
 
         # Buat JobIngest untuk penarikan
         trigger_name = actor_username or "manual_scan_pull"
+        pull_job_type = JenisJobIngest.sinkron_folder if (source and source.source_type == JenisSumber.folder_lokal) else JenisJobIngest.scraping
         job = JobIngest(
-            job_type=JenisJobIngest.scraping,
+            job_type=pull_job_type,
             source_id=session.source_id,
+            category_id=category_id,
             status=StatusJobIngest.antrian,
             total_found=selected_count,
             processed_count=0,
@@ -596,6 +755,7 @@ class ScanService:
         session.status = StatusPindai.menarik
         session.destination = destination
         session.pull_job_id = job.id
+        session.category_id = category_id
         session.naming_format = eff_format
         session.naming_separator = eff_separator
 
@@ -693,68 +853,113 @@ class ScanService:
                     if session.cancel_requested:
                         break
 
-                    # 1. Unduh berkas dari URL
+                    # 1. Unduh atau baca berkas
                     fetched = None
-                    try:
-                        fetched = crawler.fetch(cand.url, max_bytes=settings.max_upload_bytes)
-                    except FetchTooLargeError as fle:
-                        failure = IngestFailure(
-                            job_id=job.id,
-                            failure_type=JenisKegagalan.format_tidak_didukung,
-                            reason_code="ukuran_melebihi_batas",
-                            original_filename=cand.filename,
-                            source_url=cand.url,
-                            message=str(fle),
-                            is_retryable=False,
-                            ingest_options={
-                                "fetch_url": cand.url,
-                                "scan_id": session.id,
-                                "access_classification": source.default_access_classification.value if source else "publik",
-                                "document_role": source.default_document_role.value if source else "corpus_eksisting",
-                            },
-                        )
-                        db.add(failure)
-                        db.flush()
-                        cand.pull_outcome = "gagal"
-                        cand.failure_id = failure.id
-                        cand.message = str(fle)
-                        job.failed_count += 1
-                        job.processed_count += 1
-                        if job.processed_count % settings.job_progress_commit_every == 0:
-                            db.commit()
-                        continue
+                    if (source and source.source_type == JenisSumber.folder_lokal) or cand.size_source == "local":
+                        try:
+                            local_path = None
+                            if cand.url.startswith("file://"):
+                                p_clean = urlsplit(cand.url).path
+                                local_path = Path(url2pathname(p_clean))
+                            elif source and cand.source_path:
+                                local_path = Path(source.url) / cand.source_path
+                            else:
+                                local_path = Path(cand.url)
 
-                    except (BlockedUrlError, CrawlerError, Exception) as exc:
-                        is_retry = not isinstance(exc, BlockedUrlError)
-                        failure = IngestFailure(
-                            job_id=job.id,
-                            failure_type=JenisKegagalan.sumber_tidak_dapat_diakses,
-                            reason_code="sumber_tidak_dapat_diakses",
-                            original_filename=cand.filename,
-                            source_url=cand.url,
-                            message=f"Gagal mengunduh: {exc}",
-                            is_retryable=is_retry,
-                            ingest_options={
-                                "fetch_url": cand.url,
-                                "scan_id": session.id,
-                                "access_classification": source.default_access_classification.value if source else "publik",
-                                "document_role": source.default_document_role.value if source else "corpus_eksisting",
-                            },
-                        )
-                        db.add(failure)
-                        db.flush()
-                        cand.pull_outcome = "gagal"
-                        cand.failure_id = failure.id
-                        cand.message = str(exc)
-                        job.failed_count += 1
-                        job.processed_count += 1
-                        if job.processed_count % settings.job_progress_commit_every == 0:
-                            db.commit()
-                        continue
+                            f_bytes = local_path.read_bytes()
+                            fetched = FetchedFile(
+                                content=f_bytes,
+                                filename=cand.filename,
+                                content_type="application/pdf",
+                                final_url=cand.url,
+                            )
+                        except Exception as exc:
+                            failure = IngestFailure(
+                                job_id=job.id,
+                                failure_type=JenisKegagalan.sumber_tidak_dapat_diakses,
+                                reason_code="sumber_tidak_dapat_diakses",
+                                original_filename=cand.filename,
+                                source_url=cand.url,
+                                message=f"Gagal membaca berkas lokal: {exc}",
+                                is_retryable=False,
+                                ingest_options={
+                                    "fetch_url": cand.url,
+                                    "scan_id": session.id,
+                                    "access_classification": source.default_access_classification.value if source else "publik",
+                                    "document_role": source.default_document_role.value if source else "corpus_eksisting",
+                                },
+                            )
+                            db.add(failure)
+                            db.flush()
+                            cand.pull_outcome = "gagal"
+                            cand.failure_id = failure.id
+                            cand.message = str(exc)
+                            job.failed_count += 1
+                            job.processed_count += 1
+                            if job.processed_count % settings.job_progress_commit_every == 0:
+                                db.commit()
+                            continue
+                    else:
+                        try:
+                            fetched = crawler.fetch(cand.url, max_bytes=settings.max_upload_bytes)
+                        except FetchTooLargeError as fle:
+                            failure = IngestFailure(
+                                job_id=job.id,
+                                failure_type=JenisKegagalan.format_tidak_didukung,
+                                reason_code="ukuran_melebihi_batas",
+                                original_filename=cand.filename,
+                                source_url=cand.url,
+                                message=str(fle),
+                                is_retryable=False,
+                                ingest_options={
+                                    "fetch_url": cand.url,
+                                    "scan_id": session.id,
+                                    "access_classification": source.default_access_classification.value if source else "publik",
+                                    "document_role": source.default_document_role.value if source else "corpus_eksisting",
+                                },
+                            )
+                            db.add(failure)
+                            db.flush()
+                            cand.pull_outcome = "gagal"
+                            cand.failure_id = failure.id
+                            cand.message = str(fle)
+                            job.failed_count += 1
+                            job.processed_count += 1
+                            if job.processed_count % settings.job_progress_commit_every == 0:
+                                db.commit()
+                            continue
+
+                        except (BlockedUrlError, CrawlerError, Exception) as exc:
+                            is_retry = not isinstance(exc, BlockedUrlError)
+                            failure = IngestFailure(
+                                job_id=job.id,
+                                failure_type=JenisKegagalan.sumber_tidak_dapat_diakses,
+                                reason_code="sumber_tidak_dapat_diakses",
+                                original_filename=cand.filename,
+                                source_url=cand.url,
+                                message=f"Gagal mengunduh: {exc}",
+                                is_retryable=is_retry,
+                                ingest_options={
+                                    "fetch_url": cand.url,
+                                    "scan_id": session.id,
+                                    "access_classification": source.default_access_classification.value if source else "publik",
+                                    "document_role": source.default_document_role.value if source else "corpus_eksisting",
+                                },
+                            )
+                            db.add(failure)
+                            db.flush()
+                            cand.pull_outcome = "gagal"
+                            cand.failure_id = failure.id
+                            cand.message = str(exc)
+                            job.failed_count += 1
+                            job.processed_count += 1
+                            if job.processed_count % settings.job_progress_commit_every == 0:
+                                db.commit()
+                            continue
 
                     # 2. Proses berkas sesuai tujuan
                     if session.destination == TujuanTarik.knowledge_base:
-                        norm_source_url = normalize_url(cand.url)
+                        norm_source_url = cand.url if cand.url.startswith("file://") else normalize_url(cand.url)
                         item = IngestItem(
                             filename=fetched.filename,
                             content=fetched.content,
@@ -771,6 +976,7 @@ class ScanService:
                         opts = IngestOptions(
                             access_classification=source.default_access_classification if source else KlasifikasiAkses.publik,
                             document_role=source.default_document_role if source else PeranDokumen.corpus_eksisting,
+                            category_id=session.category_id or (job.category_id if job else None),
                             metadata=doc_meta,
                             naming_format=session.naming_format,
                             naming_separator=session.naming_separator,

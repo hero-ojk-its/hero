@@ -374,8 +374,7 @@ def test_k12_k13_conflict_and_validation_errors(client, db_session: Session, sca
     folder_src_id = resp_folder.json()["id"]
 
     resp_scan_folder = client.post("/api/v1/scans/", json={"source_id": folder_src_id})
-    assert resp_scan_folder.status_code == 422
-    assert "bukan merupakan situs_web" in resp_scan_folder.json()["detail"]
+    assert resp_scan_folder.status_code == 202
 
     # 2. K12: POST /scans saat sesi masih aktif (409)
     # Buat sesi langsung di database dengan status 'memindai'

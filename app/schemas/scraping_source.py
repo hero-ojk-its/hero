@@ -5,7 +5,7 @@ Schema Pydantic: ScrapingSource
 from datetime import datetime
 from typing import Optional, List
 from urllib.parse import urlparse
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.enums import JenisSumber, KlasifikasiAkses, PeranDokumen
 
@@ -101,8 +101,22 @@ class ScrapingSourceUpdate(BaseModel):
 
 class ScrapingSourceRunRequest(BaseModel):
     """Schema input opsional saat mengeksekusi run sumber (POST /{id}/run)"""
+    category_id: Optional[int] = Field(default=None, description="ID kategori target di Knowledge Base")
     naming_format: Optional[List[str]] = None
     naming_separator: Optional[str] = None
+
+
+class FolderOptionItem(BaseModel):
+    """Item subfolder lokal yang tersedia untuk didaftarkan sebagai sumber folder lokal"""
+    path: str
+    name: str
+    pdf_count: int
+    already_registered_source_id: Optional[int] = None
+
+
+class FolderOptionsResponse(BaseModel):
+    """Daftar subfolder yang tersedia dari direktori akar lokal"""
+    items: List[FolderOptionItem]
 
 
 class ScrapingSourceResponse(BaseModel):
