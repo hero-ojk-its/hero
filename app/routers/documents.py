@@ -45,6 +45,7 @@ from app.services.naming_service import (
     normalize_regulation_type,
 )
 from app.services.search_service import SearchService, SearchParams, SearchMode, SearchSort
+from app.crawlers.url_utils import extract_regulation_year
 
 logger = logging.getLogger("hero")
 router = APIRouter()
@@ -55,6 +56,7 @@ class UpdateMetadataIn(BaseModel):
     regulation_number: Optional[str] = None
     regulation_type: Optional[str] = None
     release_date: Optional[date] = None
+    regulation_year: Optional[int] = None
     bidang: Optional[str] = None
     category_id: Optional[int] = None
     access_classification: Optional[KlasifikasiAkses] = None
@@ -282,6 +284,7 @@ def _format_single_document_response(doc: Document, db: Session) -> Dict[str, An
         "regulation_number": doc.regulation_number,
         "regulation_type": getattr(doc, "regulation_type", None),
         "release_date": doc.release_date,
+        "regulation_year": getattr(doc, "regulation_year", None),
         "bidang": getattr(doc, "bidang", None),
         "naming_format": getattr(doc, "naming_format", None),
         "naming_separator": getattr(doc, "naming_separator", None),
@@ -533,6 +536,15 @@ def patch_document_metadata(
     doc.metadata_corrected_at = datetime.now(timezone.utc)
     doc.metadata_corrected_by = actor_user_id
 
+    # Perbarui regulation_year jika field pembentuknya berubah
+    if any(f in changed_fields for f in ("regulation_number", "title", "release_date")):
+        doc.regulation_year = extract_regulation_year(
+            regulation_number=doc.regulation_number,
+            title=doc.title,
+            filename=doc.original_filename,
+            release_date=doc.release_date,
+        )
+
     # Cek kecukupan metadata
     naming_inp = NamingInput(
         regulation_number=doc.regulation_number,
@@ -541,6 +553,7 @@ def patch_document_metadata(
         release_date=doc.release_date,
         bidang=doc.bidang,
         original_filename=doc.original_filename,
+        regulation_year=doc.regulation_year,
     )
     is_suff = is_metadata_sufficient(naming_inp)
 

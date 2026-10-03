@@ -205,7 +205,8 @@ class SearchService:
         if params.date_to:
             filters.append(Document.release_date <= params.date_to)
         if params.year is not None:
-            filters.append(func.extract("year", Document.release_date) == params.year)
+            eff_year = func.coalesce(Document.regulation_year, func.extract("year", Document.release_date))
+            filters.append(eff_year == params.year)
         if params.bidang and params.bidang.strip():
             filters.append(Document.bidang.ilike(f"%{params.bidang.strip()}%"))
 
@@ -317,6 +318,7 @@ class SearchService:
                 "regulation_number": doc_obj.regulation_number,
                 "regulation_type": doc_obj.regulation_type,
                 "release_date": doc_obj.release_date,
+                "regulation_year": getattr(doc_obj, "regulation_year", None),
                 "bidang": doc_obj.bidang,
                 "access_classification": doc_obj.access_classification,
                 "document_role": doc_obj.document_role,

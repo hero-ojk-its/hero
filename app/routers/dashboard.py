@@ -92,11 +92,12 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
             by_regulation_type.append({"regulation_type": None, "label": "Belum diketahui", "count": cnt})
 
     # 6. By Year (Hanya corpus eksisting, max 15, urutan tahun terbaru)
+    eff_year_expr = func.coalesce(Document.regulation_year, func.extract("year", Document.release_date))
     year_query = (
-        db.query(func.extract("year", Document.release_date).label("year"), func.count(Document.id).label("count"))
+        db.query(eff_year_expr.label("year"), func.count(Document.id).label("count"))
         .filter(Document.document_role == PeranDokumen.corpus_eksisting)
-        .group_by("year")
-        .order_by(desc("year"))
+        .group_by(eff_year_expr)
+        .order_by(desc(eff_year_expr).nulls_last())
         .limit(15)
         .all()
     )

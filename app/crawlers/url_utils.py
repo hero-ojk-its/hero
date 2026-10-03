@@ -7,6 +7,8 @@ PENTING: Modul ini TIDAK BOLEH mengimpor app.database, app.models, app.routers, 
 import ipaddress
 import re
 import socket
+from datetime import date
+from pathlib import Path
 from typing import Optional, Tuple, Dict, Any, Union
 from urllib.parse import urlsplit, urlunsplit, quote, unquote, urljoin
 
@@ -619,6 +621,7 @@ def parse_onedrive_filename_metadata(filename: str) -> Dict[str, Any]:
         "regulation_type": reg_type,
         "regulation_number": formatted_reg_num,
         "release_year": year,
+        "regulation_year": year,
         "release_date": None,  # Kosongkan release_date placeholder (Butir 4)
     }
 
@@ -639,6 +642,55 @@ def normalize_bidang(bidang: Optional[str]) -> Optional[str]:
     if val.endswith(','):
         val = val[:-1].strip()
     return val or None
+
+
+def extract_regulation_year(
+    regulation_number: Optional[str] = None,
+    title: Optional[str] = None,
+    filename: Optional[str] = None,
+    release_date: Optional[Any] = None,
+) -> Optional[int]:
+    """
+    [Langkah 12b] Ekstraksi tahun regulasi (regulation_year) dengan urutan prioritas resmi:
+    1. Tahun dari nomor resmi (misal 'POJK 3 Tahun 2015', '23/SEOJK.06/2025', '27-164-KEP-DIR-1995')
+    2. Tahun dari judul regulasi (misal 'Nomor 18 Tahun 2025')
+    3. Tahun dari nama berkas (terutama OneDrive, misal 'Peraturan_OJK_3_2015.pdf')
+    4. Tahun dari release_date (jika ada dan valid)
+    """
+    # 1. Tahun dari nomor resmi
+    if regulation_number and str(regulation_number).strip():
+        # Cari 4 digit 19xx atau 20xx
+        matches = re.findall(r"\b(19\d\d|20\d\d)\b", str(regulation_number))
+        if matches:
+            return int(matches[-1])
+
+    # 2. Tahun dari judul
+    if title and str(title).strip():
+        ym = re.search(r"\bTahun\s+(19\d\d|20\d\d)\b", str(title), re.IGNORECASE)
+        if ym:
+            return int(ym.group(1))
+        matches = re.findall(r"\b(19\d\d|20\d\d)\b", str(title))
+        if matches:
+            return int(matches[-1])
+
+    # 3. Tahun dari nama berkas
+    if filename and str(filename).strip():
+        stem = Path(str(filename).strip()).stem
+        matches = re.findall(r"\b(19\d\d|20\d\d)\b", stem)
+        if not matches:
+            matches = re.findall(r"(?:^|[-_ ])(19\d\d|20\d\d)(?:[-_ ]|$)", stem)
+        if matches:
+            return int(matches[-1])
+
+    # 4. Tahun dari release_date
+    if release_date:
+        if isinstance(release_date, date):
+            return release_date.year
+        if isinstance(release_date, str) and len(release_date) >= 4 and release_date[:4].isdigit():
+            return int(release_date[:4])
+
+    return None
+
 
 
 

@@ -35,6 +35,7 @@ from app.services.file_validation import (
 )
 from app.services.naming_service import NamingInput, build_standard_filename
 from app.services.storage_service import StorageService, get_storage_service
+from app.crawlers.url_utils import extract_regulation_year
 
 logger = logging.getLogger("hero")
 
@@ -305,7 +306,13 @@ class IngestService:
                     except ValueError:
                         doc_status_keberlakuan = StatusKeberlakuan.tidak_diketahui
 
-            # 5. Hitung nama baku awal berdasarkan format pilihan pengguna
+            # 5. Hitung tahun regulasi dan nama baku awal berdasarkan format pilihan pengguna
+            doc_regulation_year = extract_regulation_year(
+                regulation_number=doc_reg_number,
+                title=doc_title,
+                filename=item.filename,
+                release_date=doc_release_date,
+            )
             naming_inp = NamingInput(
                 regulation_number=doc_reg_number,
                 title=doc_title,
@@ -313,6 +320,7 @@ class IngestService:
                 release_date=doc_release_date,
                 bidang=doc_bidang,
                 original_filename=item.filename,
+                regulation_year=doc_regulation_year,
             )
             std_filename = build_standard_filename(
                 naming_inp,
@@ -357,6 +365,7 @@ class IngestService:
                 regulation_number=doc_reg_number,
                 regulation_type=doc_reg_type,
                 release_date=doc_release_date,
+                regulation_year=doc_regulation_year,
                 bidang=doc_bidang,
                 naming_format=options.naming_format,
                 naming_separator=options.naming_separator,

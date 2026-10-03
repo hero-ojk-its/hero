@@ -41,8 +41,13 @@ from app.models.ingest_failure import IngestFailure
 
 from app.crawlers.base import BlockedUrlError, FetchTooLargeError, CrawlerError, FetchedFile
 from app.crawlers.registry import get_crawler
-from app.crawlers.simple_http import SimpleHttpCrawler
-from app.crawlers.url_utils import normalize_url, guard_url, parse_onedrive_filename_metadata, determine_doc_kind
+from app.crawlers.url_utils import (
+    normalize_url,
+    guard_url,
+    parse_onedrive_filename_metadata,
+    determine_doc_kind,
+    extract_regulation_year,
+)
 from app.services.folder_connector import list_pdf_files, FolderAccessError
 
 from app.schemas.scan import (
@@ -327,6 +332,12 @@ class ScanService:
                                 is_selected = True
                                 c_new += 1
 
+                        cand_reg_year = meta.get("regulation_year") or extract_regulation_year(
+                            regulation_number=meta.get("regulation_number"),
+                            title=entry.absolute_path.stem.replace("_", " "),
+                            filename=entry.absolute_path.name,
+                            release_date=rel_d,
+                        )
                         cand_row = ScanCandidate(
                             scan_id=session.id,
                             url=f_url,
@@ -342,6 +353,7 @@ class ScanService:
                             regulation_number=meta.get("regulation_number"),
                             regulation_type=meta.get("regulation_type"),
                             release_date=rel_d,
+                            regulation_year=cand_reg_year,
                             size_source="local",
                             source_path=entry.relative_path,
                             match_status=m_status,
@@ -433,6 +445,12 @@ class ScanService:
                 for cand in scan_res.candidates:
                     norm_url = normalize_url(cand.url)
                     url_hash = hashlib.sha256(norm_url.encode("utf-8")).hexdigest()
+                    cand_reg_year = getattr(cand, "regulation_year", None) or extract_regulation_year(
+                        regulation_number=cand.regulation_number,
+                        title=cand.document_title,
+                        filename=cand.filename,
+                        release_date=cand.release_date,
+                    )
                     candidate_row = ScanCandidate(
                         scan_id=session.id,
                         url=norm_url,
@@ -451,6 +469,7 @@ class ScanService:
                         sub_bidang=cand.sub_bidang,
                         release_date=cand.release_date,
                         effective_date=cand.effective_date,
+                        regulation_year=cand_reg_year,
                         match_warning=cand.match_warning,
                         status_keberlakuan=cand.status_keberlakuan or "tidak_diketahui",
                         size_source=cand.size_source or "unknown",
@@ -591,10 +610,10 @@ class ScanService:
                 detail=f"Sesi pemindaian dengan ID {scan_id} tidak ditemukan.",
             )
 
-        if session.status != StatusPindai.siap_dipilih:
+        if session.status not in (StatusPindai.siap_dipilih, StatusPindai.selesai):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Pilihan kandidat hanya dapat diubah saat status sesi 'siap_dipilih' (status saat ini: '{session.status.value}').",
+                detail=f"Pilihan kandidat hanya dapat diubah saat status sesi 'siap_dipilih' atau 'selesai' (status saat ini: '{session.status.value}').",
             )
 
         candidates = self.db.query(ScanCandidate).filter(ScanCandidate.scan_id == scan_id).all()
@@ -679,10 +698,10 @@ class ScanService:
                 detail=f"Sesi pemindaian dengan ID {scan_id} tidak ditemukan.",
             )
 
-        if session.status != StatusPindai.siap_dipilih:
+        if session.status not in (StatusPindai.siap_dipilih, StatusPindai.selesai):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=f"Penarikan hanya dapat dimulai dari status 'siap_dipilih' (status saat ini: '{session.status.value}').",
+                detail=f"Penarikan hanya dapat dimulai dari status 'siap_dipilih' atau 'selesai' (status saat ini: '{session.status.value}').",
             )
 
         source = self.db.query(ScrapingSource).filter(ScrapingSource.id == session.source_id).first() if session.source_id else None
@@ -1320,10 +1339,17 @@ class ScanService:
                 existing.bidang = cand_in.bidang
                 existing.sub_bidang = cand_in.sub_bidang
                 existing.release_date = cand_in.release_date
+                existing.regulation_year = getattr(cand_in, "regulation_year", None)
                 existing.status_keberlakuan = getattr(cand_in, "status_keberlakuan", "tidak_diketahui") or "tidak_diketahui"
                 existing.size_source = cand_in.size_source or "unknown"
                 existing.source_path = cand_in.source_path
             else:
+                c_yr = getattr(cand_in, "regulation_year", None) or extract_regulation_year(
+                    regulation_number=cand_in.regulation_number,
+                    title=cand_in.document_title,
+                    filename=cand_in.filename,
+                    release_date=cand_in.release_date,
+                )
                 new_cand = ScanCandidate(
                     scan_id=scan_id,
                     url=norm_url,
@@ -1342,6 +1368,7 @@ class ScanService:
                     sub_bidang=cand_in.sub_bidang,
                     release_date=cand_in.release_date,
                     effective_date=getattr(cand_in, "effective_date", None),
+                    regulation_year=c_yr,
                     match_warning=getattr(cand_in, "match_warning", None),
                     status_keberlakuan=getattr(cand_in, "status_keberlakuan", "tidak_diketahui") or "tidak_diketahui",
                     size_source=cand_in.size_source or "unknown",

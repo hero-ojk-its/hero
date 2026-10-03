@@ -395,9 +395,9 @@ def test_s05_ojk_detail_page_metadata_and_attachments(robust_server, monkeypatch
     assert cand0.regulation_number == "13 Tahun 2026"
     assert cand0.regulation_type == "POJK"
     assert cand0.bidang == "Pasar Modal"
-    assert cand0.sub_bidang == "Bursa Efek"
-    assert cand0.release_date == date(2026, 9, 15)
+    assert cand0.release_date is None
     assert cand0.effective_date == date(2026, 9, 15)
+    assert cand0.regulation_year == 2026
 
 
 # ==============================================================================

@@ -39,6 +39,7 @@ from app.crawlers.url_utils import (
     normalize_crawler_regulation_type,
     validate_regulation_filename_match,
     normalize_bidang,
+    extract_regulation_year,
 )
 
 logger = logging.getLogger("hero.crawler.jdih_api")
@@ -417,10 +418,8 @@ class JdihApiCrawler:
                                 if dm and "tidak berlaku" not in val.lower() and "dicabut" not in val.lower():
                                     effective_date = _parse_jdih_date(dm.group(1))
 
-                    # release_date: penetapan -> pengundangan -> title_year (1 Jan)
+                    # release_date hanya dari penetapan atau pengundangan asli (jika tidak ada -> None)
                     rel_date = penetapan_date or pengundangan_date
-                    if not rel_date and title_year:
-                        rel_date = date(title_year, 1, 1)
 
                     # Fallback tanggal berlaku dari kolom 6 DataTables jika row[7] == 'Berlaku'
                     raw_status_date = str(row[6]).strip() if len(row) > 6 and row[6] is not None else None
@@ -431,9 +430,6 @@ class JdihApiCrawler:
 
                     if not effective_date and "berlaku" in status_label.lower() and "tidak" not in status_label.lower():
                         effective_date = dt_status_date
-
-                    if not rel_date:
-                        rel_date = dt_status_date
 
                     # Format regulation_number sintetis dengan tahun dari judul (atau rel_date jika judul tanpa tahun)
                     if not formatted_reg_num and reg_num:
@@ -491,6 +487,13 @@ class JdihApiCrawler:
                             regulation_type=reg_type,
                         )
 
+                        cand_reg_year = extract_regulation_year(
+                            regulation_number=formatted_reg_num or reg_num,
+                            title=doc_title,
+                            filename=final_fn,
+                            release_date=rel_date,
+                        )
+
                         cand = PdfCandidate(
                             url=att_url,
                             filename=final_fn,
@@ -508,6 +511,7 @@ class JdihApiCrawler:
                             sub_bidang=None,
                             release_date=rel_date,
                             effective_date=effective_date,
+                            regulation_year=cand_reg_year,
                             match_warning=match_warn,
                             size_source=assrc,
                             status_keberlakuan=status_keberlakuan,

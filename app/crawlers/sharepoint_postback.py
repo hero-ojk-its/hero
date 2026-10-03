@@ -40,6 +40,7 @@ from app.crawlers.url_utils import (
     normalize_crawler_regulation_type,
     validate_regulation_filename_match,
     normalize_bidang,
+    extract_regulation_year,
 )
 
 logger = logging.getLogger("hero.crawler.sharepoint_postback")
@@ -345,18 +346,8 @@ class SharepointPostbackCrawler:
             if ym:
                 parsed_year = int(ym.group(1))
 
-        if not rel_date:
-            if eff_date:
-                # Bila eff_date melompat tahun ke masa depan dibanding tahun regulasi, gunakan tahun regulasi
-                if parsed_year and eff_date.year > parsed_year:
-                    rel_date = date(parsed_year, 1, 1)
-                else:
-                    rel_date = eff_date
-            elif parsed_year:
-                rel_date = date(parsed_year, 1, 1)
-        elif parsed_year and rel_date.year > parsed_year:
-            # Bila rel_date terisi dari tanggal berlaku masa depan padahal nomor regulasi bertahun lebih awal
-            rel_date = date(parsed_year, 1, 1)
+        # Jangan mengarang tanggal release_date bila penetapan tidak ada di sumber (tetap None).
+        # Tanggal berlaku tetap berada di eff_date.
 
         # Jika jenis/nomor belum dapat, ekstrak dari slug URL atau judul
         if not jenis_reg:
@@ -407,6 +398,13 @@ class SharepointPostbackCrawler:
                 regulation_type=jenis_reg,
             )
 
+            cand_year = extract_regulation_year(
+                regulation_number=nomor_reg,
+                title=title,
+                filename=fn,
+                release_date=rel_date,
+            )
+
             cand = PdfCandidate(
                 url=norm_pdf_url,
                 filename=fn,
@@ -423,6 +421,7 @@ class SharepointPostbackCrawler:
                 sub_bidang=sub_bidang,
                 release_date=rel_date,
                 effective_date=eff_date,
+                regulation_year=cand_year,
                 match_warning=match_warn,
                 size_source=size_src,
             )

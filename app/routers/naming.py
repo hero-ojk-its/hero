@@ -88,6 +88,7 @@ def preview_naming(
     reg_number: Optional[str] = None
     reg_type: Optional[str] = None
     rel_date: Optional[date] = None
+    reg_year: Optional[int] = None
     bidang: Optional[str] = None
     orig_filename: Optional[str] = None
 
@@ -102,6 +103,7 @@ def preview_naming(
         reg_number = doc.regulation_number
         reg_type = doc.regulation_type
         rel_date = doc.release_date
+        reg_year = getattr(doc, "regulation_year", None)
         bidang = doc.bidang
         orig_filename = doc.original_filename
     elif payload.sample is not None:
@@ -109,12 +111,14 @@ def preview_naming(
         reg_number = payload.sample.regulation_number
         reg_type = payload.sample.regulation_type
         rel_date = payload.sample.release_date
+        reg_year = getattr(payload.sample, "regulation_year", None)
         bidang = payload.sample.bidang
     else:
         title = DEFAULT_SAMPLE_TITLE
         reg_number = DEFAULT_SAMPLE_REG_NUMBER
         reg_type = DEFAULT_SAMPLE_REG_TYPE
         rel_date = DEFAULT_SAMPLE_RELEASE_DATE
+        reg_year = 2026
         bidang = DEFAULT_SAMPLE_BIDANG
 
     inp = NamingInput(
@@ -124,6 +128,7 @@ def preview_naming(
         release_date=rel_date,
         bidang=bidang,
         original_filename=orig_filename,
+        regulation_year=reg_year,
     )
 
     filename = build_standard_filename(

@@ -115,6 +115,12 @@ class ScanCandidate(Base):
         nullable=True,
         comment="Tanggal mulai berlaku regulasi yang terbaca dari situs",
     )
+    regulation_year = Column(
+        Integer,
+        nullable=True,
+        index=True,
+        comment="Tahun regulasi resmi yang diekstrak",
+    )
     match_warning = Column(
         Text,
         nullable=True,

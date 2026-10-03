@@ -52,6 +52,7 @@ class CandidateResponse(BaseModel):
     sub_bidang: Optional[str] = None
     release_date: Optional[date] = None
     effective_date: Optional[date] = None
+    regulation_year: Optional[int] = None
     match_warning: Optional[str] = None
     status_keberlakuan: Optional[str] = "tidak_diketahui"
     size_source: Optional[str] = "unknown"
@@ -206,6 +207,7 @@ class InternalCandidateIn(BaseModel):
     sub_bidang: Optional[str] = None
     release_date: Optional[date] = None
     effective_date: Optional[date] = None
+    regulation_year: Optional[int] = None
     match_warning: Optional[str] = None
     status_keberlakuan: Optional[str] = "tidak_diketahui"
     size_source: Optional[str] = "unknown"

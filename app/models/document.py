@@ -55,6 +55,7 @@ class Document(Base):
         comment="Jenis regulasi (misal: UU, PP, Permen, Perda)"
     )
     release_date = Column(Date, nullable=True, comment="Tanggal terbit regulasi")
+    regulation_year = Column(Integer, nullable=True, index=True, comment="Tahun regulasi resmi")
     source_url = Column(Text, nullable=True, comment="URL sumber dokumen di web")
     file_path_pdf = Column(
         Text,
@@ -213,3 +214,21 @@ class Document(Base):
 
     def __repr__(self):
         return f"<Document id={self.id} reg={self.regulation_number} status={self.status_keberlakuan} role={self.document_role}>"
+
+
+from sqlalchemy import event
+from app.crawlers.url_utils import extract_regulation_year
+
+
+@event.listens_for(Document, "before_insert")
+@event.listens_for(Document, "before_update")
+def _auto_populate_regulation_year(mapper, connection, target):
+    if target.regulation_year is None:
+        y = extract_regulation_year(
+            regulation_number=target.regulation_number,
+            title=target.title,
+            filename=target.original_filename or target.standardized_filename,
+            release_date=target.release_date,
+        )
+        if y is not None:
+            target.regulation_year = y

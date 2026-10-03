@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from fastapi import HTTPException
 
+from app.crawlers.url_utils import extract_regulation_year
 from app.services.file_validation import sanitize_filename
 
 REGULATION_TYPE_ALIASES = {
@@ -69,6 +70,7 @@ class NamingInput:
     release_date: Optional[date] = None
     bidang: Optional[str] = None
     original_filename: Optional[str] = None
+    regulation_year: Optional[int] = None
 
 
 def normalize_regulation_type(raw: Optional[str]) -> Optional[str]:
@@ -83,30 +85,35 @@ def normalize_regulation_type(raw: Optional[str]) -> Optional[str]:
 
 def extract_year(inp: NamingInput) -> Optional[int]:
     """
-    Mengekstrak tahun dari release_date atau dari 4 digit tahun terakhir di regulation_number.
+    Mengekstrak tahun regulasi berdasarkan urutan prioritas resmi (Langkah 12b):
+    1. Tahun yang sudah diekstrak / regulation_year
+    2. Tahun dari nomor resmi
+    3. Tahun dari judul
+    4. Tahun dari nama berkas (OneDrive)
+    5. Tahun dari release_date
     """
-    if inp.release_date and inp.release_date.year:
-        return inp.release_date.year
+    if inp.regulation_year is not None:
+        return inp.regulation_year
 
-    if inp.regulation_number:
-        years = re.findall(r"\b(19\d\d|20\d\d)\b", inp.regulation_number)
-        if years:
-            return int(years[-1])
-
-    return None
+    return extract_regulation_year(
+        regulation_number=inp.regulation_number,
+        title=inp.title,
+        filename=inp.original_filename,
+        release_date=inp.release_date,
+    )
 
 
 def is_metadata_sufficient(inp: NamingInput) -> bool:
     """
     Menentukan apakah metadata dokumen sudah cukup untuk penamaan dan penempatan otomatis.
-    Cukup jika regulation_number terisi ATAU (regulation_type terisi dan release_date terisi).
+    Cukup jika regulation_number terisi ATAU (regulation_type terisi dan release_date/regulation_year terisi).
     Judul saja tidak dihitung karena bisa jadi hanya nama berkas asli.
     """
     has_number = bool(inp.regulation_number and inp.regulation_number.strip())
     has_type = bool(inp.regulation_type and inp.regulation_type.strip())
-    has_date = bool(inp.release_date is not None)
+    has_date_or_year = bool(inp.release_date is not None or inp.regulation_year is not None)
 
-    return has_number or (has_type and has_date)
+    return has_number or (has_type and has_date_or_year)
 
 
 def validate_naming_format(components: Any) -> List[str]:

@@ -29,6 +29,7 @@ class NamingSampleInput(BaseModel):
     regulation_type: Optional[str] = None
     release_date: Optional[date] = None
     bidang: Optional[str] = None
+    regulation_year: Optional[int] = None
 
 
 class NamingPreviewRequest(BaseModel):
