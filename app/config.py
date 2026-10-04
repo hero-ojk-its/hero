@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     crawl_respect_robots: bool = True
     crawl_allow_private_networks: bool = False
     crawl_head_for_size: bool = True
-    scan_stuck_minutes: int = 60
+    scan_stuck_minutes: int = 15
 
     @field_validator("category_path_template")
     @classmethod

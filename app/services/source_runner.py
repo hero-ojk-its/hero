@@ -12,7 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database import SessionLocal
+from app.database import SessionLocal, engine
 from app.models.enums import (
     JenisJobIngest,
     JenisKegagalan,
@@ -156,6 +156,7 @@ class SourceRunner:
         Membuat sesi database sendiri dan memastikan penutupan di blok finally.
         """
         db = SessionLocal()
+        lock_conn = None
         lock_acquired = False
         source_id: Optional[int] = None
         try:
@@ -172,9 +173,10 @@ class SourceRunner:
                 db.commit()
                 return
 
-            # Coba ambil advisory lock di PostgreSQL
+            # Coba ambil advisory lock di PostgreSQL pada koneksi khusus
             try:
-                lock_res = db.execute(
+                lock_conn = engine.connect()
+                lock_res = lock_conn.execute(
                     text("SELECT pg_try_advisory_lock(:ns, :sid)"),
                     {"ns": SOURCE_LOCK_NAMESPACE, "sid": source_id},
                 ).scalar()
@@ -419,14 +421,25 @@ class SourceRunner:
             except Exception:
                 db.rollback()
         finally:
-            if lock_acquired and source_id:
+            if lock_conn is not None:
                 try:
-                    db.execute(
-                        text("SELECT pg_advisory_unlock(:ns, :sid)"),
-                        {"ns": SOURCE_LOCK_NAMESPACE, "sid": source_id},
-                    )
-                except Exception:
-                    pass
+                    if lock_acquired and source_id:
+                        try:
+                            unlocked = lock_conn.execute(
+                                text("SELECT pg_advisory_unlock(:ns, :sid)"),
+                                {"ns": SOURCE_LOCK_NAMESPACE, "sid": source_id},
+                            ).scalar()
+                            if not unlocked:
+                                logger.warning(
+                                    f"[SourceRunner] pg_advisory_unlock({SOURCE_LOCK_NAMESPACE}, {source_id}) mengembalikan False."
+                                )
+                        except Exception as e:
+                            logger.warning(f"[SourceRunner] Gagal memanggil pg_advisory_unlock: {e}")
+                finally:
+                    try:
+                        lock_conn.close()
+                    except Exception:
+                        pass
             db.close()
 
 

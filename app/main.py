@@ -112,7 +112,7 @@ async def lifespan(app: FastAPI):
 
         try:
             from app.services.scan_service import recover_stuck_scan_sessions
-            recover_stuck_scan_sessions(db, stuck_minutes=settings.scan_stuck_minutes)
+            recover_stuck_scan_sessions(db, stuck_minutes=settings.scan_stuck_minutes, is_startup=True)
         except Exception as exc:
             logger.warning("Gagal memulihkan sesi pemindaian saat startup: %s", exc)
     finally:

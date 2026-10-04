@@ -4,12 +4,14 @@ Router publik untuk Alur Pindai Situs (Scan -> Bandingkan -> Centang -> Tarik).
 [US-16, FR-SCR-02, FR-SCR-05]
 """
 import io
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy import desc, or_
 from sqlalchemy.orm import Session, joinedload
 
+from app.config import settings
 from app.database import get_db
 from app.routers.auth import get_current_user
 from app.models.enums import StatusPindai, StatusKandidat, TujuanTarik, StatusJobIngest
@@ -175,6 +177,23 @@ def get_scan_session_detail(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Sesi pemindaian dengan ID {scan_id} tidak ditemukan.",
         )
+
+    # Deteksi batas waktu: jika sesi masih memindai/menarik tanpa aktivitas > scan_stuck_minutes (15 menit)
+    if session.status in (StatusPindai.memindai, StatusPindai.menarik):
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=settings.scan_stuck_minutes)
+        last_active = session.updated_at or session.started_at or session.created_at
+        if last_active and last_active < cutoff:
+            session.status = StatusPindai.gagal
+            session.error_message = f"Dihentikan karena server dimulai ulang. Batas waktu aktivitas terlampaui (> {settings.scan_stuck_minutes} menit)."
+            session.finished_at = datetime.now(timezone.utc)
+            if session.pull_job_id:
+                job = db.query(JobIngest).filter(JobIngest.id == session.pull_job_id).first()
+                if job and job.status in (StatusJobIngest.antrian, StatusJobIngest.berjalan):
+                    job.status = StatusJobIngest.gagal
+                    job.finished_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(session)
+
     return _build_session_response(session, db, request)
 
 

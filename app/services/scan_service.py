@@ -7,6 +7,7 @@ penarikan dokumen ke KB / ekspor folder ZIP, serta integrasi mode push.
 import hashlib
 import io
 import logging
+import time
 import zipfile
 from datetime import date, datetime, timezone, timedelta
 from pathlib import Path
@@ -15,11 +16,11 @@ from urllib.parse import urlsplit
 from urllib.request import url2pathname
 
 from fastapi import HTTPException, status
-from sqlalchemy import desc, text
+from sqlalchemy import desc, text, func
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database import SessionLocal
+from app.database import SessionLocal, engine
 from app.models.category import Category
 from app.models.enums import (
     JenisSumber,
@@ -132,6 +133,26 @@ class ScanService:
             .first()
         )
         if active_session:
+            # Periksa batas waktu: jika sesi tidak ada aktivitas > scan_stuck_minutes (15 menit)
+            cutoff = datetime.now(timezone.utc) - timedelta(minutes=settings.scan_stuck_minutes)
+            last_active = active_session.updated_at or active_session.started_at or active_session.created_at
+            if last_active and last_active < cutoff:
+                logger.warning(
+                    f"[Scan] Sesi aktif #{active_session.id} pada sumber '{source.name}' dianggap macet "
+                    f"(terakhir aktif: {last_active}). Menandai sesi sebagai gagal."
+                )
+                active_session.status = StatusPindai.gagal
+                active_session.error_message = f"Dihentikan karena server dimulai ulang. Batas waktu aktivitas terlampaui (> {settings.scan_stuck_minutes} menit)."
+                active_session.finished_at = datetime.now(timezone.utc)
+                if active_session.pull_job_id:
+                    job = self.db.query(JobIngest).filter(JobIngest.id == active_session.pull_job_id).first()
+                    if job and job.status in (StatusJobIngest.antrian, StatusJobIngest.berjalan):
+                        job.status = StatusJobIngest.gagal
+                        job.finished_at = datetime.now(timezone.utc)
+                self.db.commit()
+                active_session = None
+
+        if active_session:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Sumber '{source.name}' sedang dalam sesi pemindaian/penarikan aktif (scan_id={active_session.id}, status='{active_session.status.value}').",
@@ -208,8 +229,13 @@ class ScanService:
     def execute_scan(self, scan_id: int) -> None:
         """
         Menjalankan pemindaian URL situs secara asynchronous di background worker.
-        Menggunakan database session tersendiri dan advisory lock.
+        Menggunakan database session tersendiri dan advisory lock pada koneksi khusus (engine.connect()).
         """
+        lock_conn = None
+        lock_acquired = False
+        lock_key = None
+        lock_ns = 1396924750
+
         with SessionLocal() as db:
             session = db.query(ScanSession).filter(ScanSession.id == scan_id).first()
             if not session:
@@ -217,31 +243,36 @@ class ScanService:
                 return
 
             source = db.query(ScrapingSource).filter(ScrapingSource.id == session.source_id).first() if session.source_id else None
-
-            # 1. Dapatkan advisory lock berbasis source_id untuk mencegah race condition
-            lock_acquired = False
             lock_key = session.source_id or scan_id
-            try:
-                res = db.execute(text(f"SELECT pg_try_advisory_lock(1396924750, {lock_key})")).scalar()
-                lock_acquired = bool(res)
-            except Exception as e:
-                logger.warning(f"[Scan] Gagal memanggil pg_try_advisory_lock: {e}")
-                lock_acquired = True
 
-            if not lock_acquired:
-                session.status = StatusPindai.gagal
-                session.error_message = "Pemindaian sumber ini sedang diproses oleh eksekusi lain."
-                session.finished_at = datetime.now(timezone.utc)
-                if source:
-                    source.last_run_status = "gagal"
-                    source.last_run_message = session.error_message
-                db.commit()
-                return
-
+            # Seluruh badan proses pemindaian termasuk perolehan kunci berada di dalam try/finally
             try:
+                # 1. Dapatkan advisory lock berbasis source_id untuk mencegah race condition pada koneksi khusus
+                try:
+                    lock_conn = engine.connect()
+                    res = lock_conn.execute(
+                        text("SELECT pg_try_advisory_lock(:ns, :key)"),
+                        {"ns": lock_ns, "key": lock_key},
+                    ).scalar()
+                    lock_acquired = bool(res)
+                except Exception as e:
+                    logger.warning(f"[Scan] Gagal memanggil pg_try_advisory_lock: {e}")
+                    lock_acquired = True
+
+                if not lock_acquired:
+                    session.status = StatusPindai.gagal
+                    session.error_message = "Pemindaian sumber ini sedang diproses oleh eksekusi lain."
+                    session.finished_at = datetime.now(timezone.utc)
+                    if source:
+                        source.last_run_status = "gagal"
+                        source.last_run_message = session.error_message
+                    db.commit()
+                    return
+
                 # 2. Perbarui status menjadi memindai
                 session.status = StatusPindai.memindai
                 session.started_at = datetime.now(timezone.utc)
+                session.updated_at = datetime.now(timezone.utc)
                 db.commit()
 
                 # Jika mode push, biarkan status memindai menunggu push API
@@ -514,12 +545,25 @@ class ScanService:
                 db.commit()
 
             finally:
-                if lock_acquired:
+                if lock_conn is not None:
                     try:
-                        db.execute(text(f"SELECT pg_advisory_unlock(1396924750, {lock_key})"))
-                        db.commit()
-                    except Exception:
-                        pass
+                        if lock_acquired and lock_key is not None:
+                            try:
+                                unlocked = lock_conn.execute(
+                                    text("SELECT pg_advisory_unlock(:ns, :key)"),
+                                    {"ns": lock_ns, "key": lock_key},
+                                ).scalar()
+                                if not unlocked:
+                                    logger.warning(
+                                        f"[Scan] pg_advisory_unlock({lock_ns}, {lock_key}) mengembalikan False."
+                                    )
+                            except Exception as e:
+                                logger.warning(f"[Scan] Gagal memanggil pg_advisory_unlock: {e}")
+                    finally:
+                        try:
+                            lock_conn.close()
+                        except Exception as e:
+                            logger.warning(f"[Scan] Gagal menutup lock_conn: {e}")
 
     def _compare_candidates_with_kb(self, session: ScanSession, db: Session) -> None:
         """
@@ -804,7 +848,13 @@ class ScanService:
     def execute_pull(self, scan_id: int) -> None:
         """
         Mengeksekusi penarikan berkas PDF terpilih di background worker.
+        Menggunakan database session tersendiri dan advisory lock pada koneksi khusus (engine.connect()).
         """
+        lock_conn = None
+        lock_acquired = False
+        lock_key = None
+        lock_ns = 1396924751
+
         with SessionLocal() as db:
             session = db.query(ScanSession).filter(ScanSession.id == scan_id).first()
             if not session or not session.pull_job_id:
@@ -813,35 +863,44 @@ class ScanService:
 
             job = db.query(JobIngest).filter(JobIngest.id == session.pull_job_id).first()
             source = db.query(ScrapingSource).filter(ScrapingSource.id == session.source_id).first() if session.source_id else None
-
-            # Dapatkan advisory lock khusus penarikan (magic: 1396924751) dengan toleransi retry
-            lock_acquired = False
             lock_key = session.source_id or scan_id
-            for _ in range(5):
-                try:
-                    res = db.execute(text(f"SELECT pg_try_advisory_lock(1396924751, {lock_key})")).scalar()
-                    lock_acquired = bool(res)
-                    if lock_acquired:
-                        break
-                except Exception as e:
-                    logger.warning(f"[Pull] Gagal memanggil pg_try_advisory_lock: {e}")
-                    lock_acquired = True
-                    break
-                time.sleep(0.5)
 
-            if not lock_acquired:
-                session.status = StatusPindai.gagal
-                session.error_message = "Proses penarikan sedang diproses oleh eksekusi lain."
-                session.finished_at = datetime.now(timezone.utc)
-                if job:
-                    job.status = StatusJobIngest.gagal
-                    job.finished_at = datetime.now(timezone.utc)
-                db.commit()
-                return
-
+            # Seluruh badan proses penarikan termasuk perolehan kunci berada di dalam try/finally
             try:
+                # Dapatkan advisory lock khusus penarikan (magic: 1396924751) dengan toleransi retry pada koneksi khusus
+                try:
+                    lock_conn = engine.connect()
+                    for _ in range(5):
+                        try:
+                            res = lock_conn.execute(
+                                text("SELECT pg_try_advisory_lock(:ns, :key)"),
+                                {"ns": lock_ns, "key": lock_key},
+                            ).scalar()
+                            lock_acquired = bool(res)
+                            if lock_acquired:
+                                break
+                        except Exception as e:
+                            logger.warning(f"[Pull] Gagal memanggil pg_try_advisory_lock: {e}")
+                            lock_acquired = True
+                            break
+                        time.sleep(0.5)
+                except Exception as e:
+                    logger.warning(f"[Pull] Gagal membuka koneksi dedicated lock: {e}")
+                    lock_acquired = True
+
+                if not lock_acquired:
+                    session.status = StatusPindai.gagal
+                    session.error_message = "Proses penarikan sedang diproses oleh eksekusi lain."
+                    session.finished_at = datetime.now(timezone.utc)
+                    if job:
+                        job.status = StatusJobIngest.gagal
+                        job.finished_at = datetime.now(timezone.utc)
+                    db.commit()
+                    return
+
                 job.status = StatusJobIngest.berjalan
                 job.started_at = datetime.now(timezone.utc)
+                session.updated_at = datetime.now(timezone.utc)
                 db.commit()
 
                 # Gunakan crawler untuk mengunduh berkas
@@ -1102,12 +1161,25 @@ class ScanService:
                 db.commit()
 
             finally:
-                if lock_acquired:
+                if lock_conn is not None:
                     try:
-                        db.execute(text(f"SELECT pg_advisory_unlock(1396924751, {lock_key})"))
-                        db.commit()
-                    except Exception:
-                        pass
+                        if lock_acquired and lock_key is not None:
+                            try:
+                                unlocked = lock_conn.execute(
+                                    text("SELECT pg_advisory_unlock(:ns, :key)"),
+                                    {"ns": lock_ns, "key": lock_key},
+                                ).scalar()
+                                if not unlocked:
+                                    logger.warning(
+                                        f"[Pull] pg_advisory_unlock({lock_ns}, {lock_key}) mengembalikan False."
+                                    )
+                            except Exception as e:
+                                logger.warning(f"[Pull] Gagal memanggil pg_advisory_unlock: {e}")
+                    finally:
+                        try:
+                            lock_conn.close()
+                        except Exception as e:
+                            logger.warning(f"[Pull] Gagal menutup lock_conn: {e}")
 
     def cancel_scan(
         self,
@@ -1398,30 +1470,38 @@ class ScanService:
         return session
 
 
-def recover_stuck_scan_sessions(db: Session, stuck_minutes: int = 60) -> int:
+def recover_stuck_scan_sessions(db: Session, stuck_minutes: int = 15, is_startup: bool = False) -> int:
     """
-    Memulihkan sesi pemindaian dan job penarikan yang macet saat startup server.
+    Memulihkan sesi pemindaian dan job penarikan yang macet saat startup server atau batas waktu terlampaui.
+    - is_startup=True: memulihkan semua sesi 'memindai' / 'menarik' yang tidak punya proses hidup.
+    - is_startup=False: memulihkan sesi tanpa pembaruan (updated_at) selama > stuck_minutes (default 15 menit).
     """
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=stuck_minutes)
-    stuck_sessions = (
-        db.query(ScanSession)
-        .filter(
-            ScanSession.status.in_([StatusPindai.memindai, StatusPindai.menarik]),
-            ScanSession.started_at < cutoff,
-        )
-        .all()
+    query = db.query(ScanSession).filter(
+        ScanSession.status.in_([StatusPindai.memindai, StatusPindai.menarik])
     )
+    if not is_startup:
+        last_active = func.coalesce(ScanSession.updated_at, ScanSession.started_at, ScanSession.created_at)
+        query = query.filter(last_active < cutoff)
+
+    stuck_sessions = query.all()
 
     recovered = 0
+    err_msg = (
+        "Dihentikan karena server dimulai ulang."
+        if is_startup
+        else f"Dihentikan karena server dimulai ulang. Batas waktu aktivitas terlampaui (> {stuck_minutes} menit)."
+    )
+
     for s in stuck_sessions:
         s.status = StatusPindai.gagal
-        s.error_message = "Dihentikan karena server dimulai ulang."
+        s.error_message = err_msg
         s.finished_at = datetime.now(timezone.utc)
 
         source = db.query(ScrapingSource).filter(ScrapingSource.id == s.source_id).first() if s.source_id else None
         if source:
             source.last_run_status = "gagal"
-            source.last_run_message = "Dihentikan karena server dimulai ulang."
+            source.last_run_message = err_msg
 
         if s.pull_job_id:
             job = db.query(JobIngest).filter(JobIngest.id == s.pull_job_id).first()
@@ -1431,8 +1511,22 @@ def recover_stuck_scan_sessions(db: Session, stuck_minutes: int = 60) -> int:
 
         recovered += 1
 
+    # Jika startup, pulihkan juga job scraping/tarik yang tertinggal di status antrian/berjalan
+    if is_startup:
+        orphan_jobs = (
+            db.query(JobIngest)
+            .filter(
+                JobIngest.job_type == JenisJobIngest.scraping,
+                JobIngest.status.in_([StatusJobIngest.antrian, StatusJobIngest.berjalan]),
+            )
+            .all()
+        )
+        for oj in orphan_jobs:
+            oj.status = StatusJobIngest.gagal
+            oj.finished_at = datetime.now(timezone.utc)
+
     if recovered > 0:
         db.commit()
-        logger.info(f"Berhasil memulihkan {recovered} sesi pemindaian yang macet.")
+        logger.info(f"Berhasil memulihkan {recovered} sesi pemindaian yang macet (is_startup={is_startup}).")
 
     return recovered
