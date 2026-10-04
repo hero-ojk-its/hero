@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, X, AlertTriangle, FileText, Loader2 } from 'lucide-react';
+import { Plus, X, AlertTriangle, AlertCircle, FileText, Loader2 } from 'lucide-react';
 import { 
   getNamingComponents, 
   previewNaming,
@@ -40,6 +40,7 @@ export default function NamingFormatPicker({
   const [previewFilename, setPreviewFilename] = useState<string>('');
   const [missingComponents, setMissingComponents] = useState<string[]>([]);
   const [isPreviewLoading, setIsPreviewLoading] = useState<boolean>(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -81,6 +82,7 @@ export default function NamingFormatPicker({
 
     previewTimeoutRef.current = setTimeout(async () => {
       setIsPreviewLoading(true);
+      setPreviewError(null);
       try {
         const fallbackSample: NamingSampleInput = sampleInput || {
           regulation_number: 'POJK 11/POJK.03/2024',
@@ -99,22 +101,16 @@ export default function NamingFormatPicker({
 
         setPreviewFilename(res.filename);
         setMissingComponents(res.missing_components || []);
-      } catch (err) {
+        setPreviewError(null);
+      } catch (err: unknown) {
         console.warn('Gagal memuat pratinjau penamaan:', err);
-        // Fallback offline preview
-        const sep = separator || ' ';
-        const simulated = activeFormat
-          .map((k) => {
-            if (k === 'nomor') return 'POJK 11/POJK.03/2024';
-            if (k === 'nama') return 'Ketahanan dan Keamanan Siber';
-            if (k === 'tahun') return '2024';
-            if (k === 'jenis') return 'POJK';
-            if (k === 'bidang') return 'Perbankan';
-            return k;
-          })
-          .join(sep);
-        setPreviewFilename(`${simulated}.pdf`);
+        setPreviewFilename('');
         setMissingComponents([]);
+        const errorMsg =
+          err instanceof Error && err.message
+            ? err.message
+            : 'Gagal memuat pratinjau nama berkas dari server.';
+        setPreviewError(errorMsg);
       } finally {
         setIsPreviewLoading(false);
       }
@@ -288,11 +284,18 @@ export default function NamingFormatPicker({
             </span>
           )}
         </div>
-        <div className="p-2 bg-gray-50 rounded-lg border border-gray-200 text-xs font-mono text-gray-800 break-all select-all">
-          {previewFilename || 'Memuat contoh nama berkas...'}
-        </div>
+        {previewError ? (
+          <div className="p-2.5 bg-red-50 rounded-lg border border-red-200 text-xs text-red-700 flex items-start">
+            <AlertCircle size={14} className="mr-1.5 mt-0.5 shrink-0 text-red-600" />
+            <span>{previewError}</span>
+          </div>
+        ) : (
+          <div className="p-2 bg-gray-50 rounded-lg border border-gray-200 text-xs font-mono text-gray-800 break-all select-all">
+            {previewFilename || 'Memuat contoh nama berkas...'}
+          </div>
+        )}
 
-        {missingComponents.length > 0 && (
+        {!previewError && missingComponents.length > 0 && (
           <div className="flex items-center mt-2 text-[11px] text-amber-700 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200">
             <AlertTriangle size={13} className="mr-1.5 shrink-0 text-amber-600" />
             <span>
