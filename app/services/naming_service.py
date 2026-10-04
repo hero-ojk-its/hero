@@ -203,8 +203,11 @@ def parse_template_to_components(template: str) -> Tuple[List[str], str]:
 
 
 def _clean_field(val: str) -> str:
-    r"""Hapus karakter terlarang: / \ : * ? \" < > | dan rapikan whitespace."""
-    cleaned = re.sub(r'[/\\:*?"<>|]', "", val)
+    r"""Ganti / dan \ dengan -, hapus karakter terlarang : * ? \" < > |, dan rapikan whitespace."""
+    if not val:
+        return ""
+    replaced = val.replace("/", "-").replace("\\", "-")
+    cleaned = re.sub(r'[:*?"<>|]', "", replaced)
     return re.sub(r"\s+", " ", cleaned).strip()
 
 
@@ -239,8 +242,7 @@ def build_standard_filename(
     # 2. Nilai komponen
     # Nomor
     if inp.regulation_number and inp.regulation_number.strip():
-        num_clean = inp.regulation_number.strip().replace("/", "-").replace("\\", "-")
-        nomor_str = _clean_field(num_clean) or wildcard
+        nomor_str = _clean_field(inp.regulation_number.strip()) or wildcard
     else:
         nomor_str = wildcard
 
@@ -259,11 +261,11 @@ def build_standard_filename(
         bidang_str = wildcard
 
     # Nama / Judul
-    if inp.title and inp.title.strip():
+    if inp.title and inp.title.strip() and inp.title.strip() != wildcard:
         raw_nama = inp.title.strip()
     elif inp.original_filename and inp.original_filename.strip():
         stem = Path(inp.original_filename.strip()).stem
-        raw_nama = stem if stem else wildcard
+        raw_nama = stem if stem and stem != wildcard else wildcard
     else:
         raw_nama = wildcard
     nama_str = _clean_field(raw_nama) if raw_nama != wildcard else wildcard
@@ -293,13 +295,33 @@ def build_standard_filename(
 
     # Jika melebihi max_length, potong kata nama/judul dari belakang sampai muat
     if nama_str != wildcard:
-        words = nama_str.split()
-        while words:
-            words.pop()
-            candidate_nama = " ".join(words)
-            candidate_filename = render_filename(candidate_nama)
-            if len(candidate_filename) <= max_length:
-                return sanitize_filename(candidate_filename, max_len=max_length)
+        # 1. Coba potong kata per spasi
+        words = nama_str.split(" ")
+        if len(words) > 1:
+            while words:
+                words.pop()
+                cand = " ".join(words).strip()
+                if cand:
+                    cand_fn = render_filename(cand)
+                    if len(cand_fn) <= max_length:
+                        return sanitize_filename(cand_fn, max_len=max_length)
+        # 2. Coba potong kata per underscore (misal nama berkas snake_case)
+        tokens = nama_str.split("_")
+        if len(tokens) > 1:
+            while tokens:
+                tokens.pop()
+                cand = "_".join(tokens).strip("_")
+                if cand:
+                    cand_fn = render_filename(cand)
+                    if len(cand_fn) <= max_length:
+                        return sanitize_filename(cand_fn, max_len=max_length)
+        # 3. Potong karakter langsung berdasarkan sisa kuota panjang nama
+        dummy = render_filename("X")
+        overhead = len(dummy) - 1
+        avail = max(1, max_length - overhead)
+        cand = nama_str[:avail].rstrip(" _-")
+        if cand:
+            return sanitize_filename(render_filename(cand), max_len=max_length)
 
     return sanitize_filename(render_filename(""), max_len=max_length)
 

@@ -120,7 +120,7 @@ def test_n06_separator_and_illegal_character_cleaning():
     assert "/" not in res
     assert ":" not in res
     assert "?" not in res
-    assert res == "Regulasi Perbankan Syariah Keuangan Modern_POJK_2026.pdf"
+    assert res == "Regulasi Perbankan - Syariah Keuangan Modern_POJK_2026.pdf"
 
 
 # ==================== N07 - N14: INTEGRATION TESTING ====================
