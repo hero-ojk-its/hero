@@ -37,27 +37,27 @@ Untuk menghubungkan Frontend dengan Backend FastAPI:
 
 1. **Konfigurasi Environment Variable**
    Salin berkas .env.example menjadi .env.local:
-   `ash
+   ```bash
    cp .env.example .env.local
-   `
+   ```
    Pastikan variabel VITE_API_BASE_URL mengarah ke alamat backend (default: http://localhost:8000):
-   `env
+   ```env
    VITE_API_BASE_URL=http://localhost:8000
-   `
+   ```
    *Catatan: Bila VITE_API_BASE_URL kosong atau tidak ada, Frontend otomatis berjalan dalam mode contoh (data statis).*
 
 2. **Menjalankan Backend**
    Jalankan server FastAPI (dari direktori backend):
-   `ash
+   ```bash
    uvicorn app.main:app --reload --port 8000
-   `
+   ```
 
 3. **Menjalankan Frontend**
-   Dari direktori rontend/:
-   `ash
+   Dari direktori frontend/:
+   ```bash
    npm install
    npm run dev
-   `
+   ```
    Buka peramban di http://localhost:5173.
 
 ## Detail Dokumen & Integrasi PDF/Teks (US-28)

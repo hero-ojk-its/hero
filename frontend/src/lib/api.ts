@@ -215,6 +215,27 @@ export async function apiFetch<T>(endpoint: string, options: FetchOptions = {}):
   return (await response.text()) as unknown as T;
 }
 
+/**
+ * Helper untuk request JSON (POST, PUT, PATCH, DELETE) yang otomatis memasang Content-Type: application/json.
+ */
+export async function apiJson<T>(
+  method: string,
+  endpoint: string,
+  body?: unknown,
+  options: FetchOptions = {}
+): Promise<T> {
+  const headers = new Headers(options.headers);
+  if (body !== undefined && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+  return apiFetch<T>(endpoint, {
+    ...options,
+    method,
+    headers,
+    body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
+  });
+}
+
 export interface DocumentBlob extends Blob {
   filename?: string;
   contentType?: string;
