@@ -190,3 +190,99 @@ export async function previewNaming(
 export async function getCategories(signal?: AbortSignal): Promise<CategoryDetailResponse[]> {
   return apiFetch<CategoryDetailResponse[]>('/api/v1/categories/', { signal });
 }
+
+// ============================================================================
+// 5. Ingest Upload & Duplicate Check API (/api/v1/ingest/)
+// ============================================================================
+
+export type IngestUploadResponse = components['schemas']['IngestUploadResponse'];
+export type IngestItemDetailResponse = components['schemas']['IngestItemDetailResponse'];
+export type DuplicateCheckResponse = components['schemas']['DuplicateCheckResponse'];
+
+export interface IngestJobItem {
+  id: number;
+  job_type: string;
+  source_ref?: string | null;
+  source_id?: number | null;
+  status: string;
+  started_at: string;
+  finished_at?: string | null;
+  success_count: number;
+  duplicate_count: number;
+  failed_count: number;
+  total_found?: number | null;
+  processed_count?: number;
+  skipped_count?: number;
+  open_failures_count?: number;
+}
+
+export interface IngestJobListResponse {
+  total: number;
+  items: IngestJobItem[];
+}
+
+export interface IngestJobQueryParams {
+  skip?: number;
+  limit?: number;
+  status?: string;
+  job_type?: string;
+  source_id?: number;
+}
+
+/**
+ * Menghitung hash SHA-256 dari berkas menggunakan Web Crypto API.
+ * Mengembalikan string heksadesimal jika berhasil, atau null jika crypto.subtle tidak tersedia / gagal.
+ */
+export async function calculateFileHash(file: File): Promise<string | null> {
+  if (typeof window === 'undefined' || !window.crypto || !window.crypto.subtle) {
+    return null;
+  }
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const hashBuffer = await window.crypto.subtle.digest('SHA-256', arrayBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+  } catch (err) {
+    console.warn('Gagal menghitung SHA-256 berkas:', err);
+    return null;
+  }
+}
+
+/**
+ * Pengecekan pra-unggah duplikasi berkas via GET /api/v1/ingest/check-duplicate
+ */
+export async function checkDuplicate(
+  params: { file_hash?: string | null; file_size?: number | null },
+  signal?: AbortSignal
+): Promise<DuplicateCheckResponse> {
+  const qs = buildQueryString(params as Record<string, unknown>);
+  return apiFetch<DuplicateCheckResponse>(`/api/v1/ingest/check-duplicate${qs}`, { signal });
+}
+
+/**
+ * Mengunggah berkas PDF secara manual via POST /api/v1/ingest/upload-pdf (multipart/form-data)
+ * Timeout diatur 120 detik (120.000 ms) sesuai spesifikasi.
+ */
+export async function uploadManualPdf(
+  formData: FormData,
+  signal?: AbortSignal
+): Promise<IngestUploadResponse> {
+  return apiFetch<IngestUploadResponse>('/api/v1/ingest/upload-pdf', {
+    method: 'POST',
+    body: formData,
+    timeout: 120000,
+    signal,
+  });
+}
+
+/**
+ * Mengambil riwayat pekerjaan ingest via GET /api/v1/ingest/jobs
+ */
+export async function getIngestJobs(
+  params?: IngestJobQueryParams,
+  signal?: AbortSignal
+): Promise<IngestJobListResponse> {
+  const qs = params ? buildQueryString(params as Record<string, unknown>) : '';
+  return apiFetch<IngestJobListResponse>(`/api/v1/ingest/jobs${qs}`, { signal });
+}
+
