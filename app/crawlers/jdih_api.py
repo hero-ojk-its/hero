@@ -103,6 +103,53 @@ def map_jdih_status_keberlakuan(
     return "tidak_diketahui"
 
 
+def extract_jdih_regulation_number(
+    doc_title: str,
+    raw_reg_num: Optional[str] = None,
+    reg_type: Optional[str] = None,
+    year: Optional[int] = None,
+) -> Optional[str]:
+    """
+    Mengekstrak nomor regulasi resmi dari judul regulasi JDIH OJK atau DataTables.
+    Mendukung format slash dengan/tanpa spasi (misal '27 /POJK.03/2015' -> '27/POJK.03/2015').
+    Menolak format nomor terpotong tanpa jenis (misal '03/2015').
+    """
+    if not doc_title:
+        return None
+
+    # 1. Cari pola nomor slash 3 segmen dengan kode jenis/sektor: mis. '27 /POJK.03/2015', '26/POJK.04/2014'
+    slash3_m = re.search(
+        r'(?:Nomor|No\.?|\b)\s*(\d+)\s*/\s*([A-Za-z0-9\._-]+[A-Za-z][A-Za-z0-9\._-]*)\s*/\s*((?:19|20)\d{2})\b',
+        doc_title,
+        re.IGNORECASE,
+    )
+    if slash3_m:
+        return f"{slash3_m.group(1)}/{slash3_m.group(2).upper()}/{slash3_m.group(3)}"
+
+    # 2. Cari pola nomor slash 2 segmen dengan kode jenis/sektor: mis. '21/SEOJK.05'
+    slash2_m = re.search(
+        r'(?:Nomor|No\.?|\b)\s*(\d+)\s*/\s*([A-Za-z0-9\._-]*[A-Za-z][A-Za-z0-9\._-]*)\b',
+        doc_title,
+        re.IGNORECASE,
+    )
+    if slash2_m:
+        cand_num = f"{slash2_m.group(1)}/{slash2_m.group(2).upper()}"
+        if not re.match(r'^\d+/\d+$', cand_num):
+            return cand_num
+
+    # 3. Format regulasi sintetis dari reg_num kolom DataTables
+    if raw_reg_num and str(raw_reg_num).strip() not in ("None", "", "-"):
+        clean_num = str(raw_reg_num).strip()
+        # Jika raw_reg_num terpotong seperti '03/2015', tolak agar tidak mengulang kesalahan
+        if not re.match(r'^\d+/\d{4}$', clean_num):
+            type_label = reg_type or "Nomor"
+            if year:
+                return f"{type_label} {clean_num} Tahun {year}"
+            return f"{type_label} Nomor {clean_num}"
+
+    return None
+
+
 class JdihApiCrawler:
     """Crawler adapter untuk JDIH OJK via API JSON."""
 
@@ -354,10 +401,12 @@ class JdihApiCrawler:
                             title_year = int(gen_y_m.group(1))
 
                     # Format awal regulation_number lengkap dari judul jika ada format nomor slash
-                    formatted_reg_num = None
-                    slash_num_m = re.search(r'\b(\d+/[A-Z0-9\.]+(?:/\d{4})?)\b', doc_title)
-                    if slash_num_m:
-                        formatted_reg_num = slash_num_m.group(1)
+                    formatted_reg_num = extract_jdih_regulation_number(
+                        doc_title,
+                        raw_reg_num=None,
+                        reg_type=reg_type,
+                        year=title_year,
+                    )
 
                     # URL detail regulasi: lampiran PDF HANYA diambil dari halaman detail sebenarnya
                     detail_url = f"{api_base}/Web/ViewPeraturan/Detail/{guid}/All/"
@@ -432,13 +481,13 @@ class JdihApiCrawler:
                         effective_date = dt_status_date
 
                     # Format regulation_number sintetis dengan tahun dari judul (atau rel_date jika judul tanpa tahun)
-                    if not formatted_reg_num and reg_num:
-                        year_val = title_year or (rel_date.year if rel_date else None)
-                        type_label = reg_type or "Nomor"
-                        if year_val:
-                            formatted_reg_num = f"{type_label} {reg_num} Tahun {year_val}"
-                        else:
-                            formatted_reg_num = f"{type_label} Nomor {reg_num}"
+                    if not formatted_reg_num:
+                        formatted_reg_num = extract_jdih_regulation_number(
+                            doc_title,
+                            raw_reg_num=reg_num,
+                            reg_type=reg_type,
+                            year=title_year or (rel_date.year if rel_date else None),
+                        )
 
                     attachments_found: List[Tuple[str, str, Optional[str]]] = []
                     if d_html:
