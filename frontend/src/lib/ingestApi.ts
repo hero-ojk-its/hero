@@ -286,3 +286,219 @@ export async function getIngestJobs(
   return apiFetch<IngestJobListResponse>(`/api/v1/ingest/jobs${qs}`, { signal });
 }
 
+// ============================================================================
+// 6. Ingest Job Detail & Failure Queue API (Bagian C)
+// ============================================================================
+
+export interface JobSourceInfo {
+  id: number;
+  name: string;
+  source_type: string;
+  base_url?: string | null;
+}
+
+export interface JobDocumentSummary {
+  id: number;
+  title: string;
+  regulation_number?: string | null;
+  document_role?: string;
+  match_status?: string;
+}
+
+export interface JobFailureSummary {
+  id: number;
+  original_filename: string;
+  failure_type: string;
+  reason_code: string;
+  message: string;
+  is_retryable: boolean;
+  quarantine_path?: string | null;
+  attempt_count: number;
+  follow_up_status: string;
+  duplicate_of_document_id?: number | null;
+  duplicate_of_document?: {
+    id: number;
+    title: string;
+    regulation_number?: string | null;
+  } | null;
+}
+
+export interface JobDetailResponse {
+  id: number;
+  job_type: string;
+  source_ref?: string | null;
+  source_id?: number | null;
+  source?: JobSourceInfo | null;
+  retry_of_failure_id?: number | null;
+  triggered_by?: string | null;
+  status: string;
+  started_at: string;
+  finished_at?: string | null;
+  duration_seconds?: number | null;
+  success_count: number;
+  duplicate_count: number;
+  failed_count: number;
+  total_found?: number | null;
+  processed_count?: number;
+  skipped_count?: number;
+  progress_percent?: number | null;
+  documents: JobDocumentSummary[];
+  failures: JobFailureSummary[];
+}
+
+export type JenisKegagalan =
+  | 'format_tidak_didukung'
+  | 'duplikat'
+  | 'ekstraksi_gagal'
+  | 'ocr_gagal'
+  | 'metadata_tidak_lengkap'
+  | 'sumber_tidak_dapat_diakses'
+  | 'kesalahan_internal';
+
+export interface DuplicateDocumentInfo {
+  id: number;
+  title: string;
+  regulation_number?: string | null;
+}
+
+export interface FailureResponse {
+  id: number;
+  job_id: number;
+  original_filename: string;
+  source_url?: string | null;
+  failure_type: string;
+  reason_code: string;
+  message: string;
+  is_retryable: boolean;
+  quarantine_path?: string | null;
+  file_hash?: string | null;
+  file_size_bytes?: number | null;
+  duplicate_of_document_id?: number | null;
+  duplicate_of_document?: DuplicateDocumentInfo | null;
+  ingest_options?: Record<string, unknown>;
+  follow_up_status: string;
+  attempt_count: number;
+  last_retry_at?: string | null;
+  last_retry_job_id?: number | null;
+  resolved_document_id?: number | null;
+  handled_by_user_id?: number | null;
+  handling_note?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FailureListResponse {
+  total: number;
+  items: FailureResponse[];
+}
+
+export interface IngestFailureQueryParams {
+  job_id?: number;
+  failure_type?: string;
+  follow_up_status?: 'belum_ditangani' | 'diproses_ulang' | 'diabaikan' | 'all';
+  include_duplicates?: boolean;
+  skip?: number;
+  limit?: number;
+}
+
+export interface FailureStatusUpdateRequest {
+  follow_up_status: 'belum_ditangani' | 'diabaikan';
+  handling_note?: string | null;
+}
+
+export interface FailureRetryRequest {
+  category_id?: number | null;
+  access_classification?: string | null;
+  document_role?: string | null;
+}
+
+export interface FailureRetryResponse {
+  failure: FailureResponse;
+  outcome: string;
+  document_id?: number | null;
+  job_id: number;
+  message: string;
+}
+
+export interface FailureBatchRetryRequest {
+  failure_ids: number[];
+}
+
+export interface BatchRetryResponse {
+  results: FailureRetryResponse[];
+  success_count: number;
+  duplicate_count: number;
+  failed_count: number;
+  skipped_count: number;
+}
+
+/**
+ * Mengambil detail satu pekerjaan ingest via GET /api/v1/ingest/jobs/{job_id}
+ */
+export async function getIngestJobDetail(
+  jobId: number,
+  signal?: AbortSignal
+): Promise<JobDetailResponse> {
+  return apiFetch<JobDetailResponse>(`/api/v1/ingest/jobs/${jobId}`, { signal });
+}
+
+/**
+ * Mengambil antrean kegagalan ingest via GET /api/v1/ingest/failures
+ */
+export async function getIngestFailures(
+  params?: IngestFailureQueryParams,
+  signal?: AbortSignal
+): Promise<FailureListResponse> {
+  const qs = params ? buildQueryString(params as Record<string, unknown>) : '';
+  return apiFetch<FailureListResponse>(`/api/v1/ingest/failures${qs}`, { signal });
+}
+
+/**
+ * Mengambil detail satu kegagalan via GET /api/v1/ingest/failures/{failure_id}
+ */
+export async function getIngestFailureDetail(
+  failureId: number,
+  signal?: AbortSignal
+): Promise<FailureResponse> {
+  return apiFetch<FailureResponse>(`/api/v1/ingest/failures/${failureId}`, { signal });
+}
+
+/**
+ * Memperbarui status tindak lanjut kegagalan via PATCH /api/v1/ingest/failures/{failure_id}
+ */
+export async function updateIngestFailureStatus(
+  failureId: number,
+  body: FailureStatusUpdateRequest,
+  signal?: AbortSignal
+): Promise<FailureResponse> {
+  return apiJson<FailureResponse>('PATCH', `/api/v1/ingest/failures/${failureId}`, body, { signal });
+}
+
+/**
+ * Memproses ulang (retry) satu kegagalan via POST /api/v1/ingest/failures/{failure_id}/retry
+ */
+export async function retryIngestFailure(
+  failureId: number,
+  body?: FailureRetryRequest,
+  signal?: AbortSignal
+): Promise<FailureRetryResponse> {
+  return apiJson<FailureRetryResponse>('POST', `/api/v1/ingest/failures/${failureId}/retry`, body || {}, {
+    timeout: 120000,
+    signal,
+  });
+}
+
+/**
+ * Memproses ulang beberapa kegagalan secara massal via POST /api/v1/ingest/failures/retry
+ */
+export async function batchRetryIngestFailures(
+  body: FailureBatchRetryRequest,
+  signal?: AbortSignal
+): Promise<BatchRetryResponse> {
+  return apiJson<BatchRetryResponse>('POST', '/api/v1/ingest/failures/retry', body, {
+    timeout: 180000,
+    signal,
+  });
+}
+
+
