@@ -1,11 +1,43 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, X, AlertTriangle, AlertCircle, FileText, Loader2 } from 'lucide-react';
+import { isApiConfigured } from '../../../lib/api';
 import { 
   getNamingComponents, 
   previewNaming,
   type NamingComponentItem, 
   type NamingSampleInput 
 } from '../../../lib/ingestApi';
+
+// ── Data contoh untuk mode offline ──────────────────────────────────────────
+const MOCK_COMPONENTS: NamingComponentItem[] = [
+  { key: 'nomor', label: 'Nomor' },
+  { key: 'nama', label: 'Nama' },
+  { key: 'tahun', label: 'Tahun' },
+  { key: 'jenis', label: 'Jenis' },
+  { key: 'bidang', label: 'Bidang' },
+];
+const MOCK_SEPARATORS = [' ', '_', '-'];
+const MOCK_DEFAULT_FORMAT = ['nomor', 'nama', 'tahun'];
+const MOCK_SAMPLE: NamingSampleInput = {
+  regulation_number: 'POJK 11/POJK.03/2024',
+  title: 'Ketahanan dan Keamanan Siber Bank Umum',
+  regulation_type: 'POJK',
+  regulation_year: 2024,
+  bidang: 'Perbankan',
+};
+
+/** Susun pratinjau nama secara lokal dari data contoh (tanpa memanggil API). */
+function buildMockPreview(format: string[], sep: string): string {
+  const fieldMap: Record<string, string> = {
+    nomor: 'POJK 11/POJK.03/2024',
+    jenis: 'POJK',
+    tahun: '2024',
+    nama: 'Ketahanan dan Keamanan Siber Bank Umum',
+    bidang: 'Perbankan',
+  };
+  const parts = format.map((k) => fieldMap[k] ?? 'NA');
+  return parts.join(sep) + '.pdf';
+}
 
 interface NamingFormatPickerProps {
   value: string[];
@@ -26,17 +58,12 @@ export default function NamingFormatPicker({
   documentId,
   disabled = false,
 }: NamingFormatPickerProps) {
-  const [components, setComponents] = useState<NamingComponentItem[]>([
-    { key: 'nomor', label: 'Nomor' },
-    { key: 'nama', label: 'Nama' },
-    { key: 'tahun', label: 'Tahun' },
-    { key: 'jenis', label: 'Jenis' },
-    { key: 'bidang', label: 'Bidang' },
-  ]);
-  const [separators, setSeparators] = useState<string[]>([' ', '_', '-']);
-  const [defaultFormat, setDefaultFormat] = useState<string[]>(['nomor', 'nama', 'tahun']);
+  const [components, setComponents] = useState<NamingComponentItem[]>(MOCK_COMPONENTS);
+  const [separators, setSeparators] = useState<string[]>(MOCK_SEPARATORS);
+  const [defaultFormat, setDefaultFormat] = useState<string[]>(MOCK_DEFAULT_FORMAT);
   const [maxComponents, setMaxComponents] = useState<number>(8);
 
+  // Pratinjau (dipakai di mode API). Mode contoh dihitung saat render (lihat mockPreview).
   const [previewFilename, setPreviewFilename] = useState<string>('');
   const [missingComponents, setMissingComponents] = useState<string[]>([]);
   const [isPreviewLoading, setIsPreviewLoading] = useState<boolean>(false);
@@ -44,8 +71,13 @@ export default function NamingFormatPicker({
 
   const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load naming components metadata from backend
+  // ── Mode contoh: pratinjau dihitung saat render, tanpa useEffect/setState ─
+  const activeFormatForMock = value.length > 0 ? value : defaultFormat;
+  const mockPreviewFilename = !isApiConfigured ? buildMockPreview(activeFormatForMock, separator) : '';
+
+  // ── Mode API: muat komponen penamaan dari backend ──────────────────────────
   useEffect(() => {
+    if (!isApiConfigured) return; // Mode contoh: pakai MOCK_COMPONENTS
     let mounted = true;
     getNamingComponents()
       .then((res) => {
@@ -72,7 +104,7 @@ export default function NamingFormatPicker({
     };
   }, []);
 
-  // Debounced live preview (300 ms)
+  // ── Pratinjau langsung (debounced 300 ms) ─────────────────────────────────
   useEffect(() => {
     if (previewTimeoutRef.current) {
       clearTimeout(previewTimeoutRef.current);
@@ -80,17 +112,15 @@ export default function NamingFormatPicker({
 
     const activeFormat = value.length > 0 ? value : defaultFormat;
 
+    // Mode contoh: pratinjau sudah dihitung di atas saat render — tidak perlu setState
+    if (!isApiConfigured) return;
+
+    // ── MODE API ──────────────────────────────────────────────────────────
     previewTimeoutRef.current = setTimeout(async () => {
       setIsPreviewLoading(true);
       setPreviewError(null);
       try {
-        const fallbackSample: NamingSampleInput = sampleInput || {
-          regulation_number: 'POJK 11/POJK.03/2024',
-          title: 'Ketahanan dan Keamanan Siber Bank Umum',
-          regulation_type: 'POJK',
-          regulation_year: 2024,
-          bidang: 'Perbankan',
-        };
+        const fallbackSample: NamingSampleInput = sampleInput || MOCK_SAMPLE;
 
         const res = await previewNaming({
           naming_format: activeFormat,
@@ -187,7 +217,7 @@ export default function NamingFormatPicker({
       <div className="p-3 border border-gray-200 rounded-xl bg-gray-50/70 min-h-[48px] flex items-center flex-wrap gap-2">
         {value.length === 0 ? (
           <div className="flex items-center text-xs text-gray-500">
-            <span className="font-medium mr-1.5 text-gray-700">Format Default Backend:</span>
+            <span className="font-medium mr-1.5 text-gray-700">Format Default{isApiConfigured ? ' Backend' : ''}:</span>
             <span className="font-mono bg-white px-2 py-0.5 rounded border border-gray-200 text-gray-800">
               {defaultFormat.map(getComponentLabel).join(separator === ' ' ? ' ' : ` ${separator} `)}
             </span>
@@ -276,6 +306,11 @@ export default function NamingFormatPicker({
           <span className="text-xs font-semibold text-gray-700 flex items-center">
             <FileText size={13} className="mr-1 text-red-600" />
             Pratinjau Nama Berkas Standar:
+            {!isApiConfigured && (
+              <span className="ml-1.5 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-medium rounded-md border border-amber-200">
+                contoh
+              </span>
+            )}
           </span>
           {isPreviewLoading && (
             <span className="flex items-center text-[11px] text-gray-400 font-medium">
@@ -284,7 +319,12 @@ export default function NamingFormatPicker({
             </span>
           )}
         </div>
-        {previewError ? (
+        {/* Mode contoh: tampilkan mockPreviewFilename; mode API: tampilkan previewFilename atau galat */}
+        {!isApiConfigured ? (
+          <div className="p-2 bg-gray-50 rounded-lg border border-gray-200 text-xs font-mono text-gray-800 break-all select-all">
+            {mockPreviewFilename || 'Memuat contoh nama berkas...'}
+          </div>
+        ) : previewError ? (
           <div className="p-2.5 bg-red-50 rounded-lg border border-red-200 text-xs text-red-700 flex items-start">
             <AlertCircle size={14} className="mr-1.5 mt-0.5 shrink-0 text-red-600" />
             <span>{previewError}</span>

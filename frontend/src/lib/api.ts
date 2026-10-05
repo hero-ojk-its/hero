@@ -163,12 +163,9 @@ async function prepareAndFetchResponse(
           errorDetail = null;
         }
       } else {
-        try {
-          const textData = await response.text();
-          errorDetail = textData.trim() ? textData : null;
-        } catch {
-          errorDetail = null;
-        }
+        // Jangan tampilkan isi HTML/teks mentah ke pengguna (mis. 405 dari GitHub Pages).
+        // Gunakan pesan ringkas berdasarkan status HTTP saja.
+        errorDetail = null;
       }
 
       if (!errorDetail) {
