@@ -1,0 +1,185 @@
+# HERO — source registry (URD 3.2 / 4.1)
+# Sites are entered MANUALLY here; HERO never auto-discovers new hosts
+# (scheduled auto-crawling is out of scope per URD 4.2).
+
+storage:
+  knowledge_base: data/knowledge_base
+  staging_dir: data/staging
+  catalog_db: data/hero_catalog.db
+
+# Vector search (hero vector build / hero serve). The semantic model backs the
+# optional AI-Assisted search; Deterministic mode (FTS5 + LSA) never needs it.
+#   e5-large  2.24 GB, ~3 GB RAM while indexing. Measured on config/eval_queries.yaml:
+#             paraphrase MRR 0.77 (BM25 0.47). Recommended when RAM allows.
+#   minilm    0.22 GB, <1 GB RAM. Paraphrase MRR 0.45 — no better than BM25 here.
+vector:
+  semantic_model: e5-large
+  lsa_dim: 256
+
+# Jembatan ke backend tim (hero bridge …). Rahasia TIDAK di sini: kunci API
+# internal dibaca dari .env (HERO_BACKEND_INTERNAL_KEY / INTERNAL_API_KEY) dan
+# DSN Postgres dari HERO_PG_DSN / DATABASE_URL.
+#   embedder    lsa      deterministik, offline, butuh `hero vector build --lsa-only` sekali
+#               semantic model lokal ONNX (vector.semantic_model di atas)
+#               none     pasal dikirim tanpa vektor
+#   backend_dim dimensi kolom articles.embedding di backend (saat ini 1536);
+#               vektor lebih pendek di-zero-pad — cosine tidak berubah.
+bridge:
+  base_url: http://127.0.0.1:8000
+  embedder: lsa
+  backend_dim: 1536
+  claim_documents: 5
+  claim_scans: 1
+  batch_articles: 150
+  batch_candidates: 200
+  poll_seconds: 5.0
+  send_full_text: true
+  push_ayat: false
+
+# Fase 2 — Analisa & Summary (URD 3.3). Mode Deterministik selalu berjalan;
+# AI-Assisted opsional: hanya menarasikan ulang fakta hasil ekstraksi, diverifikasi,
+# dan kembali ke Deterministik bila gagal. Butuh kredensial Claude
+# (ANTHROPIC_API_KEY atau `ant auth login`) dan: pip install -e ".[ai]"
+analysis:
+  ai_enabled: false
+  ai_model: claude-opus-5
+  ai_effort: medium
+  ai_allow_internal: false      # dokumen berklasifikasi internal tidak dikirim ke layanan AI
+  ai_max_facts: 24
+
+# US-20a — penamaan berkas baku sebelum masuk folder KB. OJK belum punya format
+# baku (Weekly #4), jadi templat bebas disusun; `hero penamaan cek` untuk
+# pratinjau. Token: {jenis} {nomor} {nomor_urut} {tahun} {tanggal[:%d-%m-%Y]}
+# {judul[:panjang]} {kategori} {sumber} {status}; filter |lower |upper |title |slug.
+# Dokumen yang unsur wajibnya tidak terbaca masuk antrian koreksi (`hero koreksi`).
+naming:
+  enabled: true
+  template: "{jenis} {nomor_urut} Tahun {tahun} tentang {judul:90|title}"
+  required: [nomor, tanggal, judul]
+  mode: auto                    # auto | ocr (selalu OCR halaman 1)
+  fallback_metadata: true       # false = hanya halaman pertama, persis arahan mitra
+
+# US-24 — aturan kategori ada di berkas ini, bisa diubah tanpa mengubah kode.
+classification:
+  rules_file: config/kategori.yaml
+
+scraper:
+  user_agent: "HERO-RegulationBot/0.1 (capstone research; contact: fathir.startfranchise@gmail.com)"
+  request_timeout: 45
+  delay_seconds: 1.0        # minimum gap between requests to ONE host
+  respect_robots: true
+  max_file_mb: 80
+  verify_tls: true
+  max_retries: 3             # retries for timeouts / connection errors / 429,502,503,504
+  retry_backoff_seconds: 1.0 # exponential backoff base (with jitter), capped at 30s
+  max_concurrent_downloads: 4 # PDF downloads in flight; still throttled per host
+  use_page_cache: true        # conditional GET (ETag/Last-Modified) on listing pages
+
+ocr:
+  enabled: true
+  languages: "ind+eng"      # Indonesian first, English fallback
+  dpi: 300
+  min_chars_per_page: 120   # below this a page is treated as image-only
+  max_pages: 60             # OCR budget per document
+  preprocess: true           # orientation fix (OSD) + deskew + binarize before OCR
+  deskew: true                # projection-profile tilt correction (needs numpy)
+  adaptive_retry: true        # retry a low-confidence page with a different PSM
+
+pdf:
+  candidate_passwords: []    # tried in order, after the blank password, on locked PDFs
+  attempt_repair: true       # rebuild a broken PDF's xref table with pikepdf before giving up
+
+# ---------------------------------------------------------------------------
+# Route 1 — websites to harvest PDFs from (URD 3.2, jalur 1)
+#
+# Sites can also be passed in ad-hoc, without editing this file:
+#   hero scrape --url <URL> --follow /regulasi/Pages/ --exclude abstrak
+#   hero scrape --url "https://jdih.ojk.go.id/Web/ViewPeraturan/Index?sektor=02&jenisPeraturan=06"
+#   hero scrape --sektor 01 --sektor 02 --jenis 06 --limit 20
+#   python: from hero import scrape_urls; scrape_urls("https://...", limit=5)
+#
+# `adapter` picks the harvesting strategy:
+#   auto      — choose by hostname (default)
+#   generic   — crawl HTML links, following `follow_patterns` one hop
+#   jdih_ojk  — drive the AJAX register at jdih.ojk.go.id
+# ---------------------------------------------------------------------------
+sites:
+  # (1) Main OJK regulation register — 1,570 regulations over 157 pages
+  # (counted 2026-09-15). The pager is an ASP.NET postback, so the
+  # ojk_sharepoint adapter replays it; a link crawler only ever sees page 1.
+  # Each detail page adds Sektor / SubSektor / Jenis / Nomor / Tanggal
+  # Berlaku plus the attachments (regulation, Abstrak, FAQ, Lampiran).
+  - name: "OJK — Regulasi"
+    url: "https://ojk.go.id/id/regulasi/default.aspx"
+    enabled: true
+    adapter: ojk_sharepoint
+    max_documents: 12              # per `hero scrape`; `hero discover` lists all
+
+  # (2) Draft regulations open for public comment — 650 over 65 pages.
+  # Each draft ships as a ZIP; HERO extracts its "Batang Tubuh" (body text).
+  # Drafts are not law yet, so their status is fixed to "rancangan".
+  - name: "OJK — Rancangan Regulasi"
+    url: "https://www.ojk.go.id/id/regulasi/otoritas-jasa-keuangan/rancangan-regulasi/Default.aspx"
+    enabled: true
+    adapter: ojk_sharepoint
+    max_documents: 10
+    status_hint: rancangan
+
+  # (3) JDIH OJK — the official legal-documentation register, 986 records.
+  # Its table is loaded by AJAX; the jdih_ojk adapter reads the JSON listing,
+  # then each detail page (22 fields incl. Tanggal Penetapan, Landasan Hukum,
+  # Riwayat Peraturan). Its legal status is authoritative and is copied onto
+  # matching ojk.go.id records (TYPE|number|year).
+  #
+  # `sektor` / `jenis_peraturan` are the portal's two dynamic axes. "*" reads
+  # every value the portal publishes (120 pairs). Left empty, the pair in the
+  # URL's query string is used instead (here: 02 × 01 — a single record).
+  #   sektor: 01 Perbankan · 02 Pasar Modal · 03 IKNB (lama) · 04 PEPK
+  #           05 Manajemen Strategis · 06 Lainnya · 07 Kebijakan Strategis
+  #           08 Perasuransian/Penjaminan/Dana Pensiun · 09 Lembaga Pembiayaan
+  #           10 ITSK / Aset Keuangan Digital
+  #   jenis:  01 UU · 03 Perpres · 04 PP · 05 Permen · 06 Peraturan OJK
+  #           07 Peraturan BI · 09 SEOJK/PADK · 14 Peraturan Lain
+  - name: "JDIH OJK — Register Peraturan"
+    url: "https://jdih.ojk.go.id/Web/ViewPeraturan/Index?sektor=02&jenisPeraturan=01"
+    enabled: true
+    adapter: jdih_ojk
+    max_documents: 12
+    sektor: ["*"]                  # every sektor
+    jenis_peraturan: ["*"]         # every jenis
+
+# ---------------------------------------------------------------------------
+# Route 3 — local folders and synced OneDrive folders
+# ---------------------------------------------------------------------------
+folders:
+  - name: "Dokumen proyek (lokal)"
+    path: "docs"
+    enabled: true
+    recursive: true
+    category_hint: null
+
+  # A OneDrive folder synced by the desktop client is just a local path.
+  # - name: "OneDrive — Regulasi DPEA"
+  #   path: "~/OneDrive - Otoritas Jasa Keuangan/Regulasi"
+  #   enabled: true
+  #   recursive: true
+
+# ---------------------------------------------------------------------------
+# Route 3b — public OneDrive share links (no sync client needed)
+# ON HOLD: scraping (Route 1) is the current priority. The code path stays in
+# place and is skipped entirely while this list is empty. A folder synced by
+# the OneDrive desktop client can still be read today via `folders:` above.
+# ---------------------------------------------------------------------------
+onedrive_shares:
+  # Folder HERO/downloads milik mitra (DPEA), dibaca lewat tautan berbagi
+  # "Anyone with the link" -> sesi tamu SharePoint. Tautan ini memberi akses ke
+  # SELURUH folder HERO, karena itu subfolder dibatasi ke "downloads" saja; folder
+  # saudara (mis. Data Internal, Administration) tidak pernah dibuka.
+  # Isinya 2.612 berkas; max_files membatasi satu kali jalan. Jalankan ulang
+  # dengan angka lebih besar untuk mengambil sisanya (duplikat dikenali via SHA-256).
+  # Cek tautan tanpa mengunduh:  hero onedrive --check
+  - name: "OneDrive mitra — HERO/downloads"
+    share_url: "${HERO_ONEDRIVE_SHARE_URL}"   # rahasia: isi di .env, jangan di berkas ini
+    subfolder: "downloads"
+    max_files: 100
+    enabled: true

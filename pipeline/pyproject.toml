@@ -1,0 +1,54 @@
+[project]
+name = "hero"
+version = "0.1.0"
+description = "HERO — Harmonisasi & Analisa Regulasi Otomatis (baseline: scraping, ingest, OCR & analysis)"
+requires-python = ">=3.11"
+dependencies = [
+    "pymupdf>=1.24",
+    "pdfplumber>=0.11",
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
+    "typer>=0.12",
+    "rich>=13.7",
+    "pyyaml>=6.0",
+    "pytesseract>=0.3.10",
+    "pillow>=10.0",
+    "python-dateutil>=2.9",
+    "tenacity>=8.2",
+    "numpy>=1.26",
+    "pikepdf>=8.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "httpx>=0.27"]
+# HTTP API for the frontend (hero serve).
+api = ["fastapi>=0.115", "uvicorn>=0.30"]
+# Vector search, Deterministic mode: TF-IDF/LSA + sqlite-vec. No model download.
+vector = ["scikit-learn>=1.5", "sqlite-vec>=0.1.6"]
+# Vector search, AI-Assisted mode: local multilingual embeddings via ONNX
+# (downloads the model once: 0.22 GB MiniLM, 2.24 GB e5-large).
+semantic = ["fastembed>=0.4"]
+# AI-Assisted narration (Fase 2): Claude API. Optional — Deterministic mode never needs it.
+ai = ["anthropic>=1.0"]
+# Jembatan ke backend tim: baca/tulis kolom pgvector & benchmark Postgres.
+# Worker pindai/ekstraksi TIDAK butuh ini (cukup `requests`, sudah inti).
+pg = ["psycopg[binary]>=3.1"]
+all = ["hero[api,vector,semantic,ai,pg]"]
+
+[project.scripts]
+hero = "hero.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["hero", "hero.*"]
+
+[tool.setuptools.package-data]
+"hero.kb" = ["templates/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,3 @@
+Build the session that strict about token efficiency and respect the boundaries of security of the projects and the user, learn from the /docs folder and *.md files so you can have all the context and if there any progress you should update docs/REPORT.md as a log files and all about the updates.
+
+After process the prompt make sure you save and develop new skill so the user can use it in another environtment and platform without build it from scratch again. Export it as file md in different folder and build it as good as you can!
