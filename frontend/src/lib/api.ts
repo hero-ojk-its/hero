@@ -301,7 +301,10 @@ export interface DocumentItem {
   regulation_number: string | null;
   regulation_type: string | null;
   release_date: string | null;
+  regulation_year?: number | null;
   bidang: string | null;
+  access_classification?: 'publik' | 'non_publik' | string | null;
+  document_role?: 'corpus_eksisting' | 'draft_kajian' | string | null;
   category_id: number | null;
   category_path: string[] | null;
   status_keberlakuan: 'berlaku' | 'diubah' | 'dicabut' | 'tidak_diketahui' | string;

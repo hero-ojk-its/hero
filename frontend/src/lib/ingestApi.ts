@@ -1,4 +1,4 @@
-import { apiFetch, apiJson, apiFetchBlob, buildQueryString, type DocumentBlob } from './api';
+import { apiFetch, apiJson, apiFetchBlob, buildQueryString, type DocumentBlob, type DocumentItem } from './api';
 import type { components } from './openapi';
 
 // Re-export core schema types directly from openapi
@@ -6,6 +6,8 @@ export type ScrapingSourceCreate = components['schemas']['ScrapingSourceCreate']
 export type ScrapingSourceResponse = components['schemas']['ScrapingSourceResponse'];
 export type ScrapingSourceUpdate = components['schemas']['ScrapingSourceUpdate'];
 export type ScrapingSourceRunRequest = components['schemas']['ScrapingSourceRunRequest'];
+export type FolderOptionItem = components['schemas']['FolderOptionItem'];
+export type FolderOptionsResponse = components['schemas']['FolderOptionsResponse'];
 
 export type ScanCreate = components['schemas']['ScanCreate'];
 export type ScanSessionResponse = components['schemas']['ScanSessionResponse'];
@@ -28,6 +30,11 @@ export type NamingPreviewResponse = components['schemas']['NamingPreviewResponse
 export type NamingSampleInput = components['schemas']['NamingSampleInput'];
 
 export type CategoryDetailResponse = components['schemas']['CategoryDetailResponse'];
+
+export type UpdateMetadataIn = components['schemas']['UpdateMetadataIn'];
+export type UpdateDocumentStatusIn = components['schemas']['UpdateDocumentStatusIn'];
+export type UpdateDocumentStatusResponse = components['schemas']['UpdateDocumentStatusResponse'];
+export type StatusKeberlakuan = components['schemas']['StatusKeberlakuan'];
 
 export type JenisSumber = components['schemas']['JenisSumber'];
 export type StatusPindai = components['schemas']['StatusPindai'];
@@ -57,6 +64,13 @@ export interface CandidateQueryParams {
 
 export async function getScrapingSources(signal?: AbortSignal): Promise<ScrapingSourceResponse[]> {
   return apiFetch<ScrapingSourceResponse[]>('/api/v1/scraping-sources/', { signal });
+}
+
+/**
+ * Mengambil daftar opsi folder lokal yang tersedia via GET /api/v1/scraping-sources/folder-options
+ */
+export async function getFolderOptions(signal?: AbortSignal): Promise<FolderOptionsResponse> {
+  return apiFetch<FolderOptionsResponse>('/api/v1/scraping-sources/folder-options', { signal });
 }
 
 export async function createScrapingSource(
@@ -500,5 +514,32 @@ export async function batchRetryIngestFailures(
     signal,
   });
 }
+
+// ============================================================================
+// 8. Document Metadata & Status Management API (/api/v1/documents/)
+// ============================================================================
+
+/**
+ * Memperbarui metadata dokumen via PATCH /api/v1/documents/{id}/metadata
+ */
+export async function updateDocumentMetadata(
+  id: number,
+  body: UpdateMetadataIn,
+  signal?: AbortSignal
+): Promise<DocumentItem> {
+  return apiJson<DocumentItem>('PATCH', `/api/v1/documents/${id}/metadata`, body, { signal });
+}
+
+/**
+ * Memperbarui status keberlakuan dokumen via PUT /api/v1/documents/{id}/status
+ */
+export async function updateDocumentStatus(
+  id: number,
+  body: UpdateDocumentStatusIn,
+  signal?: AbortSignal
+): Promise<UpdateDocumentStatusResponse> {
+  return apiJson<UpdateDocumentStatusResponse>('PUT', `/api/v1/documents/${id}/status`, body, { signal });
+}
+
 
 

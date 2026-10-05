@@ -19,8 +19,11 @@ import {
   Minus,
   Plus,
   Copy,
-  CheckCircle
+  CheckCircle,
+  Edit3,
+  RefreshCw
 } from 'lucide-react';
+import { EditMetadataModal, EditStatusModal } from './DetailDokumenModals';
 import { regulasiData } from '../data/regulasiData';
 import type { RegulasiItem } from '../data/regulasiData';
 import { 
@@ -64,6 +67,10 @@ export default function DetailDokumen() {
 
   // 1. State metadata dokumen
   const [fetchedDoc, setFetchedDoc] = useState<AdaptedRegulasiDoc | null>(null);
+  const [rawDoc, setRawDoc] = useState<DocumentItem | null>(null);
+  const [isMetadataModalOpen, setIsMetadataModalOpen] = useState<boolean>(false);
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(!stateRegulasi && isApiConfigured && Boolean(id));
   const [notFound, setNotFound] = useState<boolean>(false);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -95,17 +102,22 @@ export default function DetailDokumen() {
     const controller = new AbortController();
     const signal = controller.signal;
 
-    // 1. Ambil metadata jika belum ada dari state navigasi
-    if (!stateRegulasi) {
-      setLoading(true);
+    // 1. Ambil metadata jika belum ada dari state navigasi atau untuk mendapatkan rawDoc
+    if (isApiConfigured && id) {
+      if (!stateRegulasi) {
+        setLoading(true);
+      }
       setNotFound(false);
       setApiError(null);
 
       apiFetch<DocumentItem>(`/api/v1/documents/${id}`, { signal })
         .then((doc) => {
           if (!signal.aborted) {
-            setFetchedDoc(adaptDocumentToDetail(doc));
-            setLoading(false);
+            setRawDoc(doc);
+            if (!stateRegulasi) {
+              setFetchedDoc(adaptDocumentToDetail(doc));
+              setLoading(false);
+            }
           }
         })
         .catch((err: unknown) => {
@@ -1137,6 +1149,23 @@ export default function DetailDokumen() {
           </button>
         </div>
 
+        {/* Toast Notifikasi Sukses */}
+        {toastMessage && (
+          <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl flex items-center justify-between text-xs font-semibold animate-in fade-in duration-200 shadow-xs">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{toastMessage}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setToastMessage(null)}
+              className="text-emerald-700 hover:text-emerald-950 font-bold px-2 py-0.5 rounded cursor-pointer"
+            >
+              Tutup
+            </button>
+          </div>
+        )}
+
         {/* 1. Header Card (Nomor, Status, Judul, Metadata Singkat) */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-6 sm:p-7 space-y-3.5">
           <div className="flex flex-wrap items-center gap-3">
@@ -1147,6 +1176,16 @@ export default function DetailDokumen() {
               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: statusColor }}></span>
               {regulasi.status}
             </span>
+            {isApiConfigured && Boolean(id) && rawDoc && (
+              <button
+                type="button"
+                onClick={() => setIsStatusModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:text-red-700 bg-white hover:bg-red-50 border border-gray-300 hover:border-red-200 rounded-lg shadow-xs transition-colors cursor-pointer"
+              >
+                <RefreshCw size={12} className="text-gray-500" />
+                <span>Ubah Status</span>
+              </button>
+            )}
           </div>
 
           <h2 className="text-base sm:text-lg text-gray-700 font-medium leading-relaxed">
@@ -1169,14 +1208,27 @@ export default function DetailDokumen() {
 
         {/* 2. Informasi Dokumen (Structured Grid) */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-6 sm:p-7">
-          <div className="flex items-center gap-2.5 mb-6 pb-4 border-b border-gray-100">
-            <div className="p-1.5 bg-red-50 text-red-700 rounded-lg">
-              <Info className="w-4 h-4" />
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-gray-100">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 bg-red-50 text-red-700 rounded-lg">
+                <Info className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900 text-base">Informasi Dokumen</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Metadata lengkap regulasi yang terindeks di sistem HERO.</p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-bold text-gray-900 text-base">Informasi Dokumen</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Metadata lengkap regulasi yang terindeks di sistem HERO.</p>
-            </div>
+
+            {isApiConfigured && Boolean(id) && rawDoc && (
+              <button
+                type="button"
+                onClick={() => setIsMetadataModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-gray-50 text-gray-700 hover:text-red-700 border border-gray-300 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer self-start sm:self-auto"
+              >
+                <Edit3 size={14} />
+                <span>Koreksi Metadata</span>
+              </button>
+            )}
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-7 gap-x-8">
@@ -1198,9 +1250,21 @@ export default function DetailDokumen() {
             {/* Status Keberlakuan */}
             <div className="flex flex-col gap-1.5 items-start">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Status Keberlakuan</span>
-              <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${statusBadge}`}>
-                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: statusColor }}></span>
-                <span>Berlaku Penuh ({regulasi.status})</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${statusBadge}`}>
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: statusColor }}></span>
+                  <span>{regulasi.status}</span>
+                </div>
+                {isApiConfigured && Boolean(id) && rawDoc && (
+                  <button
+                    type="button"
+                    onClick={() => setIsStatusModalOpen(true)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-gray-600 hover:text-red-700 bg-gray-50 hover:bg-red-50 border border-gray-200 hover:border-red-200 rounded-md transition-colors cursor-pointer"
+                  >
+                    <RefreshCw size={12} className="text-gray-400" />
+                    <span>Ubah Status</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1410,6 +1474,33 @@ export default function DetailDokumen() {
           )}
         </div>
       </div>
+
+      {/* Modal Koreksi Metadata & Ubah Status */}
+      {rawDoc && (
+        <>
+          <EditMetadataModal
+            isOpen={isMetadataModalOpen}
+            onClose={() => setIsMetadataModalOpen(false)}
+            document={rawDoc}
+            onSuccess={(updatedDoc) => {
+              setRawDoc(updatedDoc);
+              setFetchedDoc(adaptDocumentToDetail(updatedDoc));
+              setToastMessage('Metadata tersimpan');
+            }}
+          />
+          <EditStatusModal
+            isOpen={isStatusModalOpen}
+            onClose={() => setIsStatusModalOpen(false)}
+            document={rawDoc}
+            onSuccess={(newStatus, message) => {
+              const updated = { ...rawDoc, status_keberlakuan: newStatus };
+              setRawDoc(updated);
+              setFetchedDoc(adaptDocumentToDetail(updated));
+              setToastMessage(message || 'Status keberlakuan berhasil diperbarui');
+            }}
+          />
+        </>
+      )}
     </>
   );
 }
