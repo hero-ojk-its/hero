@@ -1,0 +1,13 @@
+[Unit]
+Description=Jadwal jembatan HERO (pindai + ekstraksi + cermin korpus)
+
+[Timer]
+# Tiap 30 menit: antrian ekstraksi backend terisi saat pengguna mengunggah
+# atau menarik dokumen, jadi jeda sependek ini membuat layar terasa hidup
+# tanpa perlu worker yang menyala terus (alternatif: unit --loop).
+OnBootSec=5min
+OnUnitActiveSec=30min
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

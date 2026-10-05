@@ -1,0 +1,31 @@
+[Unit]
+Description=HERO — worker pindai (mode push): sesi pindai backend dilayani adapter HERO
+Documentation=file:///opt/hero/docs/INTEGRASI_BACKEND.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=hero
+Group=hero
+WorkingDirectory=/opt/hero
+Environment=HOME=/opt/hero
+Environment=HERO_CONFIG=/opt/hero/config/sources.yaml
+# --maks-kandidat adalah anggaran kesopanan scraping: satu rekaman = satu
+# halaman detail yang dibaca dari situs sumber. Backend meminta sampai
+# CRAWL_MAX_CANDIDATES (bawaan 5000) — naikkan perlahan, bukan sekaligus.
+ExecStart=/opt/hero/.venv/bin/hero bridge pindai --loop --maks-kandidat 500
+Restart=always
+RestartSec=30
+MemoryMax=1G
+Nice=12
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/opt/hero/data
+
+[Install]
+WantedBy=multi-user.target

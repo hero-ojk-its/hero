@@ -1,0 +1,32 @@
+[Unit]
+Description=HERO — layanan analisa & harmonisasi (dipasang sebagai /api/v1/ml/*)
+Documentation=file:///opt/hero/docs/API_CONTRACT_ML.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=hero
+Group=hero
+WorkingDirectory=/opt/hero
+Environment=HOME=/opt/hero
+Environment=HERO_CONFIG=/opt/hero/config/sources.yaml
+# Terikat ke jembatan docker0 (172.17.0.1): hanya container yang bisa
+# menjangkau, bukan internet. Caddy Nextcloud meneruskan /api/v1/ml/* ke sini.
+# Tidak punya autentikasi sendiri — jangan pernah diikat ke 0.0.0.0.
+ExecStart=/opt/hero/.venv/bin/hero bridge serve --host 172.17.0.1 --port 8100 --cors https://hero-ojk.vercel.app,https://hero-ojk-its.github.io
+Restart=always
+RestartSec=10
+# Model semantik e5-large memakai ±3 GB saat memuat; dengan minilm <1 GB.
+# Sesuaikan dengan vector.semantic_model di config/sources.yaml.
+MemoryHigh=450M
+MemoryMax=600M
+CPUQuota=50%
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/opt/hero/data
+
+[Install]
+WantedBy=multi-user.target

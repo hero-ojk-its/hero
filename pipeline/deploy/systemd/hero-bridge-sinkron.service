@@ -1,0 +1,29 @@
+[Unit]
+Description=HERO — satu putaran jembatan: pindai, ekstraksi, cermin korpus
+Documentation=file:///opt/hero/docs/INTEGRASI_BACKEND.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+MemoryHigh=700M
+MemoryMax=900M
+CPUQuota=100%
+Environment=OMP_THREAD_LIMIT=1
+Nice=15
+Type=oneshot
+User=hero
+Group=hero
+WorkingDirectory=/opt/hero
+Environment=HOME=/opt/hero
+Environment=HERO_CONFIG=/opt/hero/config/sources.yaml
+ExecStart=/opt/hero/.venv/bin/hero bridge sekali
+TimeoutStartSec=4h
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/opt/hero/data
+
+[Install]
+WantedBy=multi-user.target

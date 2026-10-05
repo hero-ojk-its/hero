@@ -1,0 +1,18 @@
+[Unit]
+Description=HERO — cadangan PDF ke Nextcloud (WebDAV), harian
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+# Root: volume docker dan kredensial rclone hanya bisa dibaca root.
+ExecStart=/opt/hero/deploy/vps/backup-pdf.sh
+TimeoutStartSec=6h
+# Prioritas paling rendah: jangan mengganggu backend, worker, atau Nextcloud.
+Nice=19
+IOSchedulingClass=idle
+MemoryMax=300M
+CPUQuota=50%
+
+[Install]
+WantedBy=multi-user.target

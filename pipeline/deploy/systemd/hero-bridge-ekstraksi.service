@@ -1,0 +1,38 @@
+[Unit]
+Description=HERO — worker ekstraksi: antrian backend → OCR/metadata/pasal/vektor
+Documentation=file:///opt/hero/docs/INTEGRASI_BACKEND.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=hero
+Group=hero
+WorkingDirectory=/opt/hero
+Environment=HOME=/opt/hero
+Environment=HERO_CONFIG=/opt/hero/config/sources.yaml
+# HERO_BACKEND_URL dan HERO_BACKEND_INTERNAL_KEY dibaca dari /opt/hero/.env
+# (mode 600, milik user hero). Jangan menulis kunci API di unit ini: berkas
+# unit dapat dibaca semua pengguna sistem.
+ExecStart=/opt/hero/.venv/bin/hero bridge ekstraksi --loop
+Restart=always
+RestartSec=15
+# Satu dokumen OCR penuh bisa memakan ratusan MB; batas ini mencegah satu
+# PDF rusak menjatuhkan layanan lain di VPS.
+MemoryHigh=700M
+MemoryMax=900M
+CPUQuota=100%
+Environment=OMP_THREAD_LIMIT=1
+Environment=OMP_NUM_THREADS=1
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+# Pengerasan: worker hanya perlu membaca kodenya dan menulis ke data/.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/opt/hero/data
+
+[Install]
+WantedBy=multi-user.target
