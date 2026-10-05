@@ -316,7 +316,8 @@ class ScanService:
                         u_hash = hashlib.sha256(f_url.encode("utf-8")).hexdigest()
 
                         meta = parse_onedrive_filename_metadata(entry.absolute_path.name)
-                        rel_d = date(meta["release_year"], 1, 1) if meta.get("release_year") else None
+                        # Langkah 12e: Jangan mengarang tanggal 1 Januari untuk folder lokal
+                        rel_d = None
 
                         # Cocokkan terhadap KB:
                         # 1. hash + size sama -> sudah_ada
@@ -364,11 +365,11 @@ class ScanService:
                                 is_selected = True
                                 c_new += 1
 
-                        cand_reg_year = meta.get("regulation_year") or extract_regulation_year(
+                        cand_reg_year = meta.get("regulation_year") or meta.get("release_year") or extract_regulation_year(
                             regulation_number=meta.get("regulation_number"),
                             title=entry.absolute_path.stem.replace("_", " "),
                             filename=entry.absolute_path.name,
-                            release_date=rel_d,
+                            release_date=None,
                         )
                         cand_row = ScanCandidate(
                             scan_id=session.id,
