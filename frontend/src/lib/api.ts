@@ -447,11 +447,9 @@ export function adaptDocumentToDetail(doc: DocumentItem): AdaptedRegulasiDoc {
       tahun = d.getFullYear();
     }
   }
-  if (tahun === '-' && doc.created_at) {
-    const d = new Date(doc.created_at);
-    if (!isNaN(d.getTime())) {
-      tahun = d.getFullYear();
-    }
+  // Bila release_date kosong, gunakan regulation_year; bila kosong juga, '-' (JANGAN gunakan created_at)
+  if (tahun === '-' && doc.regulation_year !== null && doc.regulation_year !== undefined) {
+    tahun = doc.regulation_year;
   }
 
   let tanggalPublikasi: string | undefined = undefined;

@@ -48,7 +48,7 @@ export default function RealSyncTab() {
   const [foldersError, setFoldersError] = useState<string | null>(null);
 
   // Configuration state
-  const [accessClassification, setAccessClassification] = useState<KlasifikasiAkses>('non_publik');
+  const [accessClassification, setAccessClassification] = useState<KlasifikasiAkses>('publik');
   const [categories, setCategories] = useState<CategoryDetailResponse[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [namingFormat, setNamingFormat] = useState<string[]>(['nomor', 'nama', 'tahun']);
@@ -668,11 +668,11 @@ export default function RealSyncTab() {
                       onChange={(e) => setAccessClassification(e.target.value as KlasifikasiAkses)}
                       className="block w-full py-2.5 px-3 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                     >
-                      <option value="non_publik">Non-Publik (Internal Terbatas)</option>
                       <option value="publik">Publik (Dapat Diakses Terbuka)</option>
+                      <option value="non_publik">Non-Publik (Internal Terbatas)</option>
                     </select>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Menentukan visibilitas dokumen regulasi yang ditarik.
+                    <p className="text-xs text-gray-500 mt-1 italic">
+                      Dokumen Non-Publik belum dapat dibuka PDF-nya sampai fitur login aktif (Fase 2).
                     </p>
                   </div>
 

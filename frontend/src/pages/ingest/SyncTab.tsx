@@ -35,7 +35,7 @@ function MockSyncTab() {
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const [tempSelectedFolder, setTempSelectedFolder] = useState('/app/sources/peraturan_internal');
   const [folderError, setFolderError] = useState('');
-  const [accessClassification, setAccessClassification] = useState('Non-Publik');
+  const [accessClassification, setAccessClassification] = useState('Publik');
   const [targetCategory, setTargetCategory] = useState('Perbankan');
   const [oneDriveNotice, setOneDriveNotice] = useState(false);
   const [isSyncScanning, setIsSyncScanning] = useState(false);
@@ -242,10 +242,12 @@ function MockSyncTab() {
                         onChange={(e) => setAccessClassification(e.target.value)}
                         className="block w-full py-2.5 px-3 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-[#B91C1C] focus:border-[#B91C1C] bg-white font-medium"
                       >
-                        <option value="Non-Publik">Non-Publik</option>
                         <option value="Publik">Publik</option>
+                        <option value="Non-Publik">Non-Publik</option>
                       </select>
-                      <p className="text-xs text-gray-500 mt-1.5">Menentukan klasifikasi akses dokumen sebelum dipindai.</p>
+                      <p className="text-xs text-gray-500 mt-1.5 italic">
+                        Dokumen Non-Publik belum dapat dibuka PDF-nya sampai fitur login aktif (Fase 2).
+                      </p>
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-gray-900 mb-2 uppercase tracking-wider">

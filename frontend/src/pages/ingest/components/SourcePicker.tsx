@@ -9,7 +9,8 @@ import {
   Clock, 
   Loader2, 
   Layers,
-  Power
+  Power,
+  FolderOpen
 } from 'lucide-react';
 import type { ScrapingSourceResponse } from '../../../lib/ingestApi';
 import { JENIS_SUMBER_LABELS } from '../labels';
@@ -37,9 +38,16 @@ export default function SourcePicker({
 }: SourcePickerProps) {
   const [filterActiveOnly, setFilterActiveOnly] = useState(false);
 
+  // Tab Scraping URL hanya menampilkan sumber situs_web dan onedrive_public (folder_lokal dikelola di Tab Sinkronisasi)
+  const scrapingSources = sources.filter(
+    (s) => s.source_type === 'situs_web' || s.source_type === 'onedrive_public'
+  );
+
   const displayedSources = filterActiveOnly 
-    ? sources.filter(s => s.is_active) 
-    : sources;
+    ? scrapingSources.filter((s) => s.is_active) 
+    : scrapingSources;
+
+  const activeCount = scrapingSources.filter((s) => s.is_active).length;
 
   const formatDate = (isoStr: string | null | undefined): string => {
     if (!isoStr) return 'Belum pernah dijalankan';
@@ -58,6 +66,43 @@ export default function SourcePicker({
     }
   };
 
+  const getSourceIcon = (sourceType: string) => {
+    switch (sourceType) {
+      case 'onedrive_public':
+        return <Cloud size={18} />;
+      case 'folder_lokal':
+        return <FolderOpen size={18} />;
+      case 'situs_web':
+      default:
+        return <Globe size={18} />;
+    }
+  };
+
+  const getSourceIconBg = (sourceType: string, isSelected: boolean) => {
+    if (isSelected) return 'bg-red-100 text-red-700';
+    switch (sourceType) {
+      case 'onedrive_public':
+        return 'bg-blue-50 text-blue-600';
+      case 'folder_lokal':
+        return 'bg-amber-50 text-amber-600';
+      case 'situs_web':
+      default:
+        return 'bg-red-50 text-red-600';
+    }
+  };
+
+  const getSourceBadgeBg = (sourceType: string) => {
+    switch (sourceType) {
+      case 'onedrive_public':
+        return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'folder_lokal':
+        return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'situs_web':
+      default:
+        return 'bg-red-50 text-red-700 border-red-200';
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
@@ -70,7 +115,7 @@ export default function SourcePicker({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {sources.length > 0 && (
+          {scrapingSources.length > 0 && (
             <label className="flex items-center text-xs text-gray-600 cursor-pointer mr-2 select-none">
               <input
                 type="checkbox"
@@ -78,7 +123,7 @@ export default function SourcePicker({
                 onChange={(e) => setFilterActiveOnly(e.target.checked)}
                 className="rounded border-gray-300 text-red-600 focus:ring-red-500 mr-1.5 h-3.5 w-3.5"
               />
-              Hanya Aktif
+              Hanya Aktif ({activeCount})
             </label>
           )}
           <button
@@ -117,7 +162,6 @@ export default function SourcePicker({
         <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
           {displayedSources.map((source) => {
             const isSelected = selectedSourceId === source.id;
-            const isWeb = source.source_type === 'situs_web';
 
             return (
               <div
@@ -132,15 +176,12 @@ export default function SourcePicker({
                 <div className="flex items-start justify-between">
                   <div className="flex items-start space-x-3 min-w-0 flex-1">
                     <div
-                      className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
+                      className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${getSourceIconBg(
+                        source.source_type,
                         isSelected
-                          ? 'bg-red-100 text-red-700'
-                          : isWeb
-                          ? 'bg-red-50 text-red-600'
-                          : 'bg-blue-50 text-blue-600'
-                      }`}
+                      )}`}
                     >
-                      {isWeb ? <Globe size={18} /> : <Cloud size={18} />}
+                      {getSourceIcon(source.source_type)}
                     </div>
 
                     <div className="min-w-0 flex-1">
@@ -149,11 +190,9 @@ export default function SourcePicker({
                           {source.name}
                         </span>
                         <span
-                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                            isWeb
-                              ? 'bg-red-50 text-red-700 border-red-200'
-                              : 'bg-blue-50 text-blue-700 border-blue-200'
-                          }`}
+                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${getSourceBadgeBg(
+                            source.source_type
+                          )}`}
                         >
                           {JENIS_SUMBER_LABELS[source.source_type] || source.source_type}
                         </span>

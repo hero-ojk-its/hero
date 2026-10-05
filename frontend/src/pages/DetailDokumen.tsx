@@ -21,7 +21,8 @@ import {
   Copy,
   CheckCircle,
   Edit3,
-  RefreshCw
+  RefreshCw,
+  Lock
 } from 'lucide-react';
 import { EditMetadataModal, EditStatusModal } from './DetailDokumenModals';
 import { regulasiData } from '../data/regulasiData';
@@ -81,6 +82,7 @@ export default function DetailDokumen() {
   const [pdfLoading, setPdfLoading] = useState<boolean>(isApiConfigured && Boolean(id));
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [pdfNotFound, setPdfNotFound] = useState<boolean>(false);
+  const [pdfForbiddenMessage, setPdfForbiddenMessage] = useState<string | null>(null);
   const pdfBlobUrlRef = useRef<string | null>(null);
 
   // 3. State teks mentah dokumen
@@ -137,6 +139,7 @@ export default function DetailDokumen() {
     // 2. Ambil PDF Blob asli
     setPdfLoading(true);
     setPdfError(null);
+    setPdfForbiddenMessage(null);
     setPdfNotFound(false);
     setPdfBlobUrl(null);
     setPdfFileName(null);
@@ -149,6 +152,9 @@ export default function DetailDokumen() {
           setPdfBlobUrl(objectUrl);
           setPdfFileName(blob.filename || null);
           setPdfLoading(false);
+          setPdfForbiddenMessage(null);
+          setPdfNotFound(false);
+          setPdfError(null);
         }
       })
       .catch((err: unknown) => {
@@ -156,11 +162,23 @@ export default function DetailDokumen() {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         if (err instanceof Error && err.name === 'AbortError') return;
 
-        if (err instanceof ApiError && err.status === 404) {
+        if (err instanceof ApiError && err.status === 403) {
+          // PDF 403: Dokumen non-publik (tampilkan info gembok, bukan galat merah)
+          const detailMsg =
+            typeof err.detail === 'string'
+              ? err.detail
+              : err.message || 'Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.';
+          setPdfForbiddenMessage(detailMsg);
+          setPdfNotFound(false);
+          setPdfError(null);
+        } else if (err instanceof ApiError && err.status === 404) {
           setPdfNotFound(true);
-          setPdfError('Berkas PDF tidak ditemukan');
+          setPdfForbiddenMessage(null);
+          setPdfError(null);
         } else {
           setPdfError(err instanceof Error ? err.message : 'Gagal memuat berkas PDF dari server');
+          setPdfForbiddenMessage(null);
+          setPdfNotFound(false);
         }
         setPdfLoading(false);
       });
@@ -188,8 +206,8 @@ export default function DetailDokumen() {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         if (err instanceof Error && err.name === 'AbortError') return;
 
-        if (err instanceof ApiError && err.status === 404) {
-          // Bila backend mengembalikan 404, tampilkan "Teks belum tersedia", bukan galat merah
+        if (err instanceof ApiError && (err.status === 404 || err.status === 403)) {
+          // Bila backend mengembalikan 404 atau 403, tampilkan info wajar bukan galat merah
           setTextNotFound(true);
           setTextError(null);
         } else {
@@ -234,6 +252,7 @@ export default function DetailDokumen() {
     if (!isApiConfigured || !id) return;
     setPdfLoading(true);
     setPdfError(null);
+    setPdfForbiddenMessage(null);
     setPdfNotFound(false);
 
     apiFetchBlob(`/api/v1/documents/${id}/pdf`)
@@ -246,13 +265,27 @@ export default function DetailDokumen() {
         setPdfBlobUrl(objectUrl);
         setPdfFileName(blob.filename || null);
         setPdfLoading(false);
+        setPdfForbiddenMessage(null);
+        setPdfNotFound(false);
+        setPdfError(null);
       })
       .catch((err: unknown) => {
-        if (err instanceof ApiError && err.status === 404) {
+        if (err instanceof ApiError && err.status === 403) {
+          const detailMsg =
+            typeof err.detail === 'string'
+              ? err.detail
+              : err.message || 'Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.';
+          setPdfForbiddenMessage(detailMsg);
+          setPdfNotFound(false);
+          setPdfError(null);
+        } else if (err instanceof ApiError && err.status === 404) {
           setPdfNotFound(true);
-          setPdfError('Berkas PDF tidak ditemukan');
+          setPdfForbiddenMessage(null);
+          setPdfError(null);
         } else {
           setPdfError(err instanceof Error ? err.message : 'Gagal memuat berkas PDF dari server');
+          setPdfForbiddenMessage(null);
+          setPdfNotFound(false);
         }
         setPdfLoading(false);
       });
@@ -276,7 +309,7 @@ export default function DetailDokumen() {
         setTextLoading(false);
       })
       .catch((err: unknown) => {
-        if (err instanceof ApiError && err.status === 404) {
+        if (err instanceof ApiError && (err.status === 404 || err.status === 403)) {
           setTextNotFound(true);
           setTextError(null);
         } else {
@@ -515,7 +548,17 @@ export default function DetailDokumen() {
     );
   };
 
-  // Dynamic source badge and icon
+  // Ekstrak nama folder dan berkas untuk subLabel folder lokal
+  const extractFolderAndFile = (pathOrUrl: string): string => {
+    let clean = decodeURIComponent(pathOrUrl.replace(/^file:\/\/\/?/i, '').replace(/\\/g, '/'));
+    clean = clean.replace(/\/+$/, '');
+    const parts = clean.split('/').filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`;
+    }
+    return parts[parts.length - 1] || pathOrUrl;
+  };
+
   // Dynamic source badge and icon
   const getSourceDisplay = (sumber: string) => {
     const s = (sumber || '').toLowerCase();
@@ -523,31 +566,34 @@ export default function DetailDokumen() {
       return {
         label: '-',
         subLabel: '-',
-        icon: <Info className="w-3.5 h-3.5 text-gray-500" />,
+        icon: <Info className="w-3.5 h-3.5 text-gray-500 shrink-0" />,
         badgeClass: 'bg-gray-50 text-gray-700 border-gray-200/60'
       };
     }
-    if (s.includes('folder') || s.includes('lokal')) {
+    // Folder Lokal: kenali awalan file:// atau path /sources/ atau kata folder/lokal
+    if (s.startsWith('file://') || s.includes('/sources/') || s.includes('folder') || s.includes('lokal')) {
       return {
         label: 'Folder Lokal',
-        subLabel: 'Folder Lokal Server',
-        icon: <FolderOpen className="w-3.5 h-3.5 text-amber-700" />,
+        subLabel: extractFolderAndFile(sumber),
+        icon: <FolderOpen className="w-3.5 h-3.5 text-amber-700 shrink-0" />,
         badgeClass: 'bg-amber-50 text-amber-800 border-amber-200/60'
       };
     }
-    if (s.includes('onedrive') || s.includes('cloud')) {
+    // OneDrive: kenali sharepoint.com, 1drv.ms, onedrive, cloud
+    if (s.includes('onedrive') || s.includes('sharepoint.com') || s.includes('1drv.ms') || s.includes('cloud')) {
       return {
         label: 'OneDrive',
         subLabel: 'OneDrive Cloud Storage',
-        icon: <Cloud className="w-3.5 h-3.5 text-sky-700" />,
+        icon: <Cloud className="w-3.5 h-3.5 text-sky-700 shrink-0" />,
         badgeClass: 'bg-sky-50 text-sky-800 border-sky-200/60'
       };
     }
-    if (s.includes('scraping') || s.startsWith('http')) {
+    // Situs Web / Scraping URL
+    if (s.startsWith('http://') || s.startsWith('https://') || s.includes('scraping')) {
       return {
-        label: s.startsWith('http') ? 'Situs Web' : 'Scraping Otomatis',
-        subLabel: s.startsWith('http') ? sumber : 'Scraping Portal OJK',
-        icon: <Globe className="w-3.5 h-3.5 text-blue-700" />,
+        label: 'Situs Web',
+        subLabel: sumber,
+        icon: <Globe className="w-3.5 h-3.5 text-blue-700 shrink-0" />,
         badgeClass: 'bg-blue-50 text-blue-800 border-blue-200/60'
       };
     }
@@ -555,14 +601,14 @@ export default function DetailDokumen() {
       return {
         label: 'Upload Manual',
         subLabel: 'Upload Manual Pengguna',
-        icon: <Info className="w-3.5 h-3.5 text-red-700" />,
+        icon: <Info className="w-3.5 h-3.5 text-red-700 shrink-0" />,
         badgeClass: 'bg-red-50 text-red-800 border-red-200/60'
       };
     }
     return {
       label: sumber,
       subLabel: sumber,
-      icon: <Info className="w-3.5 h-3.5 text-gray-600" />,
+      icon: <Info className="w-3.5 h-3.5 text-gray-600 shrink-0" />,
       badgeClass: 'bg-gray-50 text-gray-700 border-gray-200/60'
     };
   };
@@ -577,11 +623,7 @@ export default function DetailDokumen() {
 
   const displayTanggalPublikasi = ('tanggalPublikasi' in regulasi && regulasi.tanggalPublikasi)
     ? regulasi.tanggalPublikasi
-    : regulasi.tahun === '-'
-    ? '-'
-    : typeof regulasi.tahun === 'number'
-    ? `12 ${regulasi.tahun === 2024 ? 'Maret' : 'Oktober'} ${regulasi.tahun}`
-    : regulasi.tahun;
+    : 'Belum diketahui';
 
   const displayUkuran = ('ukuran' in regulasi && regulasi.ukuran && regulasi.ukuran !== '-')
     ? regulasi.ukuran
@@ -1199,9 +1241,12 @@ export default function DetailDokumen() {
             <span className="text-gray-300">•</span>
             <span className="font-semibold text-gray-700">{regulasi.kategori}</span>
             <span className="text-gray-300">•</span>
-            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-semibold border ${sourceInfo.badgeClass}`}>
+            <span 
+              title={sourceInfo.subLabel}
+              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-semibold border max-w-full min-w-0 ${sourceInfo.badgeClass}`}
+            >
               {sourceInfo.icon}
-              {sourceInfo.subLabel}
+              <span className="truncate max-w-[200px] sm:max-w-xs">{sourceInfo.subLabel}</span>
             </span>
           </div>
         </div>
@@ -1233,45 +1278,44 @@ export default function DetailDokumen() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-7 gap-x-8">
             {/* Nomor Regulasi */}
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5 min-w-0">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Nomor Regulasi</span>
-              <p className="text-sm font-bold text-gray-900">{regulasi.nomor}</p>
+              <p className="text-sm font-bold text-gray-900 truncate" title={regulasi.nomor}>{regulasi.nomor}</p>
             </div>
 
             {/* Metode Ingest / Sumber (Dynamic) */}
-            <div className="flex flex-col gap-1.5 items-start">
+            <div className="flex flex-col gap-1.5 items-start min-w-0">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Metode Ingest / Sumber</span>
-              <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border ${sourceInfo.badgeClass}`}>
+              <div 
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border max-w-full min-w-0 ${sourceInfo.badgeClass}`}
+                title={`${sourceInfo.label} • ${sourceInfo.subLabel}`}
+              >
                 {sourceInfo.icon}
-                <span>{sourceInfo.label}</span>
+                <span className="font-semibold shrink-0">{sourceInfo.label}</span>
+                {sourceInfo.subLabel && sourceInfo.subLabel !== sourceInfo.label && (
+                  <>
+                    <span className="text-gray-400 shrink-0">•</span>
+                    <span className="truncate min-w-0">{sourceInfo.subLabel}</span>
+                  </>
+                )}
               </div>
             </div>
 
-            {/* Status Keberlakuan */}
-            <div className="flex flex-col gap-1.5 items-start">
+            {/* Status Keberlakuan - Hanya menampilkan badge status tanpa tombol kedua */}
+            <div className="flex flex-col gap-1.5 items-start min-w-0">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Status Keberlakuan</span>
               <div className="flex items-center gap-2 flex-wrap">
                 <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${statusBadge}`}>
                   <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: statusColor }}></span>
                   <span>{regulasi.status}</span>
                 </div>
-                {isApiConfigured && Boolean(id) && rawDoc && (
-                  <button
-                    type="button"
-                    onClick={() => setIsStatusModalOpen(true)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-gray-600 hover:text-red-700 bg-gray-50 hover:bg-red-50 border border-gray-200 hover:border-red-200 rounded-md transition-colors cursor-pointer"
-                  >
-                    <RefreshCw size={12} className="text-gray-400" />
-                    <span>Ubah Status</span>
-                  </button>
-                )}
               </div>
             </div>
 
             {/* Jenis Regulasi */}
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5 min-w-0">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Jenis Regulasi</span>
-              <p className="text-sm font-medium text-gray-900">
+              <p className="text-sm font-medium text-gray-900 truncate" title={regulasi.jenis}>
                 {regulasi.jenis === 'POJK' ? 'Peraturan Otoritas Jasa Keuangan (POJK)' : 
                  regulasi.jenis === 'SEOJK' ? 'Surat Edaran Otoritas Jasa Keuangan (SEOJK)' : 
                  regulasi.jenis === 'PDK' ? 'Peraturan Dewan Komisioner (PDK)' : regulasi.jenis}
@@ -1279,17 +1323,17 @@ export default function DetailDokumen() {
             </div>
 
             {/* Tanggal Publikasi */}
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5 min-w-0">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tanggal Publikasi</span>
               <p className="text-sm font-medium text-gray-900">{displayTanggalPublikasi}</p>
             </div>
 
             {/* Kategori Industri */}
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5 min-w-0">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Kategori Industri</span>
-              <div className="flex items-center gap-1.5 text-sm font-medium text-gray-900">
+              <div className="flex items-center gap-1.5 text-sm font-medium text-gray-900 min-w-0">
                 <Landmark className="w-4 h-4 text-red-700 shrink-0" />
-                <span>{regulasi.kategori}</span>
+                <span className="truncate" title={regulasi.kategori}>{regulasi.kategori}</span>
               </div>
             </div>
           </div>
@@ -1320,8 +1364,14 @@ export default function DetailDokumen() {
                     <span className="text-gray-400 font-mono text-[11px]">• SHA-256: {regulasi.sha256}</span>
                   )}
                   {isApiConfigured && pdfNotFound && (
-                    <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[11px] font-semibold border border-amber-200">
-                      Berkas PDF tidak ditemukan
+                    <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-[11px] font-semibold border border-gray-200">
+                      Berkas PDF tidak ditemukan di penyimpanan
+                    </span>
+                  )}
+                  {isApiConfigured && pdfForbiddenMessage && (
+                    <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-[11px] font-semibold border border-gray-200 flex items-center gap-1">
+                      <Lock className="w-3 h-3 text-gray-500" />
+                      Dokumen Non-Publik
                     </span>
                   )}
                 </p>
@@ -1329,10 +1379,21 @@ export default function DetailDokumen() {
             </div>
             
             <div className="flex items-center gap-2 sm:gap-3 shrink-0 flex-wrap">
-              {/* Jika terjadi galat jaringan pada PDF di mode API */}
-              {isApiConfigured && pdfError && !pdfNotFound ? (
+              {/* Kotak info abu-abu jika 403 Forbidden (Non-Publik) */}
+              {isApiConfigured && pdfForbiddenMessage ? (
+                <div className="flex items-center gap-2 px-3.5 py-2 bg-gray-100 border border-gray-200 rounded-lg text-xs text-gray-700 max-w-md">
+                  <Lock className="w-4 h-4 text-gray-500 shrink-0" />
+                  <span className="font-medium">{pdfForbiddenMessage}</span>
+                </div>
+              ) : isApiConfigured && pdfNotFound ? (
+                <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-xs text-gray-700">
+                  <Info className="w-4 h-4 text-gray-400 shrink-0" />
+                  <span>Berkas PDF tidak ditemukan di penyimpanan</span>
+                </div>
+              ) : isApiConfigured && pdfError ? (
+                /* Galat merah + "Coba lagi" HANYA untuk galat jaringan / 5xx */
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-red-600 font-medium">Gagal memuat PDF</span>
+                  <span className="text-xs text-red-600 font-medium">{pdfError}</span>
                   <button
                     onClick={retryFetchPdf}
                     className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold rounded-lg border border-red-200 transition-colors cursor-pointer"
@@ -1345,9 +1406,9 @@ export default function DetailDokumen() {
                   {/* Tombol Lihat PDF / Buka Dokumen -> Buka Viewer Overlay */}
                   <button 
                     onClick={() => setShowViewer(true)}
-                    disabled={isApiConfigured && pdfNotFound}
+                    disabled={isApiConfigured && (pdfNotFound || Boolean(pdfForbiddenMessage) || !pdfBlobUrl)}
                     className={`flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-bold shadow-sm transition-colors cursor-pointer ${
-                      isApiConfigured && pdfNotFound
+                      isApiConfigured && (pdfNotFound || Boolean(pdfForbiddenMessage) || !pdfBlobUrl)
                         ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                         : 'bg-[#B91C1C] hover:bg-[#a01818] text-white'
                     }`}
@@ -1360,9 +1421,9 @@ export default function DetailDokumen() {
                   {/* Tombol Buka PDF Asli -> Buka di tab baru (WAJIB US-28) */}
                   <button
                     onClick={handleOpenPdfNewTab}
-                    disabled={isApiConfigured && (pdfNotFound || (!pdfBlobUrl && pdfLoading))}
+                    disabled={isApiConfigured && (pdfNotFound || Boolean(pdfForbiddenMessage) || !pdfBlobUrl)}
                     className={`flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-bold shadow-sm border transition-colors cursor-pointer ${
-                      isApiConfigured && (pdfNotFound || (!pdfBlobUrl && pdfLoading))
+                      isApiConfigured && (pdfNotFound || Boolean(pdfForbiddenMessage) || !pdfBlobUrl)
                         ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
                         : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700 hover:text-red-700'
                     }`}
@@ -1375,9 +1436,9 @@ export default function DetailDokumen() {
                   {/* Tombol Unduh Berkas PDF */}
                   <button 
                     onClick={handleDownloadPdf}
-                    disabled={isApiConfigured && (pdfNotFound || (!pdfBlobUrl && pdfLoading))}
+                    disabled={isApiConfigured && (pdfNotFound || Boolean(pdfForbiddenMessage) || !pdfBlobUrl)}
                     className={`flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-bold shadow-sm border transition-colors cursor-pointer ${
-                      isApiConfigured && (pdfNotFound || (!pdfBlobUrl && pdfLoading))
+                      isApiConfigured && (pdfNotFound || Boolean(pdfForbiddenMessage) || !pdfBlobUrl)
                         ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
                         : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'
                     }`}
@@ -1462,9 +1523,15 @@ export default function DetailDokumen() {
           ) : textNotFound || !textData?.text || textData.text.trim() === '' ? (
             <div className="bg-gray-50/80 border border-gray-200 rounded-xl p-6 text-center text-gray-500">
               <FileText className="w-8 h-8 mx-auto mb-2 text-gray-400 stroke-1" />
-              <p className="text-sm font-medium text-gray-600">Teks belum tersedia</p>
+              <p className="text-sm font-medium text-gray-700">
+                {rawDoc?.processing_status === 'diterima' || rawDoc?.processing_status === 'diproses'
+                  ? 'Teks belum tersedia — menunggu proses ekstraksi'
+                  : 'Teks belum tersedia'}
+              </p>
               <p className="text-xs text-gray-400 mt-1">
-                Dokumen ini belum memiliki teks hasil ekstraksi atau teks tidak ditemukan di server.
+                {rawDoc?.processing_status === 'diterima' || rawDoc?.processing_status === 'diproses'
+                  ? 'Dokumen ini berstatus diterima dan belum melalui proses ekstraksi teks regulasi.'
+                  : 'Dokumen ini belum memiliki teks hasil ekstraksi atau teks tidak ditemukan di server.'}
               </p>
             </div>
           ) : (

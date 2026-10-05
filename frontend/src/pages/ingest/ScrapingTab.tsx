@@ -110,8 +110,14 @@ export default function ScrapingTab() {
       .then((data) => {
         if (!mounted) return;
         setSources(data);
-        if (data.length > 0 && !selectedSource) {
-          const firstActive = data.find((s) => s.is_active) || data[0];
+        const scrapingSources = data.filter(
+          (s) => s.source_type === 'situs_web' || s.source_type === 'onedrive_public'
+        );
+        if (
+          scrapingSources.length > 0 &&
+          (!selectedSource || selectedSource.source_type === 'folder_lokal')
+        ) {
+          const firstActive = scrapingSources.find((s) => s.is_active) || scrapingSources[0];
           setSelectedSource(firstActive);
           setCrawlDepth(firstActive.crawl_depth || 1);
           if (firstActive.default_naming_format) {
@@ -327,7 +333,9 @@ export default function ScrapingTab() {
       await deleteScrapingSource(sourceToDelete.id);
       setSources((prev) => prev.filter((s) => s.id !== sourceToDelete.id));
       if (selectedSource?.id === sourceToDelete.id) {
-        const remaining = sources.filter((s) => s.id !== sourceToDelete.id);
+        const remaining = sources.filter(
+          (s) => s.id !== sourceToDelete.id && (s.source_type === 'situs_web' || s.source_type === 'onedrive_public')
+        );
         setSelectedSource(remaining.length > 0 ? remaining[0] : null);
       }
       setSourceToDelete(null);
