@@ -1,0 +1,32 @@
+# ==============================================================================
+# HERO Backend - Caddy Reverse Proxy Configuration
+# ==============================================================================
+# Untuk membuat hash password Basic Auth bagi dokumentasi API (/docs, /redoc, /openapi.json):
+#   docker run --rm caddy:2 caddy hash-password --plaintext 'PasswordRahasiaAnda'
+# ==============================================================================
+
+{$API_DOMAIN:localhost} {
+	# Batas ukuran payload request body (110 MB untuk mendukung upload PDF hingga 100 MB)
+	request_body {
+		max_size 110MB
+	}
+
+	# Header keamanan standar industri
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# Proteksi Basic Auth HANYA untuk endpoint dokumentasi API
+	# PENTING: Jangan pasang basic auth pada /api/* agar tidak merusak preflight CORS frontend
+	@docs {
+		path /docs* /redoc* /openapi.json
+	}
+	basic_auth @docs {
+		{$DOCS_BASIC_AUTH_USER:admin} {$DOCS_BASIC_AUTH_HASH:$2a$14$V0ZcR3u3B4uQoW0l8.gYMe5TqfG0Q0Q0Q0Q0Q0Q0Q0Q0Q0Q0Q0Q0Q}
+	}
+
+	# Proxy seluruh request ke container FastAPI backend
+	reverse_proxy backend:{$APP_PORT:8000}
+}

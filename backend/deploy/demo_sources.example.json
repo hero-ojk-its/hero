@@ -1,0 +1,21 @@
+{
+  "sources": [
+    {
+      "name": "JDIH ESDM (Contoh Sumber Resmi)",
+      "source_type": "situs_web",
+      "url": "https://jdih.esdm.go.id",
+      "crawl_depth": 2,
+      "max_pages": 15,
+      "max_pull": 5,
+      "default_access_classification": "publik",
+      "default_document_role": "corpus_eksisting"
+    },
+    {
+      "name": "Folder Internal Regulasi (OneDrive Sync)",
+      "source_type": "folder_lokal",
+      "url": "onedrive",
+      "default_access_classification": "publik",
+      "default_document_role": "corpus_eksisting"
+    }
+  ]
+}
