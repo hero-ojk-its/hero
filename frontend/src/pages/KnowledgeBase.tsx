@@ -13,7 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { regulasiData } from '../data/regulasiData';
 import type { RegulasiItem } from '../data/regulasiData';
@@ -79,26 +79,54 @@ function flattenCategories(nodes: CategoryNode[], depth = 0, parentPath = ''): F
   return result;
 }
 
+const STATUS_REVERSE_MAP: Record<string, string> = {
+  berlaku: 'Aktif',
+  aktif: 'Aktif',
+  diubah: 'Diubah',
+  dicabut: 'Dicabut',
+  tidak_diketahui: 'Tidak diketahui',
+};
+
 export default function KnowledgeBase() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  const initialQ = searchParams.get('q') || '';
+  const initialJenis = searchParams.get('regulation_type') || searchParams.get('jenis') || 'Semua Jenis';
+  const initialTahun = searchParams.get('year') || searchParams.get('tahun') || 'Semua Tahun';
+  const initialCategoryIdParam = searchParams.get('category_id') || searchParams.get('kategori');
+  const initialStatusParam = searchParams.get('status_keberlakuan') || searchParams.get('status');
+
+  const initialStatus = initialStatusParam
+    ? STATUS_REVERSE_MAP[initialStatusParam.toLowerCase()] || initialStatusParam
+    : 'Semua Status';
+
+  const initialCategoryIdNum =
+    initialCategoryIdParam && !isNaN(Number(initialCategoryIdParam)) ? Number(initialCategoryIdParam) : null;
+  const initialCategoryName =
+    initialCategoryIdParam && isNaN(Number(initialCategoryIdParam))
+      ? initialCategoryIdParam
+      : initialCategoryIdNum
+      ? `Kategori #${initialCategoryIdNum}`
+      : 'Semua Kategori';
 
   // Search input state (immediate and debounced 400ms)
-  const [searchInput, setSearchInput] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [searchInput, setSearchInput] = useState(initialQ);
+  const [debouncedQuery, setDebouncedQuery] = useState(initialQ);
 
   // Dropdown open state
   const [openFilter, setOpenFilter] = useState<string | null>(null);
 
   // Filter states
   const [selectedKategori, setSelectedKategori] = useState<{ id: number | null; name: string }>({
-    id: null,
-    name: 'Semua Kategori',
+    id: initialCategoryIdNum,
+    name: initialCategoryName,
   });
-  const [selectedJenis, setSelectedJenis] = useState<string>('Semua Jenis');
-  const [selectedTahun, setSelectedTahun] = useState<string>('Semua Tahun');
+  const [selectedJenis, setSelectedJenis] = useState<string>(initialJenis);
+  const [selectedTahun, setSelectedTahun] = useState<string>(initialTahun);
   const [selectedBidang, setSelectedBidang] = useState<string>('Semua Bidang');
-  const [selectedStatus, setSelectedStatus] = useState<string>('Semua Status');
+  const [selectedStatus, setSelectedStatus] = useState<string>(initialStatus);
   const [selectedSumber, setSelectedSumber] = useState<string>('Semua Sumber'); // Dipakai di mode contoh
 
   // Paginasi
@@ -281,15 +309,22 @@ export default function KnowledgeBase() {
     return ['Semua Bidang', ...uniqueSectors];
   }, [apiDocuments]);
 
-  // Tangani query param dari URL Dashboard (kategori, jenis, tahun, topik)
+  // Tangani query param dari URL Dashboard (regulation_type, year, category_id, status_keberlakuan, q, topik, dll.)
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const kategoriParam = params.get('kategori');
-    const jenisParam = params.get('jenis');
-    const tahunParam = params.get('tahun');
+    const qParam = params.get('q');
+    const kategoriParam = params.get('category_id') || params.get('kategori');
+    const jenisParam = params.get('regulation_type') || params.get('jenis');
+    const tahunParam = params.get('year') || params.get('tahun');
+    const statusParam = params.get('status_keberlakuan') || params.get('status');
     const topikParam = params.get('topik');
 
     queueMicrotask(() => {
+      if (qParam !== null) {
+        setSearchInput((prev) => (qParam !== prev ? qParam : prev));
+        setDebouncedQuery((prev) => (qParam !== prev ? qParam : prev));
+      }
+
       if (kategoriParam) {
         // Cocokkan ke kategori yang ada
         if (flatCategories.length > 0) {
@@ -298,25 +333,40 @@ export default function KnowledgeBase() {
           );
           if (found) {
             setSelectedKategori({ id: found.id, name: found.name });
+          } else {
+            const num = Number(kategoriParam);
+            setSelectedKategori({
+              id: isNaN(num) ? null : num,
+              name: isNaN(num) ? kategoriParam : `Kategori #${kategoriParam}`,
+            });
           }
         } else {
-          setSelectedKategori({ id: null, name: kategoriParam });
+          const num = Number(kategoriParam);
+          setSelectedKategori({
+            id: isNaN(num) ? null : num,
+            name: isNaN(num) ? kategoriParam : `Kategori #${kategoriParam}`,
+          });
         }
       }
 
       if (jenisParam) {
-        setSelectedJenis(jenisParam);
+        setSelectedJenis((prev) => (jenisParam !== prev ? jenisParam : prev));
       }
 
       if (tahunParam) {
-        setSelectedTahun(tahunParam);
+        setSelectedTahun((prev) => (tahunParam !== prev ? tahunParam : prev));
+      }
+
+      if (statusParam) {
+        const mapped = STATUS_REVERSE_MAP[statusParam.toLowerCase()] || statusParam;
+        setSelectedStatus((prev) => (mapped !== prev ? mapped : prev));
       }
 
       // Topik dari dashboard dipetakan ke bidang bila cocok, atau diabaikan tanpa error
       if (topikParam) {
         const matched = bidangOptions.find((b) => b.toLowerCase() === topikParam.toLowerCase());
         if (matched) {
-          setSelectedBidang(matched);
+          setSelectedBidang((prev) => (matched !== prev ? matched : prev));
         }
       }
     });

@@ -346,8 +346,22 @@ export interface DashboardSummaryResponse {
     draft_documents: number;
     target_fase1: number;
     target_met: boolean;
-    by_status_keberlakuan: Record<string, number>;
-    by_processing_status: Record<string, number>;
+    by_status_keberlakuan: {
+      berlaku?: number;
+      diubah?: number;
+      dicabut?: number;
+      tidak_diketahui?: number;
+      [key: string]: number | undefined;
+    };
+    by_processing_status: {
+      diterima?: number;
+      diproses?: number;
+      perlu_koreksi?: number;
+      terindeks?: number;
+      gagal?: number;
+      ditolak?: number;
+      [key: string]: number | undefined;
+    };
     by_regulation_type: Array<{
       regulation_type: string | null;
       label: string;
@@ -361,8 +375,29 @@ export interface DashboardSummaryResponse {
     placed_documents: number;
     inbox_documents: number;
   };
-  ingest?: Record<string, unknown>;
-  sources?: Record<string, unknown>;
+  ingest: {
+    open_failures: number;
+    needs_review: number;
+    active_scans: number;
+    recent_jobs: Array<{
+      id: number;
+      job_type: string;
+      status: string;
+      started_at: string;
+      finished_at?: string | null;
+      success_count: number;
+      duplicate_count: number;
+      skipped_count: number;
+      failed_count: number;
+      processed_count: number;
+      total_found: number;
+    }>;
+  };
+  sources?: {
+    total: number;
+    active: number;
+    by_type: Record<string, number>;
+  };
   generated_at?: string;
 }
 
