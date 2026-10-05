@@ -3,6 +3,10 @@
  * Berdasarkan KONTRAK-API-FASE1.md §11.
  */
 
+import type { components } from '../../lib/openapi';
+
+export type JenisJobIngest = components['schemas']['JenisJobIngest'];
+
 export const MATCH_STATUS_LABELS: Record<string, string> = {
   baru: 'Baru',
   sudah_ada: 'Sudah Ada',
@@ -148,11 +152,10 @@ export const FOLLOW_UP_STATUS_LABELS: Record<string, string> = {
   diabaikan: 'Diabaikan',
 };
 
-export const JENIS_JOB_INGEST_LABELS: Record<string, string> = {
-  tarik_ke_kb: 'Tarik ke KB',
-  unduh_zip: 'Unduh Folder (ZIP)',
+export const JENIS_JOB_INGEST_LABELS: Record<JenisJobIngest, string> = {
+  scraping: 'Scraping / Pindai Situs',
   unggah_manual: 'Unggah Manual',
-  retry_kegagalan: 'Proses Ulang Kegagalan',
+  sinkron_folder: 'Sinkronisasi Folder',
 };
 
 export function getJenisKegagalanLabel(type: string | null | undefined): string {
@@ -162,7 +165,7 @@ export function getJenisKegagalanLabel(type: string | null | undefined): string 
 
 export function getJenisJobIngestLabel(type: string | null | undefined): string {
   if (!type) return '-';
-  return JENIS_JOB_INGEST_LABELS[type] || type;
+  return (JENIS_JOB_INGEST_LABELS as Record<string, string>)[type] || type;
 }
 
 export function getFollowUpStatusLabel(status: string | null | undefined): string {

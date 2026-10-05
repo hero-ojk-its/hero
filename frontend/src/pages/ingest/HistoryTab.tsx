@@ -35,6 +35,7 @@ import {
   getJenisKegagalanLabel,
   getFollowUpStatusLabel,
   getFollowUpStatusBadgeClass,
+  JENIS_JOB_INGEST_LABELS,
   JENIS_KEGAGALAN_LABELS,
 } from './labels';
 import { mockFailuresList } from './mock';
@@ -172,11 +173,19 @@ export default function HistoryTab() {
 
   // Initial & Filter change triggers
   useEffect(() => {
-    if (subView === 'jobs') {
-      fetchJobs();
-    } else {
-      fetchFailures();
-    }
+    let mounted = true;
+    const timer = setTimeout(() => {
+      if (!mounted) return;
+      if (subView === 'jobs') {
+        fetchJobs();
+      } else {
+        fetchFailures();
+      }
+    }, 0);
+    return () => {
+      mounted = false;
+      clearTimeout(timer);
+    };
   }, [subView, fetchJobs, fetchFailures]);
 
   // Bersihkan notifikasi otomatis setelah 5 detik
@@ -483,10 +492,11 @@ export default function HistoryTab() {
                 className="bg-gray-50 border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-800 focus:ring-1 focus:ring-red-600 focus:outline-none"
               >
                 <option value="all">Semua Jenis</option>
-                <option value="tarik_ke_kb">Tarik ke KB</option>
-                <option value="unduh_zip">Unduh Folder (ZIP)</option>
-                <option value="unggah_manual">Unggah Manual</option>
-                <option value="retry_kegagalan">Proses Ulang Kegagalan</option>
+                {Object.entries(JENIS_JOB_INGEST_LABELS).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

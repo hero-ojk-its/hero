@@ -21,31 +21,33 @@ export default function JobDetailModal({ jobId, onClose }: JobDetailModalProps) 
 
     if (!isApiConfigured) {
       // Mock job detail
-      setJob({
-        id: jobId,
-        job_type: 'unggah_manual',
-        source_ref: 'sample_document.pdf',
-        source_id: null,
-        source: null,
-        retry_of_failure_id: null,
-        triggered_by: 'manual_upload',
-        status: 'selesai',
-        started_at: new Date().toISOString(),
-        finished_at: new Date().toISOString(),
-        duration_seconds: 1.25,
-        success_count: 1,
-        duplicate_count: 0,
-        failed_count: 0,
-        total_found: 1,
-        processed_count: 1,
-        skipped_count: 0,
-        progress_percent: 100,
-        documents: [
-          { id: 101, title: 'Dokumen Regulasi Contoh', regulation_number: 'POJK 1/2026', document_role: 'corpus_eksisting' }
-        ],
-        failures: [],
-      });
-      return;
+      const timer = setTimeout(() => {
+        setJob({
+          id: jobId,
+          job_type: 'unggah_manual',
+          source_ref: 'sample_document.pdf',
+          source_id: null,
+          source: null,
+          retry_of_failure_id: null,
+          triggered_by: 'manual_upload',
+          status: 'selesai',
+          started_at: new Date().toISOString(),
+          finished_at: new Date().toISOString(),
+          duration_seconds: 1.25,
+          success_count: 1,
+          duplicate_count: 0,
+          failed_count: 0,
+          total_found: 1,
+          processed_count: 1,
+          skipped_count: 0,
+          progress_percent: 100,
+          documents: [
+            { id: 101, title: 'Dokumen Regulasi Contoh', regulation_number: 'POJK 1/2026', document_role: 'corpus_eksisting' },
+          ],
+          failures: [],
+        });
+      }, 0);
+      return () => clearTimeout(timer);
     }
 
     let isMounted = true;
