@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { 
   LayoutGrid, 
@@ -8,18 +9,54 @@ import {
   Settings,
   Bell,
   LogOut,
-  User
+  User,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
+
+const STORAGE_KEY = 'hero_sidebar_collapsed';
+
+function readCollapsed(): boolean {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored !== null) return stored === 'true';
+  } catch {
+    // ignore
+  }
+  // Default: auto-collapse on narrow screen
+  return typeof window !== 'undefined' && window.innerWidth < 768;
+}
 
 export default function DashboardLayout() {
   const location = useLocation();
+  const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
+
+  // Auto-collapse on narrow screen resize
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth < 768) {
+        setCollapsed(true);
+      }
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // Persist preference
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, String(collapsed));
+    } catch {
+      // ignore
+    }
+  }, [collapsed]);
 
   const navItems = [
-    { name: 'Dashboard', path: '/', icon: <LayoutGrid size={18} /> },
-    { name: 'Knowledge Base', path: '/knowledge', icon: <BookOpen size={18} /> },
-    { name: 'Ingest Dokumen', path: '/ingest', icon: <FilePlus size={18} /> },
-    { name: 'Analisa Regulasi', path: '/analisa', icon: <Search size={18} /> },
-    { name: 'Harmonisasi', path: '/harmonisasi', icon: <Scale size={18} /> },
+    { name: 'Dashboard', path: '/', icon: <LayoutGrid size={18} aria-hidden="true" /> },
+    { name: 'Knowledge Base', path: '/knowledge', icon: <BookOpen size={18} aria-hidden="true" /> },
+    { name: 'Ingest Dokumen', path: '/ingest', icon: <FilePlus size={18} aria-hidden="true" /> },
+    { name: 'Analisa Regulasi', path: '/analisa', icon: <Search size={18} aria-hidden="true" /> },
+    { name: 'Harmonisasi', path: '/harmonisasi', icon: <Scale size={18} aria-hidden="true" /> },
   ];
 
   return (
@@ -57,57 +94,102 @@ export default function DashboardLayout() {
       {/* Main Body */}
       <div className="flex flex-1 overflow-hidden relative">
         {/* Sidebar */}
-        <aside className="w-48 bg-white border-r border-gray-200 flex flex-col shrink-0 z-10 overflow-y-auto">
-          <div className="py-4 flex-1">
-            <nav className="space-y-1 px-2">
+        <aside
+          className={[
+            'bg-white border-r border-gray-200 flex flex-col shrink-0 z-10 overflow-hidden',
+            'transition-[width] duration-200 ease-in-out',
+            'motion-reduce:transition-none',
+            collapsed ? 'w-16' : 'w-48',
+          ].join(' ')}
+          aria-label="Navigasi utama"
+        >
+          {/* Toggle button */}
+          <div className={`flex ${collapsed ? 'justify-center' : 'justify-end'} px-2 pt-3 pb-1 shrink-0`}>
+            <button
+              type="button"
+              onClick={() => setCollapsed((c) => !c)}
+              aria-label={collapsed ? 'Buka sidebar' : 'Ciutkan sidebar'}
+              aria-expanded={!collapsed}
+              className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600"
+            >
+              {collapsed
+                ? <PanelLeftOpen size={18} aria-hidden="true" />
+                : <PanelLeftClose size={18} aria-hidden="true" />
+              }
+            </button>
+          </div>
+
+          {/* Main nav */}
+          <div className="py-1 flex-1 overflow-y-auto">
+            <nav className="space-y-1 px-2" aria-label="Menu utama">
               {navItems.map((item) => {
                 const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
                 return (
                   <Link
                     key={item.name}
                     to={item.path}
-                    className={`flex items-center space-x-3 px-3 py-2.5 rounded-md transition-all ${
+                    title={collapsed ? item.name : undefined}
+                    aria-label={item.name}
+                    className={`relative flex items-center rounded-md transition-all overflow-hidden ${
+                      collapsed ? 'justify-center px-0 py-2.5' : 'space-x-3 px-3 py-2.5'
+                    } ${
                       isActive 
-                        ? 'bg-red-50 text-red-700 font-semibold relative' 
+                        ? 'bg-red-50 text-red-700 font-semibold' 
                         : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium'
                     }`}
                   >
                     {isActive && (
                       <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-700 rounded-r-sm" />
                     )}
-                    <span className={`${isActive ? 'text-red-700' : 'text-gray-500'}`}>
+                    <span className={`shrink-0 ${isActive ? 'text-red-700' : 'text-gray-500'}`}>
                       {item.icon}
                     </span>
-                    <span className="text-sm">{item.name}</span>
+                    {!collapsed && (
+                      <span className="text-sm truncate">{item.name}</span>
+                    )}
                   </Link>
                 );
-              })}
+              })
+              }
             </nav>
           </div>
           
-          <div className="p-4 space-y-1">
+          {/* Bottom links */}
+          <div className="p-2 space-y-1 shrink-0">
             <Link
               to="/settings"
-              className={`flex items-center space-x-3 px-3 py-2.5 rounded-md transition-colors ${
+              title={collapsed ? 'Pengaturan' : undefined}
+              aria-label="Pengaturan"
+              className={`relative flex items-center rounded-md transition-colors overflow-hidden ${
+                collapsed ? 'justify-center px-0 py-2.5' : 'space-x-3 px-3 py-2.5'
+              } ${
                 location.pathname.startsWith('/settings')
                   ? 'bg-red-50 text-red-700 font-semibold' 
                   : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium'
               }`}
             >
-              <Settings size={18} className="text-gray-500" />
-              <span className="text-sm">Pengaturan</span>
+              {location.pathname.startsWith('/settings') && (
+                <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-700 rounded-r-sm" />
+              )}
+              <Settings size={18} className="shrink-0 text-gray-500" aria-hidden="true" />
+              {!collapsed && <span className="text-sm">Pengaturan</span>}
             </Link>
             <button
-              className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-md transition-colors text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium"
+              type="button"
+              aria-label="Keluar"
+              title={collapsed ? 'Keluar' : undefined}
+              className={`w-full flex items-center rounded-md transition-colors text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium overflow-hidden ${
+                collapsed ? 'justify-center px-0 py-2.5' : 'space-x-3 px-3 py-2.5'
+              }`}
             >
-              <LogOut size={18} className="text-gray-500" />
-              <span className="text-sm">Keluar</span>
+              <LogOut size={18} className="shrink-0 text-gray-500" aria-hidden="true" />
+              {!collapsed && <span className="text-sm">Keluar</span>}
             </button>
           </div>
         </aside>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto p-8">
+        <main className="flex-1 overflow-auto min-w-0 p-8">
           <Outlet />
         </main>
       </div>
