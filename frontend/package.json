@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "gen:api": "openapi-typescript ../_kontrak-backend/openapi-fase1.json -o src/lib/openapi.d.ts"
+    "gen:api": "openapi-typescript ../backend/docs/api/openapi-fase1.json -o src/lib/openapi.d.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",
