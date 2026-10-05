@@ -1,0 +1,31 @@
+{
+  "sEcho": 2,
+  "iTotalRecords": [
+    4
+  ],
+  "iTotalDisplayRecords": [
+    4
+  ],
+  "aaData": [
+    [
+      "<a href='http://jdih.ojk.go.id/Web/ViewPeraturan/Detail/d123dff4-9d95-6f53-9568-5224e371a676/All/'>Peraturan Otoritas Jasa Keuangan Republik Indonesia Nomor 9 Tahun 2026 tentang Pelaporan Insidental Melalui Sistem Pelaporan Otoritas Jasa Keuangan di Sektor Pasar Modal, Keuangan Derivatif, dan Bursa Karbon</a>",
+      "9",
+      "Pasar Modal, Keuangan Derivatif, dan Bursa Karbon",
+      null,
+      null,
+      "Peraturan OJK",
+      "01-10-2026",
+      "Berlaku"
+    ],
+    [
+      "<a href='http://jdih.ojk.go.id/Web/ViewPeraturan/Detail/009e5e55-ce9b-5f02-6b0b-2fdb55e5675a/All/'>Peraturan Otoritas Jasa Keuangan Republik Indonesia Nomor 8 Tahun 2026 tentang Pelaporan dan Permintaan Data Transaksi Pendanaan oleh Penyelenggara Layanan Pendanaan Bersama Berbasis Teknologi Informasi</a>",
+      "8",
+      "Lembaga Pembiayaan,Perusahaan Modal Ventura,Lembaga Keuangan Mikro,dan Lembaga Jasa Keuangan Lainnya",
+      null,
+      null,
+      "Peraturan OJK",
+      "06-07-2026",
+      "Berlaku"
+    ]
+  ]
+}

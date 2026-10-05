@@ -1,0 +1,127 @@
+### HERO Backend Fase 1 - REST Client Collection
+### Jalankan request di bawah secara berurutan menggunakan ekstensi REST Client VS Code.
+
+@baseUrl = http://127.0.0.1:8000/api/v1
+
+### 1. Health Check
+GET {{baseUrl}}/health
+Accept: application/json
+
+### 2. Naming: Get Available Components
+GET {{baseUrl}}/naming/components
+Accept: application/json
+
+### 3. Naming: Live Preview
+POST {{baseUrl}}/naming/preview
+Content-Type: application/json
+
+{
+  "naming_format": ["nomor", "nama", "tahun", "bidang"],
+  "naming_separator": "_",
+  "sample": {
+    "title": "Kesehatan Bank Perkreditan Rakyat",
+    "regulation_number": "POJK 12/POJK.03/2025",
+    "release_date": "2025-06-15",
+    "bidang": "Perbankan"
+  }
+}
+
+### 4. Scraping Source: Create Web Source
+POST {{baseUrl}}/scraping-sources/
+Content-Type: application/json
+
+{
+  "name": "JDIH ESDM",
+  "url": "https://jdih.esdm.go.id",
+  "source_type": "situs_web",
+  "crawl_depth": 2,
+  "default_access_classification": "publik",
+  "default_document_role": "corpus_eksisting",
+  "default_naming_format": ["nomor", "nama", "tahun"],
+  "default_naming_separator": " ",
+  "is_active": true
+}
+
+### 5. Scraping Source: List All Sources
+GET {{baseUrl}}/scraping-sources/
+Accept: application/json
+
+### 6. Scan: Start Website Scan
+POST {{baseUrl}}/scans/
+Content-Type: application/json
+
+{
+  "source_id": 1,
+  "crawl_depth": 1,
+  "max_pages": 10
+}
+
+### 7. Scan: Get Detail Sesi Scan (Ganti ID sesuai hasil di atas)
+GET {{baseUrl}}/scans/1
+Accept: application/json
+
+### 8. Scan: List Candidates
+GET {{baseUrl}}/scans/1/candidates?match_status=baru
+Accept: application/json
+
+### 9. Scan: Pull Candidates to Knowledge Base
+POST {{baseUrl}}/scans/1/pull
+Content-Type: application/json
+
+{
+  "destination": "knowledge_base",
+  "naming_format": ["nama", "tahun", "bidang"],
+  "naming_separator": "_"
+}
+
+### 10. Documents: List & Filter KB
+GET {{baseUrl}}/documents/?bidang=Perbankan&skip=0&limit=10
+Accept: application/json
+
+### 11. Documents: Search Full-Text & Highlight
+GET {{baseUrl}}/documents/?q=modal+inti&bidang=Perbankan
+Accept: application/json
+
+### 12. Documents: Get Detail (Ganti ID)
+GET {{baseUrl}}/documents/1
+Accept: application/json
+
+### 13. Documents: Read Text (Ganti ID)
+GET {{baseUrl}}/documents/1/text?offset=0&limit=20000
+Accept: application/json
+
+### 14. Documents: Open PDF Inline (Ganti ID)
+GET {{baseUrl}}/documents/1/pdf
+Accept: application/pdf
+
+### 15. Documents: Patch Metadata Koreksi
+PATCH {{baseUrl}}/documents/1/metadata
+Content-Type: application/json
+
+{
+  "title": "Penyelenggaraan Usaha Bank Umum Terkoreksi",
+  "regulation_number": "POJK 10/POJK.03/2026",
+  "bidang": "Perbankan",
+  "status_keberlakuan": "berlaku"
+}
+
+### 16. Ingest: List Failures Queue
+GET {{baseUrl}}/ingest/failures
+Accept: application/json
+
+### 17. Ingest: Retry Failure (Ganti ID)
+POST {{baseUrl}}/ingest/failures/1/retry
+Accept: application/json
+
+### 18. Ingest: Ignore Failure (Ganti ID)
+PATCH {{baseUrl}}/ingest/failures/1
+Content-Type: application/json
+
+{
+  "follow_up_status": "diabaikan",
+  "handling_note": "Abaikan berkas corrupt hasil pengujian."
+}
+
+### 19. Dashboard: Summary
+GET {{baseUrl}}/dashboard/summary
+Accept: application/json
