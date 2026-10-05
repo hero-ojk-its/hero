@@ -1,17 +1,24 @@
 import { Link, useSearchParams } from 'react-router-dom';
-import { Globe, RefreshCw, UploadCloud } from 'lucide-react';
+import { Globe, RefreshCw, UploadCloud, History } from 'lucide-react';
 import ScrapingTab from './ScrapingTab';
 import SyncTab from './SyncTab';
 import UploadTab from './UploadTab';
+import HistoryTab from './HistoryTab';
 
 export default function IngestDokumen() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
 
-  const activeTab: 'scraping' | 'sync' | 'upload' =
-    tabParam === 'upload' ? 'upload' : tabParam === 'sync' ? 'sync' : 'scraping';
+  const activeTab: 'scraping' | 'sync' | 'upload' | 'riwayat' =
+    tabParam === 'upload'
+      ? 'upload'
+      : tabParam === 'sync'
+      ? 'sync'
+      : tabParam === 'riwayat' || tabParam === 'history'
+      ? 'riwayat'
+      : 'scraping';
 
-  const handleTabChange = (tab: 'scraping' | 'sync' | 'upload') => {
+  const handleTabChange = (tab: 'scraping' | 'sync' | 'upload' | 'riwayat') => {
     setSearchParams(tab === 'scraping' ? {} : { tab });
   };
 
@@ -78,12 +85,26 @@ export default function IngestDokumen() {
           <UploadCloud size={18} className="mr-2" />
           Upload Manual
         </button>
+
+        <button
+          type="button"
+          onClick={() => handleTabChange('riwayat')}
+          className={`flex items-center pb-3 border-b-2 transition-colors text-sm ${
+            activeTab === 'riwayat'
+              ? 'border-red-700 text-red-700 font-semibold'
+              : 'border-transparent text-gray-500 hover:text-gray-700 font-medium'
+          }`}
+        >
+          <History size={18} className="mr-2" />
+          Riwayat & Kegagalan
+        </button>
       </div>
 
       {/* Tab Panels */}
       {activeTab === 'scraping' && <ScrapingTab />}
       {activeTab === 'sync' && <SyncTab />}
       {activeTab === 'upload' && <UploadTab />}
+      {activeTab === 'riwayat' && <HistoryTab />}
     </div>
   );
 }

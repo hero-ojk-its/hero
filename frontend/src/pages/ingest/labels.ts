@@ -141,3 +141,59 @@ export function getMatchStatusBadgeClass(status: string | null | undefined): str
       return 'bg-gray-50 text-gray-600 border-gray-200';
   }
 }
+
+export const FOLLOW_UP_STATUS_LABELS: Record<string, string> = {
+  belum_ditangani: 'Belum Ditangani',
+  diproses_ulang: 'Diproses Ulang',
+  diabaikan: 'Diabaikan',
+};
+
+export const JENIS_JOB_INGEST_LABELS: Record<string, string> = {
+  tarik_ke_kb: 'Tarik ke KB',
+  unduh_zip: 'Unduh Folder (ZIP)',
+  unggah_manual: 'Unggah Manual',
+  retry_kegagalan: 'Proses Ulang Kegagalan',
+};
+
+export function getJenisKegagalanLabel(type: string | null | undefined): string {
+  if (!type) return '-';
+  return JENIS_KEGAGALAN_LABELS[type] || type;
+}
+
+export function getJenisJobIngestLabel(type: string | null | undefined): string {
+  if (!type) return '-';
+  return JENIS_JOB_INGEST_LABELS[type] || type;
+}
+
+export function getFollowUpStatusLabel(status: string | null | undefined): string {
+  if (!status) return 'Belum Ditangani';
+  return FOLLOW_UP_STATUS_LABELS[status] || status;
+}
+
+export function getFollowUpStatusBadgeClass(status: string | null | undefined): string {
+  switch (status) {
+    case 'belum_ditangani':
+      return 'bg-amber-50 text-amber-800 border-amber-300 font-medium';
+    case 'diproses_ulang':
+      return 'bg-blue-50 text-blue-800 border-blue-300 font-medium';
+    case 'diabaikan':
+      return 'bg-gray-100 text-gray-600 border-gray-300 font-normal';
+    default:
+      return 'bg-gray-100 text-gray-700 border-gray-200';
+  }
+}
+
+export function getJobStatusBadgeClass(status: string | null | undefined): string {
+  switch (status) {
+    case 'selesai':
+      return 'bg-emerald-50 text-emerald-700 border-emerald-300';
+    case 'gagal':
+      return 'bg-rose-50 text-rose-700 border-rose-300';
+    case 'berjalan':
+      return 'bg-blue-50 text-blue-700 border-blue-300 animate-pulse';
+    case 'antrian':
+      return 'bg-amber-50 text-amber-700 border-amber-300';
+    default:
+      return 'bg-gray-100 text-gray-700 border-gray-300';
+  }
+}
