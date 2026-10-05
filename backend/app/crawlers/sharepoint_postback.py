@@ -97,13 +97,10 @@ def _parse_indonesian_date(raw_text: str) -> Optional[date]:
         except ValueError:
             pass
 
-    # Format tahun saja
+    # Format tahun saja (Langkah 12e: dilarang mengarang tanggal 1 Januari; return None)
     year_m = re.search(r"\b(20\d\d|19\d\d)\b", cleaned)
     if year_m:
-        try:
-            return date(int(year_m.group(1)), 1, 1)
-        except ValueError:
-            pass
+        return None
 
     return None
 
@@ -325,15 +322,18 @@ class SharepointPostbackCrawler:
         if tb_m:
             eff_date = _parse_indonesian_date(html.unescape(tb_m.group(1)).strip())
 
+        tp_raw = None
         tp_m = re.search(r"Tanggal\s*(?:Penetapan|Terbit)\s*:\s*<span[^>]*>([^<]+)</span>", html_text, re.IGNORECASE)
         if not tp_m:
             tp_m = re.search(r"Tanggal\s*(?:Penetapan|Terbit)\s*:\s*([^\r\n<]+)", clean_plain, re.IGNORECASE)
         if tp_m:
-            rel_date = _parse_indonesian_date(html.unescape(tp_m.group(1)).strip())
+            tp_raw = html.unescape(tp_m.group(1)).strip()
+            rel_date = _parse_indonesian_date(tp_raw)
         else:
             det_tgl_m = re.search(r"ditetapkan\s+(?:pada\s+)?tanggal\s+([0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})", clean_plain, re.IGNORECASE)
             if det_tgl_m:
-                rel_date = _parse_indonesian_date(det_tgl_m.group(1))
+                tp_raw = det_tgl_m.group(1)
+                rel_date = _parse_indonesian_date(tp_raw)
 
         # Ekstraksi tahun dari nomor atau judul untuk fallback release_date (seperti JDIH di 10c)
         parsed_year = None
@@ -343,6 +343,11 @@ class SharepointPostbackCrawler:
                 parsed_year = int(ym.group(1))
         if not parsed_year and title:
             ym = re.search(r"\b(19\d\d|20\d\d)\b", title)
+            if ym:
+                parsed_year = int(ym.group(1))
+        # Langkah 12e: jika teks terbit/penetapan hanya ada tahun (rel_date=None), gunakan untuk regulation_year agar tahun tidak hilang
+        if not parsed_year and tp_raw:
+            ym = re.search(r"\b(19\d\d|20\d\d)\b", tp_raw)
             if ym:
                 parsed_year = int(ym.group(1))
 
@@ -403,7 +408,7 @@ class SharepointPostbackCrawler:
                 title=title,
                 filename=fn,
                 release_date=rel_date,
-            )
+            ) or parsed_year
 
             cand = PdfCandidate(
                 url=norm_pdf_url,
