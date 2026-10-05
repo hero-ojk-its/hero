@@ -970,9 +970,7 @@ export default function KnowledgeBase() {
                     const tahun = isApiItem
                       ? (docItem.release_date && !isNaN(new Date(docItem.release_date).getTime())
                           ? new Date(docItem.release_date).getFullYear()
-                          : docItem.created_at && !isNaN(new Date(docItem.created_at).getTime())
-                          ? new Date(docItem.created_at).getFullYear()
-                          : '-')
+                          : (docItem.regulation_year ?? '-'))
                       : (item as RegulasiItem).tahun;
                     const status = isApiItem
                       ? (item as DocumentItem).status_keberlakuan

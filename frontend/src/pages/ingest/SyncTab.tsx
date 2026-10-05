@@ -19,15 +19,23 @@ import {
 } from 'lucide-react';
 import { availableFolders, mockScrapedDocs } from './mock';
 import { isApiConfigured } from '../../lib/api';
+import RealSyncTab from './RealSyncTab';
 
 export default function SyncTab() {
+  if (isApiConfigured) {
+    return <RealSyncTab />;
+  }
+  return <MockSyncTab />;
+}
+
+function MockSyncTab() {
   const [syncStep, setSyncStep] = useState<1 | 2 | 3 | 4>(1);
   const [sourceType, setSourceType] = useState<'folder' | 'onedrive'>('folder');
   const [folderPath, setFolderPath] = useState('/app/sources/peraturan_internal');
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const [tempSelectedFolder, setTempSelectedFolder] = useState('/app/sources/peraturan_internal');
   const [folderError, setFolderError] = useState('');
-  const [accessClassification, setAccessClassification] = useState('Non-Publik');
+  const [accessClassification, setAccessClassification] = useState('Publik');
   const [targetCategory, setTargetCategory] = useState('Perbankan');
   const [oneDriveNotice, setOneDriveNotice] = useState(false);
   const [isSyncScanning, setIsSyncScanning] = useState(false);
@@ -98,30 +106,6 @@ export default function SyncTab() {
 
   return (
     <div className="space-y-6">
-      {/* Banner Informasi Saat API Aktif */}
-      {isApiConfigured && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-start space-x-3">
-            <Info className="text-amber-700 shrink-0 mt-0.5" size={20} />
-            <div>
-              <h4 className="text-sm font-bold text-amber-900">
-                Fitur Sinkronisasi Folder Sedang Disiapkan
-              </h4>
-              <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
-                Sinkronisasi folder lokal sedang disiapkan. Untuk OneDrive, gunakan tab{' '}
-                <strong className="font-semibold underline">Scraping URL</strong> dan pilih sumber OneDrive DPEA.
-              </p>
-            </div>
-          </div>
-          <Link
-            to="/ingest?tab=scraping"
-            className="shrink-0 px-3.5 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-semibold flex items-center transition-colors shadow-sm"
-          >
-            Buka Scraping URL
-            <ArrowRight size={14} className="ml-1.5" />
-          </Link>
-        </div>
-      )}
 
           {syncStep === 1 && (
             <>
@@ -258,10 +242,12 @@ export default function SyncTab() {
                         onChange={(e) => setAccessClassification(e.target.value)}
                         className="block w-full py-2.5 px-3 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-[#B91C1C] focus:border-[#B91C1C] bg-white font-medium"
                       >
-                        <option value="Non-Publik">Non-Publik</option>
                         <option value="Publik">Publik</option>
+                        <option value="Non-Publik">Non-Publik</option>
                       </select>
-                      <p className="text-xs text-gray-500 mt-1.5">Menentukan klasifikasi akses dokumen sebelum dipindai.</p>
+                      <p className="text-xs text-gray-500 mt-1.5 italic">
+                        Dokumen Non-Publik belum dapat dibuka PDF-nya sampai fitur login aktif (Fase 2).
+                      </p>
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-gray-900 mb-2 uppercase tracking-wider">
