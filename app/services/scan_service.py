@@ -41,6 +41,7 @@ from app.models.scan_candidate import ScanCandidate
 from app.models.ingest_failure import IngestFailure
 
 from app.crawlers.base import BlockedUrlError, FetchTooLargeError, CrawlerError, FetchedFile
+from app.crawlers.generic_html import SimpleHttpCrawler
 from app.crawlers.registry import get_crawler
 from app.crawlers.url_utils import (
     normalize_url,
