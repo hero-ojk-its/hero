@@ -1,0 +1,66 @@
+# Labelled queries for `hero bench` — retrieval quality of lexical vs vector search.
+#
+# Relevant documents are named by a fragment of their subject ("tentang"),
+# not by doc_id, so this file survives a knowledge-base rebuild. A query
+# counts as answered when a relevant document appears in the top results.
+#
+# Two sets, deliberately:
+#   kata_kunci  uses words that appear in the regulation's title — the case
+#               keyword search is built for.
+#   parafrase   everyday wording that avoids the title's words — the case
+#               semantic search claims to handle. Written before any system
+#               was run on them, to avoid tuning queries to a method.
+#
+# Add queries freely; keep both sets balanced so the comparison stays fair.
+
+kata_kunci:
+  - q: perdagangan karbon bursa karbon
+    relevan: ["Perdagangan Karbon"]
+  - q: aset kripto
+    relevan: ["Aset Kripto"]
+  - q: pencucian uang pendanaan terorisme
+    relevan: ["Anti Pencucian Uang"]
+  - q: tenaga kerja asing bank umum
+    relevan: ["Tenaga Kerja Asing"]
+  - q: penyelenggaraan usaha dana pensiun
+    relevan: ["Usaha Dana Pensiun"]
+  - q: perizinan lembaga keuangan mikro
+    relevan: ["Lembaga Keuangan Mikro"]
+  - q: situs web emiten
+    relevan: ["Situs Web Emiten"]
+  - q: cuti pegawai
+    relevan: ["Cuti Pegawai"]
+  - q: jasa akuntan publik
+    relevan: ["Jasa Akuntan Publik"]
+  - q: reksa dana diperdagangkan di bursa
+    relevan: ["Unit Penyertaannya Diperdagangkan"]
+  - q: pengambilalihan perusahaan terbuka
+    relevan: ["Pengambilalihan Perusahaan Terbuka"]
+  - q: waran terstruktur
+    relevan: ["Waran Terstruktur"]
+
+parafrase:
+  - q: jual beli izin emisi gas rumah kaca
+    relevan: ["Perdagangan Karbon"]
+  - q: aturan jual beli bitcoin dan koin virtual
+    relevan: ["Aset Kripto"]
+  - q: mencegah uang hasil kejahatan disamarkan lewat lembaga keuangan
+    relevan: ["Anti Pencucian Uang"]
+  - q: bank mempekerjakan warga negara lain dan transfer keahlian ke pekerja lokal
+    relevan: ["Tenaga Kerja Asing"]
+  - q: pengelolaan tabungan hari tua karyawan setelah berhenti bekerja
+    relevan: ["Usaha Dana Pensiun"]
+  - q: izin pendirian penyedia kredit skala kecil untuk usaha rakyat
+    relevan: ["Lembaga Keuangan Mikro"]
+  - q: emiten wajib memiliki halaman internet untuk keterbukaan informasi
+    relevan: ["Situs Web Emiten"]
+  - q: hak libur tahunan karyawan OJK
+    relevan: ["Cuti Pegawai"]
+  - q: auditor eksternal yang memeriksa pembukuan perusahaan keuangan
+    relevan: ["Jasa Akuntan Publik"]
+  - q: produk investasi bersama berbasis logam mulia yang unitnya bisa diperjualbelikan setiap hari
+    relevan: ["Unit Penyertaannya Diperdagangkan"]
+  - q: membeli mayoritas saham sehingga menjadi pengendali emiten
+    relevan: ["Pengambilalihan Perusahaan Terbuka"]
+  - q: alih daya fungsi operasional bank ke vendor
+    relevan: ["Penyerahan Sebagian Pelaksanaan Pekerjaan"]

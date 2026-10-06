@@ -27,6 +27,6 @@
 # /backend/             @hero-ojk-its/backend
 # /frontend/            @hero-ojk-its/frontend-and-ui-ux
 # /scraper/             @hero-ojk-its/data-and-ml
-# /pipeline/            @hero-ojk-its/data-and-ml
+/pipeline/              @hero-ojk-its/data-and-ml
 # /infra/               @hero-ojk-its/infra-and-qa
 # /tests/               @hero-ojk-its/infra-and-qa

@@ -1,0 +1,104 @@
+# HERO — aturan klasifikasi kategori peraturan (US-24, FR-KB-01, NFR-15).
+#
+# Berkas ini SATU-SATUNYA tempat aturan kategori. Mengubah, menambah, atau
+# menghapus kategori cukup di sini — tidak perlu mengubah kode. Perubahan
+# terbaca otomatis pada dokumen berikutnya (berkas dibaca ulang bila berubah).
+# Periksa dulu dengan:  hero kategori cek     (validasi + akurasi vs label JDIH)
+#
+# Cara kerja (deterministik, tanpa AI):
+#   skor kategori = bobot.perihal × (kata kunci yang muncul di perihal/judul "tentang …")
+#                 + bobot.isi × (kemunculan di isi, maksimal isi_maks_per_kata per kata)
+#   kategori dengan skor tertinggi menang; seri → yang lebih atas di daftar menang.
+#   Tidak ada yang cocok → kategori_default.
+#   kode_nomor: kode satuan kerja di nomor lama (11/POJK.03/2016 → "03"), skor bobot.nomor.
+#     Arti kode berubah setelah reorganisasi OJK 2024 → batasi dengan sejak/sampai (tahun).
+#   kecuali: bila salah satu frasa ini ada di perihal, kategori itu dilewati.
+#   sektor_jdih: label sektor JDIH OJK yang setara — dipakai untuk mengukur akurasi.
+#
+# Kata kunci ditulis huruf kecil. cocok: kata → "efek" tidak cocok dengan "efektif".
+
+versi: 3
+cocok: kata
+kategori_default: lain-lain
+bobot:
+  perihal: 5
+  nomor: 6
+  isi: 1
+  isi_maks_per_kata: 3
+  isi_karakter: 20000
+
+# Urutan = pemenang saat skor seri. Sektor (perbankan, pasar modal, IKNB) di atas
+# topik lintas-sektor (TI, APU-PPT, tata kelola): "Keamanan Siber bagi Bank Umum"
+# masuk perbankan, sama dengan JDIH. Ingin TI didahulukan? Pindahkan blok TI ke atas.
+kategori:
+  - kode: perbankan
+    label: Perbankan
+    sektor_jdih: ["Perbankan"]
+    kode_nomor: ["03"]
+    kata_kunci: [bank, bank umum, perbankan, bank perkreditan, bank perekonomian rakyat, bpr, bprs,
+                 bank syariah, unit usaha syariah, kredit, perkreditan, permodalan bank, kualitas aset,
+                 modal inti, penyediaan modal minimum, likuiditas, giro wajib minimum, rahasia bank,
+                 informasi perkreditan, kantor cabang]
+
+  - kode: pasar-modal
+    label: Pasar Modal, Derivatif & Bursa Karbon
+    sektor_jdih: ["Pasar Modal, Keuangan Derivatif, dan Bursa Karbon"]
+    kode_nomor: ["04"]
+    kata_kunci: [pasar modal, emiten, efek, bursa, bursa karbon, reksa dana, perusahaan publik,
+                 penawaran umum, manajer investasi, kustodian, perantara pedagang efek, penjamin emisi,
+                 obligasi, sukuk, saham, derivatif, kontrak berjangka, wali amanat, dana investasi,
+                 urun dana, securities crowdfunding, lembaga kliring, lembaga penyimpanan,
+                 perusahaan terbuka, pasar alternatif]
+    kecuali: [bank, perasuransian, asuransi, dana pensiun]
+
+  - kode: iknb
+    label: Industri Keuangan Non-Bank
+    sektor_jdih:
+      - "IKNB (Sebelum UU Nomor 4 Tahun 2023)"
+      - "Perasuransian, Penjaminan, dan Dana Pensiun"
+      - "Lembaga Pembiayaan,Perusahaan Modal Ventura,Lembaga Keuangan Mikro,dan Lembaga Jasa Keuangan Lainnya"
+    kode_nomor: ["05", {kode: "06", sejak: 2024}]
+    kata_kunci: [asuransi, reasuransi, perasuransian, asuransi syariah, dana pensiun, lembaga pembiayaan,
+                 pembiayaan, perusahaan pembiayaan, penjaminan, pergadaian, pegadaian, modal ventura,
+                 lembaga keuangan mikro, koperasi, iknb, lembaga jasa keuangan lainnya,
+                 layanan pendanaan bersama, pinjam meminjam uang, beli sekarang bayar nanti, buy now pay later,
+                 tabungan perumahan rakyat, jaminan kesehatan, jaminan sosial, bpjs, permodalan nasional madani,
+                 sarana multigriya, sarana multi infrastruktur, lembaga penjamin, ekspor indonesia,
+                 pialang asuransi, aktuaria, perusahaan asuransi]
+
+  - kode: perlindungan-konsumen
+    label: Perilaku Usaha & Pelindungan Konsumen
+    sektor_jdih: ["Perilaku Pelaku Usaha Jasa Keuangan, Edukasi dan Pelindungan Konsumen"]
+    kode_nomor: [{kode: "07", sampai: 2023}, {kode: "08", sejak: 2024}]
+    kata_kunci: [perlindungan konsumen, pelindungan konsumen, edukasi konsumen, pengaduan konsumen,
+                 pengaduan, literasi keuangan, inklusi keuangan, literasi, edukasi, perilaku pelaku usaha,
+                 market conduct, sengketa, penyelesaian sengketa, alternatif penyelesaian sengketa,
+                 kegiatan usaha tanpa izin, investasi ilegal]
+
+  - kode: teknologi-informasi
+    label: Teknologi Informasi & Inovasi Keuangan Digital
+    sektor_jdih: ["Inovasi Teknologi Sektor Keuangan, Aset Keuangan Digital dan Aset Kripto"]
+    kode_nomor: [{kode: "07", sejak: 2024}]
+    kata_kunci: [teknologi informasi, sistem elektronik, keamanan siber, data pribadi, layanan digital,
+                 inovasi teknologi sektor keuangan, itsk, penyelenggara sistem, alih daya, outsourcing,
+                 pusat data, manajemen risiko teknologi, aset keuangan digital, aset kripto, kripto,
+                 agregasi jasa keuangan, inovasi keuangan digital, ruang uji coba, sandbox, fintech]
+    # Pinjol (LPBBTI) diawasi IKNB walau namanya "berbasis teknologi informasi".
+    kecuali: [layanan pendanaan bersama, pinjam meminjam uang]
+
+  - kode: apu-ppt
+    label: APU-PPT
+    kata_kunci: [pencucian uang, pendanaan terorisme, apu, ppt, know your customer,
+                 prinsip mengenal nasabah, senjata pemusnah massal]
+
+  - kode: tata-kelola
+    label: Tata Kelola & Manajemen Risiko
+    kata_kunci: [tata kelola, good corporate governance, governance, manajemen risiko,
+                 kepatuhan, audit intern, pengendalian intern, kemampuan dan kepatutan]
+
+  # "otoritas jasa keuangan" & "dewan komisioner" sengaja TIDAK dipakai: keduanya
+  # ada di nama penerbit dan rujukan hampir semua peraturan OJK (temuan US-24 v1).
+  - kode: kelembagaan
+    label: Kelembagaan OJK
+    kata_kunci: [organisasi dan tata kerja, kelembagaan, tata naskah dinas, pegawai otoritas jasa keuangan,
+                 kode etik, pungutan oleh otoritas jasa keuangan, anggaran otoritas jasa keuangan]

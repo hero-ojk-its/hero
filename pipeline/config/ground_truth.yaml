@@ -1,0 +1,19 @@
+# Ground truth jumlah dokumen per sumber — pembanding kriteria penerimaan
+# scraping (MoM Weekly #4, issue #87/#88): dokumen dianggap berhasil bila
+# terindeks saat scan (URL, nama dokumen, nama berkas, ukuran), tanpa unduh.
+#
+# Angka di bawah adalah ESTIMASI LISAN Pak Faris pada rapat 29 Sep 2026.
+# Ganti dengan angka resmi DPEA begitu dibagikan (#87), lalu jalankan:
+#   hero scan penerimaan
+#
+# Kunci = nilai kolom inventory.source.
+ojk-regulasi:
+  min: 1700
+  max: 1700
+  catatan: "Estimasi lisan ±1.700 (situs regulasi OJK). Menunggu angka resmi #87."
+jdih-ojk:
+  min: 400
+  max: 500
+  catatan: "Estimasi lisan ±400–500. Menunggu angka resmi #87 — perlu dipastikan apa yang dihitung (lihat laporan)."
+# ojk-rancangan tidak termasuk tiga sumber uji MVP; dilaporkan tanpa pembanding.
+# OneDrive public termasuk sumber uji; jumlah berkasnya dihitung dari listing share.

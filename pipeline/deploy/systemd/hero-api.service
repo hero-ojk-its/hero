@@ -1,0 +1,24 @@
+[Unit]
+Description=HERO API untuk frontend (FastAPI/uvicorn)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=hero
+Group=hero
+WorkingDirectory=/opt/hero
+Environment=HOME=/opt/hero
+Environment=HERO_CONFIG=/opt/hero/config/sources.yaml
+# Asal frontend yang diizinkan memanggil API (pisahkan dengan koma).
+Environment=HERO_CORS=http://localhost:3000,http://localhost:5173
+# Hanya dengar di localhost; buka ke luar lewat reverse proxy (Nginx/Caddy) dengan HTTPS.
+ExecStart=/opt/hero/.venv/bin/python -m hero.cli serve --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+# Model e5-large butuh ±3 GB RAM saat mengindeks; batasi agar Nextcloud tetap hidup.
+MemoryMax=4G
+Nice=5
+
+[Install]
+WantedBy=multi-user.target

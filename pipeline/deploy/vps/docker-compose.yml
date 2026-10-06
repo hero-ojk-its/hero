@@ -1,0 +1,64 @@
+# HERO di VPS: Postgres+pgvector (loopback) dan backend FastAPI (loopback).
+# Caddy TIDAK ada di sini: port 80/443 sudah dipakai Caddy milik Nextcloud.
+# Backend dijangkau lewat jaringan docker `hero_edge` yang juga dimasuki Caddy
+# Nextcloud (lihat vps/nextcloud-edge.sh).
+#
+# Dijalankan dari /opt/hero:  docker compose up -d --build
+name: hero
+
+services:
+  db:
+    image: ankane/pgvector:v0.5.0          # sama dengan docker-compose.yml backend
+    container_name: hero_db
+    restart: unless-stopped
+    # Batas sumber daya: VPS 2 vCPU / 2 GB dibagi dengan Nextcloud.
+    mem_limit: 768m
+    cpus: 0.7
+    shm_size: 128m
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/init_db:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:5432:5432"               # hanya loopback — tidak pernah ke internet
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks: [internal]
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "5" } }
+
+  backend:
+    build: ./backend
+    container_name: hero_backend
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    # Pelindung terhadap kebocoran memori: kontainer di-restart, VPS tetap hidup.
+    env_file: [./backend/.env.prod]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      STORAGE_PATH: /app/storage
+      LOCAL_SOURCE_ROOTS: /app/sources
+    ports:
+      - "127.0.0.1:8000:8000"               # worker di host memakai ini; publik lewat Caddy
+    volumes:
+      - storage_data:/app/storage
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [internal, edge]
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "5" } }
+
+networks:
+  internal: {}
+  edge:
+    name: hero_edge
+    external: true
+
+volumes:
+  pgdata:
+  storage_data:

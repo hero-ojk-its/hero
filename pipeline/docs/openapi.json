@@ -1,0 +1,2053 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "HERO API",
+  "description": "Harmonisasi & Analisa Regulasi Otomatis — kontrak untuk frontend.",
+  "version": "0.1.0"
+ },
+ "paths": {
+  "/api/health": {
+   "get": {
+    "tags": [
+     "meta"
+    ],
+    "summary": "Health",
+    "operationId": "health_api_health_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/meta/enums": {
+   "get": {
+    "tags": [
+     "meta"
+    ],
+    "summary": "Enums",
+    "description": "Every label and badge tone the UI shows, from one place.",
+    "operationId": "enums_api_meta_enums_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/dashboard/summary": {
+   "get": {
+    "tags": [
+     "dashboard"
+    ],
+    "summary": "Dashboard",
+    "operationId": "dashboard_api_dashboard_summary_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/kb/documents": {
+   "get": {
+    "tags": [
+     "knowledge-base"
+    ],
+    "summary": "Kb List",
+    "description": "Tabel Knowledge Base. ``mode`` selain lexical memakai indeks vektor:\nhasil diurutkan menurut kemiripan makna dan tiap baris membawa pasal\nyang paling cocok (``cocok``) sebagai bukti.",
+    "operationId": "kb_list_api_kb_documents_get",
+    "parameters": [
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Q"
+      }
+     },
+     {
+      "name": "kategori",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "default": [],
+       "title": "Kategori"
+      }
+     },
+     {
+      "name": "jenis",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "default": [],
+       "title": "Jenis"
+      }
+     },
+     {
+      "name": "tahun",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "integer"
+       },
+       "default": [],
+       "title": "Tahun"
+      }
+     },
+     {
+      "name": "topik",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "default": [],
+       "title": "Topik"
+      }
+     },
+     {
+      "name": "status",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "default": [],
+       "title": "Status"
+      }
+     },
+     {
+      "name": "sumber",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "default": [],
+       "title": "Sumber"
+      }
+     },
+     {
+      "name": "akses",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "default": [],
+       "title": "Akses"
+      }
+     },
+     {
+      "name": "sort",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "terbaru",
+       "title": "Sort"
+      }
+     },
+     {
+      "name": "page",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "minimum": 1,
+       "default": 1,
+       "title": "Page"
+      }
+     },
+     {
+      "name": "page_size",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 100,
+       "minimum": 1,
+       "default": 8,
+       "title": "Page Size"
+      }
+     },
+     {
+      "name": "mode",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "enum": [
+        "lexical",
+        "lsa",
+        "semantic",
+        "hybrid"
+       ],
+       "type": "string",
+       "default": "lexical",
+       "title": "Mode"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/KbListResponse"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/kb/facets": {
+   "get": {
+    "tags": [
+     "knowledge-base"
+    ],
+    "summary": "Kb Facets",
+    "operationId": "kb_facets_api_kb_facets_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": {
+          "items": {
+           "$ref": "#/components/schemas/FacetValue"
+          },
+          "type": "array"
+         },
+         "type": "object",
+         "title": "Response Kb Facets Api Kb Facets Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/kb/documents/{doc_id}": {
+   "get": {
+    "tags": [
+     "knowledge-base"
+    ],
+    "summary": "Kb Detail",
+    "operationId": "kb_detail_api_kb_documents__doc_id__get",
+    "parameters": [
+     {
+      "name": "doc_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Doc Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/KbDetail"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/kb/documents/{doc_id}/relations": {
+   "get": {
+    "tags": [
+     "knowledge-base",
+     "graph"
+    ],
+    "summary": "Kb Relations",
+    "description": "Relasi hukum dokumen: dasar hukum, pencabutan, perubahan, penerus.",
+    "operationId": "kb_relations_api_kb_documents__doc_id__relations_get",
+    "parameters": [
+     {
+      "name": "doc_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Doc Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/kb/documents/{doc_id}/pdf": {
+   "get": {
+    "tags": [
+     "knowledge-base"
+    ],
+    "summary": "Kb Pdf",
+    "description": "\"Lihat Dokumen PDF Asli\".\n\nServed from disk when present. Otherwise fetched again from the\nsource and served only if its SHA-256 equals the hash recorded at\ningest — the hash is the proof that this is the same document HERO\nanalysed, so the disk copy can be pruned without losing that proof.",
+    "operationId": "kb_pdf_api_kb_documents__doc_id__pdf_get",
+    "parameters": [
+     {
+      "name": "doc_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Doc Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       },
+       "application/pdf": {}
+      }
+     },
+     "409": {
+      "description": "Conflict"
+     },
+     "404": {
+      "description": "Not Found"
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/analisa/{doc_id}": {
+   "get": {
+    "tags": [
+     "analisa"
+    ],
+    "summary": "Analisa",
+    "description": "Fase 2: ringkasan terstruktur + poin kunci (Deterministik), dan narasi AI\nbila diminta dan tersedia. ``mode_dipakai`` + ``ai.alasan`` selalu\nmenjelaskan mode mana yang akhirnya dipakai dan mengapa.",
+    "operationId": "analisa_api_analisa__doc_id__get",
+    "parameters": [
+     {
+      "name": "doc_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Doc Id"
+      }
+     },
+     {
+      "name": "mode",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^(deterministik|ai)$",
+       "default": "deterministik",
+       "title": "Mode"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/analisa/{doc_id}/klausul": {
+   "get": {
+    "tags": [
+     "analisa"
+    ],
+    "summary": "Klausul",
+    "description": "Pasal dalam satu dokumen yang paling relevan dengan kebutuhan pengguna.",
+    "operationId": "klausul_api_analisa__doc_id__klausul_get",
+    "parameters": [
+     {
+      "name": "doc_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Doc Id"
+      }
+     },
+     {
+      "name": "kebutuhan",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "minLength": 3,
+       "title": "Kebutuhan"
+      }
+     },
+     {
+      "name": "k",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 20,
+       "minimum": 1,
+       "default": 5,
+       "title": "K"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/analisa-status": {
+   "get": {
+    "tags": [
+     "analisa"
+    ],
+    "summary": "Analisa Status",
+    "operationId": "analisa_status_api_analisa_status_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/ingest/scans": {
+   "post": {
+    "tags": [
+     "ingest"
+    ],
+    "summary": "Start Url Scan",
+    "operationId": "start_url_scan_api_ingest_scans_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/UrlScanRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "202": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StartedResponse"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/ingest/scans/{scan_id}": {
+   "get": {
+    "tags": [
+     "ingest"
+    ],
+    "summary": "Get Scan",
+    "description": "Hasil Pemindaian. Poll sampai ``status.value`` bukan 'berjalan'.",
+    "operationId": "get_scan_api_ingest_scans__scan_id__get",
+    "parameters": [
+     {
+      "name": "scan_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Scan Id"
+      }
+     },
+     {
+      "name": "status_kbs",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Status Kbs"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/ingest/jobs": {
+   "post": {
+    "tags": [
+     "ingest"
+    ],
+    "summary": "Start Job",
+    "operationId": "start_job_api_ingest_jobs_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/IngestJobRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "202": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StartedResponse"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/ingest/jobs/{job_id}": {
+   "get": {
+    "tags": [
+     "ingest"
+    ],
+    "summary": "Get Job",
+    "description": "Proses Ingest (progress bar) dan Dokumen Berhasil Ditambahkan.",
+    "operationId": "get_job_api_ingest_jobs__job_id__get",
+    "parameters": [
+     {
+      "name": "job_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Job Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/ingest/history": {
+   "get": {
+    "tags": [
+     "ingest"
+    ],
+    "summary": "History",
+    "operationId": "history_api_ingest_history_get",
+    "parameters": [
+     {
+      "name": "jenis",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^(url|sinkronisasi)$",
+       "default": "url",
+       "title": "Jenis"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 3,
+       "title": "Limit"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/sync/sources": {
+   "get": {
+    "tags": [
+     "sync"
+    ],
+    "summary": "Sync Sources",
+    "description": "Sumber OneDrive terdaftar + status koneksi (di-cache 5 menit).",
+    "operationId": "sync_sources_api_sync_sources_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/sync/scans": {
+   "post": {
+    "tags": [
+     "sync"
+    ],
+    "summary": "Start Sync Scan",
+    "operationId": "start_sync_scan_api_sync_scans_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SyncScanRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "202": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StartedResponse"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/search": {
+   "get": {
+    "tags": [
+     "search"
+    ],
+    "summary": "Search",
+    "operationId": "search_api_search_get",
+    "parameters": [
+     {
+      "name": "q",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Q"
+      }
+     },
+     {
+      "name": "method",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "enum": [
+        "lexical",
+        "lsa",
+        "semantic",
+        "hybrid"
+       ],
+       "type": "string",
+       "default": "hybrid",
+       "title": "Method"
+      }
+     },
+     {
+      "name": "k",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 50,
+       "minimum": 1,
+       "default": 10,
+       "title": "K"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/search/compare": {
+   "get": {
+    "tags": [
+     "search"
+    ],
+    "summary": "Compare",
+    "description": "Satu kueri, empat metode, berdampingan — untuk membandingkan\nrelasional (kata kunci) dengan vektor secara langsung.",
+    "operationId": "compare_api_search_compare_get",
+    "parameters": [
+     {
+      "name": "q",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Q"
+      }
+     },
+     {
+      "name": "k",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 20,
+       "minimum": 1,
+       "default": 5,
+       "title": "K"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/graph/stats": {
+   "get": {
+    "tags": [
+     "graph"
+    ],
+    "summary": "Graph Stats",
+    "operationId": "graph_stats_api_graph_stats_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/graph/findings": {
+   "get": {
+    "tags": [
+     "graph"
+    ],
+    "summary": "Graph Findings",
+    "description": "Ketidaksesuaian antara relasi graf dan status tercatat.",
+    "operationId": "graph_findings_api_graph_findings_get",
+    "parameters": [
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 200,
+       "minimum": 1,
+       "default": 20,
+       "title": "Limit"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/graph/nodes/{key}/lineage": {
+   "get": {
+    "tags": [
+     "graph"
+    ],
+    "summary": "Graph Lineage",
+    "operationId": "graph_lineage_api_graph_nodes__key__lineage_get",
+    "parameters": [
+     {
+      "name": "key",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Key"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/graph/nodes/{key}/impact": {
+   "get": {
+    "tags": [
+     "graph"
+    ],
+    "summary": "Graph Impact",
+    "operationId": "graph_impact_api_graph_nodes__key__impact_get",
+    "parameters": [
+     {
+      "name": "key",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Key"
+      }
+     },
+     {
+      "name": "max_depth",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 6,
+       "minimum": 1,
+       "default": 3,
+       "title": "Max Depth"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/graph/nodes/{key}/basis": {
+   "get": {
+    "tags": [
+     "graph"
+    ],
+    "summary": "Graph Basis",
+    "operationId": "graph_basis_api_graph_nodes__key__basis_get",
+    "parameters": [
+     {
+      "name": "key",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Key"
+      }
+     },
+     {
+      "name": "max_depth",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 6,
+       "minimum": 1,
+       "default": 4,
+       "title": "Max Depth"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/graph/nodes/{key}": {
+   "get": {
+    "tags": [
+     "graph"
+    ],
+    "summary": "Graph Node",
+    "operationId": "graph_node_api_graph_nodes__key__get",
+    "parameters": [
+     {
+      "name": "key",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Key"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "schemas": {
+   "Badge": {
+    "properties": {
+     "value": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Value"
+     },
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "tone": {
+      "type": "string",
+      "enum": [
+       "success",
+       "warning",
+       "danger",
+       "info",
+       "neutral"
+      ],
+      "title": "Tone",
+      "default": "neutral"
+     }
+    },
+    "type": "object",
+    "required": [
+     "label"
+    ],
+    "title": "Badge"
+   },
+   "FacetValue": {
+    "properties": {
+     "value": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "integer"
+       }
+      ],
+      "title": "Value"
+     },
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "count": {
+      "type": "integer",
+      "title": "Count"
+     }
+    },
+    "type": "object",
+    "required": [
+     "value",
+     "label",
+     "count"
+    ],
+    "title": "FacetValue"
+   },
+   "HTTPValidationError": {
+    "properties": {
+     "detail": {
+      "items": {
+       "$ref": "#/components/schemas/ValidationError"
+      },
+      "type": "array",
+      "title": "Detail"
+     }
+    },
+    "type": "object",
+    "title": "HTTPValidationError"
+   },
+   "IngestJobRequest": {
+    "properties": {
+     "scan_id": {
+      "type": "string",
+      "title": "Scan Id"
+     },
+     "item_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "minItems": 1,
+      "title": "Item Ids"
+     },
+     "kategori": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Kategori"
+     }
+    },
+    "type": "object",
+    "required": [
+     "scan_id",
+     "item_ids"
+    ],
+    "title": "IngestJobRequest"
+   },
+   "KbDetail": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "judul": {
+      "type": "string",
+      "title": "Judul"
+     },
+     "jenis": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Jenis"
+     },
+     "nomor": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Nomor",
+      "description": "Nomor lengkap, mis. \"11/POJK.03/2024\""
+     },
+     "nomor_singkat": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Nomor Singkat",
+      "description": "Bentuk tabel, mis. \"POJK-11/2024\""
+     },
+     "kategori": {
+      "$ref": "#/components/schemas/Option"
+     },
+     "topik": {
+      "type": "string",
+      "title": "Topik"
+     },
+     "tahun": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tahun"
+     },
+     "status": {
+      "$ref": "#/components/schemas/Badge"
+     },
+     "sumber": {
+      "$ref": "#/components/schemas/Option"
+     },
+     "cocok": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cocok",
+      "description": "Hanya pada mode semantic/hybrid: pasal yang paling cocok"
+     },
+     "judul_asli": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Judul Asli"
+     },
+     "tentang": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tentang"
+     },
+     "topik_semua": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Topik Semua"
+     },
+     "topik_alasan": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "type": "array",
+      "title": "Topik Alasan"
+     },
+     "tanggal_terbit": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Tanggal Terbit"
+     },
+     "sumber_detail": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sumber Detail"
+     },
+     "akses": {
+      "$ref": "#/components/schemas/Option"
+     },
+     "ringkasan": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ringkasan"
+     },
+     "poin_kunci": {
+      "items": {
+       "$ref": "#/components/schemas/PoinKunci"
+      },
+      "type": "array",
+      "title": "Poin Kunci"
+     },
+     "validasi": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/Validasi"
+      },
+      "type": "object",
+      "title": "Validasi"
+     },
+     "jumlah_pasal": {
+      "type": "integer",
+      "title": "Jumlah Pasal"
+     },
+     "jumlah_halaman": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Jumlah Halaman"
+     },
+     "dasar_hukum": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Dasar Hukum"
+     },
+     "pdf": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Pdf"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "judul",
+     "jenis",
+     "kategori",
+     "topik",
+     "tahun",
+     "status",
+     "sumber",
+     "judul_asli",
+     "tentang",
+     "topik_semua",
+     "topik_alasan",
+     "tanggal_terbit",
+     "sumber_detail",
+     "akses",
+     "ringkasan",
+     "poin_kunci",
+     "validasi",
+     "jumlah_pasal",
+     "jumlah_halaman",
+     "dasar_hukum",
+     "pdf"
+    ],
+    "title": "KbDetail"
+   },
+   "KbListItem": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "judul": {
+      "type": "string",
+      "title": "Judul"
+     },
+     "jenis": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Jenis"
+     },
+     "nomor": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Nomor",
+      "description": "Nomor lengkap, mis. \"11/POJK.03/2024\""
+     },
+     "nomor_singkat": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Nomor Singkat",
+      "description": "Bentuk tabel, mis. \"POJK-11/2024\""
+     },
+     "kategori": {
+      "$ref": "#/components/schemas/Option"
+     },
+     "topik": {
+      "type": "string",
+      "title": "Topik"
+     },
+     "tahun": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tahun"
+     },
+     "status": {
+      "$ref": "#/components/schemas/Badge"
+     },
+     "sumber": {
+      "$ref": "#/components/schemas/Option"
+     },
+     "cocok": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cocok",
+      "description": "Hanya pada mode semantic/hybrid: pasal yang paling cocok"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "judul",
+     "jenis",
+     "kategori",
+     "topik",
+     "tahun",
+     "status",
+     "sumber"
+    ],
+    "title": "KbListItem"
+   },
+   "KbListResponse": {
+    "properties": {
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/KbListItem"
+      },
+      "type": "array",
+      "title": "Items"
+     },
+     "total": {
+      "type": "integer",
+      "title": "Total"
+     },
+     "page": {
+      "type": "integer",
+      "title": "Page"
+     },
+     "page_size": {
+      "type": "integer",
+      "title": "Page Size"
+     },
+     "pages": {
+      "type": "integer",
+      "title": "Pages"
+     },
+     "mode": {
+      "type": "string",
+      "title": "Mode",
+      "default": "lexical"
+     },
+     "pencarian": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pencarian",
+      "description": "semua_kata | sebagian_kata — bila sebagian_kata, tampilkan 'Tidak ada yang cocok persis; menampilkan hasil yang cocok sebagian'"
+     },
+     "waktu_ms": {
+      "type": "number",
+      "title": "Waktu Ms"
+     }
+    },
+    "type": "object",
+    "required": [
+     "items",
+     "total",
+     "page",
+     "page_size",
+     "pages",
+     "waktu_ms"
+    ],
+    "title": "KbListResponse"
+   },
+   "Option": {
+    "properties": {
+     "value": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Value"
+     },
+     "label": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Label"
+     }
+    },
+    "type": "object",
+    "title": "Option"
+   },
+   "PoinKunci": {
+    "properties": {
+     "kategori": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Kategori"
+     },
+     "pasal": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pasal"
+     },
+     "halaman": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Halaman"
+     },
+     "teks": {
+      "type": "string",
+      "title": "Teks"
+     }
+    },
+    "type": "object",
+    "required": [
+     "kategori",
+     "pasal",
+     "halaman",
+     "teks"
+    ],
+    "title": "PoinKunci"
+   },
+   "StartedResponse": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "status_url": {
+      "type": "string",
+      "title": "Status Url"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "status_url"
+    ],
+    "title": "StartedResponse"
+   },
+   "SyncScanRequest": {
+    "properties": {
+     "sumber": {
+      "type": "string",
+      "enum": [
+       "onedrive",
+       "folder"
+      ],
+      "title": "Sumber"
+     },
+     "sumber_nama": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sumber Nama",
+      "description": "Nama sumber OneDrive terdaftar (dari /api/sync/sources)"
+     },
+     "share_url": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Share Url"
+     },
+     "subfolder": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Subfolder"
+     },
+     "path": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Path",
+      "description": "Folder lokal (hanya bila sumber='folder')"
+     },
+     "klasifikasi_akses": {
+      "type": "string",
+      "enum": [
+       "publik",
+       "internal",
+       "rahasia"
+      ],
+      "title": "Klasifikasi Akses",
+      "default": "internal"
+     },
+     "kategori": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Kategori"
+     },
+     "maks_item": {
+      "type": "integer",
+      "maximum": 3000.0,
+      "minimum": 1.0,
+      "title": "Maks Item",
+      "default": 200
+     }
+    },
+    "type": "object",
+    "required": [
+     "sumber"
+    ],
+    "title": "SyncScanRequest"
+   },
+   "UrlScanRequest": {
+    "properties": {
+     "url": {
+      "type": "string",
+      "maxLength": 2083,
+      "minLength": 1,
+      "format": "uri",
+      "title": "Url"
+     },
+     "kedalaman": {
+      "type": "integer",
+      "maximum": 3.0,
+      "minimum": 0.0,
+      "title": "Kedalaman",
+      "description": "Level penelusuran tautan dari halaman sumber",
+      "default": 2
+     },
+     "kategori": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Kategori",
+      "description": "Kategori target Knowledge Base (slug dari /api/kb/facets)"
+     },
+     "sektor": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sektor",
+      "description": "Khusus JDIH: kode sektor, mis. ['01']"
+     },
+     "jenis": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Jenis",
+      "description": "Khusus JDIH: kode jenis, mis. ['06']"
+     },
+     "maks_item": {
+      "type": "integer",
+      "maximum": 300.0,
+      "minimum": 1.0,
+      "title": "Maks Item",
+      "default": 50
+     }
+    },
+    "type": "object",
+    "required": [
+     "url"
+    ],
+    "title": "UrlScanRequest"
+   },
+   "Validasi": {
+    "properties": {
+     "value": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Value"
+     },
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "tone": {
+      "type": "string",
+      "title": "Tone"
+     },
+     "alasan": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Alasan"
+     },
+     "tampil": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tampil"
+     }
+    },
+    "type": "object",
+    "required": [
+     "value",
+     "label",
+     "tone",
+     "alasan"
+    ],
+    "title": "Validasi"
+   },
+   "ValidationError": {
+    "properties": {
+     "loc": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ]
+      },
+      "type": "array",
+      "title": "Location"
+     },
+     "msg": {
+      "type": "string",
+      "title": "Message"
+     },
+     "type": {
+      "type": "string",
+      "title": "Error Type"
+     },
+     "input": {
+      "title": "Input"
+     },
+     "ctx": {
+      "type": "object",
+      "title": "Context"
+     }
+    },
+    "type": "object",
+    "required": [
+     "loc",
+     "msg",
+     "type"
+    ],
+    "title": "ValidationError"
+   }
+  }
+ }
+}

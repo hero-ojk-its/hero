@@ -39,6 +39,8 @@ corpus/
 storage/
 *.pdf
 !docs/**/*.pdf
+# Fixture uji OCR: salinan POJK publik hasil pindai (bukan dokumen mitra)
+!pipeline/tests/fixtures/*.pdf
 # Pengecualian: modul kode frontend (bukan dokumen peraturan)
 !frontend/src/data/
 
@@ -46,3 +48,11 @@ storage/
 tmp/
 temp/
 scratch/
+
+# Agent
+.claude/
+
+#VPS
+myvps.sh
+# Artefak build paket Python (pipeline/hero.egg-info)
+*.egg-info/

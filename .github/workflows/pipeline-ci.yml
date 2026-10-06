@@ -1,0 +1,37 @@
+# CI lapisan data (pipeline/): seluruh test Mode Deterministik, offline,
+# tanpa kredensial AI dan tanpa dokumen mitra. Tesseract dipasang agar jalur
+# OCR ikut teruji dengan fixture POJK publik hasil pindai.
+
+name: Pipeline CI
+
+on:
+  pull_request:
+    paths: ['pipeline/**', '.github/workflows/pipeline-ci.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pipeline-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Pytest
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: pipeline }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pipeline/pyproject.toml
+      - name: Tesseract (ind + eng)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-ind
+      - name: Install
+        run: pip install -e ".[api,vector,dev]"
+      - name: Test
+        run: python -m pytest tests -q

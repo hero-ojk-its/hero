@@ -1,0 +1,42 @@
+# Harmonisasi draft vs korpus (URD 3.4, FR-HRM-01..12) — aturan sebagai
+# konfigurasi (ADR-07). Ubah di sini, bukan di kode.
+#
+# Ambang kemiripan menjawab TD-07 (SRS): mitra menjawab secara kualitatif
+# ("kesamaan objek & kausal"); angka di bawah dikalibrasi dari pasangan
+# peraturan perubahan ↔ induknya, yang secara eksplisit menyebut pasal mana
+# yang diubah dan mana yang disisipkan. Jalankan ulang kalibrasi dengan:
+#   hero harmonisasi evaluasi
+# lalu salin ambang yang disarankan ke sini.
+
+ambang:
+  # Kemiripan TF-IDF minimum agar dua pasal dianggap mengatur OBJEK YANG SAMA.
+  # Di bawah ini → pasal_baru.
+  objek_sama: 0.40
+  # Rasio kesamaan redaksi (difflib) minimum untuk DUPLIKASI (hampir identik).
+  duplikasi: 0.95
+  # Porsi isi pasal lama yang masih termuat di pasal draft agar dibaca
+  # MEMPERJELAS (draft memerinci, bukan mengganti).
+  cakupan_memperjelas: 0.80
+
+kandidat:
+  # Jumlah peraturan pembanding yang ditampilkan (FR-HRM-02).
+  maks: 5
+  # Pasal draft dengan kemiripan ≥ ambang ini ikut menyumbang skor kandidat.
+  min_kemiripan: 0.20
+
+register:
+  # Peraturan di register (JDIH/ojk.go.id) yang belum diunduh tetapi perihalnya
+  # mirip draft — disarankan untuk diunduh sebelum telaah.
+  maks: 5
+  min_kemiripan: 0.30
+
+korpus:
+  # ADR-03: draft kajian tidak menjadi pembanding.
+  kecualikan_status: [rancangan]
+  # Peraturan yang sudah dicabut penuh tidak dibandingkan (tetap dilaporkan
+  # bila DIRUJUK draft — itu temuan FR-HRM-04).
+  sertakan_dicabut: false
+
+keyakinan:
+  tinggi: 0.75
+  sedang: 0.50
