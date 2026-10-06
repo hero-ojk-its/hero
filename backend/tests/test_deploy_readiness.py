@@ -259,3 +259,12 @@ def test_r08_demo_seed_flow_and_idempotency(client, db_session: Session):
     existing_urls = {s["url"]: s for s in (all_sources if isinstance(all_sources, list) else all_sources.get("items", []))}
     assert "https://example.com/demo-jdih" in existing_urls
     assert existing_urls["https://example.com/demo-jdih"]["id"] == src_id
+
+
+def test_security_headers_present():
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    r = TestClient(app).get("/health")
+    assert r.headers["X-Content-Type-Options"] == "nosniff"
+    assert r.headers["X-Frame-Options"] == "DENY"
