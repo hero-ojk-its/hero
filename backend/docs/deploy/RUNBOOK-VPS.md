@@ -220,32 +220,46 @@ Skrip ini akan:
 
 ## 9. Backup & Restore Rutin
 
-### 9.1 Konfigurasi Otomatisasi Backup Harian (Cron)
-Buat direktori backup di host:
+### 9.1 Konfigurasi Otomatisasi Backup Harian (systemd timer)
+Backup harian dijadwalkan oleh `hero-backup-db.timer` (setiap hari 03:00, dengan jitter 5 menit). Timer ini memanggil `pipeline/deploy/vps/backup-db.sh`, yang menjalankan `backend/deploy/backup.sh` lalu mengunggah hasilnya ke Nextcloud (`nc:HERO-Backup/db`) dengan `rclone copy` (tidak pernah menghapus berkas lama di Nextcloud).
+
+Prasyarat, dikerjakan sekali di VPS:
 ```bash
 sudo mkdir -p /var/backups/hero
-sudo chown -R $USER:$USER /var/backups/hero
+sudo rclone config --config /opt/hero/rclone-nextcloud.conf   # remote bernama: nc
+sudo install -m 0644 /opt/hero/pipeline/deploy/systemd/hero-backup-db.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now hero-backup-db.timer
 ```
 
-Tambahkan jadwal cron harian pada jam 02:00 dini hari (`crontab -e`):
-```cron
-0 2 * * * cd /opt/hero-backend && ./deploy/backup.sh >> /var/log/hero-backup.log 2>&1
+Cek jadwal dan log terakhir:
+```bash
+systemctl list-timers hero-backup-db.timer
+tail -n 50 /opt/hero/data/logs/backup-db.log
 ```
 
 ### 9.2 Menjalankan Backup Manual
 ```bash
-./deploy/backup.sh
+cd /opt/hero/backend && sudo ./deploy/backup.sh
 ```
 Hasil backup berupa 2 berkas berpasangan:
-- `/var/backups/hero/db_hero_YYYYMMDD_HHMMSS.sql.gz` (dump database)
-- `/var/backups/hero/storage_hero_YYYYMMDD_HHMMSS.tar.gz` (seluruh berkas PDF & KB)
+- `/var/backups/hero/hero_db_YYYYMMDD_HHMMSS.sql.gz` (dump database)
+- `/var/backups/hero/hero_storage_YYYYMMDD_HHMMSS.tar.gz` (seluruh berkas PDF & KB)
 
-*Rotasi otomatis menyimpan 7 backup terakhir dan menghapus backup yang lebih lama.*
+Skrip hanya menyimpan berkas final bila dump tidak kosong dan arsip storage bisa dibaca utuh; berkas `.tmp` yang gagal dibuang otomatis. Rotasi menyimpan 7 backup terakhir per jenis (ubah dengan `KEEP=<n>`).
 
-### 9.3 Prosedur Restore Data
-Bila ingin mengembalikan data dari backup tertentu:
+### 9.3 Uji Pemulihan (Restore Test) — tanpa menyentuh produksi
+Sebelum mengandalkan backup, uji dulu bahwa backup bisa dipulihkan:
 ```bash
-./deploy/restore.sh /var/backups/hero/db_hero_20261001_020000.sql.gz /var/backups/hero/storage_hero_20261001_020000.tar.gz
+cd /opt/hero/backend && sudo ./deploy/restore-test.sh            # pakai backup terbaru
+sudo ./deploy/restore-test.sh <db.sql.gz> <storage.tar.gz>       # pakai berkas tertentu
+```
+Skrip ini memulihkan ke database sementara `hero_restore_test`, mengekstrak storage ke folder temporer, lalu membandingkan jumlah tabel dan berkas. Database produksi dan container backend tidak disentuh. Waktu pemulihan yang tercetak adalah perkiraan RTO. Database uji dihapus otomatis kecuali memakai `--keep`.
+
+### 9.4 Prosedur Restore Data (produksi)
+Bila benar-benar perlu mengembalikan data produksi dari backup tertentu, gunakan `restore.sh` dan jalankan hanya setelah uji pemulihan di atas lulus:
+```bash
+./deploy/restore.sh /var/backups/hero/hero_db_20261001_030000.sql.gz /var/backups/hero/hero_storage_20261001_030000.tar.gz
 ```
 Skrip restore akan:
 1. Meminta konfirmasi interaktif (atau gunakan `--yes` untuk bypass).

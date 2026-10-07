@@ -15,7 +15,8 @@
   - [ ] `CORS_ORIGINS` telah disesuaikan dengan domain Frontend Vercel.
 - [ ] **3. Uji Coba Backup & Restore**
   - [ ] Eksekusi `./deploy/backup.sh` berhasil menghasilkan arsip DB dan storage.
-  - [ ] Jadwal cron backup harian (jam 02:00) telah terpasang di VPS.
+  - [ ] Jadwal backup harian (`hero-backup-db.timer`, jam 03:00) aktif: `systemctl list-timers hero-backup-db.timer`.
+  - [ ] Uji pemulihan lulus: `sudo ./deploy/restore-test.sh` menampilkan `HASIL: LULUS`.
 - [ ] **4. Uji Integrasi Worker ML & API Internal**
   - [ ] Header `X-Internal-API-Key` terverifikasi dapat mengakses `/api/v1/internal/*`.
 
