@@ -56,6 +56,9 @@ $API_HOST {
     }
     header {
         Strict-Transport-Security "max-age=15552000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
         -Server
     }
     encode gzip

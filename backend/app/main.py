@@ -190,6 +190,15 @@ app.add_middleware(
     expose_headers=["Content-Disposition", "Content-Length"],
 )
 
+@app.middleware("http")
+async def security_headers(request, call_next):
+    """Header keamanan dasar agar tidak bergantung pada reverse proxy."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    return response
+
 # DAFTARKAN ROUTER
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
 app.include_router(audit_router, prefix="/api/v1/audit-logs", tags=["Audit Logs"])
