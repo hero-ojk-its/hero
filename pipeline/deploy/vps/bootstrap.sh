@@ -110,6 +110,16 @@ done
 systemctl daemon-reload
 systemctl enable --now hero-bridge-ekstraksi.service hero-ml.service hero-bridge-sinkron.timer
 
+# Cadangan DB harian hanya dijadwalkan bila kredensial rclone (Nextcloud) sudah dibuat,
+# supaya provisioning tidak menjadwalkan backup yang pasti gagal.
+if [[ -f /opt/hero/rclone-nextcloud.conf ]]; then
+  install -m 0644 "$S/hero-backup-db.service" "$S/hero-backup-db.timer" /etc/systemd/system/
+  systemctl daemon-reload
+  systemctl enable --now hero-backup-db.timer
+else
+  echo "    cadangan DB dilewati: /opt/hero/rclone-nextcloud.conf belum ada (lihat RUNBOOK-VPS.md 9.1)"
+fi
+
 # Firewall: SSH, HTTP, HTTPS. Port lain tertutup. Docker menerbitkan port lewat
 # iptables sendiri, jadi aturan ini melindungi layanan OS, bukan kontainer
 # yang dipublikasikan ke 0.0.0.0 (tidak ada yang seperti itu di sini).
