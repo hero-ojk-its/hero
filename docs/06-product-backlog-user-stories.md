@@ -1,5 +1,5 @@
 # PRODUCT BACKLOG & USER STORIES
-**Proyek:** HERO | **Versi:** 1.3 | **Tanggal:** 29 September 2026 | **Penyusun:** PM / Business Analyst
+**Proyek:** HERO | **Versi:** 1.4 | **Tanggal:** 9 Oktober 2026 | **Penyusun:** PM / Business Analyst
 
 ---
 
@@ -373,6 +373,101 @@ SP di atas adalah estimasi awal PM dan dikonfirmasi tim di sprint planning.
 
 ---
 
+## 5D. Status Backlog per 9 Oktober 2026 — Audit GitHub
+
+Status di bawah diturunkan dari PR yang sudah di-*merge*, kode di `backend/`, `frontend/`, dan
+`pipeline/`, serta laporan di `backend/docs/reports/` dan `pipeline/docs/`. Papan tim dan papan
+penilaian asdos ([Capstone 05 - HERO](https://github.com/orgs/if-capstone-26/projects/21))
+sudah disamakan dengan hasil ini. Issue yang selesai ditutup beserta komentar buktinya.
+
+### 5D.1 Ringkasan
+
+| | Item | SP |
+| --- | --- | --- |
+| Seluruh backlog di papan | 92 | 396 |
+| Done | 36 | 123 |
+| Sprint 3 — total | 28 | 79 |
+| Sprint 3 — Done | 19 | 63 |
+
+### 5D.2 Fase 1 — Status per Story
+
+| ID | Issue | Status | Bukti utama |
+| --- | --- | --- | --- |
+| US-12 | [#2](https://github.com/hero-ojk-its/hero/issues/2) | Done | UI kelola sumber tersambung backend — PR [#98](https://github.com/hero-ojk-its/hero/pull/98) |
+| US-13 | [#3](https://github.com/hero-ojk-its/hero/issues/3) | Done | Mesin scraping (Sprint 2) |
+| US-13a | [#4](https://github.com/hero-ojk-its/hero/issues/4) | Done | Kedalaman crawling per sumber (Sprint 2) |
+| US-13b | [#44](https://github.com/hero-ojk-its/hero/issues/44) | Done | Scan → kandidat baru/sudah ada → centang → tarik ke KB atau ZIP — PR [#98](https://github.com/hero-ojk-its/hero/pull/98) |
+| US-13c | [#88](https://github.com/hero-ojk-its/hero/issues/88) | In Review | Paging penuh, deteksi captcha/WAF, ikut redirect. Menunggu angka resmi [#87](https://github.com/hero-ojk-its/hero/issues/87) |
+| US-14 | [#5](https://github.com/hero-ojk-its/hero/issues/5) | Done | Ringkasan job + riwayat di UI — PR [#101](https://github.com/hero-ojk-its/hero/pull/101) |
+| US-15 / US-15a | [#6](https://github.com/hero-ojk-its/hero/issues/6) | Done | Unggah satu & banyak berkas, peran dokumen wajib — PR [#99](https://github.com/hero-ojk-its/hero/pull/99) (juga [#7](https://github.com/hero-ojk-its/hero/issues/7)) |
+| US-16 | [#15](https://github.com/hero-ojk-its/hero/issues/15) | Done | Sinkron folder lokal — PR [#107](https://github.com/hero-ojk-its/hero/pull/107) |
+| US-17 | [#30](https://github.com/hero-ojk-its/hero/issues/30) | Menunggu Mitra | Scan share-link jalan (2.619 PDF); isi dokumen tertutup — [#112](https://github.com/hero-ojk-its/hero/issues/112) |
+| US-18 | [#8](https://github.com/hero-ojk-its/hero/issues/8) | Done | Non-PDF ditolak di browser & backend — PR [#99](https://github.com/hero-ojk-its/hero/pull/99) |
+| US-19 | [#9](https://github.com/hero-ojk-its/hero/issues/9) | Done | Pra-cek duplikat hash + ukuran — PR [#99](https://github.com/hero-ojk-its/hero/pull/99), [#101](https://github.com/hero-ojk-its/hero/pull/101) |
+| US-20 | [#11](https://github.com/hero-ojk-its/hero/issues/11) | Done | Parser metadata + worker ekstraksi — PR [#109](https://github.com/hero-ojk-its/hero/pull/109) |
+| US-20a | [#12](https://github.com/hero-ojk-its/hero/issues/12) | Done | OCR halaman 1 (`pipeline/hero/extract/firstpage.py`) |
+| US-20b / US-20c | [#89](https://github.com/hero-ojk-its/hero/issues/89) | Done | Picker format nama + rename dinamis — PR [#98](https://github.com/hero-ojk-its/hero/pull/98), [#99](https://github.com/hero-ojk-its/hero/pull/99) (juga [#90](https://github.com/hero-ojk-its/hero/issues/90)) |
+| US-21 | [#13](https://github.com/hero-ojk-its/hero/issues/13) | Done | Koreksi metadata tercatat di audit log — PR [#107](https://github.com/hero-ojk-its/hero/pull/107) |
+| US-23 | [#14](https://github.com/hero-ojk-its/hero/issues/14) | Done | Antrean kegagalan + proses ulang — PR [#101](https://github.com/hero-ojk-its/hero/pull/101) |
+| US-24 | [#16](https://github.com/hero-ojk-its/hero/issues/16) | Done | Aturan klasifikasi di `config/kategori.yaml` |
+| US-25 | [#17](https://github.com/hero-ojk-its/hero/issues/17) | Done | Folder eksisting / baru otomatis |
+| US-26 | [#10](https://github.com/hero-ojk-its/hero/issues/10) | Done | Dokumen + metadata + teks; KB membaca backend — PR [#96](https://github.com/hero-ojk-its/hero/pull/96) |
+| US-27 | [#18](https://github.com/hero-ojk-its/hero/issues/18) | Done | Pencarian + filter — PR [#96](https://github.com/hero-ojk-its/hero/pull/96) |
+| US-28 | [#19](https://github.com/hero-ojk-its/hero/issues/19) | Done | Detail + viewer PDF — PR [#96](https://github.com/hero-ojk-its/hero/pull/96), [#97](https://github.com/hero-ojk-its/hero/pull/97) |
+| US-32a | [#20](https://github.com/hero-ojk-its/hero/issues/20) | Done | 3.966 pasal dari 118 dokumen; 2 dokumen gagal terparsing |
+| US-11 | [#47](https://github.com/hero-ojk-its/hero/issues/47) | Done | CI, deploy frontend, backend di VPS, cadangan harian — PR [#109](https://github.com/hero-ojk-its/hero/pull/109), [#110](https://github.com/hero-ojk-its/hero/pull/110), [#111](https://github.com/hero-ojk-its/hero/pull/111) |
+| SPIKE vektor | [#42](https://github.com/hero-ojk-its/hero/issues/42) | Done | `pipeline/docs/DB_COMPARISON.md` |
+| US-03 | [#33](https://github.com/hero-ojk-its/hero/issues/33) | Done | Dashboard data nyata — PR [#105](https://github.com/hero-ojk-its/hero/pull/105) · *selesai lebih awal, dari Sprint 5* |
+| US-09 | [#35](https://github.com/hero-ojk-its/hero/issues/35) | Done | Status scan & daftar job berstatus — PR [#98](https://github.com/hero-ojk-its/hero/pull/98), [#101](https://github.com/hero-ojk-its/hero/pull/101) · *selesai lebih awal, dari Sprint 5* |
+
+Sisa Fase 1 yang terbuka: US-13c (menunggu angka resmi), US-17 (menunggu akses mitra), dan bug
+keamanan [#113](https://github.com/hero-ojk-its/hero/issues/113).
+
+### 5D.3 Fase 2–3 — Lapisan Data Sudah Ada
+
+Lapisan data (`pipeline/`) sudah mengerjakan sebagian besar logika Fase 2 dan 3 secara
+deterministik, dan tersedia ke backend lewat `/api/v1/ml/*` (PR [#109](https://github.com/hero-ojk-its/hero/pull/109)). Yang belum adalah
+integrasi ke backend aplikasi dan antarmukanya. Story berikut kini **In Progress** di papan,
+sprint-nya tidak diubah:
+
+| ID | Issue | Yang sudah ada |
+| --- | --- | --- |
+| US-22 | [#31](https://github.com/hero-ojk-its/hero/issues/31) | OCR otomatis per halaman (`extract/ocr.py`) |
+| US-08 | [#34](https://github.com/hero-ojk-its/hero/issues/34) | Audit log di backend (`routers/audit.py`); UI belum |
+| US-26a | [#36](https://github.com/hero-ojk-its/hero/issues/36) | Tabel pasal di backend; worker mengirim pasal |
+| US-29..31 | [#37](https://github.com/hero-ojk-its/hero/issues/37) | US-31 sebagian: ubah status keberlakuan (PR [#107](https://github.com/hero-ojk-its/hero/pull/107)) |
+| US-32 | [#51](https://github.com/hero-ojk-its/hero/issues/51) | Parser bab/pasal/ayat + seksi Surat Edaran (`extract/structure.py`) |
+| US-33 | [#52](https://github.com/hero-ojk-its/hero/issues/52) | Graf dasar hukum (`graph/`), tabel `legal_references` |
+| US-34 | [#53](https://github.com/hero-ojk-its/hero/issues/53) | Rekonsiliasi status dengan JDIH 92,4% + graf pencabutan |
+| US-35 | [#57](https://github.com/hero-ojk-its/hero/issues/57) | Summary deterministik (`extract/summary.py`) |
+| US-36 | [#58](https://github.com/hero-ojk-its/hero/issues/58) | Key Takeaways dari klausul normatif (`analysis/clauses.py`) |
+| US-38 | [#60](https://github.com/hero-ojk-its/hero/issues/60) | Kosakata topik terkendali (`kb/topics.py`) |
+| US-41 | [#63](https://github.com/hero-ojk-its/hero/issues/63) | `hero harmonisasi jalankan` per pasal (`harmonisasi/engine.py`) |
+| US-42 | [#64](https://github.com/hero-ojk-its/hero/issues/64) | Pemilihan kandidat pembanding |
+| US-43 | [#65](https://github.com/hero-ojk-its/hero/issues/65) | Rujukan pasal eksplisit (`harmonisasi/refs.py`) |
+| US-44 | [#66](https://github.com/hero-ojk-its/hero/issues/66) | Rujukan ke peraturan dicabut lewat graf |
+| US-46 | [#68](https://github.com/hero-ojk-its/hero/issues/68) | Label temuan beserta alasannya; ambang menunggu [#28](https://github.com/hero-ojk-its/hero/issues/28) |
+
+### 5D.4 Item Baru dari Weekly #5
+
+| ID | Issue | Item | Status |
+| --- | --- | --- | --- |
+| AI-M8 | [#112](https://github.com/hero-ojk-its/hero/issues/112) | Akses isi dokumen di folder OneDrive DPEA | Menunggu Mitra |
+| BUG | [#113](https://github.com/hero-ojk-its/hero/issues/113) | API staging dapat diakses tanpa login (temuan QA Infra) | To Do |
+
+### 5D.5 Catatan PM
+
+- **Rekomendasi §5C.4 tidak lagi relevan.** US-24 dan US-21, yang diusulkan turun ke Sprint 4,
+  ternyata sudah selesai di Sprint 3.
+- **Estimasi Fase 2–3 perlu dihitung ulang di sprint planning 12 Okt.** SP story Data/ML di
+  §5D.3 masih mengasumsikan pekerjaan dari nol. Sisanya kini terutama integrasi ke backend dan
+  UI, jadi beban bergeser dari Data/ML ke Backend dan Frontend.
+- **Angka JDIH perlu dikonfirmasi.** Scan menemukan 985 regulasi, jauh di atas estimasi
+  ± 400–500. Kemungkinan estimasi mitra hanya mencakup sebagian jenis peraturan. Angka situs
+  regulasi OJK (1.577 vs ± 1.700) sudah dalam rentang wajar.
+
+---
+
 ## 6. Backlog Fase Berikutnya (Tidak Dikerjakan pada MVP)
 
 | ID | Item | Alasan Ditunda | Sumber |
@@ -391,4 +486,5 @@ SP di atas adalah estimasi awal PM dan dikonfirmasi tim di sprint planning.
 | Versi | Tanggal | Perubahan | Penyusun |
 | --- | --- | --- | --- |
 | 1.0 | 7 Sep 2026 | Draft awal: 7 epic, 63 user story, DoR/DoD, distribusi sprint | PM/BA |
+| 1.4 | 9 Okt 2026 | §5D status backlog hasil audit GitHub: 26 issue ditutup, US-03 & US-09 selesai lebih awal, 15 story Fase 2–3 In Progress di lapisan data, AI-M8 & bug API ditambahkan; papan tim dan papan asdos disamakan | PM/BA |
 | 1.3 | 29 Sep 2026 | §5C hasil Weekly #4: US-13c, US-20b, US-20c baru; AC US-13b, US-20a, US-28, US-03 direvisi; US-17 ditarik ke Sprint 3; catatan kapasitas Sprint 3 | PM/BA |

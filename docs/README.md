@@ -6,7 +6,7 @@
 **Periode:** 31 Agustus 2026 – 24 Desember 2026 (± 17 minggu / 8 sprint)
 **Product Owner:** Faris Budi (DPEA) — merangkap Agile Coach s.d. 11 Oktober 2026
 **Tim:** Zaky (PM/BA) · Rafli (Backend) · Ikhwan (Frontend/UX) · Fathir (Data/ML) · Hamdan (Infra/QA)
-**Posisi saat ini:** Sprint 0 (Fase 0 – Inception & Setup), minggu ke-2 — **tenggat Fase 0: 13 September 2026**
+**Posisi saat ini:** Sprint 3 (Fase 1 – MVP Scraping & Ingest), minggu terakhir — **rilis MVP Fase 1: 11 Oktober 2026**
 
 ---
 
@@ -20,17 +20,17 @@
 | 03 | [Software Requirements Specification (SRS/FRD)](03-srs-functional-spec.md) | BA | Draft v1.1 | Ambang kemiripan (TD-07); bentuk surat tanggapan (TD-08) |
 | 04 | [Process Flow AS-IS & TO-BE v2](04-process-flow-asis-tobe.md) | BA | Draft v2.0 | Validasi AS-IS oleh DPEA |
 | 05 | [Use Case Specification](05-use-case-spec.md) | BA | Draft v1.0 | — |
-| 06 | [Product Backlog & User Stories](06-product-backlog-user-stories.md) | PM/BA | Draft v1.3 | Persetujuan pemangkasan lingkup Fase 1 |
-| 07 | [WBS, Sprint Plan & Milestone](07-wbs-sprint-plan.md) | PM | Draft v1.3 | Skema hosting untuk uji coba 8 Okt; konfirmasi aturan H-14 Fase 3–4 |
+| 06 | [Product Backlog & User Stories](06-product-backlog-user-stories.md) | PM/BA | Draft v1.4 | Re-estimasi SP Fase 2–3 di sprint planning 12 Okt |
+| 07 | [WBS, Sprint Plan & Milestone](07-wbs-sprint-plan.md) | PM | Draft v1.4 | Penerimaan M1 oleh PO; konfirmasi aturan H-14 Fase 3–4 |
 | 08 | [Data Model & Data Dictionary](08-data-model-dictionary.md) | BA | Draft v1.1 | Review arsitek/backend |
 | 09 | [Requirements Traceability Matrix (RTM)](09-rtm-traceability-matrix.md) | BA | Draft v1.1 | — |
-| 10 | [Risk Register, Issue Log & Assumption Log](10-risk-register.md) | PM | Draft v1.1 | Review mingguan |
+| 10 | [Risk Register, Issue Log & Assumption Log](10-risk-register.md) | PM | Draft v1.2 | Review mingguan |
 | 11 | [Test Plan & UAT Scenario](11-test-plan-uat.md) | PM/BA | Draft v1.2 | Penunjukan pilot user |
 | 12 | [Glossary & Daftar Singkatan](12-glossary.md) | BA | Draft v1.0 | — |
 | **13** | **[Data Flow Diagram (DFD)](13-dfd-data-flow-diagram.md)** | BA | Draft v1.0 | — |
 | **14** | **[MoM Weekly Update #1](14-mom-weekly-update-01.md)** | PM | Final | Konfirmasi tanggal rapat |
 | **15** | **[UI Specification Fase 1](15-ui-spec-fase-1.md)** | BA | Draft v1.0 | Mockup Figma oleh Ikhwan |
-| **16** | **[Dokumen Arsitektur Sistem](16-arsitektur-sistem.md)** | BA | Draft v1.0 | Persetujuan ADR-08 s.d. ADR-10 oleh PO |
+| **16** | **[Dokumen Arsitektur Sistem](16-arsitektur-sistem.md)** | BA | Draft v1.4 | Persetujuan ADR-08 s.d. ADR-10 oleh PO |
 | **17** | **[MoM Weekly Update #2](17-mom-weekly-update-02.md)** | PM | Final | — |
 | **18** | **[MoM Weekly Update #3](18-mom-weekly-update-03.md)** | PM | Final | — |
 | **19** | **[MoM Weekly Update #4](19-mom-weekly-update-04.md)** | PM | Final | — |

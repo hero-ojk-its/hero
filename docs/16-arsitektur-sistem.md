@@ -1,6 +1,6 @@
 # DOKUMEN ARSITEKTUR SISTEM
 **Proyek:** HERO — Harmonisasi & Analisa Regulasi Otomatis
-**Versi:** 1.3 (Draft) | **Tanggal:** 14 September 2026 | **Penyusun:** Business Analyst
+**Versi:** 1.4 (Draft) | **Tanggal:** 9 Oktober 2026 | **Penyusun:** Business Analyst
 **Deliverable WBS:** 1.2.5 Perancangan arsitektur sistem
 
 ---
@@ -308,7 +308,7 @@ dibahas pada rapat mingguan, sesuai peran tim sebagai konsultan sejak 12 Oktober
 | **Konsekuensi** | Kebutuhan sumber daya komputasi lokal meningkat. Kualitas naturalisasi berpotensi di bawah model berbayar — dapat diterima karena AI hanya lapisan penyempurna (ADR-02) |
 | **Status** | Menutup sebagian TD-03; keputusan akhir bersama mentor |
 
-#### ADR-11 — Pemisahan Hosting: Frontend di Vercel, Backend di Server Terkontainer *(usulan)*
+#### ADR-11 — Pemisahan Hosting: Frontend di Vercel, Backend di Server Terkontainer *(diterima)*
 
 | Aspek | Uraian |
 | --- | --- |
@@ -319,16 +319,17 @@ dibahas pada rapat mingguan, sesuai peran tim sebagai konsultan sejak 12 Oktober
 | **Konsekuensi** | Frontend dan backend berada di dua tempat; alamat API backend menjadi konfigurasi frontend. Perlu satu akun Vercel personal sebagai pemilik proyek. Biaya VPS diajukan ke pendanaan |
 | **Berkas terkait** | `.github/workflows/deploy-frontend-vercel.yml` — sudah tersedia, terpicu hanya bila folder `frontend/` ada |
 | **Pelaksana** | Infra/QA (#22) |
+| **Realisasi** | Diterima di Weekly #5 (6 Okt 2026). Frontend di Vercel; backend FastAPI, PostgreSQL, worker scraper, dan layanan analisa di VPS dengan Caddy + HTTPS (PR #109, `pipeline/deploy/vps/`, `backend/docs/deploy/RUNBOOK-VPS.md`). Cadangan harian basis data dan PDF ke Nextcloud (PR #111). Percobaan menaruh backend di Vercel dibatalkan: worker scraper butuh proses berjalan lama |
 
 #### ADR-12 — Keputusan Teknis yang Masih Terbuka
 
-| Kode | Keputusan | Memblokir | Tenggat |
-| --- | --- | --- | --- |
-| TD-02 | Pendekatan *retrieval* / pencarian semantik | FR-HRM-05 | 30 Sep 2026 |
-| TD-04 | Mesin OCR | FR-SCR-09a (Fase 1) | 27 Sep 2026 |
-| TD-06 | Mekanisme akses OneDrive | FR-SCR-06 | 27 Sep 2026 |
-| TD-07 | Ambang kemiripan pasal | FR-HRM-06 s.d. 08a | 25 Okt 2026 |
-| TD-08 | Bentuk baku surat tanggapan | FR-POV-02, FR-POV-08 | 8 Nov 2026 |
+| Kode | Keputusan | Memblokir | Tenggat | Status per 9 Okt 2026 |
+| --- | --- | --- | --- | --- |
+| TD-02 | Pendekatan *retrieval* / pencarian semantik | FR-HRM-05 | 30 Sep 2026 | ✅ Terjawab lewat benchmark: FTS5 untuk kata kunci, vektor e5-large untuk makna, graf untuk dasar hukum — `pipeline/docs/DB_COMPARISON.md` |
+| TD-04 | Mesin OCR | FR-SCR-09a (Fase 1) | 27 Sep 2026 | ✅ Tesseract (Indonesia + Inggris), otomatis per halaman |
+| TD-06 | Mekanisme akses OneDrive | FR-SCR-06 | 27 Sep 2026 | 🟡 Adapter share-link `onedrive_share` jalan; isi dokumen menunggu akses mitra ([#112](https://github.com/hero-ojk-its/hero/issues/112)) |
+| TD-07 | Ambang kemiripan pasal | FR-HRM-06 s.d. 08a | 25 Okt 2026 | 🔴 Terbuka ([#28](https://github.com/hero-ojk-its/hero/issues/28)) |
+| TD-08 | Bentuk baku surat tanggapan | FR-POV-02, FR-POV-08 | 8 Nov 2026 | 🔴 Terbuka ([#27](https://github.com/hero-ojk-its/hero/issues/27)) |
 
 ---
 
@@ -457,6 +458,7 @@ karena berkas tersebut memuat inisialisasi skema.
 
 | Versi | Tanggal | Perubahan | Penyusun |
 | --- | --- | --- | --- |
+| 1.4 | 9 Okt 2026 | ADR-11 diterima beserta realisasinya; status TD-02, TD-04, TD-06 di ADR-12 | BA |
 | 1.3 | 14 Sep 2026 | Tambah ADR-11 usulan pemisahan hosting (frontend Vercel via Actions, backend VPS); daftar keputusan terbuka menjadi ADR-12 | BA |
 | 1.2 | 9 Sep 2026 | §4.1 ditetapkan sebagai acuan tunggal penetapan peran, disertai aturan penurunan peran untuk user story; tambah komponen Classification Engine | BA |
 | 1.1 | 9 Sep 2026 | Ingest Service dipecah menjadi Crawler (Data/ML) dan Ingest Pipeline (Backend); tambah §4.3 kontrak antarkomponen dan risiko RA-06 | BA |

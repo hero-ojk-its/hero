@@ -1,5 +1,5 @@
 # RISK REGISTER, ISSUE LOG & ASSUMPTION LOG
-**Proyek:** HERO | **Versi:** 1.1 | **Tanggal:** 8 September 2026 | **Penyusun:** Project Manager
+**Proyek:** HERO | **Versi:** 1.2 | **Tanggal:** 9 Oktober 2026 | **Penyusun:** Project Manager
 **Frekuensi Peninjauan:** setiap Sprint Planning & Sprint Review
 
 ---
@@ -105,12 +105,16 @@ Risiko yang telah terjadi dicatat di sini dan dikelola sampai tertutup.
 | ISU-01 | Product Owner dari DPEA belum ditunjuk resmi | 7 Sep 2026 | Prioritisasi backlog & sign-off sprint tidak punya pemilik | Tinggi | — | PM | 13 Sep 2026 | ✅ **Selesai** — Faris Budi menyatakan diri sebagai Product Owner + Agile Coach s.d. 11 Okt, lalu murni Product Owner (KEP-12) |
 | ISU-02 | Tech stack belum ditentukan | 7 Sep 2026 | Desain arsitektur & estimasi tertahan | Tinggi | — | PM | 13 Sep 2026 | ✅ **Selesai** — dibebaskan mitra (KEP-04) |
 | ISU-03 | Baseline waktu proses manual belum diukur | 7 Sep 2026 | M-04 & M-07 tidak dapat dibuktikan saat UAT | Tinggi | — | BA | 13 Sep 2026 | ✅ **Selesai** — mitra menyampaikan 54/40 tanggapan, 2–3 hari → target 2–3 jam |
-| ISU-04 | Daftar situs sumber belum dikonsolidasikan | 7 Sep 2026 | Sprint 1 berisiko mundur | Sedang | Menunggu alamat ketiga dari mitra (AI-M1) | PM | 14 Sep 2026 | 🟡 **Menunggu Pihak Eksternal** — 2 dari 3 situs sudah ditunjukkan (ojk.go.id/regulasi & JDIH) |
+| ISU-04 | Daftar situs sumber belum dikonsolidasikan | 7 Sep 2026 | Sprint 1 berisiko mundur | Sedang | Menunggu alamat ketiga dari mitra (AI-M1) | PM | 14 Sep 2026 | ✅ **Selesai** — tiga sumber dikonfirmasi di Weekly #4: regulasi OJK, JDIH, OneDrive public ([#24](https://github.com/hero-ojk-its/hero/issues/24)) |
 | ISU-05 | Ketidakselarasan nama & tanggal mulai antar dokumen charter | 7 Sep 2026 | Ambiguitas acuan dokumen proyek | Rendah | Konfirmasi ke mentor | PM | 13 Sep 2026 | 🟡 Terbuka |
 | **ISU-06** | **Ambang kemiripan pasal belum dijawab mitra** | 8 Sep 2026 | Aturan klasifikasi harmonisasi tidak dapat dibangun | Tinggi | Jadwalkan sesi perumusan bersama (US-64) | BA | 25 Okt 2026 | 🔴 Terbuka |
 | **ISU-07** | **Contoh surat tanggapan & dokumen dasarnya belum diterima** | 8 Sep 2026 | Fase 4 tidak punya target bentuk keluaran | Tinggi | Tagih AI-M3..AI-M6 setiap rapat mingguan | PM | 11 Okt 2026 | 🔴 Terbuka |
-| **ISU-08** | **NDA belum ditandatangani seluruh anggota tim** | 8 Sep 2026 | Folder OneDrive peraturan internal tidak dapat diakses | Sedang | Koordinasi format NDA dengan mitra | PM | 13 Sep 2026 | 🔴 Terbuka |
-| **ISU-09** | **Kesiapan hosting untuk uji coba mitra 8 Okt belum dipastikan** | 8 Sep 2026 | Mitra tidak dapat mencoba sendiri; indikator Fase 1 gagal diverifikasi | Tinggi | Tentukan skema hosting & ajukan pendanaan bila perlu | Infra/QA | 28 Sep 2026 | 🔴 Terbuka |
+| **ISU-08** | **NDA belum ditandatangani seluruh anggota tim** | 8 Sep 2026 | Folder OneDrive peraturan internal tidak dapat diakses | Sedang | Koordinasi format NDA dengan mitra | PM | 13 Sep 2026 | ✅ **Selesai** — NDA ditandatangani ([#25](https://github.com/hero-ojk-its/hero/issues/25), 22 Sep) |
+| **ISU-09** | **Kesiapan hosting untuk uji coba mitra 8 Okt belum dipastikan** | 8 Sep 2026 | Mitra tidak dapat mencoba sendiri; indikator Fase 1 gagal diverifikasi | Tinggi | Tentukan skema hosting & ajukan pendanaan bila perlu | Infra/QA | 28 Sep 2026 | ✅ **Selesai** — frontend di Vercel, backend + worker scraper di VPS ([#22](https://github.com/hero-ojk-its/hero/issues/22), ADR-11) |
+| **ISU-10** | **Isi dokumen di folder OneDrive DPEA tidak dapat diakses** | 6 Okt 2026 | Indikator M1 ke-4 tidak terpenuhi | Tinggi | Minta akses ke Pak Faris / Pak Andika ([#112](https://github.com/hero-ojk-its/hero/issues/112)) | PM | 11 Okt 2026 | 🔴 Terbuka |
+| **ISU-11** | **API staging dapat diakses tanpa login** | 6 Okt 2026 | Metadata dokumen non-publik terbaca publik begitu dokumen internal masuk staging | Tinggi | Pengaman minimal di depan API; butuh persetujuan PO karena login ditunda ([#113](https://github.com/hero-ojk-its/hero/issues/113)) | Backend + Infra/QA | 11 Okt 2026 | 🔴 Terbuka |
+| **ISU-12** | **PRD v1.0 belum ditandatangani mentor** | 22 Sep 2026 | Administrasi kampus tertahan | Sedang | Tagih tiap rapat mingguan ([#45](https://github.com/hero-ojk-its/hero/issues/45)) | PM | 11 Okt 2026 | 🟡 Menunggu Pihak Eksternal |
+| **ISU-13** | **Angka ground truth resmi per situs belum diterima** | 29 Sep 2026 | Penerimaan US-13c hanya bisa dinilai dengan estimasi rapat | Sedang | Tagih ke Pak Faris ([#87](https://github.com/hero-ojk-its/hero/issues/87)); konfirmasi selisih JDIH | PM | 11 Okt 2026 | 🟡 Menunggu Pihak Eksternal |
 
 **Definisi status:** `Terbuka` · `Sedang Ditangani` · `Menunggu Pihak Eksternal` · `Selesai` · `Dieskalasi`
 
@@ -148,4 +152,5 @@ Risiko yang telah terjadi dicatat di sini dan dikelola sampai tertutup.
 | Versi | Tanggal | Perubahan | Penyusun |
 | --- | --- | --- | --- |
 | 1.0 | 7 Sep 2026 | Draft awal: 16 risiko, 5 isu terbuka, 7 asumsi | PM |
+| 1.2 | 9 Okt 2026 | Audit GitHub & Weekly #3–#5: ISU-04, ISU-08, ISU-09 selesai; ISU-10..13 dibuka | PM |
 | 1.1 | 8 Sep 2026 | Hasil Weekly Update #1: RSK-07 ditutup, RSK-06 turun ke Sedang, RSK-17..21 ditambahkan; ISU-01/02/03 selesai, ISU-06..09 dibuka | PM |

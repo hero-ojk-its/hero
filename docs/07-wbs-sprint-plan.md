@@ -1,5 +1,5 @@
 # WORK BREAKDOWN STRUCTURE, SPRINT PLAN & MILESTONE
-**Proyek:** HERO | **Versi:** 1.3 | **Tanggal:** 29 September 2026 | **Penyusun:** Project Manager
+**Proyek:** HERO | **Versi:** 1.4 | **Tanggal:** 9 Oktober 2026 | **Penyusun:** Project Manager
 
 ---
 
@@ -286,6 +286,21 @@ M5 (serah terima) mengikuti jadwal UAT di [Test Plan §4](11-test-plan-uat.md).
 > berjalan per fitur begitu fitur selesai (bukan satu jendela di akhir), dan H-7 tetap menjadi
 > batas mulai perbaikan. Perlu dikonfirmasi ke Pak Faris sebelum Fase 3 dimulai (9 Nov).
 
+### 5.3 Status Indikator M1 per 9 Oktober 2026
+
+| Indikator | Status | Bukti |
+| --- | --- | --- |
+| Scan tiga sumber mengindeks dokumen, mendekati *ground truth* | ✅ dengan catatan | Benchmark 3 Okt (`backend/docs/reports/scan-benchmark-2026-10-03.md`): regulasi OJK 1.577 (estimasi ± 1.700), JDIH 985 (estimasi ± 400–500, perlu konfirmasi), OneDrive 2.619 PDF. Angka resmi mitra belum ada ([#87](https://github.com/hero-ojk-its/hero/issues/87)) |
+| Unggah manual berfungsi | ✅ | PR #99 |
+| ≥ 1 folder lokal terbaca | ✅ | PR #107; 3 folder terbaca |
+| ≥ 1 folder OneDrive public terbaca | ❌ terblokir | Scan share-link jalan, isi dokumen tertutup ([#112](https://github.com/hero-ojk-its/hero/issues/112)) |
+| ≥ 20 dokumen di KB (Deterministik) | ✅ | 62 dokumen pada uji lokal E01 (PR #105) |
+| Penerimaan PO | ⏳ | Pak Faris belum melihat demo (training di Jakarta saat Weekly #5) |
+
+> **Catatan PM:** empat dari lima indikator tercapai; yang tersisa bergantung pada akses dari
+> mitra, bukan kode. Satu temuan keamanan ([#113](https://github.com/hero-ojk-its/hero/issues/113), API tanpa login) sebaiknya ditutup sebelum
+> dokumen OneDrive masuk staging.
+
 ---
 
 ## 6. Dependensi & Jalur Kritis
@@ -352,4 +367,5 @@ flowchart LR
 | 1.0 | 7 Sep 2026 | Draft awal: WBS, peta fase-sprint, Gantt, 9 sprint, 6 milestone, jalur kritis | PM |
 | 1.2 | 9 Sep 2026 | WBS 1.4 dipecah menjadi 1.4.A (algoritma, Data/ML) dan 1.4.B (pipeline, Backend); kepemilikan 1.5 diperjelas | PM |
 | 1.1 | 8 Sep 2026 | Kadens rapat menjadi mingguan + format laporan mitra; M1 menyertakan uji coba mitra 8 Okt; OneDrive digeser ke Fase 2; tambah §5.1 prasyarat uji coba | PM |
+| 1.4 | 9 Okt 2026 | §5.3 status indikator M1 hasil audit GitHub | PM |
 | 1.3 | 29 Sep 2026 | Weekly #4: indikator M1 memakai dokumen terindeks vs *ground truth* dan OneDrive kembali ke Fase 1; prasyarat §5.1 ditambah; §5.2 aturan H-14 per MVP | PM |
