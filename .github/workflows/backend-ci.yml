@@ -71,7 +71,7 @@ jobs:
         run: ruff check --select E9,F821,F822,F823 app scripts tests
 
       - name: Pytest
-        run: pytest -q
+        run: python -m pytest -q
 
   docker:
     name: Build image Docker
