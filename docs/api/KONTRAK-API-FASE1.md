@@ -695,6 +695,9 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "standardized_filename": "Penyelenggaraan Usaha Bank Umum_POJK_2026_Perbankan.pdf",
       "source_url": null,
       "is_placed": true,
+      "is_active": true,
+      "deactivated_at": null,
+      "deactivated_reason": null,
       "pdf_url": "/api/v1/documents/1/pdf",
       "restricted": false,
       "rank": null,
@@ -758,6 +761,9 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "standardized_filename": "Penyelenggaraan Usaha Bank Umum_POJK_2026_Perbankan.pdf",
       "source_url": null,
       "is_placed": true,
+      "is_active": true,
+      "deactivated_at": null,
+      "deactivated_reason": null,
       "pdf_url": "/api/v1/documents/1/pdf",
       "restricted": false,
       "rank": 0.4,
@@ -845,6 +851,9 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
   "extracted_at": "2026-10-01T10:00:00Z",
   "created_at": "2026-10-01T10:00:00Z",
   "updated_at": "2026-10-01T10:00:00Z",
+  "is_active": true,
+  "deactivated_at": null,
+  "deactivated_reason": null,
   "articles": [
     {
       "id": 1,
@@ -962,6 +971,9 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
   "extracted_at": "2026-10-01T10:00:00Z",
   "created_at": "2026-10-01T10:00:00Z",
   "updated_at": "2026-10-01T10:00:00Z",
+  "is_active": true,
+  "deactivated_at": null,
+  "deactivated_reason": null,
   "articles": [
     {
       "id": 1,
@@ -1162,6 +1174,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
   "kb": {
     "corpus_documents": 2,
     "draft_documents": 0,
+    "inactive_documents": 0,
     "target_fase1": 20,
     "target_met": false,
     "by_status_keberlakuan": {

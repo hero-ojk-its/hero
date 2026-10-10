@@ -297,8 +297,9 @@ def claim_extraction_batch(
     timeout_minutes = settings.extraction_claim_timeout_minutes
     cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
 
-    # Dokumen yang memenuhi syarat klaim
+    # Dokumen yang memenuhi syarat klaim (hanya dokumen aktif)
     claimable_cond = and_(
+        Document.is_active == True,  # noqa: E712
         Document.extraction_attempts < settings.extraction_max_attempts,
         or_(
             Document.processing_status == StatusPemrosesan.diterima,

@@ -30,6 +30,7 @@ class CandidateMatchDocument(BaseModel):
     id: int
     title: str
     regulation_number: Optional[str] = None
+    is_active: bool = True
 
     model_config = ConfigDict(from_attributes=True)
 

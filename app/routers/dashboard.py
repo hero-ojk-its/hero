@@ -36,13 +36,15 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
     """
     target_fase1 = 20
 
-    # 1. Agregat Dokumen KB (Total corpus, draft, placed, inbox)
+    # 1. Agregat Dokumen KB (Total corpus, draft, placed, inbox - hanya dokumen aktif)
+    # Tambah inactive_documents untuk dokumen nonaktif
     doc_stats = (
         db.query(
-            func.count(case((Document.document_role == PeranDokumen.corpus_eksisting, 1))).label("corpus"),
-            func.count(case((Document.document_role == PeranDokumen.draft_kajian, 1))).label("draft"),
-            func.count(case((Document.file_path_pdf.like("kb/%"), 1))).label("placed"),
-            func.count(case((~Document.file_path_pdf.like("kb/%"), 1))).label("inbox"),
+            func.count(case((and_(Document.document_role == PeranDokumen.corpus_eksisting, Document.is_active == True), 1))).label("corpus"),  # noqa: E712
+            func.count(case((and_(Document.document_role == PeranDokumen.draft_kajian, Document.is_active == True), 1))).label("draft"),  # noqa: E712
+            func.count(case((and_(Document.file_path_pdf.like("kb/%"), Document.is_active == True), 1))).label("placed"),  # noqa: E712
+            func.count(case((and_(~Document.file_path_pdf.like("kb/%"), Document.is_active == True), 1))).label("inbox"),  # noqa: E712
+            func.count(case((Document.is_active == False, 1))).label("inactive"),  # noqa: E712
         )
         .one()
     )
@@ -50,11 +52,13 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
     draft_docs = doc_stats.draft or 0
     placed_docs = doc_stats.placed or 0
     inbox_docs = doc_stats.inbox or 0
+    inactive_docs = doc_stats.inactive or 0
 
-    # 3. Status Keberlakuan (Semua enum disertakan dengan default 0)
+    # 3. Status Keberlakuan (Hanya dokumen aktif, semua enum disertakan dengan default 0)
     by_status_keberlakuan = {s.value: 0 for s in StatusKeberlakuan}
     status_keb_query = (
         db.query(Document.status_keberlakuan, func.count(Document.id))
+        .filter(Document.is_active == True)  # noqa: E712
         .group_by(Document.status_keberlakuan)
         .all()
     )
@@ -63,10 +67,11 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
             key = st.value if hasattr(st, "value") else str(st)
             by_status_keberlakuan[key] = cnt
 
-    # 4. Status Pemrosesan (Semua enum disertakan dengan default 0)
+    # 4. Status Pemrosesan (Hanya dokumen aktif, semua enum disertakan dengan default 0)
     by_processing_status = {s.value: 0 for s in StatusPemrosesan}
     status_proc_query = (
         db.query(Document.processing_status, func.count(Document.id))
+        .filter(Document.is_active == True)  # noqa: E712
         .group_by(Document.processing_status)
         .all()
     )
@@ -75,10 +80,10 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
             key = st.value if hasattr(st, "value") else str(st)
             by_processing_status[key] = cnt
 
-    # 5. By Regulation Type (Hanya corpus eksisting, max 15)
+    # 5. By Regulation Type (Hanya corpus eksisting aktif, max 15)
     reg_type_query = (
         db.query(Document.regulation_type, func.count(Document.id).label("count"))
-        .filter(Document.document_role == PeranDokumen.corpus_eksisting)
+        .filter(Document.document_role == PeranDokumen.corpus_eksisting, Document.is_active == True)  # noqa: E712
         .group_by(Document.regulation_type)
         .order_by(desc("count"))
         .limit(15)
@@ -91,11 +96,11 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
         else:
             by_regulation_type.append({"regulation_type": None, "label": "Belum diketahui", "count": cnt})
 
-    # 6. By Year (Hanya corpus eksisting, max 15, urutan tahun terbaru)
+    # 6. By Year (Hanya corpus eksisting aktif, max 15, urutan tahun terbaru)
     eff_year_expr = func.coalesce(Document.regulation_year, func.extract("year", Document.release_date))
     year_query = (
         db.query(eff_year_expr.label("year"), func.count(Document.id).label("count"))
-        .filter(Document.document_role == PeranDokumen.corpus_eksisting)
+        .filter(Document.document_role == PeranDokumen.corpus_eksisting, Document.is_active == True)  # noqa: E712
         .group_by(eff_year_expr)
         .order_by(desc(eff_year_expr).nulls_last())
         .limit(15)
@@ -129,10 +134,11 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
         or 0
     )
 
-    # Needs review count
+    # Needs review count (hanya dokumen aktif)
     candidates = (
         db.query(Document.id, Document.processing_status, Document.extraction_confidence)
         .filter(
+            Document.is_active == True,  # noqa: E712
             or_(
                 Document.processing_status == StatusPemrosesan.perlu_koreksi,
                 and_(
@@ -140,7 +146,7 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
                     Document.metadata_corrected_at.is_(None),
                     Document.extraction_confidence.isnot(None),
                 ),
-            )
+            ),
         )
         .all()
     )
@@ -195,6 +201,7 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
         "kb": {
             "corpus_documents": corpus_docs,
             "draft_documents": draft_docs,
+            "inactive_documents": inactive_docs,
             "target_fase1": target_fase1,
             "target_met": corpus_docs >= target_fase1,
             "by_status_keberlakuan": by_status_keberlakuan,

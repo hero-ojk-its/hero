@@ -68,6 +68,7 @@ def _format_failure_response(f: IngestFailure) -> FailureResponse:
             id=f.duplicate_of_document.id,
             title=f.duplicate_of_document.title,
             regulation_number=f.duplicate_of_document.regulation_number,
+            is_active=f.duplicate_of_document.is_active,
         )
 
     return FailureResponse(
@@ -447,6 +448,7 @@ def get_job_detail(
                 id=f.duplicate_of_document.id,
                 title=f.duplicate_of_document.title,
                 regulation_number=f.duplicate_of_document.regulation_number,
+                is_active=f.duplicate_of_document.is_active,
             )
         failure_summaries.append(
             JobFailureSummary(

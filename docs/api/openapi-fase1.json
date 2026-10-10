@@ -1170,6 +1170,18 @@
             "description": "Pengurutan hasil pencarian"
           },
           {
+            "name": "include_inactive",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Tampilkan juga dokumen nonaktif jika true (default: false)",
+              "default": false,
+              "title": "Include Inactive"
+            },
+            "description": "Tampilkan juga dokumen nonaktif jika true (default: false)"
+          },
+          {
             "name": "skip",
             "in": "query",
             "required": false,
@@ -1664,6 +1676,64 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UpdateDocumentStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/documents/{document_id}/active": {
+      "put": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Aktifkan atau nonaktifkan dokumen regulasi",
+        "description": "Mengaktifkan atau menonaktifkan dokumen regulasi secara administratif (US-30 / FR-KB-08).\n\nPerbedaan status keberlakuan vs status aktif:\n- Dicabut/Diubah (`status_keberlakuan`) adalah status HUKUM: dokumen tetap tampil di Knowledge Base dengan penanda keberlakuan.\n- Nonaktif (`is_active`) adalah keputusan ADMINISTRATIF Admin KB (misalnya salah unggah, bukan dokumen regulasi, atau duplikat berbeda hash).\n  Dokumen nonaktif disembunyikan dari Knowledge Base dan statistik, tetapi tidak dihapus dan dapat diaktifkan kembali. Berkas fisik PDF tidak dipindah dan tidak dihapus.\n\nValidasi & Perilaku:\n- Jika `is_active == False`, `reason` wajib diisi minimal 5 karakter (divalidasi oleh skema).\n- Jika `document_id` tidak ditemukan, kembalikan 404.\n- Jika status saat ini sama dengan `payload.is_active` (idempoten), kembalikan 200 dengan `changed: False` tanpa entri audit baru.\n- Jika berubah status:\n  - Menonaktifkan (`is_active=False`): isi `deactivated_at`, `deactivated_reason`, `deactivated_by` (`current_user.id` jika ada).\n  - Mengaktifkan (`is_active=True`): kosongkan `deactivated_at`, `deactivated_reason`, `deactivated_by`.\n  - Catat audit: `DEACTIVATE_DOCUMENT` atau `ACTIVATE_DOCUMENT` dengan detail `reason`, `before.is_active`, dan `after.is_active`.",
+        "operationId": "update_document_active_api_v1_documents__document_id__active_put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDocumentActiveIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateDocumentActiveResponse"
                 }
               }
             }
@@ -3922,6 +3992,11 @@
               }
             ],
             "title": "Regulation Number"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
           }
         },
         "type": "object",
@@ -4386,6 +4461,11 @@
               }
             ],
             "title": "Regulation Number"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
           }
         },
         "type": "object",
@@ -7251,6 +7331,98 @@
         ],
         "title": "TujuanTarik",
         "description": "Tujuan penarikan dokumen dari sesi pemindaian"
+      },
+      "UpdateDocumentActiveIn": {
+        "properties": {
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "description": "True untuk mengaktifkan dokumen, False untuk menonaktifkan dokumen dari Knowledge Base"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "description": "Alasan penonaktifan dokumen. Wajib diisi minimal 5 karakter jika is_active=False.",
+            "examples": [
+              "Salah unggah: bukan dokumen regulasi"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_active"
+        ],
+        "title": "UpdateDocumentActiveIn",
+        "description": "Payload untuk mengaktifkan atau menonaktifkan dokumen Knowledge Base secara administratif.",
+        "example": {
+          "is_active": false,
+          "reason": "Salah unggah: bukan dokumen regulasi"
+        }
+      },
+      "UpdateDocumentActiveResponse": {
+        "properties": {
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id",
+            "description": "ID dokumen"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "description": "Status aktif dokumen saat ini"
+          },
+          "changed": {
+            "type": "boolean",
+            "title": "Changed",
+            "description": "True jika terjadi perubahan status aktif, False jika status sudah sama"
+          },
+          "deactivated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deactivated At",
+            "description": "Waktu dokumen dinonaktifkan"
+          },
+          "deactivated_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deactivated Reason",
+            "description": "Alasan penonaktifan dokumen"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Pesan ringkasan operasi"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "is_active",
+          "changed",
+          "message"
+        ],
+        "title": "UpdateDocumentActiveResponse",
+        "description": "Respons setelah status aktif dokumen diperbarui."
       },
       "UpdateDocumentStatusIn": {
         "properties": {
