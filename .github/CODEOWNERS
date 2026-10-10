@@ -24,7 +24,7 @@
 /.github/               @hero-ojk-its/infra-and-qa @hero-ojk-its/pm-and-business-analyst
 
 # Pemetaan kode — aktifkan tiap baris saat foldernya sudah dibuat
-# /backend/             @hero-ojk-its/backend
+/backend/             @hero-ojk-its/backend
 # /frontend/            @hero-ojk-its/frontend-and-ui-ux
 # /scraper/             @hero-ojk-its/data-and-ml
 /pipeline/              @hero-ojk-its/data-and-ml
