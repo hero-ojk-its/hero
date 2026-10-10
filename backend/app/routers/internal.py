@@ -15,7 +15,8 @@ import urllib.parse
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, ConfigDict, AliasChoices
-from sqlalchemy import or_, and_, desc
+from sqlalchemy import or_, and_, desc, select, delete, func, literal_column
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -82,7 +83,7 @@ class ExtractionResultIn(BaseModel):
 @router.post(
     "/articles",
     response_model=BulkArticleResponse,
-    summary="[Internal] Bulk insert chunk pasal dari ML pipeline",
+    summary="[Internal] Bulk insert/upsert chunk pasal dari ML pipeline",
     dependencies=[Depends(verify_internal_api_key)],
 )
 def bulk_insert_articles(
@@ -90,25 +91,180 @@ def bulk_insert_articles(
     db: Session = Depends(get_db),
 ) -> BulkArticleResponse:
     """
-    Bulk insert pasal dari pipeline ML.
+    Bulk insert / upsert pasal dari pipeline ML (Data).
+
+    Fitur utama kontrak pasal:
+    - **Upsert idempoten**: Menggunakan `INSERT ... ON CONFLICT (document_id, order_index) WHERE order_index IS NOT NULL DO UPDATE`.
+      Memperbarui kolom `level`, `chapter_title`, `article_number`, `content_text`, `page`, `parent_id`, dan `embedding` (hanya bila embedding baru tidak null).
+    - **replace_document_ids**: Opsi untuk menghapus seluruh pasal milik dokumen yang didaftarkan sebelum melakukan upsert,
+      dalam transaksi atomik yang sama. Berguna untuk ekstraksi ulang bersih atau saat pasal baru lebih sedikit dari sebelumnya.
+    - **page**: Halaman PDF tempat pasal/ayat dimulai (1-indexed).
+    - **parent_order_index**: Menyelesaikan hierarki ayat/pasal ke `parent_id`, baik induk ada pada request sebelumnya
+      (sudah tersimpan di DB) maupun berada di dalam batch yang sama. Mengembalikan 422 jika induk tidak ditemukan.
+    - **Validasi Dokumen**: Memverifikasi semua `document_id` ada di tabel `documents`. Mengembalikan 422 bila ada ID yang tidak dikenal.
     """
-    chunks = payload.articles
-    orm_articles: List[Article] = []
-    for chunk in chunks:
-        article = Article(
-            document_id=chunk.document_id,
-            level=chunk.level,
-            chapter_title=chunk.chapter_title,
-            article_number=chunk.article_number,
-            content_text=chunk.content_text,
-            order_index=chunk.order_index,
-            embedding=chunk.embedding,
+    # 1. Validasi keberadaan seluruh document_id
+    doc_ids = {chunk.document_id for chunk in payload.articles}
+    if payload.replace_document_ids:
+        doc_ids.update(payload.replace_document_ids)
+
+    existing_docs = set(db.scalars(select(Document.id).where(Document.id.in_(doc_ids))).all())
+    missing_docs = sorted(list(doc_ids - existing_docs))
+    if missing_docs:
+        raise HTTPException(
+            status_code=422,
+            detail=f"document_id tidak ditemukan di tabel documents: {missing_docs}",
         )
-        orm_articles.append(article)
+
+    # 2. Validasi parent_order_index awal: periksa apakah menunjuk ke diri sendiri
+    for chunk in payload.articles:
+        if chunk.order_index is not None and chunk.parent_order_index is not None:
+            if chunk.order_index == chunk.parent_order_index:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"Pasal induk tidak boleh menunjuk ke order_index diri sendiri: "
+                        f"document_id={chunk.document_id}, parent_order_index={chunk.parent_order_index}"
+                    ),
+                )
+
+    # Periksa ketersediaan parent yang tidak ada di dalam batch
+    batch_keys = {(c.document_id, c.order_index) for c in payload.articles if c.order_index is not None}
+    needed_db_parents = {
+        (c.document_id, c.parent_order_index)
+        for c in payload.articles
+        if c.parent_order_index is not None and (c.document_id, c.parent_order_index) not in batch_keys
+    }
+
+    replace_set = set(payload.replace_document_ids or [])
+    # Jika parent yang dibutuhkan berada di dokumen yang akan di-replace dan tidak ada di batch, pasti tidak ada
+    for d_id, p_ord in needed_db_parents:
+        if d_id in replace_set:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Pasal induk tidak ditemukan untuk document_id={d_id} dan parent_order_index={p_ord}",
+            )
+
+    found_db_parents: Dict[tuple, int] = {}
+    if needed_db_parents:
+        conditions = [
+            and_(Article.document_id == d_id, Article.order_index == ord_idx)
+            for d_id, ord_idx in needed_db_parents
+        ]
+        db_parents_rows = db.execute(
+            select(Article.document_id, Article.order_index, Article.id).where(or_(*conditions))
+        ).all()
+        found_db_parents = {(r[0], r[1]): r[2] for r in db_parents_rows}
+
+        for d_id, p_ord in needed_db_parents:
+            if (d_id, p_ord) not in found_db_parents:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Pasal induk tidak ditemukan untuk document_id={d_id} dan parent_order_index={p_ord}",
+                )
+
+    inserted_count = 0
+    updated_count = 0
+    deleted_count = 0
 
     try:
-        db.add_all(orm_articles)
+        # 3. Hapus pasal untuk replace_document_ids bila ada
+        if payload.replace_document_ids:
+            del_result = db.execute(
+                delete(Article)
+                .where(Article.document_id.in_(payload.replace_document_ids))
+                .returning(Article.id)
+            )
+            deleted_count = len(del_result.fetchall())
+
+        # 4. Proses upsert bertahap (topological levels) untuk menyelesaikan parent_order_index
+        parent_id_map: Dict[tuple, int] = dict(found_db_parents)
+        remaining_chunks = list(payload.articles)
+
+        while remaining_chunks:
+            # Cari chunk yang siap (tidak punya parent, atau parent-nya sudah ada di parent_id_map)
+            ready = [
+                c for c in remaining_chunks
+                if c.parent_order_index is None or (c.document_id, c.parent_order_index) in parent_id_map
+            ]
+
+            if not ready:
+                # Terdapat siklus relasi atau induk tidak ditemukan di sisa batch
+                first_unresolved = remaining_chunks[0]
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"Pasal induk tidak ditemukan atau terdapat siklus relasi untuk "
+                        f"document_id={first_unresolved.document_id} dan parent_order_index={first_unresolved.parent_order_index}"
+                    ),
+                )
+
+            # Pastikan tidak ada duplikat (document_id, order_index) dalam satu statement SQL
+            batch_for_stmt = []
+            next_remaining = []
+            seen_in_batch = set()
+
+            for c in ready:
+                key = (c.document_id, c.order_index) if c.order_index is not None else None
+                if key is not None and key in seen_in_batch:
+                    next_remaining.append(c)
+                else:
+                    if key is not None:
+                        seen_in_batch.add(key)
+                    batch_for_stmt.append(c)
+
+            not_ready = [c for c in remaining_chunks if c not in ready]
+            remaining_chunks = next_remaining + not_ready
+
+            values_to_insert = []
+            for c in batch_for_stmt:
+                pid = parent_id_map.get((c.document_id, c.parent_order_index)) if c.parent_order_index is not None else None
+                values_to_insert.append({
+                    "document_id": c.document_id,
+                    "level": c.level,
+                    "chapter_title": c.chapter_title,
+                    "article_number": c.article_number,
+                    "content_text": c.content_text,
+                    "order_index": c.order_index,
+                    "page": c.page,
+                    "parent_id": pid,
+                    "embedding": c.embedding,
+                })
+
+            stmt = pg_insert(Article).values(values_to_insert)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["document_id", "order_index"],
+                index_where=Article.order_index.isnot(None),
+                set_={
+                    "level": stmt.excluded.level,
+                    "chapter_title": stmt.excluded.chapter_title,
+                    "article_number": stmt.excluded.article_number,
+                    "content_text": stmt.excluded.content_text,
+                    "page": stmt.excluded.page,
+                    "parent_id": stmt.excluded.parent_id,
+                    "embedding": func.coalesce(stmt.excluded.embedding, Article.embedding),
+                },
+            )
+            stmt = stmt.returning(
+                Article.id,
+                Article.document_id,
+                Article.order_index,
+                literal_column("xmax = 0").label("is_insert"),
+            )
+            res = db.execute(stmt)
+            rows = res.fetchall()
+            for art_id, d_id, ord_idx, is_ins in rows:
+                if ord_idx is not None:
+                    parent_id_map[(d_id, ord_idx)] = art_id
+                if is_ins:
+                    inserted_count += 1
+                else:
+                    updated_count += 1
+
         db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as exc:
         db.rollback()
         raise HTTPException(
@@ -116,11 +272,12 @@ def bulk_insert_articles(
             detail=f"Gagal menyimpan pasal ke database: {str(exc)}",
         )
 
-    inserted_count = len(orm_articles)
     return BulkArticleResponse(
         status="ok",
         inserted_count=inserted_count,
-        message=f"Berhasil menyimpan {inserted_count} pasal ke tabel articles.",
+        updated_count=updated_count,
+        deleted_count=deleted_count,
+        message=f"Berhasil memproses {inserted_count + updated_count} pasal: {inserted_count} baru, {updated_count} diperbarui, {deleted_count} dihapus.",
     )
 
 
