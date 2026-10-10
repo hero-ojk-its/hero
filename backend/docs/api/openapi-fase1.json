@@ -1686,8 +1686,8 @@
         "tags": [
           "Internal"
         ],
-        "summary": "[Internal] Bulk insert chunk pasal dari ML pipeline",
-        "description": "Bulk insert pasal dari pipeline ML.",
+        "summary": "[Internal] Bulk insert/upsert chunk pasal dari ML pipeline",
+        "description": "Bulk insert / upsert pasal dari pipeline ML (Data).\n\nFitur utama kontrak pasal:\n- **Upsert idempoten**: Menggunakan `INSERT ... ON CONFLICT (document_id, order_index) WHERE order_index IS NOT NULL DO UPDATE`.\n  Memperbarui kolom `level`, `chapter_title`, `article_number`, `content_text`, `page`, `parent_id`, dan `embedding` (hanya bila embedding baru tidak null).\n- **replace_document_ids**: Opsi untuk menghapus seluruh pasal milik dokumen yang didaftarkan sebelum melakukan upsert,\n  dalam transaksi atomik yang sama. Berguna untuk ekstraksi ulang bersih atau saat pasal baru lebih sedikit dari sebelumnya.\n- **page**: Halaman PDF tempat pasal/ayat dimulai (1-indexed).\n- **parent_order_index**: Menyelesaikan hierarki ayat/pasal ke `parent_id`, baik induk ada pada request sebelumnya\n  (sudah tersimpan di DB) maupun berada di dalam batch yang sama. Mengembalikan 422 jika induk tidak ditemukan.\n- **Validasi Dokumen**: Memverifikasi semua `document_id` ada di tabel `documents`. Mengembalikan 422 bila ada ID yang tidak dikenal.",
         "operationId": "bulk_insert_articles_api_v1_internal_articles_post",
         "parameters": [
           {
@@ -3493,6 +3493,38 @@
               4
             ]
           },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page",
+            "description": "Halaman PDF tempat pasal ini dimulai (1-indexed)",
+            "examples": [
+              1
+            ]
+          },
+          "parent_order_index": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Order Index",
+            "description": "order_index pasal induk dalam dokumen yang sama (0-based)",
+            "examples": [
+              0
+            ]
+          },
           "embedding": {
             "anyOf": [
               {
@@ -3524,7 +3556,8 @@
           "content_text": "Ketentuan ini berlaku bagi seluruh lembaga keuangan...",
           "document_id": 1,
           "level": "pasal",
-          "order_index": 4
+          "order_index": 4,
+          "page": 1
         }
       },
       "BatchRetryResponse": {
@@ -3774,6 +3807,21 @@
             "minItems": 1,
             "title": "Articles",
             "description": "Daftar chunk pasal yang akan dimasukkan ke database (min. 1 item)"
+          },
+          "replace_document_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replace Document Ids",
+            "description": "Daftar ID dokumen yang seluruh pasalnya akan dihapus terlebih dahulu sebelum upsert dalam transaksi yang sama"
           }
         },
         "type": "object",
@@ -3794,7 +3842,19 @@
           "inserted_count": {
             "type": "integer",
             "title": "Inserted Count",
-            "description": "Jumlah pasal yang berhasil disimpan"
+            "description": "Jumlah pasal baru yang berhasil disimpan"
+          },
+          "updated_count": {
+            "type": "integer",
+            "title": "Updated Count",
+            "description": "Jumlah pasal yang berhasil diperbarui (upsert)",
+            "default": 0
+          },
+          "deleted_count": {
+            "type": "integer",
+            "title": "Deleted Count",
+            "description": "Jumlah pasal yang dihapus (dari replace_document_ids)",
+            "default": 0
           },
           "message": {
             "type": "string",
@@ -3808,7 +3868,7 @@
           "message"
         ],
         "title": "BulkArticleResponse",
-        "description": "Response setelah bulk insert berhasil."
+        "description": "Response setelah bulk insert/upsert berhasil."
       },
       "CandidateListResponse": {
         "properties": {

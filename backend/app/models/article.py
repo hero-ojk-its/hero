@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, ForeignKey, Enum as SQLEnum
+    Column, Integer, String, Text, DateTime, ForeignKey, Index, Enum as SQLEnum
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -23,6 +23,15 @@ class Article(Base):
     """
 
     __tablename__ = "articles"
+    __table_args__ = (
+        Index(
+            "uq_articles_document_order",
+            "document_id",
+            "order_index",
+            unique=True,
+            postgresql_where=Column("order_index").isnot(None),
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     document_id = Column(
@@ -64,6 +73,11 @@ class Article(Base):
         Integer,
         nullable=True,
         comment="Urutan tampil dalam dokumen (untuk sort yang benar)"
+    )
+    page = Column(
+        Integer,
+        nullable=True,
+        comment="Halaman PDF tempat pasal ini dimulai (1-indexed)"
     )
 
     # Kolom vector untuk pgvector — diisi oleh pipeline ML Fathir nanti

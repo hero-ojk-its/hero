@@ -319,6 +319,7 @@ def _format_single_document_response(doc: Document, db: Session) -> Dict[str, An
                 "article_number": a.article_number,
                 "content_text": a.content_text[:300] + "..." if a.content_text and len(a.content_text) > 300 else a.content_text,
                 "order_index": a.order_index,
+                "page": a.page,
             }
             for a in top_articles
         ],
