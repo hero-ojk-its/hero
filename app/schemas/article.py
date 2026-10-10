@@ -45,6 +45,18 @@ class ArticleChunkIn(BaseModel):
         description="Urutan tampil dalam dokumen (0-based, untuk sort yang benar)",
         examples=[4],
     )
+    page: Optional[int] = Field(
+        None,
+        ge=1,
+        description="Halaman PDF tempat pasal ini dimulai (1-indexed)",
+        examples=[1],
+    )
+    parent_order_index: Optional[int] = Field(
+        None,
+        ge=0,
+        description="order_index pasal induk dalam dokumen yang sama (0-based)",
+        examples=[0],
+    )
     embedding: Optional[List[float]] = Field(
         None,
         description=(
@@ -77,6 +89,8 @@ class ArticleChunkIn(BaseModel):
         "article_number": "Pasal 5",
         "content_text": "Ketentuan ini berlaku bagi seluruh lembaga keuangan...",
         "order_index": 4,
+        "page": 1,
+        "parent_order_index": None,
         "embedding": None,
     }}}
 
@@ -89,13 +103,19 @@ class BulkArticleIn(BaseModel):
         min_length=1,
         description="Daftar chunk pasal yang akan dimasukkan ke database (min. 1 item)",
     )
+    replace_document_ids: Optional[List[int]] = Field(
+        None,
+        description="Daftar ID dokumen yang seluruh pasalnya akan dihapus terlebih dahulu sebelum upsert dalam transaksi yang sama",
+    )
 
 
 class BulkArticleResponse(BaseModel):
-    """Response setelah bulk insert berhasil."""
+    """Response setelah bulk insert/upsert berhasil."""
 
     status: str = Field("ok", description="Status operasi")
-    inserted_count: int = Field(..., description="Jumlah pasal yang berhasil disimpan")
+    inserted_count: int = Field(..., description="Jumlah pasal baru yang berhasil disimpan")
+    updated_count: int = Field(0, description="Jumlah pasal yang berhasil diperbarui (upsert)")
+    deleted_count: int = Field(0, description="Jumlah pasal yang dihapus (dari replace_document_ids)")
     message: str = Field(..., description="Pesan ringkasan")
 
 

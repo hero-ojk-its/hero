@@ -852,7 +852,8 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "chapter_title": "BAB I KETENTUAN UMUM",
       "article_number": "Pasal 1",
       "content_text": "Dalam Peraturan Otoritas Jasa Keuangan ini yang dimaksud dengan Bank Umum adalah bank yang melaksanakan kegiatan usaha secara konvensional dan atau berdasarkan prinsip syariah yang dalam kegiatannya memberikan jasa dalam lalu lintas pembayaran.",
-      "order_index": 1
+      "order_index": 1,
+      "page": null
     },
     {
       "id": 2,
@@ -860,7 +861,8 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "chapter_title": "BAB II MODAL INTI",
       "article_number": "Pasal 2",
       "content_text": "Modal inti minimum bagi Bank Umum ditetapkan paling sedikit sebesar Rp3.000.000.000.000 (tiga triliun rupiah) yang wajib dipenuhi oleh setiap entitas perbankan.",
-      "order_index": 2
+      "order_index": 2,
+      "page": null
     }
   ],
   "legal_references": []
@@ -967,7 +969,8 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "chapter_title": "BAB I KETENTUAN UMUM",
       "article_number": "Pasal 1",
       "content_text": "Dalam Peraturan Otoritas Jasa Keuangan ini yang dimaksud dengan Bank Umum adalah bank yang melaksanakan kegiatan usaha secara konvensional dan atau berdasarkan prinsip syariah yang dalam kegiatannya memberikan jasa dalam lalu lintas pembayaran.",
-      "order_index": 1
+      "order_index": 1,
+      "page": null
     },
     {
       "id": 2,
@@ -975,7 +978,8 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "chapter_title": "BAB II MODAL INTI",
       "article_number": "Pasal 2",
       "content_text": "Modal inti minimum bagi Bank Umum ditetapkan paling sedikit sebesar Rp3.000.000.000.000 (tiga triliun rupiah) yang wajib dipenuhi oleh setiap entitas perbankan.",
-      "order_index": 2
+      "order_index": 2,
+      "page": null
     }
   ],
   "legal_references": [],
