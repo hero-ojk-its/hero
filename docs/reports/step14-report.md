@@ -164,137 +164,130 @@ tests/test_step14_active.py::test_n11_deactivate_non_existent_document PASSED [1
 
 ---
 
-## 6. Uji Live pada Dokumen #71 (POJK 21 Tahun 2023)
+## 6. Uji Live (dijalankan manual oleh Rafli, 11 Okt 2026)
 
-### 6.1. Build & Health Check
-```powershell
-docker compose up -d --build backend
-Start-Sleep -Seconds 15
-curl.exe -s http://localhost:8000/health
-```
-Output mentah:
-```json
-{"status":"ok","database":"ok","version":"0.10.0","app_env":"development","alembic_revision":"f6a7b8c9d0e1","alembic_head":"f6a7b8c9d0e1","migrations_up_to_date":true,"storage_writable":true,"crawler_backend":"simple_http","crawler_loaded":true,"auth_enabled":false,"protect_non_public":true}
-```
+```text
+--- AWAL ---
 
-### 6.2. Baseline Awal Sebelum Nonaktif
-```powershell
-curl.exe -s http://localhost:8000/api/v1/dashboard/summary
-```
-Output mentah cuplikan:
-```json
-{"kb":{"corpus_documents":69,"draft_documents":2,"inactive_documents":0,"target_fase1":20,"target_met":true,"by_status_keberlakuan":{"berlaku":10,"diubah":2,"dicabut":2,"tidak_diketahui":57},"placed_documents":57,"inbox_documents":14}}
-```
-
-Pencarian POJK 21:
-```powershell
-curl.exe -s "http://localhost:8000/api/v1/documents/?q=POJK+21"
-```
-Output mentah:
-```json
-{"total":1,"items":[{"id":71,"title":"POJK 21 2023 Layanan Digital Bank Umum","regulation_number":"POJK 21 Tahun 2023","regulation_type":"POJK","is_active":true,"deactivated_at":null,"deactivated_reason":null,"rank":2.0}]}
-```
-
-### 6.3. Nonaktifkan Dokumen #71
-```powershell
-curl.exe -s -X PUT http://localhost:8000/api/v1/documents/71/active -H "Content-Type: application/json" --data-raw "{\"is_active\": false, \"reason\": \"Uji Langkah 14\"}"
-```
-Output mentah:
-```json
-{"document_id":71,"is_active":false,"changed":true,"deactivated_at":"2026-10-10T09:41:49.375689Z","deactivated_reason":"Uji Langkah 14","message":"Dokumen #71 ('POJK 21 Tahun 2023') berhasil dinonaktifkan."}
-```
-
-### 6.4. Verifikasi Tersembunyi dari Pencarian & Dashboard Berkurang 1
-Pencarian default (`q=POJK 21`):
-```powershell
-curl.exe -s "http://localhost:8000/api/v1/documents/?q=POJK+21"
-```
-Output mentah:
-```json
-{"total":0,"items":[],"query":{"q":"POJK 21","mode":"phrase"}}
-```
-
-Pencarian dengan `include_inactive=true`:
-```powershell
-curl.exe -s "http://localhost:8000/api/v1/documents/?q=POJK+21&include_inactive=true"
-```
-Output mentah:
-```json
-{"total":1,"items":[{"id":71,"title":"POJK 21 2023 Layanan Digital Bank Umum","regulation_number":"POJK 21 Tahun 2023","is_active":false,"deactivated_at":"2026-10-10T09:41:49.375689+00:00","deactivated_reason":"Uji Langkah 14"}]}
-```
-
-Dashboard setelah penonaktifan:
-```powershell
-curl.exe -s http://localhost:8000/api/v1/dashboard/summary
-```
-Output mentah:
-```json
-{"kb":{"corpus_documents":68,"draft_documents":2,"inactive_documents":1,"target_fase1":20,"target_met":true,"placed_documents":56,"inbox_documents":14}}
-```
-*(Catatan: `corpus_documents` turun dari 69 menjadi 68, dan `inactive_documents` bertambah menjadi 1).*
-
-### 6.5. Aktifkan Kembali Dokumen #71
-```powershell
-curl.exe -s -X PUT http://localhost:8000/api/v1/documents/71/active -H "Content-Type: application/json" --data-raw "{\"is_active\": true}"
-```
-Output mentah:
-```json
-{"document_id":71,"is_active":true,"changed":true,"deactivated_at":null,"deactivated_reason":null,"message":"Dokumen #71 ('POJK 21 Tahun 2023') berhasil diaktifkan kembali."}
-```
-
-Verifikasi pencarian pulih:
-```powershell
-curl.exe -s "http://localhost:8000/api/v1/documents/?q=POJK+21"
-```
-Output mentah:
-```json
-{"total":1,"items":[{"id":71,"title":"POJK 21 2023 Layanan Digital Bank Umum","regulation_number":"POJK 21 Tahun 2023","is_active":true,"deactivated_at":null,"deactivated_reason":null}]}
-```
-
-Verifikasi dashboard pulih:
-```powershell
-curl.exe -s http://localhost:8000/api/v1/dashboard/summary
-```
-Output mentah:
-```json
-{"kb":{"corpus_documents":69,"draft_documents":2,"inactive_documents":0,"target_fase1":20,"target_met":true,"placed_documents":57,"inbox_documents":14}}
-```
-
-### 6.6. Entri Audit Log Live
-```powershell
-curl.exe -s "http://localhost:8000/api/v1/audit-logs/?limit=2"
-```
-Output mentah:
-```json
+corpus_documents inactive_documents
+---------------- ------------------
+              69                  0
+--- NONAKTIFKAN #71 ---
+{
+    "document_id":  71,
+    "is_active":  false,
+    "changed":  true,
+    "deactivated_at":  "2026-10-11T14:44:29.643039Z",
+    "deactivated_reason":  "Uji Langkah 14",
+    "message":  "Dokumen #71 (\u0027POJK 21 Tahun 2023\u0027) berhasil dinonaktifkan."
+}
+--- CARI POJK 21 (default) ---
+0
+--- CARI POJK 21 (include_inactive) ---
+1
+--- DASHBOARD SETELAH ---
+              68                  1
+--- AKTIFKAN KEMBALI ---
+{
+    "document_id":  71,
+    "is_active":  true,
+    "changed":  true,
+    "deactivated_at":  null,
+    "deactivated_reason":  null,
+    "message":  "Dokumen #71 (\u0027POJK 21 Tahun 2023\u0027) berhasil diaktifkan kembali."
+}
+--- DASHBOARD AKHIR ---
+              69                  0
+--- AUDIT ---
 [
-  {
-    "id": 230,
-    "user_id": null,
-    "action": "ACTIVATE_DOCUMENT",
-    "target_resource": "document:71",
-    "detail": {
-      "after": {"is_active": true},
-      "before": {"is_active": false},
-      "reason": null
+    {
+        "id":  232,
+        "user_id":  null,
+        "action":  "ACTIVATE_DOCUMENT",
+        "target_resource":  "document:71",
+        "detail":  {
+                       "after":  {
+                                     "is_active":  true
+                                 },
+                       "before":  {
+                                      "is_active":  false
+                                  },
+                       "reason":  null
+                   },
+        "ip_address":  "172.21.0.1",
+        "timestamp":  "2026-10-11T14:44:29.970911+00:00"
     },
-    "ip_address": "172.21.0.1",
-    "timestamp": "2026-10-10T09:42:27.648198+00:00"
-  },
-  {
-    "id": 229,
-    "user_id": null,
-    "action": "DEACTIVATE_DOCUMENT",
-    "target_resource": "document:71",
-    "detail": {
-      "after": {"is_active": false},
-      "before": {"is_active": true},
-      "reason": "Uji Langkah 14"
+    {
+        "id":  231,
+        "user_id":  null,
+        "action":  "DEACTIVATE_DOCUMENT",
+        "target_resource":  "document:71",
+        "detail":  {
+                       "after":  {
+                                     "is_active":  false
+                                 },
+                       "before":  {
+                                      "is_active":  true
+                                  },
+                       "reason":  "Uji Langkah 14"
+                   },
+        "ip_address":  "172.21.0.1",
+        "timestamp":  "2026-10-11T14:44:29.651220+00:00"
     },
-    "ip_address": "172.21.0.1",
-    "timestamp": "2026-10-10T09:41:49.379833+00:00"
-  }
+    {
+        "id":  230,
+        "user_id":  null,
+        "action":  "ACTIVATE_DOCUMENT",
+        "target_resource":  "document:71",
+        "detail":  {
+                       "after":  {
+                                     "is_active":  true
+                                 },
+                       "before":  {
+                                      "is_active":  false
+                                  },
+                       "reason":  null
+                   },
+        "ip_address":  "172.21.0.1",
+        "timestamp":  "2026-10-10T09:42:27.648198+00:00"
+    },
+    {
+        "id":  229,
+        "user_id":  null,
+        "action":  "DEACTIVATE_DOCUMENT",
+        "target_resource":  "document:71",
+        "detail":  {
+                       "after":  {
+                                     "is_active":  false
+                                 },
+                       "before":  {
+                                      "is_active":  true
+                                  },
+                       "reason":  "Uji Langkah 14"
+                   },
+        "ip_address":  "172.21.0.1",
+        "timestamp":  "2026-10-10T09:41:49.379833+00:00"
+    },
+    {
+        "id":  228,
+        "user_id":  null,
+        "action":  "UPDATE_METADATA",
+        "target_resource":  "document:71",
+        "detail":  {
+                       "after":  {
+                                     "access_classification":  "publik"
+                                 },
+                       "before":  {
+                                      "access_classification":  "non_publik"
+                                  }
+                   },
+        "ip_address":  "172.21.0.1",
+        "timestamp":  "2026-10-05T18:04:22.414747+00:00"
+    }
 ]
 ```
+
+*Entri audit 229–230 berasal dari uji agent pada 10 Okt; entri 231–232 dari uji manual ini.*
 
 ---
 
