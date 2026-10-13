@@ -23,6 +23,7 @@ unattended against a real government site over many repeats:
 """
 from __future__ import annotations
 
+import inspect
 import logging
 import re
 import threading
@@ -46,6 +47,16 @@ from tenacity import (
 
 from hero.config import ScraperSettings, SiteSource
 from hero.models import sha256_bytes
+
+# tenacity ≤ 9.1 hanya mengenal ``initial``; 9.2 mendeprekasinya dan memakai
+# ``multiplier``. Rentang yang didukung proyek ini (tenacity>=8.2) memuat
+# keduanya, jadi namanya dipilih sekali di sini — bukan dipaksa lewat batas
+# versi, dan bukan dibiarkan pecah saat ``initial`` benar-benar dihapus.
+# Nilainya sama persis pada kedua nama (urutan tunggu 2·2ⁿ, batas 30 s).
+_SKALA_TUNGGU = ("multiplier"
+                 if "multiplier" in inspect.signature(
+                     wait_exponential_jitter.__init__).parameters
+                 else "initial")
 
 log = logging.getLogger(__name__)
 
@@ -352,8 +363,8 @@ class WebScraper:
         return retry(
             retry=retry_if_exception(_is_retryable),
             stop=stop_after_attempt(max(1, self.settings.max_retries)),
-            wait=wait_exponential_jitter(initial=self.settings.retry_backoff_seconds,
-                                         max=30),
+            wait=wait_exponential_jitter(max=30,
+                                         **{_SKALA_TUNGGU: self.settings.retry_backoff_seconds}),
             reraise=True,
         )
 

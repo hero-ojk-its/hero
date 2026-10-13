@@ -54,8 +54,9 @@ seluruh folder DPEA), karena itu `sources.yaml` hanya memuat `${HERO_ONEDRIVE_SH
 | `hero harmonisasi jalankan <doc_id\|pdf>` | Draft vs KB: kandidat, rujukan & statusnya, temuan per pasal | `--out` JSON |
 | `hero harmonisasi siapkan-uji [--unduh]` | Pasangan peraturan perubahan ↔ induk dari register publik | — |
 | `hero harmonisasi evaluasi` | Recall & kalibrasi ambang (TD-07, FR-HRM-12) | `docs/HARMONISASI_EVALUASI.md` |
-| `hero bridge …` | Jembatan ke backend tim: pindai (mode push), ekstraksi, cermin korpus, layanan analisa | `docs/INTEGRASI_BACKEND.md` |
+| `hero bridge …` | Jembatan ke backend tim: pindai (mode push), ekstraksi, cermin korpus, layanan analisa. Kontrak pasal Langkah 13 (halaman, hierarki ayat, ganti-bersih) dipakai bila backend mendukungnya — kemampuannya **dideteksi**, bukan diasumsikan | `docs/INTEGRASI_BACKEND.md` §7 |
 | `hero bench-vektor` | SQLite (NumPy/sqlite-vec) vs Postgres pgvector: latensi, recall, ukuran | `docs/VEKTOR_BENCHMARK.md` |
+| `hero loadtest [--profil api\|ml] [--workers N] [--berat]` | Latensi per endpoint, throughput, RAM/CPU server, dan **batas pengguna serentak** (p95 ≤ 3 s, galat ≤ 1%); hanya GET | `docs/PERFORMA_SERVER*.md`, tafsiran di `docs/PERFORMA_SERVER_ANALISIS.md` |
 
 Format nama dari tombol UI (#89/#90): `hero.kb.naming.template_from_components(["jenis",
 "nomor", "tahun", "nama"])` → `{jenis} - {nomor_urut} - {tahun} - {judul:90}`.

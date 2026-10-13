@@ -15,6 +15,12 @@ storage:
 vector:
   semantic_model: e5-large
   lsa_dim: 256
+  # Server kecil (VPS 1,9 GB): tanpa tiga baris di bawah, `hero vector build --lsa-only`
+  # pada 212 ribu potongan dimatikan OOM-killer di ±1 GB. Nilai di bawah diukur
+  # (docs/PERFORMA_SERVER_VPS.md); biarkan dikomentari di laptop.
+  # lsa_fit_sample: 5000      # kosakata LSA dilatih dari sampel ini; SEMUA potongan tetap diindeks
+  # lsa_max_features: 50000
+  # numpy_max_rows: 50000     # >50 ribu potongan → cari dari disk (sqlite-vec), bukan matriks 217 MB di RAM
 
 # Jembatan ke backend tim (hero bridge …). Rahasia TIDAK di sini: kunci API
 # internal dibaca dari .env (HERO_BACKEND_INTERNAL_KEY / INTERNAL_API_KEY) dan

@@ -24,6 +24,12 @@ log = logging.getLogger("hero.bridge.client")
 RETRY_STATUS = {408, 425, 429, 500, 502, 503, 504}
 RETRY_EXC = (requests.Timeout, requests.ConnectionError, requests.exceptions.ChunkedEncodingError)
 
+# Field kontrak pasal "Langkah 13" (backend PR #115). Backend yang lebih lama
+# mengabaikannya tanpa galat, jadi kemampuannya harus dipastikan, bukan diasumsikan.
+_CONTRACT_FIELDS = ("page", "parent_order_index", "replace_document_ids")
+_CONTRACT_V2 = dict.fromkeys(_CONTRACT_FIELDS, True)
+_CONTRACT_V1 = dict.fromkeys(_CONTRACT_FIELDS, False)
+
 
 class BackendError(RuntimeError):
     """Permintaan ke backend gagal dengan cara yang tidak bisa diulang."""
@@ -47,6 +53,7 @@ class BackendClient:
             "Accept": "application/json",
             "User-Agent": "HERO-DataBridge/1.0 (pipeline/hero)",
         })
+        self._contract: dict[str, bool] | None = None
 
     # -- dasar ----------------------------------------------------------
     def _request(self, method: str, path: str, *, retries: int = 3,
@@ -139,10 +146,83 @@ class BackendClient:
         return self._json("PATCH", f"/api/v1/internal/documents/{document_id}/extraction",
                           params={"force": str(bool(force)).lower()}, json=payload)
 
-    def post_articles(self, articles: list[dict[str, Any]]) -> dict[str, Any]:
+    def post_articles(self, articles: list[dict[str, Any]], *,
+                      replace_document_ids: list[int] | None = None) -> dict[str, Any]:
+        """Kirim satu batch pasal. ``replace_document_ids`` menghapus pasal lama
+        dokumen itu lebih dulu, dalam transaksi yang sama (kontrak Langkah 13).
+
+        Jangan panggil dengan ``replace_document_ids`` sebelum
+        :meth:`article_contract` memastikan backend mendukungnya: backend lama
+        **mengabaikan field yang tidak dikenalnya tanpa bersuara**, sehingga
+        permintaan yang kita kira "ganti" justru menambah pasal ganda.
+        """
         if not articles:
             return {"status": "ok", "inserted_count": 0, "message": "tidak ada pasal"}
-        return self._json("POST", "/api/v1/internal/articles", json={"articles": articles})
+        body: dict[str, Any] = {"articles": articles}
+        if replace_document_ids:
+            body["replace_document_ids"] = [int(i) for i in replace_document_ids]
+        res = self._json("POST", "/api/v1/internal/articles", json=body)
+        self._learn_from_article_response(res)
+        return res
+
+    # -- kemampuan backend ----------------------------------------------
+    def article_contract(self) -> dict[str, bool]:
+        """Field kontrak pasal mana yang benar-benar dipahami backend ini.
+
+        Dua lapis, karena tidak satu pun bisa diandalkan sendirian:
+
+        1. **Pra-terbang** — skema ``/openapi.json``. Tepat, tetapi backend
+           produksi boleh mematikan dokumentasinya (``expose_api_docs=false``).
+        2. **Dari jawabannya** — respons kontrak baru membawa ``updated_count``
+           dan ``deleted_count``; yang lama hanya ``inserted_count``. Ini yang
+           memperbaiki tebakan setelah batch pertama benar-benar terkirim.
+
+        Selama belum pasti, pemanggil harus memilih jalur konservatif: lebih
+        baik kehilangan fitur daripada menggandakan pasal diam-diam.
+        """
+        if self._contract is None:
+            paksa = (self.s.article_contract or "auto").lower()
+            if paksa in ("v2", "baru"):
+                self._contract = dict(_CONTRACT_V2, terdeteksi=True, sumber="konfigurasi")
+            elif paksa in ("v1", "lama"):
+                self._contract = dict(_CONTRACT_V1, terdeteksi=True, sumber="konfigurasi")
+            else:
+                self._contract = self._probe_contract()
+        return self._contract
+
+    def _probe_contract(self) -> dict[str, bool]:
+        try:
+            spec = self._json("GET", "/openapi.json", retries=1)
+        except BackendError as exc:
+            log.info("skema OpenAPI backend tidak terbaca (%s) — kontrak pasal "
+                     "dianggap lama sampai jawaban pertama membuktikan sebaliknya", exc.status)
+            return dict(_CONTRACT_V1, terdeteksi=False, sumber="tidak terbaca")
+        except Exception as exc:                                  # noqa: BLE001
+            log.info("skema OpenAPI backend tidak terbaca (%s)", exc)
+            return dict(_CONTRACT_V1, terdeteksi=False, sumber="tidak terbaca")
+        skema = ((spec or {}).get("components") or {}).get("schemas") or {}
+        chunk = (skema.get("ArticleChunkIn") or {}).get("properties") or {}
+        bulk = (skema.get("BulkArticleIn") or {}).get("properties") or {}
+        return {"page": "page" in chunk,
+                "parent_order_index": "parent_order_index" in chunk,
+                "replace_document_ids": "replace_document_ids" in bulk,
+                "terdeteksi": True, "sumber": "openapi"}
+
+    def _learn_from_article_response(self, res: dict[str, Any]) -> None:
+        """Respons kontrak baru membawa ``updated_count``/``deleted_count``.
+
+        Hanya menaikkan keyakinan, tidak pernah menurunkannya: respons yang
+        tidak membawa kunci itu bisa saja datang dari proksi yang memangkas
+        field, dan menurunkan status di tengah jalan akan membuat satu
+        dokumen dikirim dengan dua aturan berbeda."""
+        if not isinstance(res, dict) or self.s.article_contract not in (None, "", "auto"):
+            return
+        if "updated_count" in res or "deleted_count" in res:
+            now = self._contract or {}
+            if not all(now.get(k) for k in _CONTRACT_FIELDS):
+                log.info("backend menjawab dengan kontrak pasal Langkah 13 — "
+                         "halaman, hierarki ayat, dan ganti-bersih diaktifkan")
+            self._contract = dict(_CONTRACT_V2, terdeteksi=True, sumber="jawaban backend")
 
     def requeue(self, document_id: int) -> dict[str, Any]:
         return self._json("POST", f"/api/v1/internal/extraction/requeue/{document_id}")

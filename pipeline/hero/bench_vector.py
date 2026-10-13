@@ -82,7 +82,7 @@ FALLBACK_QUERIES = [
 # --------------------------------------------------------------------------
 def bench_sqlite(vs: VectorService, method: str, qvecs: list[np.ndarray], k: int,
                  runs: int) -> dict[str, Any]:
-    from hero.vector.store import HAS_SQLITE_VEC
+    from hero.vector.store import sqlite_vec_ready
 
     store = vs.store
     out: dict[str, Any] = {"mesin": {}}
@@ -90,7 +90,7 @@ def bench_sqlite(vs: VectorService, method: str, qvecs: list[np.ndarray], k: int
     out["mesin"]["numpy (matriks di memori)"] = {
         "latensi": _timeit(lambda: store.knn(method, qvecs[0], k, engine="numpy"), runs),
         "recall": 1.0, "catatan": "exact — jadi ini juga acuan recall"}
-    if HAS_SQLITE_VEC and store.conn.execute(
+    if sqlite_vec_ready() and store.conn.execute(
             "SELECT 1 FROM sqlite_master WHERE name = ?", (f"vec_{method}",)).fetchone():
         got = [[rid for rid, _ in store.knn(method, q, k, engine="sqlite-vec")] for q in qvecs]
         out["mesin"]["sqlite-vec (vec0, baca dari disk)"] = {

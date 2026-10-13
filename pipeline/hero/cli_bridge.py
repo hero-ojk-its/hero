@@ -75,6 +75,28 @@ def status(
     except BackendError as exc:
         out["kunci_internal"] = f"galat: {exc}"
         t.add_row("kunci API internal", f"[red]{escape(str(exc))}[/]")
+
+    # Kontrak pasal menentukan apakah halaman, hierarki ayat, dan ganti-bersih
+    # benar-benar sampai. Backend lama mengabaikannya tanpa bersuara, jadi ini
+    # satu-satunya cara melihatnya sebelum menjalankan ekstraksi massal.
+    try:
+        kontrak = client.article_contract()
+        out["kontrak_pasal"] = kontrak
+        punya = [n for n in ("page", "parent_order_index", "replace_document_ids")
+                 if kontrak.get(n)]
+        if len(punya) == 3:
+            t.add_row("kontrak pasal", f"[green]Langkah 13[/] — halaman, hierarki ayat, "
+                                       f"ganti-bersih (sumber: {kontrak.get('sumber')})")
+        elif not kontrak.get("terdeteksi"):
+            t.add_row("kontrak pasal", "[yellow]belum terdeteksi[/] — /openapi.json tidak terbaca. "
+                                       "Jalur aman dipakai (tanpa halaman & ganti-bersih); setel "
+                                       "bridge.article_contract: v2 bila backend sudah dimigrasi")
+        else:
+            t.add_row("kontrak pasal", f"[yellow]lama[/] — hanya {', '.join(punya) or 'tanpa field baru'}; "
+                                       f"halaman disimpan di buku besar lokal saja")
+    except BackendError as exc:
+        out["kontrak_pasal"] = {"galat": str(exc)}
+        t.add_row("kontrak pasal", f"[red]{escape(str(exc))}[/]")
     client.close()
 
     st = BridgeState(default_path(settings))
@@ -202,9 +224,15 @@ def sinkron(
     for g in d["galat"]:
         console.print(f"  [yellow]•[/] {escape(str(g))}")
     if d["halaman_pasal_kosong"]:
-        console.print("[dim]Halaman pasal kosong = pasal itu tidak diekstraksi oleh worker ini, "
-                      "jadi nomor halamannya tidak diketahui (tabel articles backend belum punya "
-                      "kolom halaman). Lihat docs/INTEGRASI_BACKEND.md §Celah kontrak.[/]")
+        if d.get("halaman_dari_backend"):
+            console.print("[dim]Halaman pasal kosong = pasal itu diekstraksi sebelum backend punya "
+                          "kolom halaman (atau oleh worker tanpa kontrak Langkah 13). Ekstraksi "
+                          "ulang dokumennya akan mengisinya.[/]")
+        else:
+            console.print("[dim]Halaman pasal kosong = backend ini belum punya kolom halaman di "
+                          "tabel articles, jadi hanya pasal yang diekstraksi worker ini (tercatat "
+                          "di buku besar lokal) yang punya nomor halaman. Jalankan migrasi backend "
+                          "ke revisi kontrak pasal Langkah 13.[/]")
 
     # Graf relasi dibangun ulang secara default: harmonisasi memakainya untuk
     # menjawab "peraturan yang dirujuk draft ini masih berlaku atau sudah

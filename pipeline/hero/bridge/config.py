@@ -54,9 +54,16 @@ class BridgeSettings:
     # Backend hanya mengindeks 300.000 karakter pertama (kolom search_vector),
     # jadi mengirim lebih dari itu hanya menambah beban transfer.
     max_full_text_chars: int = 300_000
-    # Ayat belum bisa dikirim sebagai anak pasal: skema bulk backend tidak
-    # punya ``parent_id``/``parent_index`` (lihat docs/INTEGRASI_BACKEND.md §gap).
+    # Ayat dikirim sebagai anak pasal lewat ``parent_order_index`` (kontrak
+    # Langkah 13). Pada backend yang belum memilikinya, worker menolak dan
+    # mengirim pasal utuh saja — ayat menggantung tanpa induk lebih buruk
+    # daripada ayat yang isinya sudah termuat di dalam teks pasal.
     push_ayat: bool = False
+    # Kontrak pasal backend: "auto" mendeteksi sendiri (OpenAPI lalu bentuk
+    # jawaban), "v2" memaksa kontrak Langkah 13, "v1" memaksa yang lama.
+    # Paksa hanya bila deteksi tidak mungkin, mis. backend produksi yang
+    # mematikan /openapi.json dan tidak boleh dicoba-coba.
+    article_contract: str = "auto"
     # Dokumen non-publik tidak boleh keluar server. Worker ekstraksi berjalan
     # di sisi server, jadi defaultnya aman; penjaga ini mencegah lapisan AI
     # opsional ikut terpanggil untuk dokumen ber-NDA.

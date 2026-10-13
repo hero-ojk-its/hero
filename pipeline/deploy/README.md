@@ -360,15 +360,50 @@ lengkap: [`docs/DB_COMPARISON.md`](../docs/DB_COMPARISON.md).
 
 ### Update kode
 
-```bash
-# Dari Mac:
-rsync -avz --exclude='.venv' --exclude='data' --exclude='__pycache__' \
-  "/Users/mirzafathirr/Cool Yeah/TC/Capstone/" "$VPS:/opt/hero/"
+> ⚠ **Baca ini sebelum rsync.** Sumber kebenaran kode adalah **repo**
+> (`hero/pipeline/`), bukan workspace `Capstone/`. Workspace itu masih memuat
+> `hero-tools/` dan `pyproject.toml` dari tata letak lama, dan keduanya sudah
+> **jauh tertinggal**: per 12 Okt 2026 `hero-tools/` tidak punya paket
+> `bridge/` (jembatan ke backend), `harmonisasi/`, maupun `loadtest.py`.
+> Menjalankan rsync dari `Capstone/` akan menimpa VPS dengan kode pra-jembatan
+> dan `hero bridge …` akan hilang dari VPS.
+>
+> Periksa dulu tata letak VPS Anda:
+>
+> ```bash
+> ssh "$VPS" 'ls /opt/hero/hero-tools >/dev/null 2>&1 && echo "TATA LETAK LAMA (hero-tools)" || echo "tata letak repo"'
+> ssh "$VPS" 'sudo -u hero /opt/hero/.venv/bin/hero bridge status >/dev/null 2>&1 && echo "jembatan ADA" || echo "jembatan TIDAK ADA"'
+> ```
 
-# Di VPS:
-sudo -u hero /opt/hero/.venv/bin/pip install -q -e /opt/hero
-sudo systemctl restart hero-pipeline.timer   # opsional, timer tidak perlu direstart kecuali file .timer berubah
+**Update dari repo (yang benar):**
+
+```bash
+# Dari Mac — kirim kode dari repo, config dari workspace, data biarkan di VPS:
+rsync -avz --delete --exclude='__pycache__' --exclude='.pytest_cache' \
+  "/Users/mirzafathirr/Cool Yeah/TC/hero/pipeline/hero/" "$VPS:/opt/hero/hero/"
+rsync -avz \
+  "/Users/mirzafathirr/Cool Yeah/TC/hero/pipeline/pyproject.toml" \
+  "/Users/mirzafathirr/Cool Yeah/TC/hero/pipeline/deploy/" \
+  "$VPS:/opt/hero/"
+
+# Di VPS — pemasangan ulang WAJIB setiap kali dependensi berubah
+# (mis. openpyxl menjadi dependensi inti pada 12 Okt 2026):
+sudo -u hero /opt/hero/.venv/bin/pip install -q -e "/opt/hero[api,vector]"
+sudo -u hero /opt/hero/.venv/bin/hero version
+sudo -u hero /opt/hero/.venv/bin/hero bridge status    # pastikan jembatan ada
+sudo systemctl restart hero-ml hero-bridge-ekstraksi
 ```
+
+Bila VPS masih bertata letak lama (`hero-tools/`), hapus sisa-sisanya setelah
+pindah agar tidak ada dua salinan paket yang saling menimpa:
+
+```bash
+ssh "$VPS" 'sudo rm -rf /opt/hero/hero-tools /opt/hero/hero.egg-info'
+```
+
+`pyproject.toml` di repo memakai `[tool.setuptools.packages.find]` pada folder
+`hero/`, sedangkan yang lama memakai `package-dir = {"hero" = "hero-tools"}` —
+jadi keduanya tidak boleh ada bersamaan.
 
 ### Backup katalog
 

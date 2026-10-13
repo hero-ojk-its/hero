@@ -62,6 +62,23 @@ class MlState:
             self._vs = VectorService(self.settings)
         return self._vs
 
+    def prewarm(self) -> bool:
+        """Muat pustaka LSA dan jalankan satu pencarian, di luar jalur permintaan.
+
+        Tanpa ini kueri pertama setelah restart membayar pemuatan model dan
+        pembukaan indeks (terukur 2,9 s di VPS — nyaris di batas NFR-02 3 detik).
+        Hanya LSA/leksikal: model semantik besar tidak boleh dimuat diam-diam
+        di server kecil, jadi tidak pernah dipanaskan di sini.
+        """
+        try:
+            vs = self.vectors
+            if vs.ready("lsa"):
+                vs.search("pemanasan", "lsa", k=1)
+                return True
+        except Exception:                               # noqa: BLE001 — pemanasan tak boleh menjatuhkan layanan
+            log.exception("pemanasan gagal; kueri pertama akan lebih lambat")
+        return False
+
     @property
     def narrator(self):
         if self._narrator is None:
@@ -127,6 +144,8 @@ def create_app(settings: Settings | None = None, bridge: BridgeSettings | None =
     settings = settings or load_settings()
     bridge = bridge or load_bridge_settings()
     st = MlState(settings, bridge)
+    import threading
+    threading.Thread(target=st.prewarm, daemon=True, name="hero-ml-prewarm").start()
 
     app = FastAPI(title="HERO — Layanan Analisa & Harmonisasi (lapisan data)",
                   version="1.0.0", docs_url="/docs", openapi_url="/openapi.json",

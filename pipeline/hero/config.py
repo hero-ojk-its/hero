@@ -156,6 +156,18 @@ class VectorSettings:
 
     semantic_model: str = "minilm"      # key of SEMANTIC_MODELS
     lsa_dim: int = 256
+    # Batas memori untuk server kecil. Menghitung bigram atas SEMUA potongan
+    # adalah puncak memori `hero vector build`: pada VPS 1,9 GB dengan 26 ribu
+    # pasal ia dimatikan OOM-killer di ±1 GB. Keduanya hanya membatasi
+    # PELATIHAN kosakata LSA; seluruh potongan tetap diindeks. Bawaan `None`
+    # (tanpa batas) menjaga indeks yang sudah ada tetap sama; atur hanya bila
+    # build kehabisan memori. Kata yang tak muncul di sampel tidak terwakili
+    # di LSA (pencarian kata kunci leksikal tetap menemukannya).
+    lsa_fit_sample: int | None = None
+    lsa_max_features: int | None = None
+    # Di atas jumlah potongan ini pencarian memakai sqlite-vec dari disk dan
+    # tidak menahan matriks vektor di RAM. None = bawaan (500 ribu).
+    numpy_max_rows: int | None = None
 
 
 @dataclass

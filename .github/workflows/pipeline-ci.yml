@@ -7,6 +7,11 @@ name: Pipeline CI
 on:
   pull_request:
     paths: ['pipeline/**', '.github/workflows/pipeline-ci.yml']
+  # Juga pada push ke main: riwayat repo ini memuat merge langsung ke main,
+  # dan tanpa pemicu ini lapisan data tidak pernah diperiksa di sana.
+  push:
+    branches: [main]
+    paths: ['pipeline/**', '.github/workflows/pipeline-ci.yml']
   workflow_dispatch:
 
 permissions:
@@ -18,8 +23,48 @@ concurrency:
 
 jobs:
   test:
-    name: Pytest
+    name: Pytest (Python ${{ matrix.python }})
     runs-on: ubuntu-latest
+    # Uji beban di tests/test_loadtest.py meluncurkan server sungguhan;
+    # tanpa batas ini pekerjaan yang menggantung membakar kuota berjam-jam.
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 = batas bawah di pyproject (requires-python), 3.12 = versi rilis.
+        # Keduanya diuji karena lapisan ini dipasang di VPS dengan Python distro.
+        python: ['3.11', '3.12']
+    defaults:
+      run: { working-directory: pipeline }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pipeline/pyproject.toml
+      - name: Tesseract (ind + eng)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-ind
+      - name: Install
+        run: pip install -e ".[api,vector,dev]"
+
+      # Menangkap nama tak terdefinisi & impor yang hilang sebelum sampai ke
+      # server — kelas bug yang pernah terjadi di repo ini (commit 0dc512c).
+      - name: Cek nama tak terdefinisi & galat sintaks
+        run: |
+          pip install ruff
+          ruff check --select E9,F821,F822,F823 hero tests
+
+      - name: Test
+        run: python -m pytest tests -q
+
+  # Lapisan data dipasang di VPS tanpa ekstra opsional. Pekerjaan ini menangkap
+  # dependensi yang dipakai kode inti tetapi tidak dideklarasikan — openpyxl
+  # pernah lolos begitu, dan `hero inventory` gagal hanya di mesin yang bersih.
+  dependensi-inti:
+    name: Pemasangan inti tanpa ekstra
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run: { working-directory: pipeline }
     steps:
@@ -29,9 +74,29 @@ jobs:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: pipeline/pyproject.toml
-      - name: Tesseract (ind + eng)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-ind
-      - name: Install
-        run: pip install -e ".[api,vector,dev]"
-      - name: Test
-        run: python -m pytest tests -q
+      - name: Install hanya dependensi inti
+        run: pip install -e .
+      - name: Perintah inti harus jalan
+        run: |
+          hero version
+          hero --help > /dev/null
+      - name: Jalur yang sering diam-diam butuh ekstra
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import tempfile
+
+          # Ekspor inventaris menulis XLSX pada jalur bawaannya.
+          from hero.kb.inventory_export import write_xlsx
+          with tempfile.TemporaryDirectory() as d:
+              p = write_xlsx(Path(d) / "t.xlsx", ["a", "b"], [[1, 2]])
+              assert p.exists() and p.stat().st_size > 0, "ekspor XLSX gagal"
+
+          # Mode Deterministik tidak boleh menuntut SDK AI untuk dapat diimpor.
+          from hero.analysis.ai import AiNarrator
+          from hero.config import AnalysisSettings
+          st = AiNarrator(AnalysisSettings()).status()
+          assert st["sdk"] is False, "SDK AI seharusnya tidak terpasang di sini"
+          assert st["aktif"] is False, "AI tidak boleh aktif tanpa SDK"
+          print("jalur inti tanpa ekstra: ok")
+          PY

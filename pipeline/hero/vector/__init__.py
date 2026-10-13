@@ -15,7 +15,7 @@ from hero.config import Settings
 from hero.kb import readmodel
 from hero.vector.chunking import chunk_catalog
 from hero.vector.embedders import SEMANTIC_MODELS, LsaEmbedder, SemanticEmbedder, semantic_available
-from hero.vector.store import HAS_SQLITE_VEC, VectorStore
+from hero.vector.store import HAS_SQLITE_VEC, VectorStore, sqlite_vec_ready
 
 
 def vector_paths(settings: Settings) -> dict[str, Path]:
@@ -32,12 +32,22 @@ def build_vectors(settings: Settings, *, embedders: tuple[str, ...] = ("lsa", "s
     with sqlite3.connect(settings.catalog_db) as cat:
         readmodel.sync(cat)
         chunks, chunk_stats = chunk_catalog(cat)
-    store = VectorStore(paths["db"])
+    store = VectorStore(paths["db"], numpy_max_rows=settings.vector.numpy_max_rows)
     store.replace_chunks(chunks)
-    say(f"{len(chunks)} potongan dari {chunk_stats.get('dokumen', 0)} dokumen")
-    report: dict[str, Any] = {"chunking": chunk_stats, "chunk": len(chunks), "indeks": []}
+    n_chunks = len(chunks)
+    say(f"{n_chunks} potongan dari {chunk_stats.get('dokumen', 0)} dokumen")
+    report: dict[str, Any] = {"chunking": chunk_stats, "chunk": n_chunks, "indeks": []}
+    # Teks potongan sudah tersimpan di hero_vectors.db dan ``index()`` membacanya
+    # dari sana per halaman. Menahan daftar ``chunks`` (±2× ukuran teks) selama
+    # pelatihan dan pengindeksan hanya membuang memori pada server kecil.
+    texts = [c.text for c in chunks] if "lsa" in embedders else []
+    del chunks
     if "lsa" in embedders:
-        lsa = LsaEmbedder(dim=settings.vector.lsa_dim).fit([c.text for c in chunks])
+        lsa = LsaEmbedder(dim=settings.vector.lsa_dim,
+                          fit_sample=settings.vector.lsa_fit_sample,
+                          max_features=settings.vector.lsa_max_features,
+                          ).fit(texts)
+        del texts
         lsa.save(paths["lsa"])
         report["indeks"].append(store.index(lsa, use_cache=False))   # vocabulary changes → refit
         say("indeks LSA selesai")
@@ -62,7 +72,8 @@ class VectorService:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.paths = vector_paths(settings)
-        self.store = VectorStore(self.paths["db"]) if self.paths["db"].exists() else None
+        self.store = (VectorStore(self.paths["db"], numpy_max_rows=settings.vector.numpy_max_rows)
+                      if self.paths["db"].exists() else None)
         self._emb: dict[str, Any] = {}
 
     def ready(self, method: str) -> bool:
@@ -91,4 +102,5 @@ class VectorService:
         return self.store.search(q, method=method, k=k, embedder=emb, **kw)
 
 
-__all__ = ["HAS_SQLITE_VEC", "VectorService", "VectorStore", "build_vectors", "vector_paths"]
+__all__ = ["HAS_SQLITE_VEC", "VectorService", "VectorStore", "build_vectors",
+           "sqlite_vec_ready", "vector_paths"]

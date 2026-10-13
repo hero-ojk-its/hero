@@ -21,8 +21,10 @@ a semantic match checkable by a human instead of a black box.
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -39,6 +41,9 @@ except ImportError:   # the store still works — NumPy path only
     sqlite_vec = None
     HAS_SQLITE_VEC = False
 
+log = logging.getLogger(__name__)
+_EXT_OK: bool | None = None
+
 RRF_K = 60
 # Above this many chunks the float32 matrix stops being "small" (~770 MB at
 # 384 dims), and on-disk sqlite-vec search becomes the sensible default.
@@ -52,11 +57,33 @@ def _connect(path: Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    if HAS_SQLITE_VEC:
+    if sqlite_vec_ready():
         conn.enable_load_extension(True)
         sqlite_vec.load(conn)
         conn.enable_load_extension(False)
     return conn
+
+
+def sqlite_vec_ready() -> bool:
+    """Apakah jalur sqlite-vec benar-benar bisa dipakai di interpreter ini."""
+    return HAS_SQLITE_VEC and _can_load_extensions()
+
+
+def _can_load_extensions() -> bool:
+    """Apakah Python ini dibangun dengan dukungan ekstensi SQLite.
+
+    Paket ``sqlite-vec`` boleh terpasang pada interpreter yang dikompilasi
+    tanpa ``enable_load_extension`` (Python sistem macOS, sebagian paket
+    distro). Tanpa pemeriksaan ini seluruh lapisan vektor mati dengan
+    ``AttributeError`` padahal jalur NumPy-nya tidak membutuhkannya sama
+    sekali — dan jalur itulah yang dipakai pada korpus sebesar ini."""
+    global _EXT_OK
+    if _EXT_OK is None:
+        _EXT_OK = hasattr(sqlite3.Connection, "enable_load_extension")
+        if not _EXT_OK:
+            log.info("Python ini tanpa dukungan ekstensi SQLite — sqlite-vec dilewati, "
+                     "pencarian vektor memakai jalur NumPy")
+    return _EXT_OK
 
 
 def _sha(text: str) -> str:
@@ -88,9 +115,15 @@ class Hit:
 
 
 class VectorStore:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, *, numpy_max_rows: int | None = None):
         self.path = Path(path)
-        self.conn = _connect(self.path)
+        # Di atas ambang ini pencarian memakai sqlite-vec dari disk, bukan
+        # matriks NumPy di memori. Bawaan 500 ribu cocok untuk laptop; server
+        # kecil menurunkannya (``vector.numpy_max_rows``) karena matriks 212 ribu
+        # × 256 dimensi memakan 217 MB tetap di proses layanan.
+        self.numpy_max_rows = NUMPY_MAX_ROWS if numpy_max_rows is None else int(numpy_max_rows)
+        self._local = threading.local()
+        self._matrix_lock = threading.Lock()
         self._matrices: dict[str, tuple[np.ndarray, np.ndarray]] = {}
         self.conn.executescript("""
             CREATE TABLE IF NOT EXISTS chunk (
@@ -105,6 +138,17 @@ class VectorStore:
             CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
         """)
 
+    @property
+    def conn(self) -> sqlite3.Connection:
+        """Satu koneksi per utas. Server menjawab permintaan dari kumpulan utas;
+        satu koneksi bersama memunculkan ``InterfaceError`` dan baris rusak pada
+        beban serentak (ditemukan oleh ``hero loadtest``). SQLite mengizinkan
+        banyak pembaca bersamaan, jadi koneksi terpisah juga tidak saling antre."""
+        c = getattr(self._local, "conn", None)
+        if c is None:
+            c = self._local.conn = _connect(self.path)
+        return c
+
     # -- build -----------------------------------------------------------
     def replace_chunks(self, chunks: list[Chunk]) -> None:
         with self.conn:
@@ -116,52 +160,84 @@ class VectorStore:
         self._matrices.clear()
 
     def index(self, embedder, *, use_cache: bool = True, batch: int = 256) -> dict[str, Any]:
-        """Embed every chunk with ``embedder``; reuse cached vectors by text hash."""
+        """Embed every chunk with ``embedder``; reuse cached vectors by text hash.
+
+        Teks dibaca per halaman (``batch`` baris) dan penulisan memakai generator,
+        bukan ``fetchall()`` + daftar tuple. Pada korpus VPS (212 ribu potongan,
+        119 MB teks) versi lama memuncak di ±950 MB hanya untuk indeks — di atas
+        batas 1 GB yang aman dibagi dengan Nextcloud. Yang tetap di memori hanya
+        matriks vektor (N × dim float32) dan hash potongan yang perlu dicache.
+        Hasilnya identik dengan versi lama: urutan ``rowid`` sama, vektor sama.
+        """
         name, dim = embedder.name, embedder.dim
         # Cache key includes the model: vectors from MiniLM must never be
         # reused after switching to e5 (same name "semantic", different space).
         cache_name = f"{name}:{getattr(embedder, 'model_key', '')}"
-        rows = self.conn.execute("SELECT rowid, text FROM chunk ORDER BY rowid").fetchall()
         started = time.perf_counter()
-        vecs = np.zeros((len(rows), dim), dtype=np.float32)
-        todo: list[int] = []
+        n = self.conn.execute("SELECT COUNT(*) FROM chunk").fetchone()[0]
+        vecs = np.zeros((n, dim), dtype=np.float32)
+        rowids = np.zeros(n, dtype=np.int64)
         if use_cache:
             cached = {r["sha"]: r["vec"] for r in self.conn.execute(
                 "SELECT sha, vec FROM emb_cache WHERE name = ?", (cache_name,))}
         else:
             cached = {}
-        for i, r in enumerate(rows):
-            blob = cached.get(_sha(r["text"]))
-            if blob is not None and len(blob) == dim * 4:
-                vecs[i] = np.frombuffer(blob, dtype=np.float32)
-            else:
-                todo.append(i)
-        for s in range(0, len(todo), batch):
-            idx = todo[s:s + batch]
-            passages = [rows[i]["text"] for i in idx]
-            vecs[idx] = (embedder.embed_passages(passages) if hasattr(embedder, "embed_passages")
-                         else embedder.embed(passages))
+        new_cache: list[tuple[str, str, bytes]] = []
+        embedded = 0
+        pos = 0
+        last = -1
+        while pos < n:
+            page = self.conn.execute(
+                "SELECT rowid, text FROM chunk WHERE rowid > ? ORDER BY rowid LIMIT ?",
+                (last, batch)).fetchall()
+            if not page:
+                break
+            todo_idx: list[int] = []
+            todo_txt: list[str] = []
+            todo_sha: list[str] = []
+            for j, r in enumerate(page):
+                i = pos + j
+                rowids[i] = r["rowid"]
+                sha = _sha(r["text"]) if use_cache else ""
+                blob = cached.get(sha) if use_cache else None
+                if blob is not None and len(blob) == dim * 4:
+                    vecs[i] = np.frombuffer(blob, dtype=np.float32)
+                else:
+                    todo_idx.append(i)
+                    todo_txt.append(r["text"])
+                    todo_sha.append(sha)
+            if todo_txt:
+                out = (embedder.embed_passages(todo_txt) if hasattr(embedder, "embed_passages")
+                       else embedder.embed(todo_txt))
+                vecs[todo_idx] = out
+                embedded += len(todo_txt)
+                if use_cache:
+                    new_cache.extend((cache_name, sha, vecs[i].tobytes())
+                                     for sha, i in zip(todo_sha, todo_idx))
+            pos += len(page)
+            last = page[-1]["rowid"]
+        del cached
+        n = pos
         with self.conn:
-            if use_cache and todo:
+            if use_cache and new_cache:
                 self.conn.executemany(
-                    "INSERT OR REPLACE INTO emb_cache (name, sha, vec) VALUES (?, ?, ?)",
-                    [(cache_name, _sha(rows[i]["text"]), vecs[i].tobytes()) for i in todo])
+                    "INSERT OR REPLACE INTO emb_cache (name, sha, vec) VALUES (?, ?, ?)", new_cache)
             self.conn.execute(f"DROP TABLE IF EXISTS emb_{name}")
             self.conn.execute(f"CREATE TABLE emb_{name} (rowid INTEGER PRIMARY KEY, vec BLOB)")
             self.conn.executemany(f"INSERT INTO emb_{name} (rowid, vec) VALUES (?, ?)",
-                                  [(r["rowid"], vecs[i].tobytes()) for i, r in enumerate(rows)])
-            if HAS_SQLITE_VEC:
+                                  ((int(rowids[i]), vecs[i].tobytes()) for i in range(n)))
+            if sqlite_vec_ready():
                 self.conn.execute(f"DROP TABLE IF EXISTS vec_{name}")
                 self.conn.execute(f"CREATE VIRTUAL TABLE vec_{name} USING vec0("
                                   f"embedding float[{dim}] distance_metric=cosine)")
                 self.conn.executemany(f"INSERT INTO vec_{name} (rowid, embedding) VALUES (?, ?)",
-                                      [(r["rowid"], vecs[i].tobytes()) for i, r in enumerate(rows)])
+                                      ((int(rowids[i]), vecs[i].tobytes()) for i in range(n)))
             self.conn.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)", (f"dim_{name}", str(dim)))
             self.conn.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)",
                               (f"model_{name}", getattr(embedder, "model_name", name)))
         self._matrices.pop(name, None)
-        return {"embedder": name, "chunks": len(rows), "baru_diembed": len(todo),
-                "dari_cache": len(rows) - len(todo),
+        return {"embedder": name, "chunks": n, "baru_diembed": embedded,
+                "dari_cache": n - embedded,
                 "detik": round(time.perf_counter() - started, 2)}
 
     # -- stats -----------------------------------------------------------
@@ -172,7 +248,7 @@ class VectorStore:
             "AND name <> 'emb_cache'")]
         return {"chunk": sum(levels.values()), "per_level": levels,
                 "dokumen": self.conn.execute("SELECT COUNT(DISTINCT doc_id) FROM chunk").fetchone()[0],
-                "embedder": emb, "sqlite_vec": HAS_SQLITE_VEC,
+                "embedder": emb, "sqlite_vec": sqlite_vec_ready(),
                 "ukuran_mb": round(self.path.stat().st_size / 1e6, 2) if self.path.exists() else 0}
 
     def has(self, name: str) -> bool:
@@ -187,11 +263,27 @@ class VectorStore:
 
     def _matrix(self, name: str) -> tuple[np.ndarray, np.ndarray]:
         if name not in self._matrices:
-            rows = self.conn.execute(f"SELECT rowid, vec FROM emb_{name} ORDER BY rowid").fetchall()
-            ids = np.array([r[0] for r in rows], dtype=np.int64)
-            mat = np.vstack([np.frombuffer(r[1], dtype=np.float32) for r in rows]) if rows \
-                else np.zeros((0, 1), dtype=np.float32)
-            self._matrices[name] = (ids, mat)
+            with self._matrix_lock:          # satu utas memuat; yang lain menunggu, bukan memuat ulang
+                if name not in self._matrices:
+                    # Diisi baris demi baris ke matriks yang sudah dialokasikan:
+                    # fetchall() + vstack menahan dua salinan sekaligus (±2× ukuran
+                    # matriks) tepat di proses layanan yang batas memorinya ketat.
+                    n = self.conn.execute(f"SELECT COUNT(*) FROM emb_{name}").fetchone()[0]
+                    ids = np.zeros(n, dtype=np.int64)
+                    mat: np.ndarray | None = None
+                    i = 0
+                    for r in self.conn.execute(
+                            f"SELECT rowid, vec FROM emb_{name} ORDER BY rowid"):
+                        v = np.frombuffer(r[1], dtype=np.float32)
+                        if mat is None:
+                            mat = np.zeros((n, len(v)), dtype=np.float32)
+                        if i < n:
+                            ids[i] = r[0]
+                            mat[i] = v
+                        i += 1
+                    if mat is None:
+                        mat = np.zeros((0, 1), dtype=np.float32)
+                    self._matrices[name] = (ids[:i], mat[:i])
         return self._matrices[name]
 
     def knn(self, name: str, qvec: np.ndarray, k: int, *, engine: str = "auto") -> list[tuple[int, float]]:
@@ -203,7 +295,7 @@ class VectorStore:
             # here, so memory wins; sqlite-vec takes over only when the index
             # is too large to keep resident (it reads from disk per query).
             rows = self._row_count(name)
-            engine = "numpy" if rows <= NUMPY_MAX_ROWS or not HAS_SQLITE_VEC else "sqlite-vec"
+            engine = "numpy" if rows <= self.numpy_max_rows or not sqlite_vec_ready() else "sqlite-vec"
         if engine == "sqlite-vec":
             rows = self.conn.execute(
                 f"SELECT rowid, distance FROM vec_{name} WHERE embedding MATCH ? AND k = ? "

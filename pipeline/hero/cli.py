@@ -1325,6 +1325,69 @@ def bench_vector_cmd(
         console.print(f"[yellow]pgvector tidak diukur:[/] {pgv['galat']}")
 
 
+@app.command("loadtest")
+def loadtest_cmd(
+    config: Path = typer.Option("config/sources.yaml", "--config", "-c"),
+    profil: str = typer.Option("api", "--profil", help="api (hero serve) | ml (hero bridge layanan)."),
+    url: Optional[str] = typer.Option(None, "--url",
+                                      help="Uji server yang sudah berjalan. Kosong = luncurkan sendiri."),
+    workers: int = typer.Option(1, "--workers", "-w", help="Jumlah worker uvicorn (server yang diluncurkan)."),
+    level: str = typer.Option("1,2,5,10,25,50,100", "--level", help="Jumlah pengguna serentak, dipisah koma."),
+    durasi: float = typer.Option(10.0, "--durasi", help="Detik per level beban."),
+    pemanasan: float = typer.Option(2.0, "--pemanasan", help="Detik pemanasan per level (tak dihitung)."),
+    ulang: int = typer.Option(30, "--ulang", help="Pengulangan per endpoint pada uji latensi."),
+    slo_ms: float = typer.Option(3000.0, "--slo-ms", help="Batas p95 (NFR-02: 3 detik)."),
+    galat_maks: float = typer.Option(0.01, "--galat-maks", help="Rasio galat maksimum yang dianggap sehat."),
+    think_time: float = typer.Option(5.0, "--think-time",
+                                     help="Jeda antar-aksi pengguna nyata (detik), untuk perkiraan jumlah orang."),
+    berat: bool = typer.Option(False, "--berat", help="Sertakan pencarian semantik (model besar)."),
+    cari_batas: bool = typer.Option(True, "--cari-batas/--tanpa-cari-batas",
+                                    help="Gandakan jumlah pengguna sampai batas sehat terlampaui."),
+    maks_pengguna: int = typer.Option(512, "--maks-pengguna", help="Batas atas pencarian batas."),
+    endpoint: Optional[str] = typer.Option(None, "--endpoint",
+                                           help="Hanya endpoint ini (nama dipisah koma), mis. kb-daftar,dashboard."),
+    markdown: Optional[Path] = typer.Option(Path("docs/PERFORMA_SERVER.md"), "--markdown"),
+    json_out: Optional[Path] = typer.Option(None, "--json"),
+    strict: bool = typer.Option(False, "--strict",
+                                help="Keluar kode 1 bila latensi satu pengguna melewati batas mutu."),
+) -> None:
+    """Ukur latensi per endpoint dan kapasitas server (pengguna serentak, req/detik, RAM/CPU)."""
+    import json as _json
+
+    from hero.loadtest import jalankan, render
+
+    if profil not in ("api", "ml"):
+        raise typer.BadParameter("profil harus api atau ml")
+    try:
+        levels = tuple(sorted({int(x) for x in level.split(",") if x.strip()}))
+    except ValueError as exc:
+        raise typer.BadParameter("--level harus berupa bilangan dipisah koma") from exc
+    rep = jalankan(profil=profil, url=url, config=config, workers=workers, levels=levels,
+                   durasi=durasi, pemanasan=pemanasan, ulang_latensi=ulang, slo_ms=slo_ms,
+                   galat_maks=galat_maks, think_time=think_time, termasuk_berat=berat,
+                   cari_batas=cari_batas, maks_pengguna=maks_pengguna,
+                   hanya=[x.strip() for x in endpoint.split(',') if x.strip()] if endpoint else None,
+                   progress=lambda m: console.print(f"[dim]{m}[/]"))
+    if markdown:
+        markdown.parent.mkdir(parents=True, exist_ok=True)
+        markdown.write_text(render(rep), encoding="utf-8")
+        console.print(f"[green]Laporan ditulis:[/] {markdown}")
+    if json_out:
+        json_out.parent.mkdir(parents=True, exist_ok=True)
+        json_out.write_text(_json.dumps(rep, ensure_ascii=False, indent=2), encoding="utf-8")
+        console.print(f"[green]JSON ditulis:[/] {json_out}")
+    kap = rep["kapasitas"]
+    console.print(f"Pengguna serentak sehat: [bold]{kap['pengguna_serentak_sehat']}[/] · "
+                  f"perkiraan pengguna nyata ≈ [bold]{kap['perkiraan_pengguna_nyata']}[/] · "
+                  f"puncak {kap['rps_puncak']} req/s")
+    if strict:
+        lambat = [n for n, r in rep["latensi_satu_pengguna"].items()
+                  if r["p95"] > slo_ms or r["galat"]]
+        if lambat:
+            console.print(f"[red]Gagal batas mutu:[/] {', '.join(lambat)}")
+            raise typer.Exit(1)
+
+
 @app.command("analisa")
 def analisa_cmd(
     doc_id: Optional[str] = typer.Argument(None, help="ID dokumen (awalan cukup). Kosongkan dengan --semua."),

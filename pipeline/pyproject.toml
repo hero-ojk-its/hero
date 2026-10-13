@@ -18,6 +18,9 @@ dependencies = [
     "tenacity>=8.2",
     "numpy>=1.26",
     "pikepdf>=8.0",
+    # Ekspor inventaris menulis CSV + XLSX + JSON + HTML sekaligus (jalur
+    # bawaan `hero inventory`), jadi ini bukan tambahan opsional.
+    "openpyxl>=3.1",
 ]
 
 [project.optional-dependencies]

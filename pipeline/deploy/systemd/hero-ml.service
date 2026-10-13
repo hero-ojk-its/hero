@@ -17,11 +17,24 @@ Environment=HERO_CONFIG=/opt/hero/config/sources.yaml
 ExecStart=/opt/hero/.venv/bin/hero bridge serve --host 172.17.0.1 --port 8100 --cors https://hero-ojk.vercel.app,https://hero-ojk-its.github.io
 Restart=always
 RestartSec=10
-# Model semantik e5-large memakai ±3 GB saat memuat; dengan minilm <1 GB.
-# Sesuaikan dengan vector.semantic_model di config/sources.yaml.
-MemoryHigh=450M
-MemoryMax=600M
-CPUQuota=50%
+# Batas memori DIUKUR (docs/PERFORMA_SERVER_ML.md dan _VPS.md), dan ada satu pelajaran mahal:
+#
+#   Cache halaman berkas indeks (hero_vectors.db, 705 MB di VPS) DIHITUNG ke cgroup layanan.
+#   Dengan MemoryHigh=550M, kernel terus membuang cache itu dan menukar memori anonim ke swap,
+#   sehingga SETIAP kueri membaca disk: 2,2 s per kueri (memory.events "high" = 838 kali).
+#   Tanpa MemoryHigh: 0,23 s per kueri, kondisi tunak anon ≈ 180 MB + cache ≈ 570 MB.
+#
+# Maka: tidak ada MemoryHigh (batas lunak yang justru menghukum cache). MemoryMax membatasi bila ada
+# kebocoran; cache bisa direklamasi sehingga tidak memicu OOM sebelum anon (≈180 MB) mendekati batas.
+#
+# Skenario (korpus VPS 207 ribu potongan, pencarian dari disk):
+#   A. Deterministik (lexical + LSA)   anon ≈ 180 MB · cache ≈ 570 MB · CPU 1 inti      ← dipakai
+#   B. + semantik e5-large             tambahan ±2 GB — TIDAK muat di VPS 1,9 GB
+#
+# `GET /api/v1/ml/cari` tanpa `metode` (bawaan hybrid) menjawab 503 di VPS karena model semantik tidak
+# ada; frontend wajib mengirim metode=lsa atau metode=lexical.
+MemoryMax=900M
+CPUQuota=100%
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full

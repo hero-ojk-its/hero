@@ -53,6 +53,7 @@ class SyncReport:
     draft: int = 0
     halaman_terisi: int = 0
     halaman_kosong: int = 0
+    halaman_dari_backend: bool = False
     detik: float = 0.0
     galat: list[str] = field(default_factory=list)
 
@@ -62,6 +63,7 @@ class SyncReport:
                 "dilewati_tanpa_pasal": self.dilewati_tanpa_pasal,
                 "halaman_pasal_terisi": self.halaman_terisi,
                 "halaman_pasal_kosong": self.halaman_kosong,
+                "halaman_dari_backend": self.halaman_dari_backend,
                 "detik": round(self.detik, 1), "galat": self.galat[:10]}
 
 
@@ -79,11 +81,24 @@ ORDER BY d.id
 """
 
 ART_SQL = """
-SELECT a.document_id, a.article_number, a.chapter_title, a.content_text, a.order_index, a.level
+SELECT a.document_id, a.article_number, a.chapter_title, a.content_text, a.order_index,
+       a.level{kolom_halaman}
 FROM articles a
 WHERE a.document_id = ANY(%s) AND a.level = 'pasal'
 ORDER BY a.document_id, COALESCE(a.order_index, a.id), a.id
 """
+
+
+def _punya_kolom_halaman(conn) -> bool:
+    """Apakah ``articles.page`` ada di skema backend ini.
+
+    Ditanyakan, bukan diasumsikan: kolomnya baru ada sejak migrasi kontrak
+    pasal Langkah 13, dan menyebut kolom yang belum ada akan menggagalkan
+    seluruh cermin korpus — bukan hanya halamannya."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM information_schema.columns "
+                    "WHERE table_name = 'articles' AND column_name = 'page'")
+        return cur.fetchone() is not None
 
 
 def _iso(value: Any) -> str | None:
@@ -92,6 +107,15 @@ def _iso(value: Any) -> str | None:
     if isinstance(value, datetime):
         return value.date().isoformat()
     return str(value)[:10] or None
+
+
+def _halaman(value) -> int | None:
+    """Halaman 1-indexed dari backend, atau None bila tidak masuk akal."""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return None
+    return n if n >= 1 else None
 
 
 def _record(row: dict[str, Any], doc_id: str,
@@ -181,8 +205,11 @@ def mirror(settings: Settings, *, dsn: str | None = None, limit: int | None = No
             return rep
 
         ids = [d["id"] for d in docs]
+        halaman_dari_backend = _punya_kolom_halaman(conn)
+        rep.halaman_dari_backend = halaman_dari_backend
+        sql = ART_SQL.format(kolom_halaman=", a.page" if halaman_dari_backend else "")
         with conn.cursor() as cur:
-            cur.execute(ART_SQL, (ids,))
+            cur.execute(sql, (ids,))
             acols = [c.name for c in cur.description]
             arts_by_doc: dict[int, list[dict[str, Any]]] = {}
             for r in cur.fetchall():
@@ -220,7 +247,12 @@ def mirror(settings: Settings, *, dsn: str | None = None, limit: int | None = No
                     # Katalog HERO menyimpan nomor polos ("4"), backend menyimpan
                     # labelnya ("Pasal 4"). Buku besar halaman memakai label.
                     num = mapping.pasal_number(label)
-                    pg_no = page_map.get(label) or page_map.get(num)
+                    # Halaman dari backend lebih dipercaya daripada buku besar
+                    # lokal: ia berlaku untuk semua dokumen, termasuk yang
+                    # diekstraksi worker lain atau di mesin lain. Buku besar
+                    # tetap dipakai untuk dokumen yang diekstraksi sebelum
+                    # kolom halaman ada di backend.
+                    pg_no = _halaman(a.get("page")) or page_map.get(label) or page_map.get(num)
                     if pg_no is None:
                         rep.halaman_kosong += 1
                     else:

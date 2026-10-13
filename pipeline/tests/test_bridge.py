@@ -137,9 +137,41 @@ def test_ayat_hanya_dikirim_bila_dinyalakan():
     arts = [_Art("Pasal 2", "Bank wajib…", ayat=[("1", "Bank wajib menerapkan…"),
                                                  ("2", "Bank dilarang…")])]
     assert len(mapping.article_payloads(1, arts)) == 1
-    rows = mapping.article_payloads(1, arts, push_ayat=True)
+    rows = mapping.article_payloads(1, arts, push_ayat=True, with_parent=True)
     assert [r["level"] for r in rows] == ["pasal", "ayat", "ayat"]
     assert all(len(r["article_number"]) <= 50 for r in rows)
+
+
+def test_ayat_menunjuk_order_index_pasal_induknya():
+    """Tanpa induk yang benar, ayat menjadi baris menggantung di backend."""
+    arts = [_Art("Pasal 1", "Ketentuan umum…", ayat=[("1", "Dalam hal ini…")]),
+            _Art("Pasal 2", "Bank wajib…", ayat=[("1", "Wajib a…"), ("2", "Wajib b…")])]
+    rows = mapping.article_payloads(1, arts, push_ayat=True, with_parent=True)
+    assert [r["order_index"] for r in rows] == [0, 1, 2, 3, 4]
+    assert [r.get("parent_order_index") for r in rows] == [None, 0, None, 2, 2]
+    # Induk tiap ayat harus benar-benar ada di kiriman yang sama, kalau tidak
+    # backend menjawab 422.
+    ada = {r["order_index"] for r in rows}
+    assert all(r["parent_order_index"] in ada for r in rows if r.get("parent_order_index") is not None)
+
+
+def test_ayat_tanpa_induk_ditolak_di_tempat_bukan_dikirim_menggantung():
+    arts = [_Art("Pasal 1", "isi", ayat=[("1", "a")])]
+    with pytest.raises(ValueError, match="with_parent"):
+        mapping.article_payloads(1, arts, push_ayat=True, with_parent=False)
+
+
+def test_halaman_dikirim_hanya_bila_backend_punya_kolomnya():
+    arts = [_Art("Pasal 1", "isi pasal satu", page=3)]
+    assert "page" not in mapping.article_payloads(1, arts)[0]
+    assert mapping.article_payloads(1, arts, with_page=True)[0]["page"] == 3
+
+
+def test_halaman_tak_masuk_akal_dikosongkan_bukan_ditebak():
+    """Backend menolak page < 1; halaman yang ditebak menyesatkan pemeriksa."""
+    for buruk in (0, -2, None, "halaman tiga"):
+        rows = mapping.article_payloads(1, [_Art("Pasal 1", "isi", page=buruk)], with_page=True)
+        assert "page" not in rows[0]
 
 
 def test_embedding_ikut_per_pasal():
@@ -395,14 +427,29 @@ def test_sesi_pindai_memakai_konfigurasi_sumber_yang_sudah_ada(tmp_settings):
 # Worker ekstraksi, ujung ke ujung dengan backend tiruan
 # ---------------------------------------------------------------------------
 class FakeBackend:
-    """Backend tiruan yang mencatat apa yang diterimanya."""
+    """Backend tiruan yang mencatat apa yang diterimanya.
 
-    def __init__(self, pdf: Path, status: str = "terindeks"):
+    ``contract="v2"`` meniru backend dengan kontrak pasal Langkah 13 (upsert
+    pada ``(document_id, order_index)``, ``page``, ``parent_order_index``,
+    ``replace_document_ids``). ``contract="v1"`` meniru backend sebelumnya —
+    termasuk sifat yang berbahaya itu: **field yang tidak dikenalnya
+    diabaikan tanpa galat**, sehingga pengirim mengira halamannya sampai.
+    """
+
+    def __init__(self, pdf: Path, status: str = "terindeks", contract: str = "v2"):
         self.pdf = pdf
         self.status = status
+        self.contract = contract
         self.patched: list[dict] = []
         self.articles: list[dict] = []
         self.requeued: list[int] = []
+        self.replace_calls: list[list[int]] = []
+
+    # -- kemampuan -------------------------------------------------------
+    def article_contract(self) -> dict:
+        baru = self.contract == "v2"
+        return {"page": baru, "parent_order_index": baru,
+                "replace_document_ids": baru, "terdeteksi": True}
 
     def download_pdf(self, document_id, dest, **kw):
         Path(dest).parent.mkdir(parents=True, exist_ok=True)
@@ -416,9 +463,35 @@ class FakeBackend:
         return {"status": self.status, "changed_fields": ["title"], "ignored_fields": [],
                 "low_confidence_fields": [], "placement": {"placed": True}}
 
-    def post_articles(self, articles):
-        self.articles.extend(articles)
-        return {"status": "ok", "inserted_count": len(articles)}
+    def post_articles(self, articles, *, replace_document_ids=None):
+        if self.contract != "v2":
+            # Backend lama: field asing dibuang diam-diam, tidak ada upsert,
+            # dan jawabannya tidak punya updated_count/deleted_count.
+            self.articles.extend({k: v for k, v in a.items()
+                                  if k not in ("page", "parent_order_index")}
+                                 for a in articles)
+            return {"status": "ok", "inserted_count": len(articles), "message": "ok"}
+
+        deleted = 0
+        if replace_document_ids:
+            self.replace_calls.append(list(replace_document_ids))
+            sisa = [a for a in self.articles if a["document_id"] not in set(replace_document_ids)]
+            deleted = len(self.articles) - len(sisa)
+            self.articles = sisa
+        inserted = updated = 0
+        for a in articles:
+            kunci = (a["document_id"], a.get("order_index"))
+            ada = next((x for x in self.articles
+                        if (x["document_id"], x.get("order_index")) == kunci), None)
+            if ada is not None and kunci[1] is not None:
+                ada.update({k: v for k, v in a.items()
+                            if k != "embedding" or v is not None})
+                updated += 1
+            else:
+                self.articles.append(dict(a))
+                inserted += 1
+        return {"status": "ok", "inserted_count": inserted, "updated_count": updated,
+                "deleted_count": deleted, "message": "ok"}
 
     def requeue(self, document_id):
         self.requeued.append(document_id)
@@ -505,3 +578,413 @@ def test_url_dengan_sektor_eksplisit_tidak_mewarisi_matriks_penuh(tmp_settings):
     luas = site_for("https://jdih.ojk.go.id/Web/ViewPeraturan/Index",
                     tmp_settings, depth=1, max_pages=5, max_candidates=20)
     assert luas.sektor == ["01", "02", "03"] and luas.jenis_peraturan == ["06", "07"]
+
+
+# ---------------------------------------------------------------------------
+# Kontrak pasal Langkah 13: deteksi kemampuan backend
+#
+# Bahayanya satu arah dan senyap: backend lama **mengabaikan** field yang tidak
+# dikenalnya tanpa galat. Mengirim `replace_document_ids` ke sana tidak
+# menghapus apa pun, sehingga kiriman berikutnya menggandakan pasal — dan
+# pasal ganda langsung merusak unit pembanding harmonisasi.
+# ---------------------------------------------------------------------------
+_OPENAPI_V2 = {"components": {"schemas": {
+    "ArticleChunkIn": {"properties": {"document_id": {}, "page": {}, "parent_order_index": {}}},
+    "BulkArticleIn": {"properties": {"articles": {}, "replace_document_ids": {}}}}}}
+_OPENAPI_V1 = {"components": {"schemas": {
+    "ArticleChunkIn": {"properties": {"document_id": {}, "order_index": {}}},
+    "BulkArticleIn": {"properties": {"articles": {}}}}}}
+
+
+def test_kontrak_pasal_terbaca_dari_openapi():
+    c, _ = _client([_Resp(200, _OPENAPI_V2)])
+    k = c.article_contract()
+    assert k["page"] and k["parent_order_index"] and k["replace_document_ids"]
+    assert k["terdeteksi"] and k["sumber"] == "openapi"
+
+
+def test_backend_lama_terbaca_sebagai_kontrak_lama():
+    c, _ = _client([_Resp(200, _OPENAPI_V1)])
+    k = c.article_contract()
+    assert not any(k[f] for f in ("page", "parent_order_index", "replace_document_ids"))
+
+
+def test_openapi_dimatikan_berarti_jalur_aman_bukan_asumsi_optimis():
+    """Backend produksi boleh mematikan /openapi.json. Yang tidak diketahui
+    harus diperlakukan sebagai 'belum punya', bukan 'mungkin punya'."""
+    c, _ = _client([_Resp(404, {"detail": "not found"})])
+    k = c.article_contract()
+    assert not k["replace_document_ids"] and k["terdeteksi"] is False
+
+
+def test_kontrak_hanya_ditanyakan_sekali():
+    c, s = _client([_Resp(200, _OPENAPI_V2)])
+    c.article_contract()
+    c.article_contract()
+    assert len(s.calls) == 1
+
+
+def test_bentuk_jawaban_memperbaiki_tebakan_yang_terlalu_hati_hati():
+    """Tanpa OpenAPI kita menebak 'lama'. Jawaban yang membawa updated_count /
+    deleted_count hanya ada pada kontrak Langkah 13, jadi itu bukti cukup."""
+    c, _ = _client([_Resp(404, {"detail": "x"}),
+                    _Resp(200, {"status": "ok", "inserted_count": 2,
+                                "updated_count": 0, "deleted_count": 0})])
+    assert c.article_contract()["replace_document_ids"] is False
+    c.post_articles([{"document_id": 1, "order_index": 0}])
+    k = c.article_contract()
+    assert k["replace_document_ids"] and k["sumber"] == "jawaban backend"
+
+
+def test_jawaban_lama_tidak_menurunkan_kontrak_yang_sudah_pasti():
+    """Proksi yang memangkas field tidak boleh membuat satu dokumen dikirim
+    dengan dua aturan berbeda di tengah jalan."""
+    c, _ = _client([_Resp(200, _OPENAPI_V2),
+                    _Resp(200, {"status": "ok", "inserted_count": 1})])
+    assert c.article_contract()["replace_document_ids"]
+    c.post_articles([{"document_id": 1, "order_index": 0}])
+    assert c.article_contract()["replace_document_ids"]
+
+
+def test_kontrak_dapat_dipaksa_lewat_konfigurasi():
+    """Untuk backend yang mematikan dokumentasi dan tidak boleh dicoba-coba."""
+    from hero.bridge.client import BackendClient
+
+    s = _Session([])
+    c = BackendClient(BridgeSettings(base_url="http://b", api_key="k",
+                                     article_contract="v2"), session=s)
+    assert c.article_contract()["replace_document_ids"]
+    assert not s.calls, "pemaksaan tidak boleh memanggil backend"
+
+
+def test_replace_hanya_dikirim_bila_diminta():
+    c, s = _client([_Resp(200, {"status": "ok", "inserted_count": 1, "updated_count": 0}),
+                    _Resp(200, {"status": "ok", "inserted_count": 1, "updated_count": 0})])
+    c.post_articles([{"document_id": 3, "order_index": 0}])
+    assert "replace_document_ids" not in s.calls[0][2]["json"]
+    c.post_articles([{"document_id": 3, "order_index": 0}], replace_document_ids=[3])
+    assert s.calls[1][2]["json"]["replace_document_ids"] == [3]
+
+
+# ---------------------------------------------------------------------------
+# Worker ekstraksi terhadap kedua versi backend
+# ---------------------------------------------------------------------------
+def test_worker_mengirim_halaman_dan_ganti_bersih_ke_backend_baru(
+        tmp_settings, tmp_path, regulation_pdf):
+    pdf = regulation_pdf(tmp_path / "pojk.pdf", nomor=11, tahun=2026)
+    be = FakeBackend(pdf, contract="v2")
+    w, st = _worker(tmp_settings, be, tmp_path)
+    out = w.process_one({"document_id": 42, "file_hash": "h1", "attempt": 1,
+                         "original_filename": "pojk.pdf"})
+    assert out.status == "terindeks" and out.articles == 3
+    assert be.replace_calls == [[42]], "batch pertama harus membersihkan pasal lama"
+    assert all(a.get("page") for a in be.articles), "halaman harus ikut terkirim"
+    st.close()
+
+
+def test_worker_tidak_mengirim_ganti_bersih_ke_backend_lama(
+        tmp_settings, tmp_path, regulation_pdf):
+    """Pada backend lama field itu diabaikan diam-diam, jadi mengirimnya hanya
+    menciptakan rasa aman palsu — penjaga sebenarnya adalah buku besar lokal."""
+    pdf = regulation_pdf(tmp_path / "pojk.pdf")
+    be = FakeBackend(pdf, contract="v1")
+    w, st = _worker(tmp_settings, be, tmp_path)
+    out = w.process_one({"document_id": 7, "file_hash": "h", "attempt": 1})
+    assert out.status == "terindeks" and out.articles == 3
+    assert be.replace_calls == []
+    assert all("page" not in a for a in be.articles)
+    st.close()
+
+
+def test_ayat_tidak_dikirim_ke_backend_yang_belum_punya_induk(
+        tmp_settings, tmp_path, regulation_pdf):
+    """Diminta push_ayat, tetapi backend lama akan menyimpannya menggantung."""
+    pdf = regulation_pdf(tmp_path / "pojk.pdf")
+    be = FakeBackend(pdf, contract="v1")
+    w, st = _worker(tmp_settings, be, tmp_path, push_ayat=True)
+    out = w.process_one({"document_id": 8, "file_hash": "h", "attempt": 1})
+    assert out.status == "terindeks"
+    assert {a["level"] for a in be.articles} == {"pasal"}
+    st.close()
+
+
+def test_ekstraksi_ulang_berkas_berubah_membuang_pasal_lama(
+        tmp_settings, tmp_path, regulation_pdf):
+    """Berkas diganti dengan yang pasalnya lebih sedikit: sisa pasal lama
+    tidak boleh tertinggal sebagai unit pembanding hantu."""
+    besar = regulation_pdf(tmp_path / "besar.pdf", nomor=11, tahun=2026)
+    be = FakeBackend(besar, contract="v2")
+    w, st = _worker(tmp_settings, be, tmp_path)
+    w.process_one({"document_id": 55, "file_hash": "lama", "attempt": 1})
+    semula = len(be.articles)
+    assert semula == 3
+
+    # Dokumen yang sama, berkas baru (hash berbeda) dengan satu pasal saja.
+    be.articles.append({"document_id": 55, "order_index": 99, "level": "pasal",
+                        "article_number": "Pasal 99", "content_text": "sisa lama"})
+    be.pdf = regulation_pdf(tmp_path / "kecil.pdf", nomor=12, tahun=2026)
+    w.process_one({"document_id": 55, "file_hash": "baru", "attempt": 1})
+    assert all(a["order_index"] != 99 for a in be.articles), "pasal hantu masih tertinggal"
+    assert be.replace_calls == [[55], [55]]
+    st.close()
+
+
+def test_ganti_bersih_tidak_menghapus_batch_sebelumnya(tmp_settings, tmp_path, regulation_pdf):
+    """Regresi: replace_document_ids pada SETIAP batch akan menghapus hasil
+    batch sebelumnya, menyisakan ≤ satu batch terakhir saja."""
+    pdf = regulation_pdf(tmp_path / "pojk.pdf")
+    be = FakeBackend(pdf, contract="v2")
+    w, st = _worker(tmp_settings, be, tmp_path, batch_articles=1)   # 3 pasal → 3 batch
+    out = w.process_one({"document_id": 61, "file_hash": "h", "attempt": 1})
+    assert len(be.articles) == 3, "batch berikutnya menghapus hasil batch sebelumnya"
+    assert out.articles == 3
+    assert be.replace_calls == [[61]], "ganti-bersih hanya pada batch pertama"
+    st.close()
+
+
+def test_pasal_yang_diperbarui_tetap_terhitung(tmp_settings, tmp_path, regulation_pdf):
+    """Upsert melaporkan kiriman ulang sebagai updated_count. Menghitung
+    inserted_count saja membuat dokumen yang lengkap terlapor '0 pasal'."""
+    pdf = regulation_pdf(tmp_path / "pojk.pdf")
+    be = FakeBackend(pdf, contract="v2")
+    w, st = _worker(tmp_settings, be, tmp_path)
+    w.process_one({"document_id": 71, "file_hash": "h1", "attempt": 1})
+    st.close()
+
+    # Buku besar baru = worker lain yang mengerjakan dokumen yang sama.
+    w2, st2 = _worker(tmp_settings, be, tmp_path / "lain")
+    out = w2.process_one({"document_id": 71, "file_hash": "h1", "attempt": 1})
+    assert out.articles == 3, "pasal yang diperbarui tidak terhitung"
+    assert len(be.articles) == 3, "upsert tidak boleh menggandakan"
+    st2.close()
+
+
+def test_penjaga_kiriman_ulang_memakai_hash_milik_pasal_bukan_percobaan_sekarang(tmp_path):
+    """Regresi: ``begin_extraction`` menimpa ``file_hash`` di awal percobaan.
+    Bila penjaga membandingkan kolom itu, ia membandingkan hash baru dengan
+    dirinya sendiri — berkas yang diganti tidak pernah diekstraksi ulang."""
+    st = BridgeState(tmp_path / "bridge.db")
+    st.begin_extraction(3, file_hash="lama", attempt=1)
+    st.finish_extraction(3, status="selesai", articles=12, articles_hash="lama")
+    assert st.articles_already_sent(3, "lama") == 12          # kiriman ulang: ditahan
+
+    st.begin_extraction(3, file_hash="baru", attempt=2)       # berkas diganti
+    assert st.articles_already_sent(3, "baru") == 0, "pasal lama harus digantikan"
+    st.close()
+
+
+def test_baris_buku_besar_lama_tanpa_articles_hash_tetap_terbaca(tmp_path):
+    """Buku besar yang sudah ada di VPS tidak punya kolom itu; migrasi aditif
+    tidak boleh membuat semua dokumennya terkirim ulang."""
+    st = BridgeState(tmp_path / "bridge.db")
+    st.begin_extraction(4, file_hash="h", attempt=1)
+    st.conn.execute("UPDATE extraction SET articles = 5, articles_hash = NULL "
+                    "WHERE document_id = 4")
+    st.conn.commit()
+    assert st.articles_already_sent(4, "h") == 5
+    st.close()
+
+
+# ---------------------------------------------------------------------------
+# Cermin korpus: halaman pasal
+# ---------------------------------------------------------------------------
+class _Cur:
+    def __init__(self, hasil):
+        self.hasil = hasil
+        self.sql = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *e):
+        return False
+
+    def execute(self, sql, params=None):
+        self.sql = sql
+
+    def fetchone(self):
+        return self.hasil
+
+
+class _Conn:
+    def __init__(self, punya_page):
+        self.punya_page = punya_page
+        self.terakhir = None
+
+    def cursor(self):
+        self.terakhir = _Cur((1,) if self.punya_page else None)
+        return self.terakhir
+
+
+def test_kolom_halaman_ditanyakan_bukan_diasumsikan():
+    """Menyebut ``a.page`` pada backend yang belum dimigrasi akan menggagalkan
+    seluruh cermin korpus, bukan hanya halamannya."""
+    from hero.bridge.sync import _punya_kolom_halaman
+
+    assert _punya_kolom_halaman(_Conn(True)) is True
+    assert _punya_kolom_halaman(_Conn(False)) is False
+
+
+def test_sql_pasal_hanya_menyebut_halaman_bila_kolomnya_ada():
+    from hero.bridge.sync import ART_SQL
+
+    assert "a.page" in ART_SQL.format(kolom_halaman=", a.page")
+    assert "a.page" not in ART_SQL.format(kolom_halaman="")
+
+
+def test_halaman_backend_disaring_sama_ketatnya():
+    """Halaman yang ditebak mengirim pemeriksa ke halaman yang salah."""
+    from hero.bridge.sync import _halaman
+
+    assert _halaman(3) == 3
+    assert _halaman("7") == 7
+    for buruk in (0, -1, None, "", "hal 3"):
+        assert _halaman(buruk) is None
+
+
+# ---------------------------------------------------------------------------
+# Layanan analisa: pemanasan
+# ---------------------------------------------------------------------------
+def test_pemanasan_tidak_menjatuhkan_layanan_tanpa_indeks(tmp_settings, tmp_path):
+    """Server baru tanpa indeks vektor harus tetap naik; pemanasan hanya gagal diam-diam."""
+    from hero.bridge.ml_api import MlState
+
+    ml = MlState(tmp_settings, BridgeSettings(embedder="none"))
+    assert ml.prewarm() is False
+
+
+def test_pemanasan_hanya_menyentuh_lsa_tidak_memuat_model_semantik(tmp_settings):
+    from hero.bridge.ml_api import MlState
+
+    dipanggil = []
+
+    class _VS:
+        def ready(self, m):
+            dipanggil.append(("ready", m))
+            return m == "lsa"
+
+        def search(self, q, metode, k=10):
+            dipanggil.append(("search", metode))
+            return []
+
+    ml = MlState(tmp_settings, BridgeSettings(embedder="none"))
+    ml._vs = _VS()
+    assert ml.prewarm() is True
+    assert ("search", "lsa") in dipanggil
+    assert not any(m in ("semantic", "hybrid") for _, m in dipanggil), \
+        "pemanasan tidak boleh menyentuh model semantik di server kecil"
+
+
+def test_pemanasan_yang_gagal_dilaporkan_bukan_meledak(tmp_settings):
+    from hero.bridge.ml_api import MlState
+
+    class _VS:
+        def ready(self, m):
+            return True
+
+        def search(self, *a, **k):
+            raise RuntimeError("indeks rusak")
+
+    ml = MlState(tmp_settings, BridgeSettings(embedder="none"))
+    ml._vs = _VS()
+    assert ml.prewarm() is False
+
+
+# ---------------------------------------------------------------------------
+# Metadata yang melampaui batas kolom backend (insiden VPS 13 Okt 2026)
+#
+# Lembar ringkasan SEOJK satu halaman: judul terbaca 298 karakter (potongan butir
+# isi) dan nomor terbaca nomor peraturan LAIN yang disebut sebagai dicabut. PATCH
+# menjawab 200, lalu commit penempatan meledak di varchar(255); dokumen tetap
+# 'diproses' dan diklaim ulang tanpa akhir.
+# ---------------------------------------------------------------------------
+class _MdKop:
+    def __init__(self, subject, number="31/SEOJK.03/2025", doc_type="SEOJK", title=None, issued=None):
+        self.subject, self.number, self.doc_type = subject, number, doc_type
+        self.title = title or subject
+        self.issued_date = issued
+
+
+def test_judul_dipotong_ke_batas_kolom_backend_di_batas_kata():
+    md = _MdKop("Pelaporan Bank Umum " + "butir isi yang bukan judul " * 30)
+    assert len(md.subject) > 255
+    p = mapping.extraction_payload(md, "teks", send_full_text=False)
+    assert len(p["title"]) <= 255
+    assert p["title"].endswith("…") and not p["title"][:-1].endswith(" ")
+    assert p["title"].startswith("Pelaporan Bank Umum")
+
+
+def test_semua_kolom_string_dibatasi_sesuai_skema_backend():
+    md = _MdKop("x " * 400, number="N" * 300, doc_type="J" * 300)
+    p = mapping.extraction_payload(md, "teks", bidang="B" * 400, engine="E" * 300, send_full_text=False)
+    for kolom, batas in mapping.BATAS_KOLOM.items():
+        assert len(p[kolom] or "") <= batas, kolom
+
+
+def test_judul_normal_tidak_diubah_sama_sekali():
+    md = _MdKop("PELAPORAN BANK UMUM KONVENSIONAL MELALUI SISTEM PELAPORAN")
+    p = mapping.extraction_payload(md, "teks", send_full_text=False)
+    assert p["title"] == "PELAPORAN BANK UMUM KONVENSIONAL MELALUI SISTEM PELAPORAN"
+
+
+def test_kop_gagal_dibaca_menurunkan_keyakinan_agar_masuk_antrean_koreksi():
+    """Ambang backend 0,7. Tanpa ini nomor yang salah lolos sebagai 'terindeks'."""
+    rusak = _MdKop("kalimat isi " * 30)
+    conf = mapping.extraction_payload(rusak, "teks", send_full_text=False)["confidence"]
+    assert mapping.header_gagal_dibaca(rusak)
+    assert conf and all(v < 0.7 for v in conf.values()), conf
+
+    sehat = _MdKop("PELAPORAN BANK UMUM KONVENSIONAL")
+    conf2 = mapping.extraction_payload(sehat, "teks", send_full_text=False)["confidence"]
+    assert not mapping.header_gagal_dibaca(sehat)
+    assert conf2["title"] >= 0.7 and conf2["regulation_number"] >= 0.7
+
+
+def test_fit_tidak_memotong_kata_dan_menjaga_panjang_total():
+    assert mapping._fit("abc def", 20) == "abc def"
+    assert mapping._fit("", 5) is None and mapping._fit(None, 5) is None
+    hasil = mapping._fit("kata " * 100, 50)
+    assert len(hasil) <= 50 and hasil.endswith("…")
+    assert mapping._fit("satu_kata_sangat_panjang_tanpa_spasi", 12) == "satu_kata_s…"
+
+
+def test_status_tetap_diproses_dilaporkan_bukan_dianggap_sukses_diam_diam(
+        tmp_settings, tmp_path, regulation_pdf, caplog):
+    import logging
+
+    pdf = regulation_pdf(tmp_path / "pojk.pdf")
+    be = FakeBackend(pdf, status="diproses")        # PATCH 200, tetapi tidak pernah final
+    w, st = _worker(tmp_settings, be, tmp_path)
+    with caplog.at_level(logging.WARNING, logger="hero.bridge.extract"):
+        out = w.process_one({"document_id": 9, "file_hash": "h", "attempt": 1})
+    assert "backend belum menuntaskan" in out.detail
+    assert any("status tetap 'diproses'" in r.message for r in caplog.records)
+    st.close()
+
+
+# ---------------------------------------------------------------------------
+# Byte NUL (insiden VPS 13 Okt: dokumen 137 'PostgreSQL text fields cannot contain NUL')
+# ---------------------------------------------------------------------------
+def test_byte_nul_dibuang_dari_teks_penuh_judul_dan_pasal():
+    nul = "\x00"
+    md = _MdKop("PELAPORAN" + nul + " BANK")
+    p = mapping.extraction_payload(md, "isi" + nul + "teks" + nul, send_full_text=True)
+    assert nul not in p["full_text"] and p["full_text"] == "isiteks"
+    assert nul not in p["title"] and p["title"] == "PELAPORAN BANK"
+
+    rows = mapping.article_payloads(
+        1, [_Art("Pasal 1", "Bank" + nul + " wajib", bab="BAB" + nul + " I",
+                 ayat=[("1", "ayat" + nul + " satu")])],
+        push_ayat=True, with_parent=True)
+    for r in rows:
+        for k, v in r.items():
+            if isinstance(v, str):
+                assert nul not in v, (k, v)
+    assert rows[0]["content_text"] == "Bank wajib"
+
+
+def test_karakter_kontrol_lain_tidak_diubah_hanya_nul():
+    """PostgreSQL hanya menolak NUL; menghapus sisanya akan mengubah teks tanpa alasan."""
+    assert mapping.bersihkan_teks("a\x0cb\tc\nd") == "a\x0cb\tc\nd"
+    assert mapping.bersihkan_teks("\x00\x00") == ""
+    assert mapping.bersihkan_teks(None) == "" and mapping.bersihkan_teks("") == ""

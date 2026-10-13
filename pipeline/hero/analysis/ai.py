@@ -174,6 +174,27 @@ def credentials_hint() -> str | None:
     return None
 
 
+class _TidakPernahTerjadi(Exception):
+    """Penampung ``except`` saat SDK tidak terpasang: tidak ada yang melemparnya."""
+
+
+def _sdk_errors() -> dict[str, type[BaseException] | tuple[type[BaseException], ...]]:
+    """Kelas galat SDK bila ada; penampung yang tidak pernah terpicu bila tidak.
+
+    Tanpa SDK, galat apa pun dari klien yang disuntikkan akan naik ke pemanggil
+    apa adanya — itu memang yang benar: kita tidak tahu artinya, jadi jangan
+    menyamarkannya sebagai "layanan AI tidak tersedia"."""
+    try:
+        import anthropic
+    except ImportError:
+        return dict.fromkeys(("auth", "izin", "laju", "status", "koneksi"), _TidakPernahTerjadi)
+    return {"auth": anthropic.AuthenticationError,
+            "izin": anthropic.PermissionDeniedError,
+            "laju": anthropic.RateLimitError,
+            "status": anthropic.APIStatusError,
+            "koneksi": anthropic.APIConnectionError}
+
+
 class AiNarrator:
     def __init__(self, settings: AnalysisSettings, client: Any | None = None):
         self.settings = settings
@@ -238,8 +259,12 @@ class AiNarrator:
         return result
 
     def _call(self, client, a: AnalysisV2, facts: list[dict[str, Any]]) -> AiResult:
-        import anthropic
-
+        # Kelas galat SDK diambil lewat ``_sdk_errors`` dan bukan lewat
+        # ``import anthropic`` di sini: klien boleh disuntikkan (uji, atau
+        # gateway lain), dan menuntut SDK hanya untuk membaca nama galatnya
+        # akan menjatuhkan jalur yang justru dirancang untuk tetap jalan tanpa
+        # layanan AI (NFR-04).
+        err = _sdk_errors()
         s = self.settings
         user = ("FAKTA (JSON):\n" + json.dumps(facts, ensure_ascii=False, indent=1)
                 + "\n\nTulis ringkasan dan poin_kunci sesuai aturan.")
@@ -254,15 +279,15 @@ class AiNarrator:
                 output_config={"effort": s.ai_effort,
                                "format": {"type": "json_schema", "schema": OUTPUT_SCHEMA}},
             )
-        except anthropic.AuthenticationError:
+        except err["auth"]:
             return AiResult("deterministik", "Kredensial Claude tidak valid atau belum diatur")
-        except anthropic.PermissionDeniedError:
+        except err["izin"]:
             return AiResult("deterministik", "Kredensial tidak memiliki izin untuk model ini")
-        except anthropic.RateLimitError:
+        except err["laju"]:
             return AiResult("deterministik", "Batas laju API tercapai — coba lagi nanti")
-        except anthropic.APIStatusError as exc:
-            return AiResult("deterministik", f"Galat API {exc.status_code}")
-        except anthropic.APIConnectionError:
+        except err["status"] as exc:
+            return AiResult("deterministik", f"Galat API {getattr(exc, 'status_code', '?')}")
+        except err["koneksi"]:
             return AiResult("deterministik", "Tidak dapat terhubung ke layanan AI")
 
         usage = {k: getattr(response.usage, k, None) for k in

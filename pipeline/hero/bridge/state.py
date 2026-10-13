@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -46,12 +47,13 @@ CREATE TABLE IF NOT EXISTS scan (
     started_at    TEXT,
     finished_at   TEXT
 );
--- Halaman tiap pasal, per dokumen backend. Tabel ``articles`` backend tidak
--- punya kolom halaman (lihat docs/INTEGRASI_BACKEND.md §Celah kontrak),
--- sedangkan setiap temuan harmonisasi wajib menyebut pasal + HALAMAN + tautan
--- PDF agar bisa divalidasi manusia. Worker ekstraksi sudah memegang nomor
--- halaman tiap pasal saat memparsing, jadi dicatat di sini — bukan ditebak
--- ulang belakangan, dan bukan dikarang.
+-- Halaman tiap pasal, per dokumen backend. Sejak kontrak pasal Langkah 13
+-- backend punya kolom ``articles.page`` sendiri dan itulah sumber utamanya
+-- (lihat docs/INTEGRASI_BACKEND.md §7a). Tabel ini tetap ada karena dokumen
+-- yang diekstraksi SEBELUM kolom itu ada hanya punya halamannya di sini, dan
+-- setiap temuan harmonisasi wajib menyebut pasal + HALAMAN + tautan PDF agar
+-- bisa divalidasi manusia. Cermin korpus membaca backend lebih dulu, lalu
+-- jatuh ke tabel ini — bukan menebak, dan bukan mengarang.
 CREATE TABLE IF NOT EXISTS article_page (
     document_id    INTEGER NOT NULL,
     article_number TEXT NOT NULL,
@@ -98,16 +100,31 @@ class BridgeState:
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(str(self.path), check_same_thread=False)
-        self.conn.row_factory = sqlite3.Row
+        self._local = threading.local()
+        self._semua: list[sqlite3.Connection] = []
+        self._daftar_lock = threading.Lock()
         self.conn.executescript(SCHEMA)
         self._migrate()
+
+    @property
+    def conn(self) -> sqlite3.Connection:
+        """Satu koneksi per utas. Layanan analisa menjawab dari kumpulan utas; satu
+        koneksi bersama menghasilkan ``InterfaceError`` pada beban serentak (ditemukan
+        oleh ``hero loadtest --profil ml``). ``timeout`` menunggu penulis alih-alih gagal."""
+        c = getattr(self._local, "conn", None)
+        if c is None:
+            c = sqlite3.connect(str(self.path), timeout=30, check_same_thread=False)
+            c.row_factory = sqlite3.Row
+            self._local.conn = c
+            with self._daftar_lock:
+                self._semua.append(c)
+        return c
 
     def _migrate(self) -> None:
         """Aditif & idempoten: kolom baru ditambah, yang ada tidak pernah diubah."""
         for table, cols in (
             ("extraction", {"backend_status": "TEXT", "vectors": "INTEGER DEFAULT 0",
-                            "embedder": "TEXT"}),
+                            "embedder": "TEXT", "articles_hash": "TEXT"}),
             ("scan", {"pages_visited": "INTEGER DEFAULT 0"}),
         ):
             have = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
@@ -118,15 +135,27 @@ class BridgeState:
 
     # -- ekstraksi -------------------------------------------------------
     def articles_already_sent(self, document_id: int, file_hash: str | None) -> int:
-        """Berapa pasal yang sudah pernah dikirim untuk berkas ini (0 = belum)."""
+        """Berapa pasal yang sudah pernah dikirim **untuk berkas ini** (0 = belum).
+
+        Pembandingnya ``articles_hash``: hash berkas pada saat pasal dikirim,
+        bukan ``file_hash`` yang sudah ditimpa oleh ``begin_extraction`` di
+        awal percobaan ini. Memakai ``file_hash`` membuat perbandingannya
+        selalu sama dengan dirinya sendiri, sehingga berkas yang diganti tidak
+        pernah diekstraksi ulang — pasal lama bertahan sebagai unit pembanding
+        yang tidak lagi mewakili isinya.
+
+        Baris lama (sebelum kolom ``articles_hash`` ada) tidak punya nilai itu;
+        untuk baris tersebut ``file_hash`` dipakai sebagai perkiraan terbaik.
+        """
         row = self.conn.execute(
-            "SELECT articles, file_hash FROM extraction WHERE document_id = ?",
+            "SELECT articles, file_hash, articles_hash FROM extraction WHERE document_id = ?",
             (int(document_id),)).fetchone()
         if not row or not row["articles"]:
             return 0
+        milik = row["articles_hash"] or row["file_hash"]
         # Berkas diganti (hash beda) → pasal lama tidak lagi mewakili isinya;
         # pengiriman ulang adalah hal yang benar, dan dicatat di laporan.
-        if file_hash and row["file_hash"] and row["file_hash"] != file_hash:
+        if file_hash and milik and milik != file_hash:
             return 0
         return int(row["articles"])
 
@@ -141,11 +170,13 @@ class BridgeState:
 
     def finish_extraction(self, document_id: int, *, status: str, backend_status: str | None = None,
                           articles: int | None = None, vectors: int | None = None,
-                          embedder: str | None = None, error: str | None = None) -> None:
+                          embedder: str | None = None, error: str | None = None,
+                          articles_hash: str | None = None) -> None:
         sets = ["status = ?", "finished_at = ?"]
         vals: list[Any] = [status, now()]
         for col, val in (("backend_status", backend_status), ("articles", articles),
-                         ("vectors", vectors), ("embedder", embedder), ("error", error)):
+                         ("vectors", vectors), ("embedder", embedder), ("error", error),
+                         ("articles_hash", articles_hash)):
             if val is not None:
                 sets.append(f"{col} = ?")
                 vals.append(val)
@@ -269,7 +300,14 @@ class BridgeState:
                 "peristiwa_terakhir": [dict(r) for r in last]}
 
     def close(self) -> None:
-        self.conn.close()
+        with self._daftar_lock:
+            semua, self._semua = self._semua, []
+        for c in semua:
+            try:
+                c.close()
+            except sqlite3.Error:
+                pass
+        self._local = threading.local()
 
 
 def default_path(settings) -> Path:

@@ -269,7 +269,7 @@ kolom dengan model lewat migrasi aditif).
 **Satu-satunya jalur tulis ke Postgres** adalah `hero bridge vektor-isi`
 (`UPDATE articles SET embedding`), untuk pasal yang masuk sebelum jembatan ada
 atau saat ganti model. Default-nya uji coba; `--apply` baru menulis.
-`POST /internal/articles` tidak bisa dipakai untuk ini karena selalu INSERT.
+`POST /internal/articles` bisa dipakai untuk ini sejak kontrak Langkah 13 (upsert mempertahankan embedding lama bila yang dikirim `null`), tetapi `vektor-isi` tetap lebih murah: ia menulis kolom vektor saja, tanpa mengirim ulang teks pasal.
 
 **Ganti model = isi ulang semuanya.** Vektor dari ruang yang berbeda tidak
 bisa dibandingkan satu sama lain. Pakai `hero bridge vektor-isi --ulang --apply`,
@@ -277,61 +277,88 @@ jangan mencampur dua model dalam satu kolom.
 
 ---
 
-## 7. Celah kontrak — yang perlu diputuskan bersama backend
+## 7. Kontrak pasal — status 12 Oktober 2026
 
-Keempat hal ini sudah ada jalan kelilingnya, jadi **tidak memblokir**. Yang
-diminta adalah keputusan, bukan perbaikan darurat.
+**§7.1–7.3 sudah ditutup backend** lewat PR [#115](https://github.com/hero-ojk-its/hero/pull/115) (migrasi
+`e5f6a7b8c9d0`, "Langkah 13"). Bagian ini sekarang mencatat apa yang
+dipakai lapisan data dan apa yang masih terbuka, bukan lagi daftar
+permintaan.
 
-### 7.1 `articles` belum punya kolom halaman — menyentuh syarat bukti
+| | Yang diminta | Keadaan |
+|---|---|---|
+| §7.1 | kolom halaman pada `articles` | ✅ `page` (1-indexed, nullable) |
+| §7.2 | `POST /internal/articles` idempoten | ✅ upsert `(document_id, order_index)` + `replace_document_ids` |
+| §7.3 | hierarki ayat | ✅ `parent_order_index` → `parent_id` |
+| §7.4 | dimensi kolom embedding | ⏳ masih 1536; jembatan jalan di kedua skenario (§6) |
 
-Setiap temuan harmonisasi wajib menyebut **pasal + halaman + tautan PDF** agar
-bisa divalidasi manusia (validasi sampling DPEA, tombol "buka PDF asli" US-49a).
-Tabel `articles` backend tidak punya kolom halaman.
+### 7a. Yang dipakai lapisan data
 
-*Jalan keliling yang sudah jalan:* worker ekstraksi memegang nomor halaman
-tiap pasal saat memparsing, dan mencatatnya di buku besar lokal
-(`data/hero_bridge.db`, tabel `article_page`). Cermin korpus mengisi halaman
-dari situ. Yang hilang: dokumen yang **tidak** diekstraksi worker ini tidak
-punya halaman — dilaporkan jujur oleh `hero bridge sinkron` sebagai
-"halaman pasal kosong", bukan ditebak.
+- **`page`** dikirim per pasal **dan** per ayat. Halaman ayat = halaman pasalnya:
+  parser mencatat posisi awal pasal, bukan tiap ayat, dan halaman yang ditebak
+  akan mengirim pemeriksa ke halaman yang salah.
+- **`replace_document_ids`** dikirim **hanya pada batch pertama** satu dokumen.
+  Pada batch kedua dan seterusnya ia akan menghapus hasil batch sebelumnya.
+  Ini juga yang membersihkan sisa pasal dari worker yang mati di tengah jalan
+  dan dari ekstraksi lama yang menghasilkan lebih banyak pasal.
+- **`parent_order_index`** diisi untuk setiap ayat (`bridge.push_ayat: true`,
+  masih mati secara bawaan — lihat §7c). Induk boleh berada di request
+  sebelumnya; diuji sampai **satu baris per request** tanpa 422.
+- **`inserted_count` + `updated_count`** dijumlahkan. Menghitung yang pertama
+  saja membuat kiriman ulang terlapor "0 pasal" padahal dokumennya lengkap.
+- **Cermin korpus** (`hero bridge sinkron`) membaca `articles.page` dari
+  backend bila kolomnya ada, dan jatuh ke buku besar lokal bila tidak.
 
-*Usulan (aditif, tidak mengubah kolom mana pun):*
+### 7b. Kemampuan dideteksi, tidak diasumsikan
 
-```python
-# alembic revision: tambah halaman pada articles
-op.add_column("articles", sa.Column("page", sa.Integer(), nullable=True,
-              comment="Halaman PDF tempat pasal ini dimulai (1-indexed)"))
+Backend sebelum migrasi ini **mengabaikan field yang tidak dikenalnya tanpa
+galat** (Pydantic `extra="ignore"`). Jadi mengirim `replace_document_ids` ke
+sana tidak menghapus apa pun — dan kiriman berikutnya menggandakan pasal,
+persis kerusakan yang §7.2 ingin dicegah. Karena itu jembatan memastikan dulu:
+
+1. **Pra-terbang** — skema `/openapi.json`. Tepat, tetapi backend produksi
+   boleh mematikannya (`EXPOSE_API_DOCS=false`).
+2. **Dari jawabannya** — respons kontrak baru membawa `updated_count` dan
+   `deleted_count`; yang lama hanya `inserted_count`.
+
+Selama belum pasti, jalur konservatif yang dipakai: tanpa halaman, tanpa ayat,
+tanpa ganti-bersih, dan buku besar lokal yang menahan kiriman ulang. Lebih baik
+kehilangan fitur daripada menggandakan pasal diam-diam.
+
+Status terbaca di `hero bridge status` baris **"kontrak pasal"**. Bila backend
+sudah dimigrasi tetapi dokumentasinya ditutup, setel di `config/sources.yaml`:
+
+```yaml
+bridge:
+  article_contract: v2      # auto (bawaan) | v2 | v1
 ```
-lalu `ArticleChunkIn` menerima `page: Optional[int]`. Jembatan sudah memegang
-nilainya dan akan langsung mengirimkannya begitu field-nya ada.
 
-### 7.2 `POST /internal/articles` tidak idempoten
+### 7c. Yang masih perlu keputusan bersama
 
-Endpoint selalu INSERT. Dokumen yang diklaim ulang (upaya ke-2, atau klaim
-kedaluwarsa 30 menit) akan menggandakan pasalnya, dan pasal ganda langsung
-merusak unit pembanding harmonisasi.
+- **`bridge.push_ayat` masih `false`.** Mesinnya sudah siap dan teruji, tetapi
+  menyalakannya mengubah **isi tabel `articles` backend**: satu POJK uji
+  menjadi 79 pasal + 169 ayat, dan teks ayat sudah termuat di dalam
+  `content_text` pasalnya, jadi ada duplikasi teks di indeks pencarian.
+  Keputusan ini milik backend + frontend (tampilan & unit pencarian), bukan
+  lapisan data sendiri.
+- **`GET /api/v1/documents/{id}` menyaring `parent_id IS NULL`**, jadi ayat
+  tersimpan tetapi tidak muncul di respons itu. Bila layar Analisa ingin ayat
+  bersarang, backend perlu menambahkan sarangnya atau endpoint terpisah.
 
-*Jalan keliling:* buku besar lokal menolak mengirim pasal untuk kombinasi
-`document_id` + `file_hash` yang sudah pernah terkirim. Aman untuk satu worker;
-**belum aman** untuk dua worker paralel di host berbeda.
+### 7d. Hasil uji ujung-ke-ujung (12 Okt 2026)
 
-*Usulan:* salah satu dari —
-(a) `DELETE FROM articles WHERE document_id = :id` sebelum insert di dalam
-transaksi yang sama (paling sederhana, cocok karena pasal selalu dikirim utuh
-per dokumen); atau
-(b) `UNIQUE (document_id, article_number)` + `ON CONFLICT DO UPDATE`.
+Lapisan data vs backend sungguhan (`docker compose`, revisi `e5f6a7b8c9d0`,
+tiga POJK publik dari JDIH):
 
-### 7.3 Hierarki ayat belum bisa dikirim
+| Yang diuji | Hasil |
+|---|---|
+| Halaman terkirim | 40/40 dan 79/79 pasal punya `page` |
+| Dua worker, buku besar terpisah, dokumen sama | tetap 40 pasal (bukan 80) |
+| Pasal hantu `order_index=999` disuntik lalu ekstraksi ulang | terhapus |
+| Hierarki ayat | 169/169 ayat berinduk pasal yang benar |
+| `batch_articles: 1` (induk selalu di request sebelumnya) | 43/43 baris masuk, tanpa 422 |
+| Cermin korpus setelah migrasi | halaman terisi 97, kosong 0 (sebelumnya 0 / 97) |
 
-`ArticleChunkIn` tidak punya `parent_id`/`parent_index`, padahal modelnya punya
-`parent_id`. Jadi ayat yang dikirim akan kehilangan kaitannya ke pasal. Karena
-itu `bridge.push_ayat` default `false` — yang dikirim pasal utuh (dengan ayatnya
-di dalam `content_text`), bukan baris ayat yang menggantung.
-
-*Usulan:* tambah `parent_index: Optional[int]` (indeks dalam batch yang sama)
-pada skema bulk; backend menyelesaikannya menjadi `parent_id` setelah flush.
-
-### 7.4 Dimensi kolom embedding
+### 7e. Dimensi kolom embedding
 
 Lihat §6. Keputusan: biarkan 1536, atau samakan dengan model. Angkanya ada di
 benchmark; jembatan jalan di kedua skenario tanpa perubahan kode

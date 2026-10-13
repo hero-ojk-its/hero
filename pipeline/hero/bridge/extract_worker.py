@@ -15,9 +15,13 @@ Alur satu dokumen (kontrak ``ingest-extraction-contract.md`` §1):
 
 Tiga hal yang membuat worker ini aman dijalankan berulang:
 
-* **Tidak ada pasal ganda.** ``POST /internal/articles`` hanya INSERT, jadi
-  buku besar lokal (``hero/bridge/state.py``) menolak mengirim pasal untuk
-  dokumen+hash yang sudah pernah terkirim.
+* **Tidak ada pasal ganda.** Backend dengan kontrak Langkah 13 melakukan
+  *upsert* pada ``(document_id, order_index)``, dan batch pertama memakai
+  ``replace_document_ids`` sehingga sisa ekstraksi lama ikut dibersihkan.
+  Pada backend yang belum punya kontrak itu, buku besar lokal
+  (``hero/bridge/state.py``) yang menahan kiriman ulang untuk dokumen+hash
+  yang sama. Kemampuannya dideteksi, bukan diasumsikan: backend lama
+  mengabaikan field yang tidak dikenalnya tanpa bersuara.
 * **Kegagalan dilaporkan, bukan ditelan.** PDF rusak/terenkripsi dikirim
   sebagai ``error`` sehingga masuk ``ingest_failures`` dan bisa di-*retry*
   dari UI, bukan dibiarkan menggantung berstatus ``diproses``.
@@ -95,6 +99,8 @@ class ExtractionWorker:
         self.staging = Path(staging or (Path(settings.staging_dir) / "bridge"))
         self.staging.mkdir(parents=True, exist_ok=True)
         self._embed_warned = False
+        self._ayat_warned = False
+        self._contract: dict[str, bool] | None = None
         self._rules = None
 
     # -- satu dokumen ----------------------------------------------------
@@ -148,6 +154,14 @@ class ExtractionWorker:
 
             sent, vectors = self._push_articles(doc_id, item, struct)
             detail = []
+            if backend_status == "diproses":
+                # PATCH menjawab 200 tetapi dokumen tidak berpindah status: backend
+                # gagal menuntaskan (mis. commit penempatan melanggar batas kolom)
+                # dan melakukan rollback. Tanpa catatan ini dokumennya diklaim
+                # ulang tiap 30 menit sampai percobaannya habis, tanpa jejak di sini.
+                log.warning("dokumen %s: backend menjawab 200 tetapi status tetap 'diproses' — "
+                            "periksa log backend (kemungkinan kolom melebihi batas)", doc_id)
+                detail.append("backend belum menuntaskan (status tetap diproses)")
             if res.get("low_confidence_fields"):
                 detail.append("keyakinan rendah: " + ", ".join(res["low_confidence_fields"]))
             if res.get("ignored_fields"):
@@ -215,6 +229,13 @@ class ExtractionWorker:
         if not articles:
             return 0, 0
 
+        kontrak = self._article_contract()
+        push_ayat = bool(self.bridge.push_ayat and kontrak["parent_order_index"])
+        if self.bridge.push_ayat and not push_ayat and not self._ayat_warned:
+            log.warning("push_ayat diminta tetapi backend belum punya parent_order_index — "
+                        "ayat tidak dikirim (isinya tetap ada di dalam teks pasal)")
+            self._ayat_warned = True
+
         vectors: list[list[float] | None] | None = None
         if self.embedder.enabled:
             try:
@@ -227,9 +248,12 @@ class ExtractionWorker:
                 log.warning("embedding gagal (%s) — pasal tetap dikirim tanpa vektor", exc)
 
         rows = mapping.article_payloads(doc_id, articles, vectors=vectors,
-                                        push_ayat=self.bridge.push_ayat)
-        # Halaman tiap pasal dicatat lokal: kolom halaman belum ada di tabel
-        # articles backend, sedangkan bukti temuan harmonisasi wajib menyebutnya.
+                                        push_ayat=push_ayat,
+                                        with_page=kontrak["page"],
+                                        with_parent=kontrak["parent_order_index"])
+        # Halaman tiap pasal tetap dicatat lokal walau backend sudah menyimpannya:
+        # dokumen yang diekstraksi sebelum kontrak Langkah 13 ada hanya punya
+        # halaman di sini, dan cermin korpus membaca keduanya.
         # Kunci memakai label yang sama dengan yang dikirim ke backend
         # ("Pasal 2"), bukan nomor mentah — supaya cermin korpus bisa
         # mencocokkannya kembali.
@@ -239,14 +263,37 @@ class ExtractionWorker:
         n_vec = 0
         for start in range(0, len(rows), self.bridge.batch_articles):
             batch = rows[start:start + self.bridge.batch_articles]
-            res = self.client.post_articles(batch)
-            sent += int(res.get("inserted_count") or 0)
+            # Ganti-bersih hanya pada batch pertama: pada batch berikutnya ia
+            # justru akan menghapus hasil batch sebelumnya. Ini juga yang
+            # membersihkan sisa pasal dari worker yang mati di tengah jalan
+            # dan dari ekstraksi lama yang menghasilkan lebih banyak pasal.
+            ganti = [doc_id] if (start == 0 and kontrak["replace_document_ids"]) else None
+            res = self.client.post_articles(batch, replace_document_ids=ganti)
+            # Kontrak baru melakukan upsert: kiriman ulang muncul sebagai
+            # ``updated_count``, bukan ``inserted_count``. Menghitung yang
+            # pertama saja akan melaporkan "0 pasal" untuk dokumen yang
+            # sebenarnya lengkap.
+            sent += int(res.get("inserted_count") or 0) + int(res.get("updated_count") or 0)
             n_vec += sum(1 for r in batch if r.get("embedding"))
             # Catat kemajuan tiap batch: worker yang mati di tengah tidak boleh
             # mengirim ulang batch yang sudah masuk.
+            # Hash dicatat bersama jumlah pasal: itulah yang menentukan apakah
+            # kiriman berikutnya adalah kiriman ulang atau berkas yang berbeda.
             self.state.finish_extraction(doc_id, status="berjalan", articles=sent, vectors=n_vec,
-                                         embedder=self.embedder.name)
+                                         embedder=self.embedder.name,
+                                         articles_hash=item.get("file_hash"))
         return sent, n_vec
+
+    def _article_contract(self) -> dict[str, bool]:
+        """Kemampuan kontrak pasal backend, ditanyakan sekali per worker."""
+        if self._contract is None:
+            try:
+                self._contract = dict(self.client.article_contract())
+            except Exception as exc:                             # noqa: BLE001
+                log.warning("kontrak pasal backend tidak terdeteksi (%s) — memakai jalur lama", exc)
+                self._contract = {"page": False, "parent_order_index": False,
+                                  "replace_document_ids": False, "terdeteksi": False}
+        return self._contract
 
     def _fail(self, doc_id: int, code: str, message: str, started: float) -> Outcome:
         try:

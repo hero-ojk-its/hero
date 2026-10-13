@@ -201,6 +201,53 @@ def candidates_from_inventory_row(row: dict[str, Any], *, depth: int = 1,
 CONF_BY_SOURCE = {"halaman-1": 0.95, "penutup": 0.85, "metadata": 0.75,
                   "turunan": 0.55, "nama-berkas": 0.35, "koreksi-manual": 0.99}
 
+# Batas kolom ``documents`` di backend (String(n)). Nilai lebih panjang tidak
+# ditolak di pintu masuk (PATCH 200) melainkan meledak saat commit penempatan,
+# dan dokumennya diklaim ulang tanpa akhir sampai percobaannya habis.
+BATAS_KOLOM = {"title": 255, "regulation_number": 100, "regulation_type": 100,
+               "bidang": 150, "extraction_engine": 100}
+# Judul peraturan sungguhan jarang melebihi ±200 karakter. Lebih panjang dari
+# itu hampir pasti teks isi yang terbaca sebagai judul (halaman pertama tanpa
+# kop, mis. lembar ringkasan satu halaman).
+JUDUL_WAJAR_MAKS = 200
+KEYAKINAN_HEADER_GAGAL = 0.4          # < ambang backend 0.7 → masuk antrean koreksi
+
+
+def bersihkan_teks(value: str | None) -> str:
+    """Buang byte NUL (0x00): kolom teks PostgreSQL menolaknya sama sekali.
+
+    OCR dan pengekstrak PDF kadang mengeluarkannya untuk glif yang tak terpetakan.
+    Satu byte di antara ratusan ribu karakter cukup untuk menggagalkan commit
+    seluruh dokumen (insiden VPS 13 Okt: dokumen 137 diklaim ulang sampai
+    percobaannya habis). Hanya NUL yang dibuang; karakter kontrol lain diterima
+    PostgreSQL dan tidak diubah."""
+    return str(value).replace("\x00", "") if value else ""
+
+
+def _fit(value: str | None, n: int) -> str | None:
+    """Rapikan spasi lalu potong ke ``n`` karakter di batas kata, dengan elipsis."""
+    if not value:
+        return None
+    v = " ".join(bersihkan_teks(value).split())
+    if not v:
+        return None
+    if len(v) <= n:
+        return v
+    cut = v[: n - 1]
+    if " " in cut[n // 2:]:
+        cut = cut[: cut.rindex(" ")]
+    return cut.rstrip(" ,;:-") + "…"
+
+
+def header_gagal_dibaca(md) -> bool:
+    """Kop dokumen jelas gagal diurai: judul terlalu panjang untuk judul sungguhan.
+
+    Pada kasus ini bukan hanya judulnya yang tak bisa dipercaya. Pengurai
+    mengambil nomor/jenis dari tempat lain dalam teks — terbukti pada lembar
+    ringkasan SEOJK satu halaman, nomor yang terbaca adalah nomor peraturan
+    LAIN yang disebut sebagai yang dicabut."""
+    return len(" ".join(str(getattr(md, "subject", "") or "").split())) > JUDUL_WAJAR_MAKS
+
 
 def field_confidence(md, *, identity=None, ocr_confidence: float | None = None,
                      from_ocr: bool = False) -> dict[str, float]:
@@ -230,6 +277,9 @@ def field_confidence(md, *, identity=None, ocr_confidence: float | None = None,
     if md.title:
         has_subject = bool(md.subject)
         conf["title"] = CONF_BY_SOURCE["halaman-1"] if has_subject else CONF_BY_SOURCE["nama-berkas"]
+    if header_gagal_dibaca(md):
+        # Jangan lolos diam-diam sebagai "terindeks": biarkan manusia memeriksa.
+        conf = {k: min(v, KEYAKINAN_HEADER_GAGAL) for k, v in conf.items()}
     return {k: round(v * scale, 2) for k, v in conf.items()}
 
 
@@ -240,20 +290,20 @@ def extraction_payload(md, extraction, *, identity=None, quality: dict[str, Any]
     """Isi ``PATCH /internal/documents/{id}/extraction`` dari hasil ekstraksi HERO."""
     from_ocr = bool(getattr(extraction, "ocr_pages", 0))
     payload: dict[str, Any] = {
-        "bidang": bidang or None,
-        "title": md.subject or md.title or None,
-        "regulation_number": md.number or None,
-        "regulation_type": md.doc_type or None,
+        "bidang": _fit(bidang, BATAS_KOLOM["bidang"]),
+        "title": _fit(md.subject or md.title, BATAS_KOLOM["title"]),
+        "regulation_number": _fit(md.number, BATAS_KOLOM["regulation_number"]),
+        "regulation_type": _fit(md.doc_type, BATAS_KOLOM["regulation_type"]),
         "release_date": md.issued_date.isoformat() if isinstance(md.issued_date, date) else None,
         "extraction_method": "ocr" if from_ocr else "teks_langsung",
-        "extraction_engine": engine,
+        "extraction_engine": _fit(engine, BATAS_KOLOM["extraction_engine"]),
         "confidence": field_confidence(
             md, identity=identity, from_ocr=from_ocr,
             ocr_confidence=getattr(extraction, "mean_ocr_confidence", None)),
     }
     if send_full_text:
         text = extraction.text if hasattr(extraction, "text") else str(extraction)
-        payload["full_text"] = text[:max_chars]
+        payload["full_text"] = bersihkan_teks(text)[:max_chars]
     if quality and quality.get("grade") in ("gagal",):
         # Grade "gagal" berarti teks tidak terbaca sama sekali; pemanggil
         # memutuskan mengirim error, bukan metadata kosong.
@@ -298,13 +348,15 @@ def pasal_number(label: str | None) -> str:
 def _trim(value: str | None, n: int) -> str | None:
     if not value:
         return None
-    v = " ".join(str(value).split())
+    v = " ".join(bersihkan_teks(value).split())
     return v[:n] if v else None
 
 
 def article_payloads(document_id: int, articles: list, *,
                      vectors: list[list[float] | None] | None = None,
-                     push_ayat: bool = False) -> list[dict[str, Any]]:
+                     push_ayat: bool = False,
+                     with_page: bool = False,
+                     with_parent: bool = False) -> list[dict[str, Any]]:
     """``DocumentStructure.articles`` → daftar ``ArticleChunkIn`` backend.
 
     Hanya pasal batang tubuh yang dikirim: pasal di lampiran/penjelasan adalah
@@ -312,17 +364,25 @@ def article_payloads(document_id: int, articles: list, *,
     harmonisasi. ``order_index`` menjaga urutan tampil karena nomor pasal bisa
     berupa "7A" (pasal sisipan) yang tidak terurut secara numerik.
 
-    Ayat default-nya tidak dikirim: skema bulk backend belum punya kolom induk
-    (``parent_id``) yang bisa diisi lewat API, sehingga ayat akan kehilangan
-    kaitannya ke pasal. Lihat ``docs/INTEGRASI_BACKEND.md`` §Celah kontrak.
+    ``with_page`` dan ``with_parent`` mengikuti kemampuan backend yang
+    sebenarnya (``BackendClient.article_contract``), bukan harapan: backend
+    lama mengabaikan field asing tanpa bersuara, sehingga mengirimnya begitu
+    saja hanya menyembunyikan bahwa halaman tidak pernah sampai.
+
+    ``push_ayat`` butuh ``with_parent``. Tanpa induk, ayat menjadi baris
+    menggantung yang tidak bisa ditelusuri kembali ke pasalnya — lebih buruk
+    daripada tidak mengirimnya, karena isinya sudah termuat di dalam teks
+    pasal.
     """
+    if push_ayat and not with_parent:
+        raise ValueError("push_ayat butuh with_parent: ayat tanpa induk tidak dapat ditelusuri")
     rows: list[dict[str, Any]] = []
     order = 0
     for i, art in enumerate(articles):
         if getattr(art, "in_attachment", False):
             continue
         number = _trim(pasal_label(getattr(art, "number", None)), 50) or f"Pasal {i + 1}"
-        text = (getattr(art, "text", "") or "").strip()
+        text = bersihkan_teks(getattr(art, "text", "") or "").strip()
         if not text:
             continue
         row: dict[str, Any] = {
@@ -333,24 +393,48 @@ def article_payloads(document_id: int, articles: list, *,
             "content_text": text,
             "order_index": order,
         }
+        halaman = _page_number(getattr(art, "page", None))
+        if with_page and halaman is not None:
+            row["page"] = halaman
         vec = vectors[i] if vectors and i < len(vectors) else None
         if vec is not None:
             row["embedding"] = vec
         rows.append(row)
+        induk = order
         order += 1
 
         if push_ayat:
             for num, body in getattr(art, "ayat", []) or []:
-                body = (body or "").strip()
+                body = bersihkan_teks(body or "").strip()
                 if not body:
                     continue
-                rows.append({
+                ayat_row: dict[str, Any] = {
                     "document_id": int(document_id),
                     "level": "ayat",
                     "chapter_title": _trim(getattr(art, "bab", None), 255),
                     "article_number": _trim(f"{number} ayat ({num})", 50) or number,
                     "content_text": body,
                     "order_index": order,
-                })
+                    "parent_order_index": induk,
+                }
+                if with_page and halaman is not None:
+                    # Halaman ayat = halaman pasalnya: parser mencatat posisi
+                    # awal pasal, bukan tiap ayat. Menebak halaman ayat yang
+                    # lebih jauh akan menghasilkan rujukan yang salah.
+                    ayat_row["page"] = halaman
+                rows.append(ayat_row)
                 order += 1
     return rows
+
+
+def _page_number(value: Any) -> int | None:
+    """Halaman 1-indexed yang dapat diterima backend (``ge=1``), atau None.
+
+    Nilai 0/negatif/tak terbaca dibuang alih-alih dikoreksi: halaman yang
+    ditebak akan mengirim pemeriksa ke halaman yang salah, dan itu lebih
+    merugikan daripada kolom kosong yang jujur."""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return None
+    return n if n >= 1 else None
