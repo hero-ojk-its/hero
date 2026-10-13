@@ -2,8 +2,9 @@
 Pydantic schemas untuk endpoint internal artikel.
 Dipakai oleh pipeline ML (chunking/embedding) untuk bulk insert ke tabel articles.
 """
+from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ArticleChunkIn(BaseModel):
@@ -165,3 +166,47 @@ class UpdateDocumentStatusResponse(BaseModel):
         description="ID entri LegalReference yang baru dibuat (jika ada)",
     )
     message: str
+
+
+class UpdateDocumentActiveIn(BaseModel):
+    """
+    Payload untuk mengaktifkan atau menonaktifkan dokumen Knowledge Base secara administratif.
+    """
+
+    is_active: bool = Field(
+        ...,
+        description="True untuk mengaktifkan dokumen, False untuk menonaktifkan dokumen dari Knowledge Base",
+    )
+    reason: Optional[str] = Field(
+        None,
+        description="Alasan penonaktifan dokumen. Wajib diisi minimal 5 karakter jika is_active=False.",
+        examples=["Salah unggah: bukan dokumen regulasi"],
+    )
+
+    @model_validator(mode="after")
+    def validate_deactivation_reason(self):
+        if not self.is_active:
+            r = (self.reason or "").strip()
+            if len(r) < 5:
+                raise ValueError("Alasan penonaktifan dokumen wajib diisi minimal 5 karakter")
+        return self
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "is_active": False,
+                "reason": "Salah unggah: bukan dokumen regulasi",
+            }
+        }
+    }
+
+
+class UpdateDocumentActiveResponse(BaseModel):
+    """Respons setelah status aktif dokumen diperbarui."""
+
+    document_id: int = Field(..., description="ID dokumen")
+    is_active: bool = Field(..., description="Status aktif dokumen saat ini")
+    changed: bool = Field(..., description="True jika terjadi perubahan status aktif, False jika status sudah sama")
+    deactivated_at: Optional[datetime] = Field(None, description="Waktu dokumen dinonaktifkan")
+    deactivated_reason: Optional[str] = Field(None, description="Alasan penonaktifan dokumen")
+    message: str = Field(..., description="Pesan ringkasan operasi")

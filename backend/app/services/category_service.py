@@ -145,10 +145,10 @@ class CategoryService:
         langsung (document_count) dan total turunan (total_document_count)
         dalam agregasi tunggal efisien tanpa N+1 query.
         """
-        # 1. Ambil hitungan dokumen per category_id
+        # 1. Ambil hitungan dokumen per category_id (hanya dokumen aktif)
         doc_counts_query = (
             self.db.query(Document.category_id, func.count(Document.id).label("count"))
-            .filter(Document.category_id.isnot(None))
+            .filter(Document.category_id.isnot(None), Document.is_active == True)  # noqa: E712
             .group_by(Document.category_id)
             .all()
         )
