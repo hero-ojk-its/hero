@@ -29,9 +29,10 @@
 8. [Alur 7: Detail Dokumen, Pembaca Teks & Penampil PDF](#8-alur-7-detail-dokumen-pembaca-teks--penampil-pdf)
 9. [Alur 8: Kurasi & Koreksi Metadata serta Antrean Penanganan Gagal](#9-alur-8-kurasi--koreksi-metadata-serta-antrean-penanganan-gagal)
 10. [Alur 9: Dashboard Ringkasan Eksekutif](#10-alur-9-dashboard-ringkasan-eksekutif)
-11. [Tabel Referensi Enum & Label Bahasa Indonesia](#11-tabel-referensi-enum--label-bahasa-indonesia)
-12. [Daftar Kode Galat HTTP & Penanganan di UI](#12-daftar-kode-galat-http--penanganan-di-ui)
-13. [Catatan & Pertanyaan untuk Frontend](#13-catatan--pertanyaan-untuk-frontend)
+11. [Gerbang Analisa (`/api/v1/ml/*`)](#11-gerbang-analisa-apiv1ml)
+12. [Tabel Referensi Enum & Label Bahasa Indonesia](#12-tabel-referensi-enum--label-bahasa-indonesia)
+13. [Daftar Kode Galat HTTP & Penanganan di UI](#13-daftar-kode-galat-http--penanganan-di-ui)
+14. [Catatan & Pertanyaan untuk Frontend](#14-catatan--pertanyaan-untuk-frontend)
 
 ---
 
@@ -1301,7 +1302,58 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
 
 ---
 
-## 11. TABEL REFERENSI ENUM & LABEL BAHASA INDONESIA
+## 11. GERBANG ANALISA (`/api/v1/ml/*`)
+
+Layanan analisa regulasi dan harmonisasi milik lapisan data (`hero bridge serve`) disediakan terpadu melalui gerbang backend di `/api/v1/ml/*`. Backend bertindak sebagai gerbang tunggal untuk memvalidasi hak akses (proteksi dokumen nonaktif dan dokumen non-publik), menyaring hasil pencarian/korpus sebelum dikembalikan ke antarmuka pengguna, serta mencatat jejak audit harmonisasi regulasi.
+
+Frontend cukup memanggil satu asal (`API_BASE_URL` backend) tanpa perlu menghubungkan langsung ke port lapisan data.
+
+### 11.1 Kesiapan Layanan Analisa
+- **Method & Path:** `GET /api/v1/ml/health`
+- **Tujuan:** Memeriksa kesiapan layanan analisa, ketersediaan indeks vektor, dan korpus dokumen regulasi.
+
+### 11.2 Daftar Dokumen Siap Analisa
+- **Method & Path:** `GET /api/v1/ml/dokumen`
+- **Parameter Query:**
+  - `peran` (opsional): `corpus_eksisting` | `draft_kajian`
+  - `limit` (opsional): integer `1-500` (default: `50`)
+- **Penyaringan Backend:** Dokumen nonaktif dan non-publik (saat mode proteksi aktif) otomatis disaring. Respons memuat `disaring_backend` yang mencatat jumlah dokumen yang disaring.
+
+### 11.3 Analisa Struktur & Poin Kunci Dokumen
+- **Method & Path:** `GET /api/v1/ml/analisa/{document_id}`
+- **Parameter Path:** `document_id` (integer ID dokumen backend)
+- **Parameter Query:** `mode` (opsional): `deterministik` (default) | `ai`
+- **Proteksi Akses:** Mengembalikan `404` jika dokumen tidak ditemukan atau telah dinonaktifkan (`dokumen_nonaktif`), dan `403` jika dokumen non-publik diakses saat login belum aktif.
+
+### 11.4 Pencarian Klausul Relevan Regulasi
+- **Method & Path:** `GET /api/v1/ml/analisa/{document_id}/klausul`
+- **Parameter Query:**
+  - `kebutuhan` (wajib): string minimal 3 karakter
+  - `k` (opsional): integer `1-20` (default: `5`)
+
+### 11.5 Harmonisasi Draft Regulasi
+- **Method & Path:** `POST /api/v1/ml/harmonisasi/{document_id}`
+- **Body:** `null` (membandingkan terhadap seluruh korpus yang diizinkan) atau daftar array ID dokumen pembanding `[id1, id2, ...]`.
+- **Penyaringan & Audit:** Backend membatasi korpus pembanding pada dokumen aktif dan diizinkan, membuang temuan/kandidat dokumen nonaktif, mengosongkan ID rujukan di luar korpus, serta mencatat jejak audit `RUN_HARMONIZATION`.
+
+### 11.6 Pencarian Semantik Regulasi
+- **Method & Path:** `GET /api/v1/ml/cari`
+- **Parameter Query:**
+  - `q` (wajib): kata kunci minimal 2 karakter
+  - `metode` (opsional): `lexical` | `lsa` (default jika kosong) | `semantic` | `hybrid` | `pgvector`
+  - `k` (opsional): `1-50` (default: `10`)
+
+### 11.7 Pencarian Pasal Serupa
+- **Method & Path:** `GET /api/v1/ml/pasal-mirip`
+- **Parameter Query:**
+  - `teks` (wajib): kutipan teks pasal minimal 20 karakter
+  - `k` (opsional): `1-50` (default: `10`)
+  - `kecuali_dokumen` (opsional): ID dokumen draft untuk dikecualikan dari pembanding
+  - `hanya_publik` (opsional): boolean (dipaksa `true` saat mode proteksi non-publik aktif)
+
+---
+
+## 12. TABEL REFERENSI ENUM & LABEL BAHASA INDONESIA
 
 <!-- AUTO:enum_tables -->
 ### 11.1 Jenis Sumber Dokumen (`JenisSumber`)
@@ -1462,7 +1514,7 @@ Field respons/parameter: `job_status`
 
 ---
 
-## 12. DAFTAR KODE GALAT HTTP & PENANGANAN DI UI
+## 13. DAFTAR KODE GALAT HTTP & PENANGANAN DI UI
 
 | Kode HTTP | Makna Teknis | Penyebab Umum | Aksi UI yang Disarankan |
 |---|---|---|---|
@@ -1476,7 +1528,7 @@ Field respons/parameter: `job_status`
 
 ---
 
-## 13. CATATAN & PERTANYAAN UNTUK FRONTEND
+## 14. CATATAN & PERTANYAAN UNTUK FRONTEND
 
 1. **Komponen Penamaan Berulang:** Backend mengizinkan tombol komponen penamaan yang sama diklik lebih dari sekali (misal: `["tahun", "nama", "tahun"]`). Apakah UI telah mendukung representasi chip/badge yang dapat diurutkan secara drag-and-drop?
 2. **Karakter Pemisah Penamaan:** Pemisah default adalah spasi `" "`. Pilihan lain adalah `"_"` dan `"-"`. Jika pengguna tidak memilih pemisah, backend otomatis menggunakan spasi.

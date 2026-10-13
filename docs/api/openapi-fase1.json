@@ -3436,6 +3436,481 @@
         }
       }
     },
+    "/api/v1/ml/health": {
+      "get": {
+        "tags": [
+          "Analisa (ML)",
+          "Analisa (ML)"
+        ],
+        "summary": "Kesiapan Layanan Analisa ML",
+        "description": "Mengecek status kesiapan layanan analisa (indeks vektor, korpus, mode AI).",
+        "operationId": "get_ml_health_api_v1_ml_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ml/dokumen": {
+      "get": {
+        "tags": [
+          "Analisa (ML)",
+          "Analisa (ML)"
+        ],
+        "summary": "Daftar Dokumen Siap Analisa",
+        "description": "Dokumen backend yang siap dianalisa, disaring sesuai hak akses.",
+        "operationId": "get_ml_dokumen_api_v1_ml_dokumen_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "peran",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "corpus_eksisting",
+                    "draft_kajian"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Peran"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ml/analisa/{document_id}": {
+      "get": {
+        "tags": [
+          "Analisa (ML)",
+          "Analisa (ML)"
+        ],
+        "summary": "Analisa Regulasi",
+        "description": "Ringkasan terstruktur dan poin kunci berbasis pasal.",
+        "operationId": "get_ml_analisa_api_v1_ml_analisa__document_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "deterministik",
+                    "ai"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "deterministik",
+              "title": "Mode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ml/analisa/{document_id}/klausul": {
+      "get": {
+        "tags": [
+          "Analisa (ML)",
+          "Analisa (ML)"
+        ],
+        "summary": "Pencarian Klausul Relevan",
+        "description": "Pasal yang relevan dengan kebutuhan pengguna dalam dokumen.",
+        "operationId": "get_ml_analisa_klausul_api_v1_ml_analisa__document_id__klausul_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "kebutuhan",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 3,
+              "title": "Kebutuhan"
+            }
+          },
+          {
+            "name": "k",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "minimum": 1,
+              "default": 5,
+              "title": "K"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ml/harmonisasi/{document_id}": {
+      "post": {
+        "tags": [
+          "Analisa (ML)",
+          "Analisa (ML)"
+        ],
+        "summary": "Harmonisasi Draft Regulasi",
+        "description": "Analisa harmonisasi draft terhadap korpus dokumen regulasi.\nBody opsional berisi daftar document_id pembatas korpus (null = seluruh korpus yang diizinkan).",
+        "operationId": "post_ml_harmonisasi_api_v1_ml_harmonisasi__document_id__post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ml/cari": {
+      "get": {
+        "tags": [
+          "Analisa (ML)",
+          "Analisa (ML)"
+        ],
+        "summary": "Pencarian Semantik Regulasi",
+        "description": "Pencarian pasal semantik/leksikal dengan penyesuaian metode default.",
+        "operationId": "get_ml_cari_api_v1_ml_cari_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "title": "Q"
+            }
+          },
+          {
+            "name": "metode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "lexical",
+                    "lsa",
+                    "semantic",
+                    "hybrid",
+                    "pgvector"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Metode"
+            }
+          },
+          {
+            "name": "k",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 10,
+              "title": "K"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ml/pasal-mirip": {
+      "get": {
+        "tags": [
+          "Analisa (ML)",
+          "Analisa (ML)"
+        ],
+        "summary": "Pencarian Pasal Mirip Korpus",
+        "description": "Pencarian pasal termirip di korpus backend untuk sepotong teks.",
+        "operationId": "get_ml_pasal_mirip_api_v1_ml_pasal_mirip_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "teks",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 20,
+              "title": "Teks"
+            }
+          },
+          {
+            "name": "k",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 10,
+              "title": "K"
+            }
+          },
+          {
+            "name": "kecuali_dokumen",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kecuali Dokumen"
+            }
+          },
+          {
+            "name": "hanya_publik",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hanya Publik"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "tags": [
