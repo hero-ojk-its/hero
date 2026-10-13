@@ -1,5 +1,5 @@
 # WORK BREAKDOWN STRUCTURE, SPRINT PLAN & MILESTONE
-**Proyek:** HERO | **Versi:** 1.4 | **Tanggal:** 9 Oktober 2026 | **Penyusun:** Project Manager
+**Proyek:** HERO | **Versi:** 1.5 | **Tanggal:** 13 Oktober 2026 | **Penyusun:** Project Manager
 
 ---
 
@@ -286,20 +286,44 @@ M5 (serah terima) mengikuti jadwal UAT di [Test Plan §4](11-test-plan-uat.md).
 > berjalan per fitur begitu fitur selesai (bukan satu jendela di akhir), dan H-7 tetap menjadi
 > batas mulai perbaikan. Perlu dikonfirmasi ke Pak Faris sebelum Fase 3 dimulai (9 Nov).
 
-### 5.3 Status Indikator M1 per 9 Oktober 2026
+### 5.3 Status Indikator M1 per 13 Oktober 2026
+
+Fase 1 berakhir 11 Okt. Angka diambil dari laporan lapisan data
+(`pipeline/docs/LAPORAN_FASE2_UNTUK_KLIEN.md`), yang dihasilkan oleh perintah yang dapat dijalankan ulang.
 
 | Indikator | Status | Bukti |
 | --- | --- | --- |
-| Scan tiga sumber mengindeks dokumen, mendekati *ground truth* | ✅ dengan catatan | Benchmark 3 Okt (`backend/docs/reports/scan-benchmark-2026-10-03.md`): regulasi OJK 1.577 (estimasi ± 1.700), JDIH 985 (estimasi ± 400–500, perlu konfirmasi), OneDrive 2.619 PDF. Angka resmi mitra belum ada ([#87](https://github.com/hero-ojk-its/hero/issues/87)) |
+| Scan tiga sumber mengindeks dokumen, mendekati *ground truth* | ✅ dengan catatan | Regulasi OJK 1.556 dari ± 1.700 (0,92×); JDIH 984 dari ± 400–500 (2,19×). Angka resmi mitra belum ada ([#87](https://github.com/hero-ojk-its/hero/issues/87)) |
 | Unggah manual berfungsi | ✅ | PR #99 |
 | ≥ 1 folder lokal terbaca | ✅ | PR #107; 3 folder terbaca |
-| ≥ 1 folder OneDrive public terbaca | ❌ terblokir | Scan share-link jalan, isi dokumen tertutup ([#112](https://github.com/hero-ojk-its/hero/issues/112)) |
-| ≥ 20 dokumen di KB (Deterministik) | ✅ | 62 dokumen pada uji lokal E01 (PR #105) |
-| Penerimaan PO | ⏳ | Pak Faris belum melihat demo (training di Jakarta saat Weekly #5) |
+| ≥ 1 folder OneDrive public terbaca | ⚠ terblokir sebagian | Tautan terbaca tanpa login, 30 dokumen tercatat di katalog; isi dokumen tertutup ([#112](https://github.com/hero-ojk-its/hero/issues/112)) |
+| ≥ 20 dokumen di KB (Deterministik) | ✅ | 116 dokumen peraturan di katalog; 151 dokumen di backend VPS |
+| Penerimaan PO | ⏳ | Pak Faris belum melihat demo |
 
-> **Catatan PM:** empat dari lima indikator tercapai; yang tersisa bergantung pada akses dari
-> mitra, bukan kode. Satu temuan keamanan ([#113](https://github.com/hero-ojk-its/hero/issues/113), API tanpa login) sebaiknya ditutup sebelum
-> dokumen OneDrive masuk staging.
+> **Catatan PM:** empat dari lima indikator tercapai. M1 belum bisa dinyatakan diterima karena
+> tiga hal di luar kode: akses OneDrive ([#112](https://github.com/hero-ojk-its/hero/issues/112)), angka resmi *ground truth* ([#87](https://github.com/hero-ojk-its/hero/issues/87)), dan
+> demo ke PO. Sisa Fase 1 dibawa ke Sprint 4 sebagai carry-over ([#30](https://github.com/hero-ojk-its/hero/issues/30), [#88](https://github.com/hero-ojk-its/hero/issues/88), [#92](https://github.com/hero-ojk-its/hero/issues/92),
+> [#113](https://github.com/hero-ojk-its/hero/issues/113)). Belum ada tag rilis MVP Fase 1 di repo.
+
+### 5.4 Status Indikator M2 per 13 Oktober 2026
+
+Fase 2 dimulai 12 Okt. Mesin analisa sudah berjalan di lapisan data dan di VPS sebelum fase dimulai.
+
+| Indikator | Aktual | Target | Status |
+| --- | --- | --- | --- |
+| Summary & Key Takeaways untuk dokumen uji | 114 dokumen | ≥ 10 | ✅ di lapisan data |
+| Waktu proses per dokumen | 11,5 detik terburuk (laptop); ± 280 detik untuk PDF OCR 345 halaman di VPS | < 5 menit | ✅ dengan catatan |
+| Toggle AI-Assisted berfungsi | Mekanisme ada dan diuji offline; belum diuji model nyata | berfungsi | ⚠ |
+
+> **Catatan PM:**
+> - **Jalur kritis M2 pindah ke frontend.** Layar Analisa masih placeholder ([#116](https://github.com/hero-ojk-its/hero/issues/116)). Dengan
+>   aturan H-14, pengujian M2 mulai 25 Okt, jadi layar harus tersambung dalam Sprint 4.
+> - **Uji AI-Assisted butuh persetujuan mitra.** Mengirim teks ke layanan pihak ketiga menyangkut
+>   NFR-08; minta keputusan tertulis Pak Faris.
+> - **Penerimaan M2 mensyaratkan telaah SME** atas kualitas ringkasan. Templatnya sudah disiapkan
+>   lapisan data; SME-nya belum ditunjuk.
+> - **Staging baru memuat 151 dari ± 2.100 dokumen katalog.** Cara memasukkan sisanya perlu
+>   keputusan PO dan Backend.
 
 ---
 
@@ -367,5 +391,6 @@ flowchart LR
 | 1.0 | 7 Sep 2026 | Draft awal: WBS, peta fase-sprint, Gantt, 9 sprint, 6 milestone, jalur kritis | PM |
 | 1.2 | 9 Sep 2026 | WBS 1.4 dipecah menjadi 1.4.A (algoritma, Data/ML) dan 1.4.B (pipeline, Backend); kepemilikan 1.5 diperjelas | PM |
 | 1.1 | 8 Sep 2026 | Kadens rapat menjadi mingguan + format laporan mitra; M1 menyertakan uji coba mitra 8 Okt; OneDrive digeser ke Fase 2; tambah §5.1 prasyarat uji coba | PM |
+| 1.5 | 13 Okt 2026 | §5.3 diperbarui ke posisi akhir Fase 1; §5.4 status indikator M2 | PM |
 | 1.4 | 9 Okt 2026 | §5.3 status indikator M1 hasil audit GitHub | PM |
 | 1.3 | 29 Sep 2026 | Weekly #4: indikator M1 memakai dokumen terindeks vs *ground truth* dan OneDrive kembali ke Fase 1; prasyarat §5.1 ditambah; §5.2 aturan H-14 per MVP | PM |

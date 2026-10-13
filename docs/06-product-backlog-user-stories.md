@@ -1,5 +1,5 @@
 # PRODUCT BACKLOG & USER STORIES
-**Proyek:** HERO | **Versi:** 1.4 | **Tanggal:** 9 Oktober 2026 | **Penyusun:** PM / Business Analyst
+**Proyek:** HERO | **Versi:** 1.5 | **Tanggal:** 13 Oktober 2026 | **Penyusun:** PM / Business Analyst
 
 ---
 
@@ -468,6 +468,95 @@ sprint-nya tidak diubah:
 
 ---
 
+## 5E. Pembaruan 13 Oktober 2026 — Sprint 3 Ditutup, Sprint 4 Berjalan
+
+Sumber: PR #114 dan #115, commit `c0cb07f`, dan laporan lapisan data
+[`pipeline/docs/LAPORAN_FASE2_UNTUK_KLIEN.md`](../pipeline/docs/LAPORAN_FASE2_UNTUK_KLIEN.md).
+Papan tim sudah diperbarui. Papan penilaian asdos **belum** disamakan untuk pembaruan ini.
+
+### 5E.1 Penutupan Sprint 3
+
+| Sprint | Item selesai | SP selesai |
+| --- | --- | --- |
+| Sprint 2 (14–27 Sep) | 14 | 58 |
+| Sprint 3 (28 Sep – 11 Okt) | 19 | 63 |
+
+Seluruh item yang belum selesai di Sprint 3 dibawa ke Sprint 4 dengan label `status: carry-over`.
+Item mitra [#27](https://github.com/hero-ojk-its/hero/issues/27), [#87](https://github.com/hero-ojk-its/hero/issues/87), dan [#112](https://github.com/hero-ojk-its/hero/issues/112) ikut dipindah karena masih ditunggu.
+
+### 5E.2 Isi Sprint 4 (12–25 Okt)
+
+**Carry-over Fase 1**
+
+| ID | Issue | SP | Status | Catatan |
+| --- | --- | --- | --- | --- |
+| US-17 | [#30](https://github.com/hero-ojk-its/hero/issues/30) | 8 | Menunggu Mitra | Menunggu akses isi dokumen OneDrive ([#112](https://github.com/hero-ojk-its/hero/issues/112)) |
+| US-13c | [#88](https://github.com/hero-ojk-its/hero/issues/88) | 8 | In Review | OJK 0,92× dan JDIH 2,19× estimasi; menunggu angka resmi ([#87](https://github.com/hero-ojk-its/hero/issues/87)) |
+| BUG | [#113](https://github.com/hero-ojk-its/hero/issues/113) | — | To Do | API staging tanpa login |
+| AI-T13 | [#92](https://github.com/hero-ojk-its/hero/issues/92) | — | In Progress | Laporan akhir Cakupan Uji belum ada di repo |
+| AI-T14 | [#93](https://github.com/hero-ojk-its/hero/issues/93) | — | In Progress | Sprint review Sprint 2; Sprint 3 ikut jatuh tempo |
+| PRD | [#45](https://github.com/hero-ojk-its/hero/issues/45) | — | Menunggu Mitra | Menunggu tanda tangan Pak Andika |
+
+**Fase 2 — terjadwal di Sprint 4**
+
+| ID | Issue | SP | Status | Catatan |
+| --- | --- | --- | --- | --- |
+| US-32 | [#51](https://github.com/hero-ojk-its/hero/issues/51) | 13 | In Review | 92,9% dokumen berpasal terparsing — AC ≥ 80% terpenuhi |
+| US-33 | [#52](https://github.com/hero-ojk-its/hero/issues/52) | 5 | In Progress | 98,2% rujukan terbaca; tampilan di UI belum |
+| US-34 | [#53](https://github.com/hero-ojk-its/hero/issues/53) | 5 | In Review | Rekonsiliasi status dengan JDIH 92,4% |
+| US-29..31 | [#37](https://github.com/hero-ojk-its/hero/issues/37) | 11 | In Progress | US-31 sebagian (PR #107) |
+| US-04 | [#48](https://github.com/hero-ojk-its/hero/issues/48) | 5 | In Progress | Mekanisme saklar AI ada; belum diuji model nyata |
+| US-05 | [#49](https://github.com/hero-ojk-its/hero/issues/49) | 5 | To Do | Belum dimulai |
+| US-07 | [#50](https://github.com/hero-ojk-its/hero/issues/50) | 2 | To Do | Menunggu layar Analisa |
+| US-01 | [#32](https://github.com/hero-ojk-its/hero/issues/32) | 5 | To Do | Menunggu arahan role dari Pak Faris |
+| US-64 | [#54](https://github.com/hero-ojk-its/hero/issues/54) | 5 | To Do | Bergantung ambang kemiripan ([#28](https://github.com/hero-ojk-its/hero/issues/28)) |
+
+**Fase 2 — ditarik dari Sprint 5** karena lapisan datanya sudah terukur memenuhi kriteria
+
+| ID | Issue | SP | Status | Catatan |
+| --- | --- | --- | --- | --- |
+| US-22 | [#31](https://github.com/hero-ojk-its/hero/issues/31) | 8 | In Review | OCR halaman pindai berjalan; byte NUL ditangani |
+| US-26a | [#36](https://github.com/hero-ojk-its/hero/issues/36) | 5 | In Review | Kontrak pasal PR #115; 149 dokumen terindeks di VPS |
+| US-35 | [#57](https://github.com/hero-ojk-its/hero/issues/57) | 8 | In Review | Summary untuk 114 dokumen (target 10) |
+| US-36 | [#58](https://github.com/hero-ojk-its/hero/issues/58) | 8 | In Review | Median 16,5 poin; 99,7% berujukan pasal |
+| US-38 | [#60](https://github.com/hero-ojk-its/hero/issues/60) | 3 | In Review | Kosakata topik terkendali |
+| US-39 | [#61](https://github.com/hero-ojk-its/hero/issues/61) | 3 | In Review | 11,5 detik terburuk (batas 300) |
+
+**Baru dari laporan Fase 2**
+
+| ID | Issue | SP | Status | Catatan |
+| --- | --- | --- | --- | --- |
+| AI-T15 | [#116](https://github.com/hero-ojk-its/hero/issues/116) | — | To Do | Sambungkan layar Analisa ke layanan analisa — **jalur kritis M2** |
+| BUG | [#117](https://github.com/hero-ojk-its/hero/issues/117) | — | To Do | Backend menjawab 200 saat penempatan gagal |
+
+### 5E.3 Beban Sprint 4
+
+| | SP |
+| --- | --- |
+| Total di papan | 107 |
+| Berstatus In Review — tinggal review kode, telaah SME, atau angka dari mitra | 61 |
+| **Pekerjaan nyata tersisa** | **46** |
+
+Di luar itu ada lima tugas tanpa SP: [#116](https://github.com/hero-ojk-its/hero/issues/116), [#117](https://github.com/hero-ojk-its/hero/issues/117), [#113](https://github.com/hero-ojk-its/hero/issues/113), [#92](https://github.com/hero-ojk-its/hero/issues/92), [#93](https://github.com/hero-ojk-its/hero/issues/93).
+
+### 5E.4 Catatan PM
+
+- **Jalur kritis Sprint 4 adalah [#116](https://github.com/hero-ojk-its/hero/issues/116), dan item itu belum punya estimasi.** Indikator M2
+  sudah tercapai di lapisan data, tetapi layar Analisa masih placeholder. Dengan aturan H-14,
+  pengujian M2 mulai 25 Okt. Estimasikan [#116](https://github.com/hero-ojk-its/hero/issues/116) di sprint planning.
+- **Story Fase 2 lapisan data berstatus In Review, bukan Done.** Kriterianya terukur terpenuhi,
+  tetapi commit `c0cb07f` masuk langsung ke `main` tanpa PR, sedangkan DoD mensyaratkan review
+  oleh anggota lain. Penerimaan M2 juga mensyaratkan telaah SME atas ringkasan.
+- **Tiga keputusan menunggu Pak Faris:** role pengguna ([#32](https://github.com/hero-ojk-its/hero/issues/32)), izin menguji AI-Assisted dengan
+  model nyata ([#48](https://github.com/hero-ojk-its/hero/issues/48), NFR-08), dan cara memasukkan ± 2.100 dokumen katalog ke staging.
+- **Sprint 5 tinggal 25 SP.** Ada ruang untuk menarik layar Harmonisasi lebih awal — mesin
+  harmonisasi sudah mengukur recall 90,1% pada 14 pasangan peraturan (target M3 ≥ 70%), dan
+  Fase 3 hanya menyisakan 6 hari bangun menurut aturan H-14 (dok. 07 §5.2).
+- **Asumsi kapasitas ± 44 SP per sprint (§5B.1) terlalu rendah** dibanding realisasi dua sprint
+  terakhir. Pakai angka realisasi sebagai acuan sprint berikutnya.
+
+---
+
 ## 6. Backlog Fase Berikutnya (Tidak Dikerjakan pada MVP)
 
 | ID | Item | Alasan Ditunda | Sumber |
@@ -486,5 +575,6 @@ sprint-nya tidak diubah:
 | Versi | Tanggal | Perubahan | Penyusun |
 | --- | --- | --- | --- |
 | 1.0 | 7 Sep 2026 | Draft awal: 7 epic, 63 user story, DoR/DoD, distribusi sprint | PM/BA |
+| 1.5 | 13 Okt 2026 | §5E: Sprint 3 ditutup, carry-over ke Sprint 4, enam story Fase 2 ditarik dari Sprint 5, AI-T15 & bug penempatan ditambahkan, beban Sprint 4 | PM/BA |
 | 1.4 | 9 Okt 2026 | §5D status backlog hasil audit GitHub: 26 issue ditutup, US-03 & US-09 selesai lebih awal, 15 story Fase 2–3 In Progress di lapisan data, AI-M8 & bug API ditambahkan; papan tim dan papan asdos disamakan | PM/BA |
 | 1.3 | 29 Sep 2026 | §5C hasil Weekly #4: US-13c, US-20b, US-20c baru; AC US-13b, US-20a, US-28, US-03 direvisi; US-17 ditarik ke Sprint 3; catatan kapasitas Sprint 3 | PM/BA |

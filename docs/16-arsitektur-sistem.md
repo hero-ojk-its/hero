@@ -1,6 +1,6 @@
 # DOKUMEN ARSITEKTUR SISTEM
 **Proyek:** HERO — Harmonisasi & Analisa Regulasi Otomatis
-**Versi:** 1.4 (Draft) | **Tanggal:** 9 Oktober 2026 | **Penyusun:** Business Analyst
+**Versi:** 1.5 (Draft) | **Tanggal:** 13 Oktober 2026 | **Penyusun:** Business Analyst
 **Deliverable WBS:** 1.2.5 Perancangan arsitektur sistem
 
 ---
@@ -325,7 +325,7 @@ dibahas pada rapat mingguan, sesuai peran tim sebagai konsultan sejak 12 Oktober
 
 | Kode | Keputusan | Memblokir | Tenggat | Status per 9 Okt 2026 |
 | --- | --- | --- | --- | --- |
-| TD-02 | Pendekatan *retrieval* / pencarian semantik | FR-HRM-05 | 30 Sep 2026 | ✅ Terjawab lewat benchmark: FTS5 untuk kata kunci, vektor e5-large untuk makna, graf untuk dasar hukum — `pipeline/docs/DB_COMPARISON.md` |
+| TD-02 | Pendekatan *retrieval* / pencarian semantik | FR-HRM-05 | 30 Sep 2026 | ✅ Terjawab lewat benchmark: FTS5 untuk kata kunci, vektor e5-large untuk makna, graf untuk dasar hukum — `pipeline/docs/DB_COMPARISON.md`. **Catatan 13 Okt:** e5-large (± 2,2 GB) tidak muat di VPS 1,9 GB; di server yang tersedia kata kunci + LSA |
 | TD-04 | Mesin OCR | FR-SCR-09a (Fase 1) | 27 Sep 2026 | ✅ Tesseract (Indonesia + Inggris), otomatis per halaman |
 | TD-06 | Mekanisme akses OneDrive | FR-SCR-06 | 27 Sep 2026 | 🟡 Adapter share-link `onedrive_share` jalan; isi dokumen menunggu akses mitra ([#112](https://github.com/hero-ojk-its/hero/issues/112)) |
 | TD-07 | Ambang kemiripan pasal | FR-HRM-06 s.d. 08a | 25 Okt 2026 | 🔴 Terbuka ([#28](https://github.com/hero-ojk-its/hero/issues/28)) |
@@ -458,6 +458,7 @@ karena berkas tersebut memuat inisialisasi skema.
 
 | Versi | Tanggal | Perubahan | Penyusun |
 | --- | --- | --- | --- |
+| 1.5 | 13 Okt 2026 | TD-02: batas memori VPS untuk pencarian makna | BA |
 | 1.4 | 9 Okt 2026 | ADR-11 diterima beserta realisasinya; status TD-02, TD-04, TD-06 di ADR-12 | BA |
 | 1.3 | 14 Sep 2026 | Tambah ADR-11 usulan pemisahan hosting (frontend Vercel via Actions, backend VPS); daftar keputusan terbuka menjadi ADR-12 | BA |
 | 1.2 | 9 Sep 2026 | §4.1 ditetapkan sebagai acuan tunggal penetapan peran, disertai aturan penurunan peran untuk user story; tambah komponen Classification Engine | BA |

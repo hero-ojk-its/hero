@@ -1,5 +1,5 @@
 # RISK REGISTER, ISSUE LOG & ASSUMPTION LOG
-**Proyek:** HERO | **Versi:** 1.2 | **Tanggal:** 9 Oktober 2026 | **Penyusun:** Project Manager
+**Proyek:** HERO | **Versi:** 1.3 | **Tanggal:** 13 Oktober 2026 | **Penyusun:** Project Manager
 **Frekuensi Peninjauan:** setiap Sprint Planning & Sprint Review
 
 ---
@@ -115,6 +115,9 @@ Risiko yang telah terjadi dicatat di sini dan dikelola sampai tertutup.
 | **ISU-11** | **API staging dapat diakses tanpa login** | 6 Okt 2026 | Metadata dokumen non-publik terbaca publik begitu dokumen internal masuk staging | Tinggi | Pengaman minimal di depan API; butuh persetujuan PO karena login ditunda ([#113](https://github.com/hero-ojk-its/hero/issues/113)) | Backend + Infra/QA | 11 Okt 2026 | 🔴 Terbuka |
 | **ISU-12** | **PRD v1.0 belum ditandatangani mentor** | 22 Sep 2026 | Administrasi kampus tertahan | Sedang | Tagih tiap rapat mingguan ([#45](https://github.com/hero-ojk-its/hero/issues/45)) | PM | 11 Okt 2026 | 🟡 Menunggu Pihak Eksternal |
 | **ISU-13** | **Angka ground truth resmi per situs belum diterima** | 29 Sep 2026 | Penerimaan US-13c hanya bisa dinilai dengan estimasi rapat | Sedang | Tagih ke Pak Faris ([#87](https://github.com/hero-ojk-its/hero/issues/87)); konfirmasi selisih JDIH | PM | 11 Okt 2026 | 🟡 Menunggu Pihak Eksternal |
+| **ISU-14** | **RAM VPS (1,9 GB) nyaris habis** | 13 Okt 2026 | Pencarian makna (model e5-large ± 2,2 GB) tidak muat; tidak ada ruang untuk harmonisasi massal. Risiko RSK-14 terwujud | Tinggi | Ajukan penambahan RAM ke ≥ 4 GB lewat skema reimburse; sementara pakai kata kunci + LSA | Infra/QA + PM | 25 Okt 2026 | 🔴 Terbuka |
+| **ISU-15** | **Layar Analisa belum tersambung ke mesin analisa** | 13 Okt 2026 | Indikator M2 tercapai di lapisan data tetapi tidak bisa didemokan lewat aplikasi | Tinggi | Sambungkan layar dalam Sprint 4 ([#116](https://github.com/hero-ojk-its/hero/issues/116)) | Frontend + Backend | 25 Okt 2026 | 🔴 Terbuka |
+| **ISU-16** | **Staging baru memuat 151 dari ± 2.100 dokumen katalog** | 13 Okt 2026 | Knowledge Base staging belum mencerminkan korpus; hasil uji mitra tidak representatif | Sedang | Putuskan cara memasukkan sisanya (pindai backend atau unggah massal) | Backend + PO | 25 Okt 2026 | 🔴 Terbuka |
 
 **Definisi status:** `Terbuka` · `Sedang Ditangani` · `Menunggu Pihak Eksternal` · `Selesai` · `Dieskalasi`
 
@@ -152,5 +155,6 @@ Risiko yang telah terjadi dicatat di sini dan dikelola sampai tertutup.
 | Versi | Tanggal | Perubahan | Penyusun |
 | --- | --- | --- | --- |
 | 1.0 | 7 Sep 2026 | Draft awal: 16 risiko, 5 isu terbuka, 7 asumsi | PM |
+| 1.3 | 13 Okt 2026 | Laporan Fase 2 lapisan data: ISU-14..16 dibuka (RAM VPS, layar Analisa, isi staging) | PM |
 | 1.2 | 9 Okt 2026 | Audit GitHub & Weekly #3–#5: ISU-04, ISU-08, ISU-09 selesai; ISU-10..13 dibuka | PM |
 | 1.1 | 8 Sep 2026 | Hasil Weekly Update #1: RSK-07 ditutup, RSK-06 turun ke Sedang, RSK-17..21 ditambahkan; ISU-01/02/03 selesai, ISU-06..09 dibuka | PM |
