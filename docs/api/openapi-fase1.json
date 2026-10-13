@@ -3403,25 +3403,6 @@
           }
         }
       }
-    },
-    "/debug-routes": {
-      "get": {
-        "tags": [
-          "Health"
-        ],
-        "summary": "Debug Routes",
-        "operationId": "debug_routes_debug_routes_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
     }
   },
   "components": {
