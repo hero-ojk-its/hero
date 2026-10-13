@@ -27,7 +27,14 @@ jobs:
     runs-on: ubuntu-latest
     # Uji beban di tests/test_loadtest.py meluncurkan server sungguhan;
     # tanpa batas ini pekerjaan yang menggantung membakar kuota berjam-jam.
-    timeout-minutes: 25
+    # Suite sehat selesai dalam ±1–3 menit; 20 menit sudah berarti ada yang macet.
+    timeout-minutes: 20
+    env:
+      # Tesseract memakai OpenMP. Pada runner dengan sedikit inti ia berebut thread
+      # dan melambat berlipat (diukur: 44 s → 19 s untuk tiga tes OCR di 2 inti).
+      # Sebelum ini satu run Pytest memakan 19–25 menit, hampir semuanya di blok OCR.
+      # Unit systemd produksi sudah memakai pembatas yang sama.
+      OMP_THREAD_LIMIT: '1'
     strategy:
       fail-fast: false
       matrix:
@@ -56,7 +63,8 @@ jobs:
           ruff check --select E9,F821,F822,F823 hero tests
 
       - name: Test
-        run: python -m pytest tests -q
+        # --durations: bila suite melambat lagi, log langsung menunjuk tes penyebabnya.
+        run: python -m pytest tests -q --durations=15
 
   # Lapisan data dipasang di VPS tanpa ekstra opsional. Pekerjaan ini menangkap
   # dependensi yang dipakai kode inti tetapi tidak dideklarasikan — openpyxl

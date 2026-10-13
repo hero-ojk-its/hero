@@ -17,16 +17,40 @@ pytestmark = pytest.mark.skipif(
     not tesseract_available(), reason="tesseract not installed")
 
 
+_FONT_KANDIDAT = (
+    "/System/Library/Fonts/Supplemental/Arial.ttf",                        # macOS
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",                     # Debian/Ubuntu
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans.ttf",                              # Fedora/Alpine
+)
+
+
+def _font(size: int):
+    """Font ber-skala untuk gambar uji OCR, yang tersedia di semua mesin.
+
+    Versi awal hanya mencoba Arial milik macOS dan jatuh ke ``load_default()``
+    di Linux. Itu font bitmap ±10 px: teksnya terlalu kecil bagi Tesseract
+    (rotasi 180° tak terdeteksi, "PASAL 5" terbaca "PASAL5"), sehingga dua tes
+    gagal di setiap run CI GitHub sejak 6 Okt dan hanya lulus di Mac pengembang."""
+    from PIL import ImageFont
+
+    for path in _FONT_KANDIDAT:
+        try:
+            return ImageFont.truetype(path, size)
+        except OSError:
+            continue
+    try:
+        return ImageFont.load_default(size=size)       # Pillow ≥ 10.1: font vektor bawaan
+    except TypeError:                                   # Pillow lama: hanya bitmap kecil
+        pytest.skip("tidak ada font ber-skala untuk membuat gambar uji OCR")
+
+
 def make_text_image(rotate: int = 0):
     from PIL import Image, ImageDraw, ImageFont
 
     img = Image.new("L", (900, 500), color=255)
     draw = ImageDraw.Draw(img)
-    try:
-        font = ImageFont.truetype(
-            "/System/Library/Fonts/Supplemental/Arial.ttf", 26)
-    except OSError:
-        font = ImageFont.load_default()
+    font = _font(26)
     lines = [
         "PASAL 5",
         "Setiap pelaku usaha wajib menyampaikan laporan",
