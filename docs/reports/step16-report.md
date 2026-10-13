@@ -68,6 +68,8 @@ Layanan analisa regulasi dan harmonisasi milik lapisan data (`hero bridge serve`
    ```
    *(Pada Docker Desktop pengujian lokal dapat menggunakan `http://host.docker.internal:8100`).*
 2. **Penghapusan Blok Bypass di Caddy:** Setelah gerbang backend aktif di VPS, blok `handle /api/v1/ml/*` di reverse proxy Caddy (`deploy/Caddyfile`) sebaiknya dihapus agar seluruh lalu lintas melewati backend demi penegakan hak akses. Layanan ML cukup mendengarkan di IP internal bridge (`172.17.0.1` / `127.0.0.1`). *(Sesuai instruksi aturan main, `deploy/Caddyfile` tidak diubah pada langkah ini).*
+3. **Penyaringan Harmonisasi di Lapisan Data:**
+   > **Lapisan data:** `POST /harmonisasi` menghitung terhadap seluruh korpus lalu baru menyaring `temuan` dengan `pembanding`. Angka di `ringkasan` dan kalimat `rekomendasi` karena itu masih dihitung dari korpus penuh. Sebaiknya korpus dibatasi **sebelum** `harmonise()` dijalankan, dan `[]` dibedakan dari `null`.
 
 ---
 
@@ -87,7 +89,7 @@ Berikut output mentah `git diff --stat` setelah penambahan seksi Gerbang Analisa
 
 ---
 
-## 4. Tabel Hasil Pengujian Gerbang ML (M01 – M12)
+## 4. Tabel Hasil Pengujian Gerbang ML (M01 – M17)
 
 Pengujian dilakukan menggunakan `httpx.MockTransport` tanpa layanan ML sungguhan.
 
@@ -100,11 +102,18 @@ Pengujian dilakukan menggunakan `httpx.MockTransport` tanpa layanan ML sungguhan
 | **M05** | `GET /analisa/{id}` dokumen nonaktif | 404 `dokumen_nonaktif`, handler **tidak** dipanggil | Status 404, pesan `dokumen_nonaktif`, transport 0 call | **PASSED** |
 | **M06** | `GET /analisa/{id}` non-publik, mode lindung | 403, handler **tidak** dipanggil | Status 403, detail proteksi login, transport 0 call | **PASSED** |
 | **M07** | `POST /harmonisasi/{id}` body `null` (ada nonaktif & non-publik) | Body ke ML = daftar eksplisit dokumen terfilter | Status 200, request body ke downstream hanya ID valid | **PASSED** |
-| **M08** | Jawaban harmonisasi memuat kandidat/temuan nonaktif | Dibuang; `disaring_backend` > 0; rujukan `document_id = null`; audit tercatat | Kandidat/temuan disaring, rujukan dinetralkan, audit `RUN_HARMONIZATION` tercatat | **PASSED** |
+| **M08** | Jawaban harmonisasi memuat kandidat/temuan/rujukan nonaktif | Kandidat/temuan dibuang; `rujukan` `document_id=null` & kunci sensitif dihapus; `disaring_backend` = 3 (1 kandidat + 1 temuan + 1 rujukan); audit ringkas | Status 200, kandidat/temuan dibuang, rujukan dinetralkan, disaring=3, audit format ringkas | **PASSED** |
 | **M09** | `GET /cari?q=modal` tanpa `metode` | Layanan menerima `metode=lsa`; item nonaktif dibuang, `total` disesuaikan | Parameter `metode=lsa` diteruskan, item disaring, total=1 | **PASSED** |
 | **M10** | `GET /pasal-mirip?teks=...&hanya_publik=false` (mode lindung) | Layanan menerima `hanya_publik=true` | Query parameter dipaksa `hanya_publik=true` | **PASSED** |
 | **M11** | Layanan menjawab 404 `{"detail":"belum siap"}` | Gerbang menjawab 404 dengan body yang sama | Status 404, payload `{"detail":"belum siap"}` | **PASSED** |
 | **M12** | `GET /cari?q=a` (1 karakter) | 422 dari backend, handler **tidak** dipanggil | Status 422 Unprocessable, transport 0 call | **PASSED** |
+| **M13** | Harmonisasi: temuan memuat `alternatif` dokumen nonaktif | Temuan tetap ada, `alternatif` dibuang, penanda rahasia hilang, `disaring_backend` ≥ 1 | Alternatif kosong `[]`, teks penanda hilang, disaring ≥ 1 | **PASSED** |
+| **M14** | `/analisa/{id}` memuat `dasar_hukum` non-publik & `terdekat` nonaktif | Elemen list dibuang; `terdekat.document_id = null`, kutipan hilang, teks tetap ada; penanda rahasia hilang | `dasar_hukum` `[]`, `terdekat` tereduksi tanpa kutipan, teks penanda hilang | **PASSED** |
+| **M15** | Harmonisasi dengan body `[<id non-publik>]` | 422 `pembanding_kosong`, handler **tidak** dipanggil | Status 422 `pembanding_kosong`, transport 0 call | **PASSED** |
+| **M16** | Harmonisasi sukses | Audit: `jumlah_korpus` int, `korpus_dibatasi_pengguna` bool, tidak ada list ID | Audit terekam dengan `jumlah_korpus: 1`, `korpus_dibatasi_pengguna: true` | **PASSED** |
+| **M17** | `/analisa/{id}/klausul` memuat `hasil` dokumen nonaktif | Elemen list dibuang, penanda rahasia hilang, `disaring_backend` ≥ 1 | Hasil kosong `[]`, teks penanda hilang, disaring ≥ 1 | **PASSED** |
+
+> *Catatan Penyesuaian M08:* Nilai `disaring_backend` berubah dari 2 menjadi 3 karena pada penyaring rekursif baru (`saring_rujukan`), penentralan `document_id = null` dan pembersihan atribut sensitif pada entri `rujukan` dokumen nonaktif kini ikut dihitung sebagai 1 item penyaringan backend (1 kandidat + 1 temuan + 1 rujukan).
 
 ---
 
@@ -123,20 +132,25 @@ platform win32 -- Python 3.13.7, pytest-9.1.1, pluggy-1.6.0 -- C:\Hero\hero-back
 cachedir: .pytest_cache
 rootdir: C:\Hero\hero-backend
 plugins: anyio-4.15.1
-collecting ... collected 12 items
+collecting ... collected 17 items
 
-tests/test_step16_ml_gateway.py::test_m01_ml_service_url_empty_returns_503 PASSED [  8%]
-tests/test_step16_ml_gateway.py::test_m02_connect_error_returns_503 PASSED [ 16%]
-tests/test_step16_ml_gateway.py::test_m03_timeout_returns_504 PASSED     [ 25%]
-tests/test_step16_ml_gateway.py::test_m04_analisa_active_public_doc_returns_200 PASSED [ 33%]
-tests/test_step16_ml_gateway.py::test_m05_analisa_inactive_doc_returns_404_handler_not_called PASSED [ 41%]
-tests/test_step16_ml_gateway.py::test_m06_analisa_non_public_doc_protected_mode_returns_403 PASSED [ 50%]
-tests/test_step16_ml_gateway.py::test_m07_harmonisasi_body_null_filters_inactive_and_non_public PASSED [ 58%]
-tests/test_step16_ml_gateway.py::test_m08_harmonisasi_response_filtering_and_audit PASSED [ 66%]
-tests/test_step16_ml_gateway.py::test_m09_cari_default_method_and_filtering PASSED [ 75%]
-tests/test_step16_ml_gateway.py::test_m10_pasal_mirip_protected_mode_forces_hanya_publik PASSED [ 83%]
-tests/test_step16_ml_gateway.py::test_m11_ml_service_returns_404_gateway_forwards PASSED [ 91%]
-tests/test_step16_ml_gateway.py::test_m12_cari_query_too_short_returns_422_backend PASSED [100%]
+tests/test_step16_ml_gateway.py::test_m01_ml_service_url_empty_returns_503 PASSED [  5%]
+tests/test_step16_ml_gateway.py::test_m02_connect_error_returns_503 PASSED [ 11%]
+tests/test_step16_ml_gateway.py::test_m03_timeout_returns_504 PASSED     [ 17%]
+tests/test_step16_ml_gateway.py::test_m04_analisa_active_public_doc_returns_200 PASSED [ 23%]
+tests/test_step16_ml_gateway.py::test_m05_analisa_inactive_doc_returns_404_handler_not_called PASSED [ 29%]
+tests/test_step16_ml_gateway.py::test_m06_analisa_non_public_doc_protected_mode_returns_403 PASSED [ 35%]
+tests/test_step16_ml_gateway.py::test_m07_harmonisasi_body_null_filters_inactive_and_non_public PASSED [ 41%]
+tests/test_step16_ml_gateway.py::test_m08_harmonisasi_response_filtering_and_audit PASSED [ 47%]
+tests/test_step16_ml_gateway.py::test_m09_cari_default_method_and_filtering PASSED [ 52%]
+tests/test_step16_ml_gateway.py::test_m10_pasal_mirip_protected_mode_forces_hanya_publik PASSED [ 58%]
+tests/test_step16_ml_gateway.py::test_m11_ml_service_returns_404_gateway_forwards PASSED [ 64%]
+tests/test_step16_ml_gateway.py::test_m12_cari_query_too_short_returns_422_backend PASSED [ 70%]
+tests/test_step16_ml_gateway.py::test_m13_harmonisasi_alternatif_with_inactive_doc_discarded PASSED [ 76%]
+tests/test_step16_ml_gateway.py::test_m14_analisa_recursive_filtering_dasar_hukum_and_terdekat PASSED [ 82%]
+tests/test_step16_ml_gateway.py::test_m15_harmonisasi_body_all_unauthorized_returns_422_pembanding_kosong PASSED [ 88%]
+tests/test_step16_ml_gateway.py::test_m16_harmonisasi_success_audit_format PASSED [ 94%]
+tests/test_step16_ml_gateway.py::test_m17_analisa_klausul_hasil_inactive_doc_discarded PASSED [100%]
 
 ============================== warnings summary ===============================
 venv\Lib\site-packages\fastapi\testclient.py:1
@@ -147,16 +161,20 @@ venv\Lib\site-packages\starlette\testclient.py:53
   C:\Hero\hero-backend\venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
     _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
 
+tests/test_step16_ml_gateway.py::test_m15_harmonisasi_body_all_unauthorized_returns_422_pembanding_kosong
+  C:\Hero\hero-backend\venv\Lib\site-packages\fastapi\routing.py:352: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    return await dependant.call(**values)
+
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-======================= 12 passed, 2 warnings in 17.66s =======================
+======================= 17 passed, 3 warnings in 24.06s =======================
 ```
 
 ### C. Pytest Seluruh Suite (`python -m pytest -q`)
 ```
-284 passed, 1 skipped, 34 warnings in 275.12s (0:04:35)
+289 passed, 1 skipped, 35 warnings in 375.70s (0:06:15)
 ```
 
-### D. Uji Live Kontainer Docker
+### D. Uji Live Kontainer Docker (dari Langkah 16)
 ```powershell
 docker compose up -d --build backend
 Start-Sleep -Seconds 15
@@ -179,15 +197,15 @@ referrer-policy: strict-origin-when-cross-origin
 
 {"detail":{"code":"layanan_analisa_belum_dikonfigurasi","message":"Layanan analisa belum dikonfigurasi (ML_SERVICE_URL kosong)."}}
 ```
-*(Catatan: Respons 503 adalah perilaku yang benar dan diharapkan karena `ML_SERVICE_URL` memang belum diisi di `.env` lokal).*
 
 ---
 
 ## 6. Riwayat Commit dan Status Git
 
-### A. `git log --oneline -5`
+### A. `git log --oneline -6`
 ```
-9d88cf4 feat(step16): gerbang analisa ml untuk proteksi akses dan harmonisasi (issue #116)
+<commit 16b> fix(step16): saring rujukan dokumen secara rekursif di gerbang ml
+1ed2d6f feat(step16): gerbang analisa ml untuk proteksi akses dan harmonisasi (issue #116)
 45cd17f fix(step15): pertahankan alasan penempatan saat worker melapor galat
 363ad3b fix(step15): penanganan kegagalan penempatan dokumen dan antrean kegagalan (issue #117)
 f09d2a2 docs(step14): ganti hasil uji live dengan output asli
@@ -196,6 +214,7 @@ f09d2a2 docs(step14): ganti hasil uji live dengan output asli
 
 ### B. `git status --short`
 ```
-(bersih / working tree clean)
+(bersih / working tree clean setelah commit)
 ```
+
 

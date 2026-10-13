@@ -4,9 +4,9 @@ Gerbang terpadu untuk layanan Analisa dan Harmonisasi Regulasi (ML Layer).
 
 Tanggung jawab gerbang:
 1. Memvalidasi hak akses dokumen sebelum meneruskan ke ML (proteksi dokumen nonaktif & dokumen non-publik).
-2. Menyaring hasil pencarian, daftar dokumen, dan korpus harmonisasi agar dokumen yang tidak diizinkan tidak bocor.
-3. Menyeragamkan kode dan format galat (503 bila belum dikonfigurasi / tidak tersedia, 504 saat timeout).
-4. Mencatat jejak audit RUN_HARMONIZATION saat harmonisasi dijalankan.
+2. Menyaring secara rekursif hasil analisa, temuan, referensi, dan korpus harmonisasi agar data dokumen yang tidak diizinkan tidak bocor.
+3. Menyeragamkan kode dan format galat (503 bila belum dikonfigurasi / tidak tersedia, 504 saat timeout, 422 bila pembanding kosong).
+4. Mencatat jejak audit ringkas RUN_HARMONIZATION saat harmonisasi dijalankan.
 """
 import logging
 from collections.abc import AsyncIterator
@@ -27,6 +27,8 @@ from app.services.audit_service import RUN_HARMONIZATION, record_audit
 logger = logging.getLogger("hero")
 
 router = APIRouter(tags=["Analisa (ML)"])
+
+SENSITIVE_REF_KEYS = {"kutipan", "pdf", "halaman", "pasal", "pasal_mirip", "skor"}
 
 
 async def get_ml_client() -> AsyncIterator[httpx.AsyncClient]:
@@ -79,6 +81,105 @@ def check_document_access(db: Session, document_id: int) -> Document:
                 detail="Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.",
             )
     return doc
+
+
+def saring_rujukan(
+    obj: Any,
+    allowed_ids: set[int],
+    parent_key: Optional[str] = None,
+) -> tuple[Any, int]:
+    """
+    Penyaring rekursif untuk respons ML:
+    - Elemen list berupa dict dengan kunci `document_id` bernilai int yang tidak ada di `allowed_ids` -> dibuang.
+      (Kecuali dalam list 'rujukan', di mana elemen dinetralkan dengan document_id=None dan kunci sensitif dihapus).
+    - Elemen list berupa dict yang memiliki sub-dict `pembanding` dengan `document_id` tidak diizinkan -> dibuang (temuan[]).
+    - Dict bukan elemen list dengan `document_id` tidak diizinkan -> set document_id = null, hapus kunci sensitif
+      (kutipan, pdf, halaman, pasal, pasal_mirip, skor), teks rujukan tetap dipertahankan.
+    - document_id = null (register belum diunduh) dibiarkan.
+    - Objek level atas 'draft' pada harmonisasi dikecualikan.
+    """
+    if isinstance(obj, dict):
+        new_dict = {}
+        total_dibuang = 0
+        for k, v in obj.items():
+            # Pengecualian objek draft level atas pada respons harmonisasi
+            if k == "draft" and parent_key is None:
+                new_dict[k] = v
+                continue
+
+            # Dict bukan elemen list dengan document_id tidak diizinkan
+            if isinstance(v, dict):
+                doc_id = v.get("document_id")
+                if isinstance(doc_id, int) and doc_id not in allowed_ids:
+                    v_copy = dict(v)
+                    v_copy["document_id"] = None
+                    for sk in SENSITIVE_REF_KEYS:
+                        v_copy.pop(sk, None)
+                    total_dibuang += 1
+                    rec_val, rec_count = saring_rujukan(v_copy, allowed_ids, parent_key=k)
+                    total_dibuang += rec_count
+                    new_dict[k] = rec_val
+                    continue
+
+            filtered_v, count_v = saring_rujukan(v, allowed_ids, parent_key=k)
+            total_dibuang += count_v
+            new_dict[k] = filtered_v
+
+        # Sesuaikan total jika ada list items
+        if "items" in new_dict and isinstance(new_dict["items"], list) and "total" in new_dict:
+            new_dict["total"] = len(new_dict["items"])
+
+        return new_dict, total_dibuang
+
+    elif isinstance(obj, list):
+        new_list = []
+        total_dibuang = 0
+        for item in obj:
+            if isinstance(item, dict):
+                # Penanganan khusus elemen list rujukan: netralkan dokumen_id, jangan buang seluruh rujukan
+                if parent_key == "rujukan":
+                    doc_id = item.get("document_id")
+                    if isinstance(doc_id, int) and doc_id not in allowed_ids:
+                        item_copy = dict(item)
+                        item_copy["document_id"] = None
+                        for sk in SENSITIVE_REF_KEYS:
+                            item_copy.pop(sk, None)
+                        total_dibuang += 1
+                        rec_item, rec_count = saring_rujukan(item_copy, allowed_ids, parent_key="rujukan_item")
+                        total_dibuang += rec_count
+                        new_list.append(rec_item)
+                    else:
+                        rec_item, rec_count = saring_rujukan(item, allowed_ids, parent_key="rujukan_item")
+                        total_dibuang += rec_count
+                        new_list.append(rec_item)
+                    continue
+
+                # Aturan 1: Elemen list dengan document_id int yang tidak diizinkan -> DIBUANG
+                doc_id = item.get("document_id")
+                if isinstance(doc_id, int) and doc_id not in allowed_ids:
+                    total_dibuang += 1
+                    continue
+
+                # Aturan 2: Elemen list dengan pembanding.document_id tidak diizinkan -> DIBUANG
+                pembanding = item.get("pembanding")
+                if isinstance(pembanding, dict):
+                    p_doc_id = pembanding.get("document_id")
+                    if isinstance(p_doc_id, int) and p_doc_id not in allowed_ids:
+                        total_dibuang += 1
+                        continue
+
+                rec_item, rec_count = saring_rujukan(item, allowed_ids, parent_key=parent_key)
+                total_dibuang += rec_count
+                new_list.append(rec_item)
+            else:
+                rec_item, rec_count = saring_rujukan(item, allowed_ids, parent_key=parent_key)
+                total_dibuang += rec_count
+                new_list.append(rec_item)
+
+        return new_list, total_dibuang
+
+    else:
+        return obj, 0
 
 
 async def forward_ml_request(
@@ -180,17 +281,11 @@ async def get_ml_dokumen(
     if status_code >= 400:
         return JSONResponse(status_code=status_code, content=data)
 
-    if not isinstance(data, dict):
-        return data
-
     allowed_ids = allowed_document_ids(db)
-    items = data.get("items", [])
-    filtered_items = [it for it in items if isinstance(it, dict) and it.get("document_id") in allowed_ids]
-    discarded = len(items) - len(filtered_items)
-    data["items"] = filtered_items
-    data["total"] = len(filtered_items)
-    data["disaring_backend"] = discarded
-    return data
+    filtered_data, discarded = saring_rujukan(data, allowed_ids)
+    if isinstance(filtered_data, dict):
+        filtered_data["disaring_backend"] = discarded
+    return filtered_data
 
 
 @router.get("/analisa/{document_id}", summary="Analisa Regulasi")
@@ -207,7 +302,12 @@ async def get_ml_analisa(
     status_code, data = await forward_ml_request(client, "GET", f"/analisa/{document_id}", params=params)
     if status_code >= 400:
         return JSONResponse(status_code=status_code, content=data)
-    return data
+
+    allowed_ids = allowed_document_ids(db)
+    filtered_data, discarded = saring_rujukan(data, allowed_ids)
+    if isinstance(filtered_data, dict):
+        filtered_data["disaring_backend"] = discarded
+    return filtered_data
 
 
 @router.get("/analisa/{document_id}/klausul", summary="Pencarian Klausul Relevan")
@@ -225,7 +325,12 @@ async def get_ml_analisa_klausul(
     status_code, data = await forward_ml_request(client, "GET", f"/analisa/{document_id}/klausul", params=params)
     if status_code >= 400:
         return JSONResponse(status_code=status_code, content=data)
-    return data
+
+    allowed_ids = allowed_document_ids(db)
+    filtered_data, discarded = saring_rujukan(data, allowed_ids)
+    if isinstance(filtered_data, dict):
+        filtered_data["disaring_backend"] = discarded
+    return filtered_data
 
 
 @router.post("/harmonisasi/{document_id}", summary="Harmonisasi Draft Regulasi")
@@ -249,6 +354,15 @@ async def post_ml_harmonisasi(
     else:
         forward_body = sorted(list((set(body) & allowed_ids) - {document_id}))
 
+    if not forward_body:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "pembanding_kosong",
+                "message": "Tidak ada dokumen pembanding yang dapat diakses.",
+            },
+        )
+
     status_code, data = await forward_ml_request(
         client,
         "POST",
@@ -258,45 +372,9 @@ async def post_ml_harmonisasi(
     if status_code >= 400:
         return JSONResponse(status_code=status_code, content=data)
 
-    if not isinstance(data, dict):
-        return data
-
-    orig_kandidat = data.get("kandidat", [])
-    orig_temuan = data.get("temuan", [])
-    orig_rujukan = data.get("rujukan", [])
-
-    filtered_kandidat = []
-    if isinstance(orig_kandidat, list):
-        for k_item in orig_kandidat:
-            if isinstance(k_item, dict) and k_item.get("document_id") in allowed_ids:
-                filtered_kandidat.append(k_item)
-
-    filtered_temuan = []
-    if isinstance(orig_temuan, list):
-        for t_item in orig_temuan:
-            if not isinstance(t_item, dict):
-                continue
-            pembanding = t_item.get("pembanding")
-            p_doc_id = pembanding.get("document_id") if isinstance(pembanding, dict) else None
-            t_doc_id = t_item.get("document_id")
-            if p_doc_id is not None and p_doc_id not in allowed_ids:
-                continue
-            if t_doc_id is not None and t_doc_id not in allowed_ids:
-                continue
-            filtered_temuan.append(t_item)
-
-    if isinstance(orig_rujukan, list):
-        for r_item in orig_rujukan:
-            if isinstance(r_item, dict):
-                r_doc_id = r_item.get("document_id")
-                if r_doc_id is not None and r_doc_id not in allowed_ids:
-                    r_item["document_id"] = None
-
-    discarded_count = (len(orig_kandidat) - len(filtered_kandidat)) + (len(orig_temuan) - len(filtered_temuan))
-    data["kandidat"] = filtered_kandidat
-    data["temuan"] = filtered_temuan
-    data["rujukan"] = orig_rujukan
-    data["disaring_backend"] = discarded_count
+    filtered_data, discarded = saring_rujukan(data, allowed_ids)
+    if isinstance(filtered_data, dict):
+        filtered_data["disaring_backend"] = discarded
 
     actor_user_id = getattr(current_user, "id", None) if current_user else None
     client_ip = request.client.host if request and request.client else None
@@ -307,14 +385,15 @@ async def post_ml_harmonisasi(
         target_resource=f"document:{document_id}",
         detail={
             "document_id": document_id,
-            "jumlah_temuan": len(filtered_temuan),
-            "korpus_dokumen": forward_body,
+            "jumlah_temuan": len(filtered_data.get("temuan", [])) if isinstance(filtered_data, dict) else 0,
+            "jumlah_korpus": len(forward_body),
+            "korpus_dibatasi_pengguna": body is not None,
         },
         ip_address=client_ip,
         commit=True,
     )
 
-    return data
+    return filtered_data
 
 
 @router.get("/cari", summary="Pencarian Semantik Regulasi")
@@ -334,17 +413,11 @@ async def get_ml_cari(
     if status_code >= 400:
         return JSONResponse(status_code=status_code, content=data)
 
-    if not isinstance(data, dict):
-        return data
-
     allowed_ids = allowed_document_ids(db)
-    items = data.get("items", [])
-    filtered_items = [it for it in items if isinstance(it, dict) and it.get("document_id") in allowed_ids]
-    discarded = len(items) - len(filtered_items)
-    data["items"] = filtered_items
-    data["total"] = len(filtered_items)
-    data["disaring_backend"] = discarded
-    return data
+    filtered_data, discarded = saring_rujukan(data, allowed_ids)
+    if isinstance(filtered_data, dict):
+        filtered_data["disaring_backend"] = discarded
+    return filtered_data
 
 
 @router.get("/pasal-mirip", summary="Pencarian Pasal Mirip Korpus")
@@ -373,14 +446,8 @@ async def get_ml_pasal_mirip(
     if status_code >= 400:
         return JSONResponse(status_code=status_code, content=data)
 
-    if not isinstance(data, dict):
-        return data
-
     allowed_ids = allowed_document_ids(db)
-    items = data.get("items", [])
-    filtered_items = [it for it in items if isinstance(it, dict) and it.get("document_id") in allowed_ids]
-    discarded = len(items) - len(filtered_items)
-    data["items"] = filtered_items
-    data["total"] = len(filtered_items)
-    data["disaring_backend"] = discarded
-    return data
+    filtered_data, discarded = saring_rujukan(data, allowed_ids)
+    if isinstance(filtered_data, dict):
+        filtered_data["disaring_backend"] = discarded
+    return filtered_data

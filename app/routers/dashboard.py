@@ -85,7 +85,7 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
         db.query(Document.regulation_type, func.count(Document.id).label("count"))
         .filter(Document.document_role == PeranDokumen.corpus_eksisting, Document.is_active == True)  # noqa: E712
         .group_by(Document.regulation_type)
-        .order_by(desc("count"))
+        .order_by(desc("count"), Document.regulation_type.nulls_last())
         .limit(15)
         .all()
     )

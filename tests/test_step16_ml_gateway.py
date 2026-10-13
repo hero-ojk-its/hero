@@ -243,9 +243,9 @@ def test_m08_harmonisasi_response_filtering_and_audit(
     assert rujukan_inactive["document_id"] is None
     assert rujukan_inactive["teks"] == "Rujukan Inactive"
 
-    # disaring_backend > 0
+    # disaring_backend > 0 (3: 1 kandidat + 1 temuan + 1 rujukan dinetralkan)
     assert data["disaring_backend"] > 0
-    assert data["disaring_backend"] == 2  # 1 kandidat + 1 temuan
+    assert data["disaring_backend"] == 3  # 1 kandidat + 1 temuan + 1 rujukan dinetralkan
 
     # Audit RUN_HARMONIZATION tercatat
     audit = (
@@ -257,7 +257,9 @@ def test_m08_harmonisasi_response_filtering_and_audit(
     assert audit is not None
     assert audit.detail["document_id"] == draft_doc.id
     assert audit.detail["jumlah_temuan"] == 1
-    assert isinstance(audit.detail["korpus_dokumen"], list)
+    assert audit.detail["jumlah_korpus"] == 1
+    assert audit.detail["korpus_dibatasi_pengguna"] is False
+    assert "korpus_dokumen" not in audit.detail
 
 
 def test_m09_cari_default_method_and_filtering(
@@ -335,3 +337,196 @@ def test_m12_cari_query_too_short_returns_422_backend(client: TestClient):
     resp = client.get("/api/v1/ml/cari?q=a")
     assert resp.status_code == 422
     assert len(handler_called) == 0
+
+
+def test_m13_harmonisasi_alternatif_with_inactive_doc_discarded(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """
+    M13: Harmonisasi: temuan yang pembandingnya diizinkan memuat alternatif: [{document_id: <nonaktif>, kutipan: "KUTIPAN-RAHASIA-XYZ"}]
+    -> temuan tetap ada, alternatif itu dibuang, penanda tidak ada di resp.text, disaring_backend >= 1.
+    """
+    draft_doc = _seed_test_doc(db_session, test_storage, title="Draft M13", reg_num="13/DRAFT/2026")
+    allowed_doc = _seed_test_doc(db_session, test_storage, title="Allowed M13", reg_num="13/ALLOWED/2026")
+    inactive_doc = _seed_test_doc(db_session, test_storage, title="Inactive M13", reg_num="13/INACTIVE/2026", is_active=False)
+
+    secret_marker = "KUTIPAN-RAHASIA-XYZ"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        mock_response = {
+            "versi": "1.0",
+            "kandidat": [{"document_id": allowed_doc.id, "judul": allowed_doc.title}],
+            "temuan": [
+                {
+                    "pasal_draft": "Pasal 1",
+                    "jenis": "menggantikan",
+                    "pembanding": {"document_id": allowed_doc.id},
+                    "alternatif": [
+                        {"document_id": inactive_doc.id, "kutipan": secret_marker},
+                    ],
+                }
+            ],
+            "rujukan": [],
+        }
+        return httpx.Response(200, json=mock_response)
+
+    app.dependency_overrides[get_ml_client] = lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    resp = client.post(f"/api/v1/ml/harmonisasi/{draft_doc.id}", json=None)
+    assert resp.status_code == 200
+    assert secret_marker not in resp.text
+    data = resp.json()
+    assert len(data["temuan"]) == 1
+    assert data["temuan"][0]["alternatif"] == []
+    assert data["disaring_backend"] >= 1
+
+
+def test_m14_analisa_recursive_filtering_dasar_hukum_and_terdekat(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """
+    M14: /analisa/{id} (dokumen diizinkan) memuat dasar_hukum: [{document_id: <non-publik>, kutipan: "KUTIPAN-RAHASIA-XYZ"}]
+         dan terdekat: {document_id: <nonaktif>, kutipan: "KUTIPAN-RAHASIA-XYZ", teks: "POJK 1/2020"}
+    -> elemen list dibuang; terdekat.document_id = null, kutipan hilang, teks tetap ada; penanda tidak ada di resp.text.
+    """
+    doc = _seed_test_doc(db_session, test_storage, title="Doc M14", reg_num="14/DOC/2026")
+    secret_doc = _seed_test_doc(
+        db_session,
+        test_storage,
+        title="Secret M14",
+        reg_num="14/SECRET/2026",
+        access_classification=KlasifikasiAkses.non_publik,
+    )
+    inactive_doc = _seed_test_doc(
+        db_session,
+        test_storage,
+        title="Inactive M14",
+        reg_num="14/INACTIVE/2026",
+        is_active=False,
+    )
+
+    secret_marker = "KUTIPAN-RAHASIA-XYZ"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "document_id": doc.id,
+                "dasar_hukum": [
+                    {"document_id": secret_doc.id, "kutipan": secret_marker},
+                ],
+                "terdekat": {
+                    "document_id": inactive_doc.id,
+                    "kutipan": secret_marker,
+                    "teks": "POJK 1/2020",
+                },
+            },
+        )
+
+    app.dependency_overrides[get_ml_client] = lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    resp = client.get(f"/api/v1/ml/analisa/{doc.id}")
+    assert resp.status_code == 200
+    assert secret_marker not in resp.text
+    data = resp.json()
+    assert data["dasar_hukum"] == []
+    assert data["terdekat"]["document_id"] is None
+    assert data["terdekat"]["teks"] == "POJK 1/2020"
+    assert "kutipan" not in data["terdekat"]
+
+
+def test_m15_harmonisasi_body_all_unauthorized_returns_422_pembanding_kosong(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """
+    M15: Harmonisasi dengan body [<id non-publik>] -> 422 pembanding_kosong, handler tidak dipanggil.
+    """
+    draft_doc = _seed_test_doc(db_session, test_storage, title="Draft M15", reg_num="15/DRAFT/2026")
+    secret_doc = _seed_test_doc(
+        db_session,
+        test_storage,
+        title="Secret M15",
+        reg_num="15/SECRET/2026",
+        access_classification=KlasifikasiAkses.non_publik,
+    )
+    handler_called = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        handler_called.append(request)
+        return httpx.Response(200, json={})
+
+    app.dependency_overrides[get_ml_client] = lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    resp = client.post(f"/api/v1/ml/harmonisasi/{draft_doc.id}", json=[secret_doc.id])
+    assert resp.status_code == 422
+    assert len(handler_called) == 0
+    data = resp.json()["detail"]
+    assert data["code"] == "pembanding_kosong"
+    assert "Tidak ada dokumen pembanding yang dapat diakses" in data["message"]
+
+
+def test_m16_harmonisasi_success_audit_format(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """
+    M16: Harmonisasi sukses -> audit jumlah_korpus berupa int, korpus_dibatasi_pengguna berupa bool, tidak ada list id.
+    """
+    draft_doc = _seed_test_doc(db_session, test_storage, title="Draft M16", reg_num="16/DRAFT/2026")
+    allowed_doc1 = _seed_test_doc(db_session, test_storage, title="Allowed 1 M16", reg_num="16/ALLOWED1/2026")
+    _seed_test_doc(db_session, test_storage, title="Allowed 2 M16", reg_num="16/ALLOWED2/2026")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"kandidat": [], "temuan": [], "rujukan": []})
+
+    app.dependency_overrides[get_ml_client] = lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    resp = client.post(f"/api/v1/ml/harmonisasi/{draft_doc.id}", json=[allowed_doc1.id])
+    assert resp.status_code == 200
+
+    audit = (
+        db_session.query(AuditLog)
+        .filter(AuditLog.target_resource == f"document:{draft_doc.id}", AuditLog.action == RUN_HARMONIZATION)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    assert audit is not None
+    assert audit.detail["document_id"] == draft_doc.id
+    assert isinstance(audit.detail["jumlah_temuan"], int)
+    assert isinstance(audit.detail["jumlah_korpus"], int)
+    assert audit.detail["jumlah_korpus"] == 1
+    assert isinstance(audit.detail["korpus_dibatasi_pengguna"], bool)
+    assert audit.detail["korpus_dibatasi_pengguna"] is True
+    assert "korpus_dokumen" not in audit.detail
+
+
+def test_m17_analisa_klausul_hasil_inactive_doc_discarded(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """
+    M17: /analisa/{id}/klausul memuat hasil: [{document_id: <nonaktif>, kutipan: "KUTIPAN-RAHASIA-XYZ"}]
+    -> dibuang, penanda tidak ada di resp.text.
+    """
+    doc = _seed_test_doc(db_session, test_storage, title="Doc M17", reg_num="17/DOC/2026")
+    inactive_doc = _seed_test_doc(
+        db_session,
+        test_storage,
+        title="Inactive M17",
+        reg_num="17/INACTIVE/2026",
+        is_active=False,
+    )
+    secret_marker = "KUTIPAN-RAHASIA-XYZ"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "document_id": doc.id,
+                "hasil": [
+                    {"document_id": inactive_doc.id, "kutipan": secret_marker},
+                ],
+            },
+        )
+
+    app.dependency_overrides[get_ml_client] = lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    resp = client.get(f"/api/v1/ml/analisa/{doc.id}/klausul?kebutuhan=modal+inti")
+    assert resp.status_code == 200
+    assert secret_marker not in resp.text
+    data = resp.json()
+    assert data["hasil"] == []
+    assert data["disaring_backend"] >= 1
