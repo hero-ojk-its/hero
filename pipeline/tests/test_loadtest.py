@@ -188,21 +188,34 @@ def test_latency_phase_orders_slow_above_fast(palsu):
 
 def test_queueing_raises_latency_when_the_server_is_saturated(palsu):
     """Server palsu melayani serial (dikunci) → menambah pengguna tak menambah throughput
-    tetapi menaikkan latensi. Inilah bentuk 'lutut' yang harus terbaca di laporan."""
+    tetapi menaikkan latensi. Inilah bentuk 'lutut' yang harus terbaca di laporan.
+
+    Waktu layan 60 ms jauh di atas biaya klien/jaringan, supaya hasilnya sama di laptop
+    maupun runner CI 2-inti yang lambat. Versi awal memakai 10 ms dan membandingkan
+    throughput mutlak; di runner GitHub satu pengguna hanya 20 req/s sehingga
+    perbandingannya terbalik (98 < 32 gagal)."""
     h, url = palsu
     serial = threading.Lock()
     orig = h.do_GET
 
     def do_GET(self):  # noqa: N802
         with serial:
-            time.sleep(0.01)
+            time.sleep(0.06)
             orig(self)
 
     h.do_GET = do_GET
-    a = lt.jalankan_level(url, EPS, {}, 1, 1.0, 0.3, None)
-    b = lt.jalankan_level(url, EPS, {}, 8, 1.0, 0.3, None)
-    assert b["rps"] < a["rps"] * 1.6                          # throughput tidak ikut naik 8×
-    assert b["latensi_ms"]["p95"] > a["latensi_ms"]["p95"] * 3
+    a = lt.jalankan_level(url, EPS, {}, 1, 1.5, 0.3, None)
+    b = lt.jalankan_level(url, EPS, {}, 8, 1.5, 0.3, None)
+    assert a["permintaan"] > 0 and b["permintaan"] > 0
+    # Satu penjaga serial: kapasitas total ≈ 1/0,06 ≈ 16 req/s berapa pun jumlah pengguna.
+    assert b["rps"] < 20, f"melebihi kapasitas serial teoretis: {b['rps']}"
+    # Tanpa penjaga serial, 8 pengguna memberi ≈ 8× throughput; dengan penjaga ≤ ≈ 2×
+    # (satu pengguna pun sudah memakai sebagian kapasitas). Ambang 3× memisahkan keduanya
+    # dengan lega, termasuk di runner 1-inti tempat satu pengguna hanya ±9 req/s karena
+    # klien dan server berebut inti yang sama — 1,6× versi awal gagal di sana (15,3 vs 14,9).
+    assert b["rps"] < a["rps"] * 3
+    # Antrean: tiap permintaan menunggu giliran ≈ 8 × 60 ms, jauh di atas latensi satu pengguna.
+    assert b["latensi_ms"]["p95"] > a["latensi_ms"]["p95"] * 2.5
 
 
 def test_render_never_claims_a_limit_it_did_not_find():
@@ -326,12 +339,20 @@ def test_vector_store_survives_concurrent_readers(tmp_path):
 
 
 def test_cli_registers_loadtest():
+    """Dicek lewat daftar perintah Typer, bukan teks ``--help``: Rich membungkus dan
+    memberi kode warna ANSI bergantung lebar terminal (di CI ``--workers`` terpecah
+    dan pencarian string gagal)."""
+    import re
+
     from typer.testing import CliRunner
 
     from hero.cli import app
 
-    r = CliRunner().invoke(app, ["loadtest", "--help"])
-    assert r.exit_code == 0 and "--workers" in r.stdout and "--slo-ms" in r.stdout
+    assert "loadtest" in {c.name for c in app.registered_commands}
+    r = CliRunner().invoke(app, ["loadtest", "--help"], env={"NO_COLOR": "1", "COLUMNS": "200"})
+    assert r.exit_code == 0
+    teks = re.sub(r"\x1b\[[0-9;]*m", "", r.stdout)
+    assert "workers" in teks and "slo-ms" in teks
 
 
 def test_launched_server_roundtrip(tmp_path, tmp_settings, regulation_pdf):
