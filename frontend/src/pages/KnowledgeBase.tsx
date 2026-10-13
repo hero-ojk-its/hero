@@ -197,7 +197,8 @@ export default function KnowledgeBase() {
       selectedJenis,
       selectedTahun,
       selectedBidang,
-      selectedKategori,
+      selectedKategori.id,
+      selectedKategori.name,
       selectedStatus,
     ],
     isApiConfigured
@@ -332,20 +333,30 @@ export default function KnowledgeBase() {
             (c) => c.name.toLowerCase() === kategoriParam.toLowerCase() || String(c.id) === kategoriParam
           );
           if (found) {
-            setSelectedKategori({ id: found.id, name: found.name });
+            setSelectedKategori((prev) =>
+              prev.id === found.id && prev.name === found.name
+                ? prev
+                : { id: found.id, name: found.name }
+            );
           } else {
             const num = Number(kategoriParam);
-            setSelectedKategori({
-              id: isNaN(num) ? null : num,
-              name: isNaN(num) ? kategoriParam : `Kategori #${kategoriParam}`,
-            });
+            const targetId = isNaN(num) ? null : num;
+            const targetName = isNaN(num) ? kategoriParam : `Kategori #${kategoriParam}`;
+            setSelectedKategori((prev) =>
+              prev.id === targetId && prev.name === targetName
+                ? prev
+                : { id: targetId, name: targetName }
+            );
           }
         } else {
           const num = Number(kategoriParam);
-          setSelectedKategori({
-            id: isNaN(num) ? null : num,
-            name: isNaN(num) ? kategoriParam : `Kategori #${kategoriParam}`,
-          });
+          const targetId = isNaN(num) ? null : num;
+          const targetName = isNaN(num) ? kategoriParam : `Kategori #${kategoriParam}`;
+          setSelectedKategori((prev) =>
+            prev.id === targetId && prev.name === targetName
+              ? prev
+              : { id: targetId, name: targetName }
+          );
         }
       }
 
@@ -364,13 +375,14 @@ export default function KnowledgeBase() {
 
       // Topik dari dashboard dipetakan ke bidang bila cocok, atau diabaikan tanpa error
       if (topikParam) {
-        const matched = bidangOptions.find((b) => b.toLowerCase() === topikParam.toLowerCase());
+        const knownSectors = ['Perbankan', 'Pasar Modal', 'IKNB', 'BMKS', 'Fintech', 'Asuransi', 'Tata Kelola IT & AI'];
+        const matched = knownSectors.find((b) => b.toLowerCase() === topikParam.toLowerCase());
         if (matched) {
           setSelectedBidang((prev) => (matched !== prev ? matched : prev));
         }
       }
     });
-  }, [location.search, flatCategories, bidangOptions]);
+  }, [location.search, flatCategories]);
 
   // Tutup dropdown jika klik di luar
   useEffect(() => {
