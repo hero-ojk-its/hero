@@ -1,6 +1,6 @@
 from sqlalchemy import (
-    Column, Integer, String, Text, Date, DateTime, BigInteger, ForeignKey, Enum as SQLEnum, UniqueConstraint,
-    Computed, Index
+    Column, Integer, String, Text, Date, DateTime, BigInteger, Boolean, ForeignKey, Enum as SQLEnum, UniqueConstraint,
+    Computed, Index, text
 )
 from sqlalchemy.dialects.postgresql import TSVECTOR, JSONB
 from sqlalchemy.orm import relationship
@@ -197,6 +197,32 @@ class Document(Base):
         comment="Waktu hasil ekstraksi ML diterima"
     )
 
+    is_active = Column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("true"),
+        index=True,
+        comment="Status aktif dokumen secara administratif (Knowledge Base)"
+    )
+    deactivated_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Waktu dokumen dinonaktifkan"
+    )
+    deactivated_reason = Column(
+        Text,
+        nullable=True,
+        comment="Alasan penonaktifan dokumen"
+    )
+    deactivated_by = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="ID user yang menonaktifkan dokumen"
+    )
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -204,6 +230,7 @@ class Document(Base):
     category = relationship("Category", back_populates="documents")
     job = relationship("JobIngest", back_populates="documents")
     corrected_by_user = relationship("User", foreign_keys=[metadata_corrected_by])
+    deactivated_by_user = relationship("User", foreign_keys=[deactivated_by])
     articles = relationship("Article", back_populates="document", cascade="all, delete-orphan")
     legal_references = relationship(
         "LegalReference",

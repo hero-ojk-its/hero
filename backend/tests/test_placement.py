@@ -272,10 +272,10 @@ def test_p09_placement_rollback_on_commit_failure(client: TestClient, db_session
     monkeypatch.setattr(db_session, "commit", failing_commit)
 
     res = client.post(f"/api/v1/documents/{doc.id}/place")
-    assert res.status_code == 200
-    res_data = res.json()
-    assert res_data["placed"] is False
-    assert "gagal" in res_data["reason"]
+    assert res.status_code == 422
+    res_data = res.json().get("detail", res.json())
+    assert res_data.get("code") == "penempatan_gagal"
+    assert "gagal" in str(res_data.get("message", res_data))
 
     # Berkas harus tetap berada di old_rel
     assert test_storage.exists(old_rel)

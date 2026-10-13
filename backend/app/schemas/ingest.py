@@ -62,6 +62,7 @@ class DuplicateDocumentInfo(BaseModel):
     id: int
     title: str
     regulation_number: Optional[str] = None
+    is_active: bool = True
 
 
 class JobFailureSummary(BaseModel):
