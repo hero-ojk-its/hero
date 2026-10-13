@@ -73,6 +73,7 @@ class SearchParams:
     year: Optional[int] = None
     bidang: Optional[str] = None
     sort: Optional[SearchSort] = None
+    include_inactive: bool = False
     skip: int = 0
     limit: int = 20
 
@@ -210,6 +211,10 @@ class SearchService:
         if params.bidang and params.bidang.strip():
             filters.append(Document.bidang.ilike(f"%{params.bidang.strip()}%"))
 
+        # Filter aktif / nonaktif (default hanya dokumen aktif)
+        if not params.include_inactive:
+            filters.append(Document.is_active == True)
+
         # 10. Tentukan Pengurutan (Sort)
         effective_sort = params.sort
         if effective_sort is None:
@@ -333,6 +338,9 @@ class SearchService:
                 "standardized_filename": doc_obj.standardized_filename,
                 "source_url": doc_obj.source_url,
                 "is_placed": is_placed,
+                "is_active": doc_obj.is_active,
+                "deactivated_at": doc_obj.deactivated_at,
+                "deactivated_reason": doc_obj.deactivated_reason,
                 "pdf_url": pdf_url,
                 "restricted": is_restricted,
                 "rank": rank_val,

@@ -58,7 +58,11 @@ def get_category_detail(category_id: int, db: Session = Depends(get_db)):
 
     svc = CategoryService(db)
     cat_path = svc.path_of(cat)
-    doc_count = db.query(Document).filter(Document.category_id == cat.id).count()
+    doc_count = (
+        db.query(Document)
+        .filter(Document.category_id == cat.id, Document.is_active == True)  # noqa: E712
+        .count()
+    )
 
     return CategoryDetailResponse(
         id=cat.id,

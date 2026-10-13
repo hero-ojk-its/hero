@@ -36,6 +36,8 @@ def sample_doc(db_session):
     db_session.add(doc)
     db_session.commit()
     db_session.refresh(doc)
+    db_session.expunge(doc)
+    db_session.commit()
     return doc
 
 
@@ -451,69 +453,74 @@ def test_p09_migration_cleans_duplicates_and_creates_index(sample_doc: Document)
     alembic_cfg = alembic.config.Config("alembic.ini")
     alembic_cfg.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
 
-    # 1. Downgrade ke revisi sebelum Step 13
-    alembic.command.downgrade(alembic_cfg, "d4e5f6a7b8c9")
+    doc_id = int(sample_doc.id)
 
-    # 2. Sisipkan data duplikat (document_id, order_index)
-    from tests.conftest import TestingSessionLocal
-    s = TestingSessionLocal()
     try:
-        # Masukkan 2 baris dengan order_index = 0 yang sama untuk sample_doc
-        s.execute(text("""
-            INSERT INTO articles (document_id, article_number, content_text, level, order_index)
-            VALUES 
-                (:doc_id, 'Pasal 1 Asli', 'Konten id kecil', 'pasal', 0),
-                (:doc_id, 'Pasal 1 Duplikat', 'Konten id besar', 'pasal', 0);
-        """), {"doc_id": sample_doc.id})
-        s.commit()
+        # 1. Downgrade ke revisi sebelum Step 13
+        alembic.command.downgrade(alembic_cfg, "d4e5f6a7b8c9")
 
-        # Pastikan ada 2 baris sebelum migrasi upgrade
-        count_pre = s.execute(text(
-            "SELECT count(*) FROM articles WHERE document_id = :doc_id AND order_index = 0"
-        ), {"doc_id": sample_doc.id}).scalar()
-        assert count_pre == 2
-    finally:
-        s.close()
-
-    # 3. Jalankan upgrade ke head (e5f6a7b8c9d0)
-    alembic.command.upgrade(alembic_cfg, "head")
-
-    # 4. Verifikasi hasil pembersihan
-    s = TestingSessionLocal()
-    try:
-        rows = s.execute(text("""
-            SELECT id, article_number, content_text 
-            FROM articles 
-            WHERE document_id = :doc_id AND order_index = 0
-            ORDER BY id ASC
-        """), {"doc_id": sample_doc.id}).fetchall()
-
-        # Hanya tersisa tepat 1 baris
-        assert len(rows) == 1
-        # Baris yang tersimpan adalah baris dengan id terkecil ('Pasal 1 Asli')
-        assert rows[0][1] == "Pasal 1 Asli"
-
-        # Verifikasi bahwa index uq_articles_document_order terpasang di postgres
-        idx_check = s.execute(text("""
-            SELECT indexname FROM pg_indexes 
-            WHERE tablename = 'articles' AND indexname = 'uq_articles_document_order';
-        """)).scalar()
-        assert idx_check == "uq_articles_document_order"
-
-        # Verifikasi bahwa mencoba insert duplikat sekarang ditolak oleh database constraint
-        dup_failed = False
+        # 2. Sisipkan data duplikat (document_id, order_index)
+        from tests.conftest import TestingSessionLocal
+        s = TestingSessionLocal()
         try:
+            # Masukkan 2 baris dengan order_index = 0 yang sama untuk sample_doc
             s.execute(text("""
                 INSERT INTO articles (document_id, article_number, content_text, level, order_index)
-                VALUES (:doc_id, 'Pasal 1 Lagi', 'Gagal', 'pasal', 0);
-            """), {"doc_id": sample_doc.id})
+                VALUES 
+                    (:doc_id, 'Pasal 1 Asli', 'Konten id kecil', 'pasal', 0),
+                    (:doc_id, 'Pasal 1 Duplikat', 'Konten id besar', 'pasal', 0);
+            """), {"doc_id": doc_id})
             s.commit()
-        except Exception:
-            s.rollback()
-            dup_failed = True
-        assert dup_failed is True
+
+            # Pastikan ada 2 baris sebelum migrasi upgrade
+            count_pre = s.execute(text(
+                "SELECT count(*) FROM articles WHERE document_id = :doc_id AND order_index = 0"
+            ), {"doc_id": doc_id}).scalar()
+            assert count_pre == 2
+        finally:
+            s.close()
+
+        # 3. Jalankan upgrade ke head
+        alembic.command.upgrade(alembic_cfg, "head")
+
+        # 4. Verifikasi hasil pembersihan
+        s = TestingSessionLocal()
+        try:
+            rows = s.execute(text("""
+                SELECT id, article_number, content_text 
+                FROM articles 
+                WHERE document_id = :doc_id AND order_index = 0
+                ORDER BY id ASC
+            """), {"doc_id": doc_id}).fetchall()
+
+            # Hanya tersisa tepat 1 baris
+            assert len(rows) == 1
+            # Baris yang tersimpan adalah baris dengan id terkecil ('Pasal 1 Asli')
+            assert rows[0][1] == "Pasal 1 Asli"
+
+            # Verifikasi bahwa index uq_articles_document_order terpasang di postgres
+            idx_check = s.execute(text("""
+                SELECT indexname FROM pg_indexes 
+                WHERE tablename = 'articles' AND indexname = 'uq_articles_document_order';
+            """)).scalar()
+            assert idx_check == "uq_articles_document_order"
+
+            # Verifikasi bahwa mencoba insert duplikat sekarang ditolak oleh database constraint
+            dup_failed = False
+            try:
+                s.execute(text("""
+                    INSERT INTO articles (document_id, article_number, content_text, level, order_index)
+                    VALUES (:doc_id, 'Pasal 1 Lagi', 'Gagal', 'pasal', 0);
+                """), {"doc_id": doc_id})
+                s.commit()
+            except Exception:
+                s.rollback()
+                dup_failed = True
+            assert dup_failed is True
+        finally:
+            s.close()
     finally:
-        s.close()
+        alembic.command.upgrade(alembic_cfg, "head")
 
 
 def test_p10_legacy_payload_compatibility(client: TestClient, sample_doc: Document, db_session):

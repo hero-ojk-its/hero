@@ -65,6 +65,11 @@ class Settings(BaseSettings):
     crawl_head_for_size: bool = True
     scan_stuck_minutes: int = 15
 
+    # Gerbang Analisa / Layanan ML (Langkah 16)
+    ml_service_url: str = ""
+    ml_timeout_seconds: float = 120.0
+    ml_default_search_method: str = "lsa"
+
     @field_validator("category_path_template")
     @classmethod
     def validate_category_path_template(cls, v: str) -> str:

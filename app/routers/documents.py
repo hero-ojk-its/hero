@@ -11,7 +11,7 @@ import urllib.parse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import or_, and_, desc
 from sqlalchemy.orm import Session
 
@@ -27,7 +27,12 @@ from app.models.enums import (
     StatusPemrosesan,
     JenisRujukan,
 )
-from app.schemas.article import UpdateDocumentStatusIn, UpdateDocumentStatusResponse
+from app.schemas.article import (
+    UpdateDocumentStatusIn,
+    UpdateDocumentStatusResponse,
+    UpdateDocumentActiveIn,
+    UpdateDocumentActiveResponse,
+)
 from app.routers.auth import get_current_user
 from app.services.audit_service import (
     record_audit,
@@ -35,6 +40,8 @@ from app.services.audit_service import (
     OPEN_PDF,
     DOWNLOAD_PDF,
     UPDATE_METADATA,
+    DEACTIVATE_DOCUMENT,
+    ACTIVATE_DOCUMENT,
 )
 from app.services.storage_service import StorageService, get_storage_service
 from app.services.category_service import CategoryService
@@ -50,14 +57,19 @@ from app.crawlers.url_utils import extract_regulation_year
 logger = logging.getLogger("hero")
 router = APIRouter()
 
+_DOC_TITLE_MAX_LEN = Document.title.type.length or 255
+_DOC_REG_NUM_MAX_LEN = Document.regulation_number.type.length or 100
+_DOC_REG_TYPE_MAX_LEN = Document.regulation_type.type.length or 100
+_DOC_BIDANG_MAX_LEN = Document.bidang.type.length or 150
+
 
 class UpdateMetadataIn(BaseModel):
-    title: Optional[str] = None
-    regulation_number: Optional[str] = None
-    regulation_type: Optional[str] = None
+    title: Optional[str] = Field(None, max_length=_DOC_TITLE_MAX_LEN)
+    regulation_number: Optional[str] = Field(None, max_length=_DOC_REG_NUM_MAX_LEN)
+    regulation_type: Optional[str] = Field(None, max_length=_DOC_REG_TYPE_MAX_LEN)
     release_date: Optional[date] = None
     regulation_year: Optional[int] = None
-    bidang: Optional[str] = None
+    bidang: Optional[str] = Field(None, max_length=_DOC_BIDANG_MAX_LEN)
     category_id: Optional[int] = None
     access_classification: Optional[KlasifikasiAkses] = None
     document_role: Optional[PeranDokumen] = None
@@ -80,6 +92,7 @@ def list_documents(
     year: Optional[int] = Query(None, description="Filter tahun rilis"),
     bidang: Optional[str] = Query(None, description="Filter sektor atau bidang regulasi (misal: Perbankan, BMKS)"),
     sort: Optional[SearchSort] = Query(None, description="Pengurutan hasil pencarian"),
+    include_inactive: bool = Query(False, description="Tampilkan juga dokumen nonaktif jika true (default: false)"),
     skip: int = Query(0, ge=0, description="Offset pagination"),
     limit: int = Query(20, ge=1, description="Batas dokumen per halaman (maks 100)"),
     db: Session = Depends(get_db),
@@ -112,6 +125,7 @@ def list_documents(
         year=year,
         bidang=bidang,
         sort=sort,
+        include_inactive=include_inactive,
         skip=skip,
         limit=clamped_limit,
     )
@@ -170,11 +184,19 @@ def place_pending_documents(
     skipped_cnt = sum(1 for r in results if not r.placed and r.reason in ("metadata_belum_cukup", "sudah_ditempatkan"))
     failed_cnt = sum(1 for r in results if r.reason.startswith("gagal"))
 
+    failed_documents = [
+        {"document_id": r.document_id, "reason": r.reason}
+        for r in results
+        if r.reason and r.reason.startswith("gagal")
+    ]
+
     return {
         "processed": len(results),
         "placed": placed_cnt,
         "skipped": skipped_cnt,
         "failed": failed_cnt,
+        "failed_count": failed_cnt,
+        "failed_documents": failed_documents,
         "results": [
             {
                 "document_id": r.document_id,
@@ -204,6 +226,7 @@ def get_documents_needing_review(
     candidates = (
         db.query(Document)
         .filter(
+            Document.is_active == True,
             or_(
                 Document.processing_status == StatusPemrosesan.perlu_koreksi,
                 and_(
@@ -311,6 +334,9 @@ def _format_single_document_response(doc: Document, db: Session) -> Dict[str, An
         "extracted_at": doc.extracted_at,
         "created_at": doc.created_at,
         "updated_at": doc.updated_at,
+        "is_active": getattr(doc, "is_active", True),
+        "deactivated_at": getattr(doc, "deactivated_at", None),
+        "deactivated_reason": getattr(doc, "deactivated_reason", None),
         "articles": [
             {
                 "id": a.id,
@@ -571,6 +597,15 @@ def patch_document_metadata(
         cat_svc = CategoryService(db)
         place_svc = PlacementService(db, storage, cat_svc, settings)
         place_res = place_svc.place(doc, force=True, actor_user_id=actor_user_id, ip_address=client_ip)
+        if not place_res.placed and place_res.reason and place_res.reason.startswith("gagal"):
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "penempatan_gagal",
+                    "message": place_res.reason,
+                },
+            )
         placement_info = {
             "document_id": place_res.document_id,
             "placed": place_res.placed,
@@ -628,6 +663,15 @@ def place_document(
     client_ip = request.client.host if request.client else None
 
     res = place_svc.place(doc, force=force, actor_user_id=actor_user_id, ip_address=client_ip)
+
+    if not res.placed and res.reason and res.reason.startswith("gagal"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "penempatan_gagal",
+                "message": res.reason,
+            },
+        )
 
     return {
         "document_id": res.document_id,
@@ -759,4 +803,111 @@ def update_document_status(
         legal_reference_created=ref_created,
         legal_reference_id=legal_ref.id if legal_ref else None,
         message=message,
+    )
+
+
+@router.put(
+    "/{document_id}/active",
+    response_model=UpdateDocumentActiveResponse,
+    summary="Aktifkan atau nonaktifkan dokumen regulasi",
+)
+def update_document_active(
+    document_id: int,
+    payload: UpdateDocumentActiveIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+) -> UpdateDocumentActiveResponse:
+    """
+    Mengaktifkan atau menonaktifkan dokumen regulasi secara administratif (US-30 / FR-KB-08).
+
+    Perbedaan status keberlakuan vs status aktif:
+    - Dicabut/Diubah (`status_keberlakuan`) adalah status HUKUM: dokumen tetap tampil di Knowledge Base dengan penanda keberlakuan.
+    - Nonaktif (`is_active`) adalah keputusan ADMINISTRATIF Admin KB (misalnya salah unggah, bukan dokumen regulasi, atau duplikat berbeda hash).
+      Dokumen nonaktif disembunyikan dari Knowledge Base dan statistik, tetapi tidak dihapus dan dapat diaktifkan kembali. Berkas fisik PDF tidak dipindah dan tidak dihapus.
+
+    Validasi & Perilaku:
+    - Jika `is_active == False`, `reason` wajib diisi minimal 5 karakter (divalidasi oleh skema).
+    - Jika `document_id` tidak ditemukan, kembalikan 404.
+    - Jika status saat ini sama dengan `payload.is_active` (idempoten), kembalikan 200 dengan `changed: False` tanpa entri audit baru.
+    - Jika berubah status:
+      - Menonaktifkan (`is_active=False`): isi `deactivated_at`, `deactivated_reason`, `deactivated_by` (`current_user.id` jika ada).
+      - Mengaktifkan (`is_active=True`): kosongkan `deactivated_at`, `deactivated_reason`, `deactivated_by`.
+      - Catat audit: `DEACTIVATE_DOCUMENT` atau `ACTIVATE_DOCUMENT` dengan detail `reason`, `before.is_active`, dan `after.is_active`.
+    """
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Dokumen dengan id={document_id} tidak ditemukan",
+        )
+
+    current_active = bool(doc.is_active)
+    target_active = bool(payload.is_active)
+
+    # Idempoten: status sama dengan yang diminta
+    if current_active == target_active:
+        return UpdateDocumentActiveResponse(
+            document_id=doc.id,
+            is_active=doc.is_active,
+            changed=False,
+            deactivated_at=doc.deactivated_at,
+            deactivated_reason=doc.deactivated_reason,
+            message=(
+                f"Dokumen sudah dalam status {'aktif' if target_active else 'nonaktif'}. "
+                "Tidak ada perubahan."
+            ),
+        )
+
+    # Perubahan status
+    before_state = {"is_active": current_active}
+    clean_reason = payload.reason.strip() if payload.reason else None
+
+    if not target_active:
+        # Menonaktifkan
+        doc.is_active = False
+        doc.deactivated_at = datetime.now(timezone.utc)
+        doc.deactivated_reason = clean_reason
+        user_id = getattr(current_user, "id", None) if current_user else None
+        doc.deactivated_by = user_id
+        action = DEACTIVATE_DOCUMENT
+        msg = f"Dokumen #{doc.id} ('{doc.regulation_number or doc.title}') berhasil dinonaktifkan."
+    else:
+        # Mengaktifkan kembali
+        doc.is_active = True
+        doc.deactivated_at = None
+        doc.deactivated_reason = None
+        doc.deactivated_by = None
+        action = ACTIVATE_DOCUMENT
+        msg = f"Dokumen #{doc.id} ('{doc.regulation_number or doc.title}') berhasil diaktifkan kembali."
+
+    after_state = {"is_active": doc.is_active}
+
+    actor_user_id = getattr(current_user, "id", None) if current_user else None
+    client_ip = request.client.host if request.client else None
+
+    record_audit(
+        db,
+        action=action,
+        user_id=actor_user_id,
+        target_resource=f"document:{doc.id}",
+        detail={
+            "reason": clean_reason,
+            "before": before_state,
+            "after": after_state,
+        },
+        ip_address=client_ip,
+        commit=False,
+    )
+
+    db.commit()
+    db.refresh(doc)
+
+    return UpdateDocumentActiveResponse(
+        document_id=doc.id,
+        is_active=doc.is_active,
+        changed=True,
+        deactivated_at=doc.deactivated_at,
+        deactivated_reason=doc.deactivated_reason,
+        message=msg,
     )
