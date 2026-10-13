@@ -198,7 +198,6 @@ export default function KnowledgeBase() {
       selectedTahun,
       selectedBidang,
       selectedKategori.id,
-      selectedKategori.name,
       selectedStatus,
     ],
     isApiConfigured
@@ -925,9 +924,9 @@ export default function KnowledgeBase() {
 
         {/* Content Box (Table / Loading / Error / Empty) */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          {docsLoading ? (
+          {docsLoading && !apiDocuments ? (
             <LoadingState message="Memuat regulasi dari backend..." />
-          ) : docsError ? (
+          ) : docsError && !apiDocuments ? (
             <ErrorState
               title="Gagal Memuat Regulasi"
               message={docsError}
@@ -942,7 +941,12 @@ export default function KnowledgeBase() {
               actionLabel="Reset Semua Filter"
             />
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto relative">
+              {docsLoading && (
+                <div className="absolute inset-0 bg-white/50 backdrop-blur-[0.5px] flex items-center justify-center z-10">
+                  <div className="w-5 h-5 border-2 border-red-700 border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-gray-50/80 border-b border-gray-200">
