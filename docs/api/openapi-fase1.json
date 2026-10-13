@@ -4498,7 +4498,8 @@
           "judul": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 255
               },
               {
                 "type": "null"
@@ -4509,7 +4510,8 @@
           "nomor_peraturan": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 100
               },
               {
                 "type": "null"
@@ -4520,7 +4522,8 @@
           "jenis_peraturan": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 100
               },
               {
                 "type": "null"
@@ -4543,7 +4546,8 @@
           "bidang": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 150
               },
               {
                 "type": "null"
@@ -4554,7 +4558,8 @@
           "metode_ekstraksi": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 13
               },
               {
                 "type": "null"
@@ -4565,7 +4570,8 @@
           "mesin_ekstraksi": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 100
               },
               {
                 "type": "null"
@@ -7510,7 +7516,8 @@
           "title": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 255
               },
               {
                 "type": "null"
@@ -7521,7 +7528,8 @@
           "regulation_number": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 100
               },
               {
                 "type": "null"
@@ -7532,7 +7540,8 @@
           "regulation_type": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 100
               },
               {
                 "type": "null"
@@ -7566,7 +7575,8 @@
           "bidang": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 150
               },
               {
                 "type": "null"

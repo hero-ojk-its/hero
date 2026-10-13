@@ -42,6 +42,7 @@ from app.services.audit_service import (
     EXTRACTION_RESULT,
     EXTRACTION_FAILED,
     EXTRACTION_REQUEUED,
+    PLACE_DOCUMENT_FAILED,
 )
 from app.services.storage_service import StorageService, get_storage_service
 from app.services.category_service import CategoryService
@@ -50,6 +51,13 @@ from app.services.naming_service import normalize_regulation_type
 
 logger = logging.getLogger("hero")
 router = APIRouter()
+
+_DOC_TITLE_MAX_LEN = Document.title.type.length or 255
+_DOC_REG_NUM_MAX_LEN = Document.regulation_number.type.length or 100
+_DOC_REG_TYPE_MAX_LEN = Document.regulation_type.type.length or 100
+_DOC_BIDANG_MAX_LEN = Document.bidang.type.length or 150
+_DOC_ENGINE_MAX_LEN = Document.extraction_engine.type.length or 100
+_DOC_METHOD_MAX_LEN = Document.extraction_method.type.length or 13
 
 
 def verify_internal_api_key(x_internal_api_key: Optional[str] = Header(None, alias="X-Internal-API-Key")) -> None:
@@ -68,13 +76,13 @@ class ExtractionErrorIn(BaseModel):
 
 class ExtractionResultIn(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    title: Optional[str] = Field(None, validation_alias="judul")
-    regulation_number: Optional[str] = Field(None, validation_alias="nomor_peraturan")
-    regulation_type: Optional[str] = Field(None, validation_alias="jenis_peraturan")
+    title: Optional[str] = Field(None, max_length=_DOC_TITLE_MAX_LEN, validation_alias="judul")
+    regulation_number: Optional[str] = Field(None, max_length=_DOC_REG_NUM_MAX_LEN, validation_alias="nomor_peraturan")
+    regulation_type: Optional[str] = Field(None, max_length=_DOC_REG_TYPE_MAX_LEN, validation_alias="jenis_peraturan")
     release_date: Optional[date] = Field(None, validation_alias="tanggal_terbit")
-    bidang: Optional[str] = Field(None, validation_alias=AliasChoices("bidang", "sektor", "sector"))
-    extraction_method: Optional[str] = Field(None, validation_alias="metode_ekstraksi")
-    extraction_engine: Optional[str] = Field(None, validation_alias="mesin_ekstraksi")
+    bidang: Optional[str] = Field(None, max_length=_DOC_BIDANG_MAX_LEN, validation_alias=AliasChoices("bidang", "sektor", "sector"))
+    extraction_method: Optional[str] = Field(None, max_length=_DOC_METHOD_MAX_LEN, validation_alias="metode_ekstraksi")
+    extraction_engine: Optional[str] = Field(None, max_length=_DOC_ENGINE_MAX_LEN, validation_alias="mesin_ekstraksi")
     full_text: Optional[str] = Field(None, validation_alias="teks_lengkap")
     confidence: Optional[Dict[str, float]] = None
     error: Optional[ExtractionErrorIn] = None
@@ -414,6 +422,27 @@ def patch_extraction_result(
         err_code = payload.error.code.strip()
         err_msg = payload.error.message.strip()
 
+        # Jangan dobel catatan kegagalan jika sudah ada kegagalan penempatan/simpan ekstraksi terbuka
+        existing_failure = (
+            db.query(IngestFailure)
+            .filter(
+                IngestFailure.document_id == doc.id,
+                IngestFailure.follow_up_status == StatusTindakLanjut.belum_ditangani,
+                IngestFailure.reason_code.in_(["penempatan_gagal", "simpan_ekstraksi_gagal"]),
+            )
+            .order_by(IngestFailure.id.desc())
+            .first()
+        )
+
+        if existing_failure:
+            existing_failure.message = err_msg
+            # Status perlu_koreksi jangan diubah menjadi gagal
+            db.commit()
+            return {
+                "status": "gagal_dicatat",
+                "failure_id": existing_failure.id,
+            }
+
         doc.processing_status = StatusPemrosesan.gagal
 
         # Tentukan failure_type enum
@@ -553,24 +582,6 @@ def patch_extraction_result(
     else:
         doc.processing_status = StatusPemrosesan.terindeks
 
-    # Penamaan & Penempatan Otomatis
-    is_placed_already = bool(doc.file_path_pdf and doc.file_path_pdf.replace("\\", "/").startswith("kb/"))
-    force_place = bool(changed_fields and is_placed_already)
-
-    cat_svc = CategoryService(db)
-    place_svc = PlacementService(db, storage, cat_svc, settings)
-    place_res = place_svc.place(doc, force=force_place)
-
-    placement_info = {
-        "document_id": place_res.document_id,
-        "placed": place_res.placed,
-        "reason": place_res.reason,
-        "old_path": place_res.old_path,
-        "new_path": place_res.new_path,
-        "category_id": place_res.category_id,
-        "category_path": place_res.category_path,
-    }
-
     record_audit(
         db,
         action=EXTRACTION_RESULT,
@@ -585,7 +596,136 @@ def patch_extraction_result(
         commit=False,
     )
 
-    db.commit()
+    # Simpan hasil ekstraksi terlebih dahulu secara mandiri
+    try:
+        db.commit()
+        db.refresh(doc)
+    except Exception as commit_exc:
+        db.rollback()
+        logger.exception("Gagal menyimpan hasil ekstraksi dokumen ID %s: %s", doc.id, commit_exc)
+        doc = db.query(Document).filter(Document.id == document_id).first()
+        if doc:
+            doc.processing_status = StatusPemrosesan.gagal
+        job_id = doc.job_id if doc else None
+        if not job_id:
+            default_job = db.query(JobIngest).filter(JobIngest.source_ref == "system:extraction").first()
+            if not default_job:
+                default_job = JobIngest(
+                    job_type=JenisJobIngest.unggah_manual,
+                    triggered_by="system",
+                    source_ref="system:extraction",
+                    status=StatusJobIngest.selesai,
+                )
+                db.add(default_job)
+                db.flush()
+            job_id = default_job.id
+
+        failure = IngestFailure(
+            job_id=job_id,
+            original_filename=(doc.standardized_filename or doc.title or "dokumen.pdf") if doc else "dokumen.pdf",
+            source_url=doc.source_url if doc else None,
+            failure_type=JenisKegagalan.kesalahan_internal,
+            reason_code="simpan_ekstraksi_gagal",
+            message=str(commit_exc)[:500],
+            is_retryable=True,
+            quarantine_path=None,
+            file_hash=doc.file_hash if doc else "",
+            file_size_bytes=doc.file_size_bytes if doc else 0,
+            document_id=doc.id if doc else document_id,
+            ingest_options={},
+            follow_up_status=StatusTindakLanjut.belum_ditangani,
+        )
+        db.add(failure)
+        db.commit()
+        db.refresh(failure)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "simpan_ekstraksi_gagal",
+                "message": str(commit_exc)[:500],
+                "failure_id": failure.id,
+            },
+        )
+
+    # Penamaan & Penempatan Otomatis
+    is_placed_already = bool(doc.file_path_pdf and doc.file_path_pdf.replace("\\", "/").startswith("kb/"))
+    force_place = bool(changed_fields and is_placed_already)
+
+    cat_svc = CategoryService(db)
+    place_svc = PlacementService(db, storage, cat_svc, settings)
+    place_res = place_svc.place(doc, force=force_place)
+
+    # Bila penempatan gagal
+    if not place_res.placed and place_res.reason and place_res.reason.startswith("gagal"):
+        doc = db.query(Document).filter(Document.id == document_id).first()
+        if doc:
+            doc.processing_status = StatusPemrosesan.perlu_koreksi
+
+        job_id = doc.job_id if doc else None
+        if not job_id:
+            default_job = db.query(JobIngest).filter(JobIngest.source_ref == "system:placement").first()
+            if not default_job:
+                default_job = JobIngest(
+                    job_type=JenisJobIngest.unggah_manual,
+                    triggered_by="system",
+                    source_ref="system:placement",
+                    status=StatusJobIngest.selesai,
+                )
+                db.add(default_job)
+                db.flush()
+            job_id = default_job.id
+
+        failure = IngestFailure(
+            job_id=job_id,
+            original_filename=(doc.standardized_filename or doc.title or "dokumen.pdf") if doc else "dokumen.pdf",
+            source_url=doc.source_url if doc else None,
+            failure_type=JenisKegagalan.kesalahan_internal,
+            reason_code="penempatan_gagal",
+            message=place_res.reason,
+            is_retryable=True,
+            quarantine_path=None,
+            file_hash=doc.file_hash if doc else "",
+            file_size_bytes=doc.file_size_bytes if doc else 0,
+            document_id=doc.id if doc else document_id,
+            ingest_options={},
+            follow_up_status=StatusTindakLanjut.belum_ditangani,
+        )
+        db.add(failure)
+        db.flush()
+
+        record_audit(
+            db,
+            action=PLACE_DOCUMENT_FAILED,
+            target_resource=f"document:{doc.id}" if doc else f"document:{document_id}",
+            detail={
+                "document_id": doc.id if doc else document_id,
+                "reason": place_res.reason,
+                "failure_id": failure.id,
+            },
+            commit=False,
+        )
+        db.commit()
+
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "penempatan_gagal",
+                "message": place_res.reason,
+                "failure_id": failure.id,
+                "processing_status": "perlu_koreksi",
+            },
+        )
+
+    placement_info = {
+        "document_id": place_res.document_id,
+        "placed": place_res.placed,
+        "reason": place_res.reason,
+        "old_path": place_res.old_path,
+        "new_path": place_res.new_path,
+        "category_id": place_res.category_id,
+        "category_path": place_res.category_path,
+    }
+
     db.refresh(doc)
 
     return {

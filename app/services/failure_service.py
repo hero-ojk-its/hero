@@ -368,6 +368,80 @@ class FailureService:
             ItemOutcome,
         )
 
+        # Kasus khusus retry kegagalan penempatan dokumen (Step 15 / Bug #117)
+        if failure.reason_code == "penempatan_gagal" and failure.document_id is not None:
+            doc = self.db.query(Document).filter(Document.id == failure.document_id).first()
+            if not doc:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Dokumen ID {failure.document_id} terkait kegagalan ini tidak ditemukan.",
+                )
+
+            from app.services.category_service import CategoryService
+            from app.services.placement_service import PlacementService
+            from app.services.naming_service import NamingInput, is_metadata_sufficient
+            from app.config import settings
+
+            cat_svc = CategoryService(self.db)
+            place_svc = PlacementService(self.db, self.storage, cat_svc, settings)
+            place_res = place_svc.place(doc, force=True, actor_user_id=actor_user_id, ip_address=ip_address)
+
+            if not place_res.placed and place_res.reason and place_res.reason.startswith("gagal"):
+                failure.attempt_count += 1
+                failure.last_retry_at = datetime.now(timezone.utc)
+                failure.message = place_res.reason
+                self.db.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Penempatan gagal: {place_res.reason}",
+                )
+
+            # Penempatan berhasil -> kegagalan selesai
+            failure.follow_up_status = StatusTindakLanjut.diproses_ulang
+            failure.resolved_document_id = doc.id
+            failure.attempt_count += 1
+            failure.last_retry_at = datetime.now(timezone.utc)
+            if actor_user_id is not None:
+                failure.handled_by_user_id = actor_user_id
+
+            # Evaluasi ulang status dokumen (terindeks bila metadata cukup)
+            naming_inp = NamingInput(
+                regulation_number=doc.regulation_number,
+                title=doc.title,
+                regulation_type=doc.regulation_type,
+                release_date=doc.release_date,
+                bidang=doc.bidang,
+                original_filename=doc.original_filename,
+                regulation_year=doc.regulation_year,
+            )
+            if is_metadata_sufficient(naming_inp):
+                doc.processing_status = StatusPemrosesan.terindeks
+
+            record_audit(
+                self.db,
+                action=RETRY_FAILURE,
+                user_id=actor_user_id,
+                target_resource=f"ingest_failure:{failure.id}",
+                detail={"outcome": "placed", "document_id": doc.id, "reason": place_res.reason},
+                ip_address=ip_address,
+                commit=False,
+            )
+            self.db.commit()
+            self.db.refresh(failure)
+            self.db.refresh(doc)
+
+            @dataclass
+            class PlacementRetryResult:
+                outcome: ItemOutcome = ItemOutcome.success
+                document_id: int = doc.id
+                message: str = f"Dokumen ID {doc.id} berhasil ditempatkan di {place_res.new_path}."
+
+            return RetryResult(
+                failure=failure,
+                item_result=PlacementRetryResult(),
+                job=failure.job,
+            )
+
         # Kasus khusus retry kegagalan ekstraksi Data/ML
         if failure.failure_type in (JenisKegagalan.ekstraksi_gagal, JenisKegagalan.ocr_gagal) and failure.document_id is not None:
             doc = self.db.query(Document).filter(Document.id == failure.document_id).first()

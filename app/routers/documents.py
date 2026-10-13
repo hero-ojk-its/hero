@@ -11,7 +11,7 @@ import urllib.parse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import or_, and_, desc
 from sqlalchemy.orm import Session
 
@@ -57,14 +57,19 @@ from app.crawlers.url_utils import extract_regulation_year
 logger = logging.getLogger("hero")
 router = APIRouter()
 
+_DOC_TITLE_MAX_LEN = Document.title.type.length or 255
+_DOC_REG_NUM_MAX_LEN = Document.regulation_number.type.length or 100
+_DOC_REG_TYPE_MAX_LEN = Document.regulation_type.type.length or 100
+_DOC_BIDANG_MAX_LEN = Document.bidang.type.length or 150
+
 
 class UpdateMetadataIn(BaseModel):
-    title: Optional[str] = None
-    regulation_number: Optional[str] = None
-    regulation_type: Optional[str] = None
+    title: Optional[str] = Field(None, max_length=_DOC_TITLE_MAX_LEN)
+    regulation_number: Optional[str] = Field(None, max_length=_DOC_REG_NUM_MAX_LEN)
+    regulation_type: Optional[str] = Field(None, max_length=_DOC_REG_TYPE_MAX_LEN)
     release_date: Optional[date] = None
     regulation_year: Optional[int] = None
-    bidang: Optional[str] = None
+    bidang: Optional[str] = Field(None, max_length=_DOC_BIDANG_MAX_LEN)
     category_id: Optional[int] = None
     access_classification: Optional[KlasifikasiAkses] = None
     document_role: Optional[PeranDokumen] = None
@@ -179,11 +184,19 @@ def place_pending_documents(
     skipped_cnt = sum(1 for r in results if not r.placed and r.reason in ("metadata_belum_cukup", "sudah_ditempatkan"))
     failed_cnt = sum(1 for r in results if r.reason.startswith("gagal"))
 
+    failed_documents = [
+        {"document_id": r.document_id, "reason": r.reason}
+        for r in results
+        if r.reason and r.reason.startswith("gagal")
+    ]
+
     return {
         "processed": len(results),
         "placed": placed_cnt,
         "skipped": skipped_cnt,
         "failed": failed_cnt,
+        "failed_count": failed_cnt,
+        "failed_documents": failed_documents,
         "results": [
             {
                 "document_id": r.document_id,
@@ -584,6 +597,15 @@ def patch_document_metadata(
         cat_svc = CategoryService(db)
         place_svc = PlacementService(db, storage, cat_svc, settings)
         place_res = place_svc.place(doc, force=True, actor_user_id=actor_user_id, ip_address=client_ip)
+        if not place_res.placed and place_res.reason and place_res.reason.startswith("gagal"):
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "penempatan_gagal",
+                    "message": place_res.reason,
+                },
+            )
         placement_info = {
             "document_id": place_res.document_id,
             "placed": place_res.placed,
@@ -641,6 +663,15 @@ def place_document(
     client_ip = request.client.host if request.client else None
 
     res = place_svc.place(doc, force=force, actor_user_id=actor_user_id, ip_address=client_ip)
+
+    if not res.placed and res.reason and res.reason.startswith("gagal"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "penempatan_gagal",
+                "message": res.reason,
+            },
+        )
 
     return {
         "document_id": res.document_id,
