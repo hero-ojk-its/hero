@@ -189,7 +189,19 @@ def test_b03_after_b02_worker_sends_error_payload_no_duplicate_failure(
     failures = db_session.query(IngestFailure).filter(IngestFailure.document_id == doc.id).all()
     assert len(failures) == 1
     assert failures[0].id == b02_failure_id
-    assert "Worker menerima 422 lalu lapor error" in failures[0].message
+    # Memuat alasan asli dan pesan worker
+    assert "Disk full simulasi B03" in failures[0].message
+    assert "laporan worker: Worker menerima 422 lalu lapor error" in failures[0].message
+
+    # Kirim ulang untuk memastikan tidak ada duplikasi pesan
+    resp_err_again = client.patch(
+        f"/api/v1/internal/documents/{doc.id}/extraction?force=true",
+        headers=INTERNAL_HEADERS,
+        json=error_payload,
+    )
+    assert resp_err_again.status_code == 200
+    db_session.refresh(failures[0])
+    assert failures[0].message.count("Worker menerima 422 lalu lapor error") == 1
 
     # Status tetap perlu_koreksi (tidak menjadi gagal)
     db_session.refresh(doc)

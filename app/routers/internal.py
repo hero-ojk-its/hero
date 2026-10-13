@@ -435,7 +435,10 @@ def patch_extraction_result(
         )
 
         if existing_failure:
-            existing_failure.message = err_msg
+            old_msg = existing_failure.message or ""
+            if not (err_msg and err_msg in old_msg):
+                combined = f"{old_msg} | laporan worker: {err_msg}" if old_msg else f"laporan worker: {err_msg}"
+                existing_failure.message = combined[:1000]
             # Status perlu_koreksi jangan diubah menjadi gagal
             db.commit()
             return {
