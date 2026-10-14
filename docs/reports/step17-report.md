@@ -177,3 +177,73 @@ PS C:\Hero\hero-backend> git status --short
 (bersih / kosong)
 ```
 
+---
+
+## 5. Langkah 17b: Perapian Cek Duplikat Identitas
+
+### 5.1 Ringkasan Perbaikan
+1. **Cadangan Hanya Mengisi yang Kosong**:
+   - `app/routers/internal.py` (`patch_extraction_result`): jika `kunci_identitas` tidak dikirim, fungsi fallback `fallback_identity_key` hanya dipanggil bila dokumen belum memiliki `identity_key` (`elif not doc.identity_key:`), sehingga kunci kanonik yang lebih akurat dari worker/data pipeline tidak tertimpa.
+   - `app/routers/internal.py` (`batch_update_document_identity`): item tanpa `kunci_identitas` hanya diisi cadangan jika dokumen belum memiliki `identity_key` (`elif not doc.identity_key:`).
+2. **Koreksi Metadata Menghitung Ulang Kunci**:
+   - `app/routers/documents.py` (`patch_document_metadata`): bila salah satu dari `regulation_type`, `regulation_number`, atau `regulation_year` berubah:
+     - Dihitung ulang `new_key = fallback_identity_key(...)` dari nilai baru.
+     - Bila hasilnya tidak `None`, `doc.identity_key` di-set ke nilai tersebut.
+     - Bila hasilnya `None`, `doc.identity_key` dikosongkan (`None`).
+     - Setelah koreksi dan penempatan sukses di-commit, dijalankan `check_identity_duplicate(db, doc, actor_user_id=actor_user_id)` dalam transaksinya sendiri.
+     - Galat tak terduga di-handle dengan `db.rollback()`, `logger.exception`, dan respons tetap 200.
+     - Menambahkan kolom `"duplikat": <ringkasan atau null>` pada respons.
+     - Jalur 422 `penempatan_gagal` tidak berubah: bila penempatan gagal, dilakukan `rollback` dan kunci/duplikasi tidak berubah.
+
+### 5.2 Matriks Kasus Uji D14 – D19
+
+| # | Kasus Uji | Ekspektasi | Hasil |
+|---|---|---|---|
+| D14 | PATCH extraction dengan `kunci_identitas="POJK\|11\|2022"`, lalu PATCH extraction kedua (`force=true`) **tanpa** kunci, dengan metadata yang cadangannya berbeda (mis. nomor `12/POJK.03/2022`) | `identity_key` tetap `POJK\|11\|2022` | **LULUS** |
+| D15 | `PATCH /internal/documents/identity` item tanpa kunci untuk dokumen yang sudah berkunci | kunci tidak berubah | **LULUS** |
+| D16 | Dok A `POJK\|11\|2022` aktif; dok B salah baca `POJK\|17\|2022`. Koreksi metadata B menjadi nomor `11/POJK.03/2022` | `identity_key` B menjadi `POJK\|11\|2022`, cek duplikat berjalan, salah satu dinonaktifkan sesuai aturan (B nonaktif), respons memuat `duplikat` | **LULUS** |
+| D17 | Koreksi metadata B menjadi jenis `PBI` (cadangan `None`) | `identity_key` B menjadi `None`, tidak ada yang dinonaktifkan | **LULUS** |
+| D18 | Koreksi metadata yang hanya mengubah `title` | `identity_key` tidak berubah | **LULUS** |
+| D19 | Koreksi metadata dengan penempatan gagal (monkeypatch `StorageService.move`) | tetap 422 `penempatan_gagal`; `identity_key` dan status aktif semua dokumen tidak berubah | **LULUS** |
+
+### 5.3 Output Mentah Terminal Langkah 17b
+
+#### Ruff Check
+```text
+PS C:\Hero\hero-backend> .\venv\Scripts\ruff.exe check --select E9,F821,F822,F823 app scripts tests
+All checks passed!
+```
+
+#### Pytest Step 17 (D01 – D19)
+```text
+PS C:\Hero\hero-backend> .\venv\Scripts\python.exe -m pytest tests/test_step17_duplicate_identity.py -q
+...................                                                      [100%]
+============================== warnings summary ===============================
+venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Hero\hero-backend\venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+venv\Lib\site-packages\starlette\testclient.py:53
+  C:\Hero\hero-backend\venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+tests/test_step17_duplicate_identity.py::test_d19_patch_metadata_placement_failure_preserves_state
+  C:\Users\IBUCOMP\Downloads\hero-backend\venv\Lib\site-packages\anyio\_backends\_asyncio.py:1100: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    result = context.run(func, *args)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+19 passed, 3 warnings in 22.70s
+```
+
+#### Pytest Seluruh Suite
+```text
+PS C:\Hero\hero-backend> .\venv\Scripts\python.exe -m pytest -q
+........................................................................ [ 23%]
+.............................................s.......................... [ 46%]
+........................................................................ [ 69%]
+........................................................................ [ 93%]
+.....................                                                    [100%]
+308 passed, 1 skipped, 52 warnings in 247.81s (0:04:07)
+```
+
+

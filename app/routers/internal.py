@@ -586,8 +586,8 @@ def patch_extraction_result(
         if doc.identity_key != clean_key:
             doc.identity_key = clean_key
             changed_fields.append("identity_key")
-    else:
-        # Cadangan bila kunci_identitas tidak dikirim
+    elif not doc.identity_key:
+        # Cadangan bila kunci_identitas tidak dikirim dan dokumen belum punya kunci
         fallback_key = fallback_identity_key(
             regulation_type=doc.regulation_type,
             regulation_number=doc.regulation_number,
@@ -918,7 +918,7 @@ def batch_update_document_identity(
 
         if item.identity_key and item.identity_key.strip():
             doc.identity_key = item.identity_key.strip()
-        else:
+        elif not doc.identity_key:
             fb = fallback_identity_key(doc.regulation_type, doc.regulation_number, doc.regulation_year)
             if fb:
                 doc.identity_key = fb

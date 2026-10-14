@@ -1,7 +1,7 @@
 """
 tests/test_step17_duplicate_identity.py
-Pengujian Cek Duplikat Identitas (Judul + Nomor Peraturan) — Langkah 17.
-Kasus Uji: D01 - D13
+Pengujian Cek Duplikat Identitas (Judul + Nomor Peraturan) — Langkah 17 & 17b.
+Kasus Uji: D01 - D19
 """
 from datetime import date
 from unittest.mock import patch
@@ -654,3 +654,284 @@ def test_d13_backfill_identity_dry_run(db_session: Session, test_storage: Storag
     assert doc1.is_active is True
     assert doc2.is_active is True
     assert doc1.duplicate_of_id is None
+
+
+def test_d14_patch_extraction_does_not_overwrite_worker_key(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """
+    D14: PATCH extraction dengan kunci_identitas="POJK|11|2022",
+    lalu PATCH extraction kedua (force=true) tanpa kunci,
+    dengan metadata yang cadangannya berbeda (mis. nomor 12/POJK.03/2022).
+    Ekspektasi: identity_key tetap "POJK|11|2022".
+    """
+    doc = _seed_test_doc(
+        db_session,
+        test_storage,
+        title="POJK 11 2022 Worker Initial",
+        reg_num="11/POJK.03/2022",
+        processing_status=StatusPemrosesan.diproses,
+    )
+
+    # 1. PATCH extraction pertama membawa kunci_identitas eksplisit
+    p1 = {
+        "judul": "POJK 11 2022 Worker Initial",
+        "nomor_peraturan": "11/POJK.03/2022",
+        "jenis_peraturan": "POJK",
+        "kunci_identitas": "POJK|11|2022",
+        "jumlah_halaman": 10,
+        "teks_lengkap": "Isi teks dokumen POJK 11 2022.",
+    }
+    r1 = client.patch(
+        f"/api/v1/internal/documents/{doc.id}/extraction",
+        headers=INTERNAL_HEADERS,
+        json=p1,
+    )
+    assert r1.status_code == 200, r1.text
+    db_session.refresh(doc)
+    assert doc.identity_key == "POJK|11|2022"
+
+    # 2. PATCH extraction kedua dengan force=true TANPA kunci_identitas,
+    # nomor peraturan berbeda (yang mana fallback-nya akan menjadi POJK|12|2022)
+    p2 = {
+        "judul": "POJK 12 2022 Update Tanpa Kunci",
+        "nomor_peraturan": "12/POJK.03/2022",
+        "jenis_peraturan": "POJK",
+        "jumlah_halaman": 10,
+        "teks_lengkap": "Isi teks dokumen diperbarui.",
+    }
+    r2 = client.patch(
+        f"/api/v1/internal/documents/{doc.id}/extraction?force=true",
+        headers=INTERNAL_HEADERS,
+        json=p2,
+    )
+    assert r2.status_code == 200, r2.text
+
+    db_session.refresh(doc)
+    # Kunci tidak boleh tertimpa cadangan, tetap POJK|11|2022
+    assert doc.identity_key == "POJK|11|2022"
+
+
+def test_d15_batch_identity_does_not_overwrite_existing_key(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """
+    D15: PATCH /internal/documents/identity item tanpa kunci untuk dokumen yang sudah berkunci.
+    Ekspektasi: kunci tidak berubah.
+    """
+    doc = _seed_test_doc(
+        db_session,
+        test_storage,
+        title="Dokumen Sudah Berkunci",
+        reg_num="15/POJK.03/2022",
+        identity_key="POJK|99|2022",  # Kunci akurat dari worker/data
+        page_count=5,
+        processing_status=StatusPemrosesan.terindeks,
+    )
+
+    items = [
+        {"document_id": doc.id, "jumlah_halaman": 20}  # tanpa kunci_identitas
+    ]
+
+    resp = client.patch(
+        "/api/v1/internal/documents/identity",
+        headers=INTERNAL_HEADERS,
+        json=items,
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["updated"] == 1
+
+    db_session.refresh(doc)
+    assert doc.identity_key == "POJK|99|2022"  # Tidak berubah jadi fallback POJK|15|2022
+    assert doc.page_count == 20
+
+
+def test_d16_patch_metadata_recalculates_key_and_detects_duplicate(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """
+    D16: Dok A POJK|11|2022 aktif; dok B salah baca POJK|17|2022.
+    Koreksi metadata B menjadi nomor 11/POJK.03/2022.
+    Ekspektasi: identity_key B menjadi POJK|11|2022, cek duplikat berjalan,
+    salah satu dinonaktifkan sesuai aturan (A 20 hal, B 10 hal -> B nonaktif),
+    respons memuat duplikat.
+    """
+    doc_a = _seed_test_doc(
+        db_session,
+        test_storage,
+        title="POJK 11 Tahun 2022 Dok A",
+        reg_num="11/POJK.03/2022",
+        reg_type="POJK",
+        reg_year=2022,
+        identity_key="POJK|11|2022",
+        page_count=20,
+        processing_status=StatusPemrosesan.terindeks,
+        is_active=True,
+    )
+    doc_b = _seed_test_doc(
+        db_session,
+        test_storage,
+        title="POJK 17 Tahun 2022 Dok B Salah Baca",
+        reg_num="17/POJK.03/2022",
+        reg_type="POJK",
+        reg_year=2022,
+        identity_key="POJK|17|2022",
+        page_count=10,
+        processing_status=StatusPemrosesan.terindeks,
+        is_active=True,
+    )
+
+    resp = client.patch(
+        f"/api/v1/documents/{doc_b.id}/metadata",
+        json={"regulation_number": "11/POJK.03/2022"},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    assert data["identity_key"] == "POJK|11|2022"
+    assert data["duplikat"] is not None
+    assert data["duplikat"]["kept_document_id"] == doc_a.id
+    assert data["duplikat"]["deactivated_document_ids"] == [doc_b.id]
+    assert data["duplikat"]["rule"] == "page_count"
+    assert data["is_active"] is False
+    assert data["duplicate_of_id"] == doc_a.id
+
+    db_session.refresh(doc_a)
+    db_session.refresh(doc_b)
+
+    assert doc_a.is_active is True
+    assert doc_b.is_active is False
+    assert doc_b.identity_key == "POJK|11|2022"
+    assert doc_b.duplicate_of_id == doc_a.id
+
+
+def test_d17_patch_metadata_clears_key_when_fallback_is_none(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """
+    D17: Koreksi metadata B menjadi jenis PBI (cadangan None).
+    Ekspektasi: identity_key B menjadi None, tidak ada yang dinonaktifkan.
+    """
+    doc_b = _seed_test_doc(
+        db_session,
+        test_storage,
+        title="Regulasi Eks POJK",
+        reg_num="11/POJK.03/2022",
+        reg_type="POJK",
+        reg_year=2022,
+        identity_key="POJK|11|2022",
+        page_count=10,
+        processing_status=StatusPemrosesan.terindeks,
+        is_active=True,
+    )
+
+    resp = client.patch(
+        f"/api/v1/documents/{doc_b.id}/metadata",
+        json={"regulation_type": "PBI"},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    assert data["identity_key"] is None
+    assert data["duplikat"] is None
+    assert data["is_active"] is True
+
+    db_session.refresh(doc_b)
+    assert doc_b.identity_key is None
+    assert doc_b.is_active is True
+    assert doc_b.duplicate_of_id is None
+
+
+def test_d18_patch_metadata_title_only_leaves_identity_key_unchanged(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """
+    D18: Koreksi metadata yang hanya mengubah title.
+    Ekspektasi: identity_key tidak berubah.
+    """
+    doc = _seed_test_doc(
+        db_session,
+        test_storage,
+        title="Judul Asli Sebelum Koreksi",
+        reg_num="18/POJK.03/2023",
+        reg_type="POJK",
+        reg_year=2023,
+        identity_key="POJK|18|2023",
+        page_count=15,
+        processing_status=StatusPemrosesan.terindeks,
+        is_active=True,
+    )
+
+    resp = client.patch(
+        f"/api/v1/documents/{doc.id}/metadata",
+        json={"title": "Judul Baru Hasil Koreksi Redaksional"},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    assert data["identity_key"] == "POJK|18|2023"
+    assert data["duplikat"] is None
+
+    db_session.refresh(doc)
+    assert doc.title == "Judul Baru Hasil Koreksi Redaksional"
+    assert doc.identity_key == "POJK|18|2023"
+
+
+def test_d19_patch_metadata_placement_failure_preserves_state(
+    client: TestClient, db_session: Session, test_storage: StorageService, monkeypatch: pytest.MonkeyPatch
+):
+    """
+    D19: Koreksi metadata dengan penempatan gagal (monkeypatch StorageService.move).
+    Ekspektasi: tetap 422 penempatan_gagal; identity_key dan status aktif semua dokumen tidak berubah.
+    """
+    doc_a = _seed_test_doc(
+        db_session,
+        test_storage,
+        title="POJK 11 2022 Dok A",
+        reg_num="11/POJK.03/2022",
+        reg_type="POJK",
+        reg_year=2022,
+        identity_key="POJK|11|2022",
+        page_count=20,
+        processing_status=StatusPemrosesan.terindeks,
+        is_active=True,
+    )
+    doc_b = _seed_test_doc(
+        db_session,
+        test_storage,
+        title="POJK 17 2022 Dok B",
+        reg_num="17/POJK.03/2022",
+        reg_type="POJK",
+        reg_year=2022,
+        identity_key="POJK|17|2022",
+        page_count=10,
+        processing_status=StatusPemrosesan.terindeks,
+        is_active=True,
+    )
+
+    def mock_move_failure(self, rel_src, subdir, filename_hint):
+        raise IOError("Simulasi gagal pemindahan berkas penyimpanan")
+
+    monkeypatch.setattr(StorageService, "move", mock_move_failure)
+
+    resp = client.patch(
+        f"/api/v1/documents/{doc_b.id}/metadata",
+        json={"regulation_number": "11/POJK.03/2022"},
+    )
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    assert detail["code"] == "penempatan_gagal"
+
+    db_session.refresh(doc_a)
+    db_session.refresh(doc_b)
+
+    # Status aktif dan identity_key tidak boleh berubah
+    assert doc_a.identity_key == "POJK|11|2022"
+    assert doc_a.is_active is True
+    assert doc_a.duplicate_of_id is None
+
+    assert doc_b.identity_key == "POJK|17|2022"
+    assert doc_b.regulation_number == "17/POJK.03/2022"
+    assert doc_b.is_active is True
+    assert doc_b.duplicate_of_id is None
