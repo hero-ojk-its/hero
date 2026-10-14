@@ -699,6 +699,9 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "is_active": true,
       "deactivated_at": null,
       "deactivated_reason": null,
+      "identity_key": null,
+      "page_count": null,
+      "duplicate_of_id": null,
       "pdf_url": "/api/v1/documents/1/pdf",
       "restricted": false,
       "rank": null,
@@ -723,6 +726,8 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
     "year": null,
     "bidang": "Perbankan",
     "sort": "release_date_desc",
+    "include_inactive": false,
+    "duplikat": null,
     "skip": 0,
     "limit": 10
   }
@@ -765,6 +770,9 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "is_active": true,
       "deactivated_at": null,
       "deactivated_reason": null,
+      "identity_key": null,
+      "page_count": null,
+      "duplicate_of_id": null,
       "pdf_url": "/api/v1/documents/1/pdf",
       "restricted": false,
       "rank": 0.4,
@@ -789,6 +797,8 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
     "year": null,
     "bidang": "Perbankan",
     "sort": "relevance",
+    "include_inactive": false,
+    "duplikat": null,
     "skip": 0,
     "limit": 20
   }
@@ -855,6 +865,9 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
   "is_active": true,
   "deactivated_at": null,
   "deactivated_reason": null,
+  "identity_key": null,
+  "page_count": null,
+  "duplicate_of_id": null,
   "articles": [
     {
       "id": 1,
@@ -975,6 +988,9 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
   "is_active": true,
   "deactivated_at": null,
   "deactivated_reason": null,
+  "identity_key": null,
+  "page_count": null,
+  "duplicate_of_id": null,
   "articles": [
     {
       "id": 1,
@@ -1162,6 +1178,28 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
 ```
 <!-- /AUTO:failure_ignore_response -->
 
+### 9.5 Deteksi Duplikat Identitas Regulasi (Langkah 17)
+- **Aturan Duplikasi:** Bila regulasi berjenis dan bernomor sama (`identity_key` kanonik `JENIS|NOMOR|TAHUN`), sistem mempertahankan dokumen dengan `page_count` terbanyak (atau ukuran berkas terbesar jika halaman tidak diketahui, atau ID terlama jika masih seri). Dokumen yang kalah dinonaktifkan (`is_active=false`) dengan `duplicate_of_id` mengarah ke dokumen pemenang.
+- **Pengecualian:** Dokumen yang pernah menjadi duplikat lalu diaktifkan kembali secara manual oleh admin (`PUT /documents/{id}/active`) tidak akan dinonaktifkan ulang secara otomatis.
+- **Integrasi Ekstraksi (Data/ML):** `PATCH /api/v1/internal/documents/{id}/extraction`
+  - Mendukung field opsional `kunci_identitas` (alias `identity_key`, string maks 120) dan `jumlah_halaman` (alias `page_count`, integer >= 1).
+  - Respons sukses 200 menyertakan objek `duplikat`:
+    ```json
+    {
+      "identity_key": "POJK|11|2022",
+      "kept_document_id": 1,
+      "deactivated_document_ids": [2],
+      "rule": "page_count"
+    }
+    ```
+    atau `null` jika tidak ada dokumen yang dinonaktifkan.
+- **Endpoint Backfill Massal:** `PATCH /api/v1/internal/documents/identity`
+  - Body: daftar maksimal 500 item `[{"document_id": 1, "kunci_identitas": "POJK|11|2022", "jumlah_halaman": 25}]`.
+  - Respons: `{"updated": 1, "not_found": [], "duplicates": [...]}`.
+- **Penyaringan & Dashboard Frontend:**
+  - `GET /api/v1/documents/?duplikat=true&include_inactive=true`: menampilkan dokumen nonaktif hasil deteksi duplikat identitas.
+  - `GET /api/v1/dashboard/summary`: menyertakan metrik `kb.duplicate_documents`.
+
 ---
 
 ## 10. ALUR 9: DASHBOARD RINGKASAN EKSEKUTIF
@@ -1176,6 +1214,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
     "corpus_documents": 2,
     "draft_documents": 0,
     "inactive_documents": 0,
+    "duplicate_documents": 0,
     "target_fase1": 20,
     "target_met": false,
     "by_status_keberlakuan": {
@@ -1194,13 +1233,13 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
     },
     "by_regulation_type": [
       {
-        "regulation_type": null,
-        "label": "Belum diketahui",
+        "regulation_type": "POJK",
+        "label": "POJK",
         "count": 1
       },
       {
-        "regulation_type": "POJK",
-        "label": "POJK",
+        "regulation_type": null,
+        "label": "Belum diketahui",
         "count": 1
       }
     ],

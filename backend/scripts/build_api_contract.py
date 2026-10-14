@@ -6,6 +6,7 @@ snapshot OpenAPI (docs/api/openapi-fase1.json), dan koleksi REST Client (docs/ap
 Semua contoh respons JSON diuji dan ditangkap langsung dari eksekusi nyata TestClient
 terhadap database pengujian (hero_test).
 """
+import argparse
 import io
 import json
 import os
@@ -296,8 +297,9 @@ def generate_enum_tables() -> str:
     return "\n".join(md_out)
 
 
-def run_contract_builder():
-    print("Memulai build API Contract HERO Backend...")
+def run_contract_builder(output_dir: Path | None = None):
+    target_dir = Path(output_dir) if output_dir else (BASE_DIR / "docs" / "api")
+    print(f"Memulai build API Contract HERO Backend ke: {target_dir}...")
     reset_test_db()
 
     # Setup override SessionLocal & client
@@ -657,14 +659,15 @@ def run_contract_builder():
         auto_blocks["enum_tables"] = generate_enum_tables()
 
     # Generate Dokumen Kontrak Lengkap
-    build_markdown_contract(auto_blocks)
-    build_openapi_snapshot()
-    build_http_requests()
+    build_markdown_contract(auto_blocks, output_dir=target_dir)
+    build_openapi_snapshot(output_dir=target_dir)
+    build_http_requests(output_dir=target_dir)
     print("Pembuatan kontrak API selesai!")
 
 
-def build_markdown_contract(blocks: Dict[str, str]):
-    contract_path = BASE_DIR / "docs" / "api" / "KONTRAK-API-FASE1.md"
+def build_markdown_contract(blocks: Dict[str, str], output_dir: Path | None = None):
+    target_dir = Path(output_dir) if output_dir else (BASE_DIR / "docs" / "api")
+    contract_path = target_dir / "KONTRAK-API-FASE1.md"
     max_upload_mb = settings.max_upload_bytes // (1024 * 1024)
     
     doc_content = f"""# KONTRAK API HERO BACKEND — FASE 1 (MVP)
@@ -1046,6 +1049,28 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
 {blocks['failure_ignore_response']}
 <!-- /AUTO:failure_ignore_response -->
 
+### 9.5 Deteksi Duplikat Identitas Regulasi (Langkah 17)
+- **Aturan Duplikasi:** Bila regulasi berjenis dan bernomor sama (`identity_key` kanonik `JENIS|NOMOR|TAHUN`), sistem mempertahankan dokumen dengan `page_count` terbanyak (atau ukuran berkas terbesar jika halaman tidak diketahui, atau ID terlama jika masih seri). Dokumen yang kalah dinonaktifkan (`is_active=false`) dengan `duplicate_of_id` mengarah ke dokumen pemenang.
+- **Pengecualian:** Dokumen yang pernah menjadi duplikat lalu diaktifkan kembali secara manual oleh admin (`PUT /documents/{{id}}/active`) tidak akan dinonaktifkan ulang secara otomatis.
+- **Integrasi Ekstraksi (Data/ML):** `PATCH /api/v1/internal/documents/{{id}}/extraction`
+  - Mendukung field opsional `kunci_identitas` (alias `identity_key`, string maks 120) dan `jumlah_halaman` (alias `page_count`, integer >= 1).
+  - Respons sukses 200 menyertakan objek `duplikat`:
+    ```json
+    {{
+      "identity_key": "POJK|11|2022",
+      "kept_document_id": 1,
+      "deactivated_document_ids": [2],
+      "rule": "page_count"
+    }}
+    ```
+    atau `null` jika tidak ada dokumen yang dinonaktifkan.
+- **Endpoint Backfill Massal:** `PATCH /api/v1/internal/documents/identity`
+  - Body: daftar maksimal 500 item `[{{"document_id": 1, "kunci_identitas": "POJK|11|2022", "jumlah_halaman": 25}}]`.
+  - Respons: `{{"updated": 1, "not_found": [], "duplicates": [...]}}`.
+- **Penyaringan & Dashboard Frontend:**
+  - `GET /api/v1/documents/?duplikat=true&include_inactive=true`: menampilkan dokumen nonaktif hasil deteksi duplikat identitas.
+  - `GET /api/v1/dashboard/summary`: menyertakan metrik `kb.duplicate_documents`.
+
 ---
 
 ## 10. ALUR 9: DASHBOARD RINGKASAN EKSEKUTIF
@@ -1143,15 +1168,19 @@ Frontend cukup memanggil satu asal (`API_BASE_URL` backend) tanpa perlu menghubu
     print(f"Kontrak API berhasil ditulis ke: {contract_path}")
 
 
-def build_openapi_snapshot():
-    openapi_path = BASE_DIR / "docs" / "api" / "openapi-fase1.json"
+def build_openapi_snapshot(output_dir: Path | None = None):
+    target_dir = Path(output_dir) if output_dir else (BASE_DIR / "docs" / "api")
+    openapi_path = target_dir / "openapi-fase1.json"
+    openapi_path.parent.mkdir(parents=True, exist_ok=True)
     schema = app.openapi()
     openapi_path.write_text(json.dumps(schema, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"Snapshot OpenAPI berhasil ditulis ke: {openapi_path}")
 
 
-def build_http_requests():
-    http_path = BASE_DIR / "docs" / "api" / "hero-fase1.http"
+def build_http_requests(output_dir: Path | None = None):
+    target_dir = Path(output_dir) if output_dir else (BASE_DIR / "docs" / "api")
+    http_path = target_dir / "hero-fase1.http"
+    http_path.parent.mkdir(parents=True, exist_ok=True)
     http_content = """### HERO Backend Fase 1 - REST Client Collection
 ### Jalankan request di bawah secara berurutan menggunakan ekstensi REST Client VS Code.
 
@@ -1285,4 +1314,8 @@ Accept: application/json
 
 
 if __name__ == "__main__":
-    run_contract_builder()
+    parser = argparse.ArgumentParser(description="Pembangkit Kontrak API HERO Backend Fase 1")
+    parser.add_argument("--output-dir", type=str, default=None, help="Direktori target output (default: docs/api)")
+    args = parser.parse_args()
+    out = Path(args.output_dir) if args.output_dir else None
+    run_contract_builder(output_dir=out)
