@@ -1182,6 +1182,24 @@
             "description": "Tampilkan juga dokumen nonaktif jika true (default: false)"
           },
           {
+            "name": "duplikat",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter dokumen duplikat (dokumen dengan duplicate_of_id terisi)",
+              "title": "Duplikat"
+            },
+            "description": "Filter dokumen duplikat (dokumen dengan duplicate_of_id terisi)"
+          },
+          {
             "name": "skip",
             "in": "query",
             "required": false,
@@ -2169,6 +2187,75 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/InternalCandidatesBatchIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/internal/documents/identity": {
+      "patch": {
+        "tags": [
+          "Internal"
+        ],
+        "summary": "[Internal] Isi-ulang identity_key dan page_count dokumen secara massal",
+        "description": "Endpoint isi-ulang identity_key dan page_count untuk dokumen yang sudah ada (Langkah 17).\nMaksimal 500 item per permintaan. Menjalankan cek duplikat identitas per dokumen yang diperbarui.",
+        "operationId": "batch_update_document_identity_api_v1_internal_documents_identity_patch",
+        "parameters": [
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/DocumentIdentityItemIn"
+                    }
+                  },
+                  {
+                    "$ref": "#/components/schemas/BatchIdentityIn"
+                  }
+                ],
+                "title": "Payload"
               }
             }
           }
@@ -4105,6 +4192,23 @@
           "page": 1
         }
       },
+      "BatchIdentityIn": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentIdentityItemIn"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "BatchIdentityIn"
+      },
       "BatchRetryResponse": {
         "properties": {
           "results": {
@@ -4876,6 +4980,43 @@
         ],
         "title": "CategoryDetailResponse"
       },
+      "DocumentIdentityItemIn": {
+        "properties": {
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "identity_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identity Key"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id"
+        ],
+        "title": "DocumentIdentityItemIn"
+      },
       "DuplicateCheckResponse": {
         "properties": {
           "is_duplicate": {
@@ -5078,6 +5219,30 @@
               }
             ],
             "title": "Confidence"
+          },
+          "identity_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identity Key"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Count"
           },
           "error": {
             "anyOf": [

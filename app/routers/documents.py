@@ -93,6 +93,7 @@ def list_documents(
     bidang: Optional[str] = Query(None, description="Filter sektor atau bidang regulasi (misal: Perbankan, BMKS)"),
     sort: Optional[SearchSort] = Query(None, description="Pengurutan hasil pencarian"),
     include_inactive: bool = Query(False, description="Tampilkan juga dokumen nonaktif jika true (default: false)"),
+    duplikat: Optional[bool] = Query(None, description="Filter dokumen duplikat (dokumen dengan duplicate_of_id terisi)"),
     skip: int = Query(0, ge=0, description="Offset pagination"),
     limit: int = Query(20, ge=1, description="Batas dokumen per halaman (maks 100)"),
     db: Session = Depends(get_db),
@@ -126,6 +127,7 @@ def list_documents(
         bidang=bidang,
         sort=sort,
         include_inactive=include_inactive,
+        duplikat=duplikat,
         skip=skip,
         limit=clamped_limit,
     )
@@ -155,6 +157,8 @@ def list_documents(
             "year": year,
             "bidang": bidang,
             "sort": effective_sort.value if hasattr(effective_sort, "value") else str(effective_sort),
+            "include_inactive": include_inactive,
+            "duplikat": duplikat,
             "skip": skip,
             "limit": clamped_limit,
         },
@@ -337,6 +341,9 @@ def _format_single_document_response(doc: Document, db: Session) -> Dict[str, An
         "is_active": getattr(doc, "is_active", True),
         "deactivated_at": getattr(doc, "deactivated_at", None),
         "deactivated_reason": getattr(doc, "deactivated_reason", None),
+        "identity_key": getattr(doc, "identity_key", None),
+        "page_count": getattr(doc, "page_count", None),
+        "duplicate_of_id": getattr(doc, "duplicate_of_id", None),
         "articles": [
             {
                 "id": a.id,
