@@ -45,6 +45,7 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
             func.count(case((and_(Document.file_path_pdf.like("kb/%"), Document.is_active == True), 1))).label("placed"),  # noqa: E712
             func.count(case((and_(~Document.file_path_pdf.like("kb/%"), Document.is_active == True), 1))).label("inbox"),  # noqa: E712
             func.count(case((Document.is_active == False, 1))).label("inactive"),  # noqa: E712
+            func.count(case((and_(Document.is_active == False, Document.duplicate_of_id.isnot(None)), 1))).label("duplicate_docs"),  # noqa: E712
         )
         .one()
     )
@@ -53,6 +54,7 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
     placed_docs = doc_stats.placed or 0
     inbox_docs = doc_stats.inbox or 0
     inactive_docs = doc_stats.inactive or 0
+    duplicate_docs = doc_stats.duplicate_docs or 0
 
     # 3. Status Keberlakuan (Hanya dokumen aktif, semua enum disertakan dengan default 0)
     by_status_keberlakuan = {s.value: 0 for s in StatusKeberlakuan}
@@ -202,6 +204,7 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
             "corpus_documents": corpus_docs,
             "draft_documents": draft_docs,
             "inactive_documents": inactive_docs,
+            "duplicate_documents": duplicate_docs,
             "target_fase1": target_fase1,
             "target_met": corpus_docs >= target_fase1,
             "by_status_keberlakuan": by_status_keberlakuan,

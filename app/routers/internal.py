@@ -9,10 +9,10 @@ Endpoint INTERNAL untuk integrasi pipeline Data/ML (Fathir):
 from datetime import datetime, date, timedelta, timezone
 import logging
 import re
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 import urllib.parse
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, ConfigDict, AliasChoices
 from sqlalchemy import or_, and_, desc, select, delete, func, literal_column
@@ -48,6 +48,8 @@ from app.services.storage_service import StorageService, get_storage_service
 from app.services.category_service import CategoryService
 from app.services.placement_service import PlacementService
 from app.services.naming_service import normalize_regulation_type
+from app.services.identity_service import fallback_identity_key
+from app.services.duplicate_service import check_identity_duplicate
 
 logger = logging.getLogger("hero")
 router = APIRouter()
@@ -85,7 +87,20 @@ class ExtractionResultIn(BaseModel):
     extraction_engine: Optional[str] = Field(None, max_length=_DOC_ENGINE_MAX_LEN, validation_alias="mesin_ekstraksi")
     full_text: Optional[str] = Field(None, validation_alias="teks_lengkap")
     confidence: Optional[Dict[str, float]] = None
+    identity_key: Optional[str] = Field(None, max_length=120, validation_alias=AliasChoices("identity_key", "kunci_identitas"))
+    page_count: Optional[int] = Field(None, ge=1, validation_alias=AliasChoices("page_count", "jumlah_halaman"))
     error: Optional[ExtractionErrorIn] = None
+
+
+class DocumentIdentityItemIn(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    document_id: int
+    identity_key: Optional[str] = Field(None, max_length=120, validation_alias=AliasChoices("identity_key", "kunci_identitas"))
+    page_count: Optional[int] = Field(None, ge=1, validation_alias=AliasChoices("page_count", "jumlah_halaman"))
+
+
+class BatchIdentityIn(BaseModel):
+    items: List[DocumentIdentityItemIn] = Field(..., max_length=500)
 
 
 @router.post(
@@ -565,6 +580,28 @@ def patch_extraction_result(
                 doc.bidang = clean_bidang
                 changed_fields.append("bidang")
 
+    # Tangani identity_key dan page_count
+    if payload.identity_key and payload.identity_key.strip():
+        clean_key = payload.identity_key.strip()
+        if doc.identity_key != clean_key:
+            doc.identity_key = clean_key
+            changed_fields.append("identity_key")
+    elif not doc.identity_key:
+        # Cadangan bila kunci_identitas tidak dikirim dan dokumen belum punya kunci
+        fallback_key = fallback_identity_key(
+            regulation_type=doc.regulation_type,
+            regulation_number=doc.regulation_number,
+            regulation_year=doc.regulation_year,
+        )
+        if fallback_key and doc.identity_key != fallback_key:
+            doc.identity_key = fallback_key
+            changed_fields.append("identity_key")
+
+    if payload.page_count is not None:
+        if doc.page_count != payload.page_count:
+            doc.page_count = payload.page_count
+            changed_fields.append("page_count")
+
     # Hitung low confidence fields
     low_confidence_fields = []
     metadata_has_low_conf = False
@@ -729,6 +766,18 @@ def patch_extraction_result(
         "category_path": place_res.category_path,
     }
 
+    # Cek duplikat identitas dalam transaksi mandiri
+    duplicate_info = None
+    try:
+        dup_res = check_identity_duplicate(db, doc)
+        if dup_res:
+            db.commit()
+            duplicate_info = dup_res.model_dump()
+    except Exception as dup_exc:
+        db.rollback()
+        logger.exception("Galat cek duplikat identitas untuk dokumen ID %s: %s", doc.id, dup_exc)
+        duplicate_info = None
+
     db.refresh(doc)
 
     return {
@@ -737,6 +786,7 @@ def patch_extraction_result(
         "ignored_fields": ignored_fields,
         "low_confidence_fields": low_confidence_fields,
         "placement": placement_info,
+        "duplikat": duplicate_info,
     }
 
 
@@ -834,3 +884,64 @@ def push_scan_candidates_endpoint(
         "candidates_uncertain": session.candidates_uncertain,
         "done": payload.done,
     }
+
+
+@router.patch(
+    "/documents/identity",
+    summary="[Internal] Isi-ulang identity_key dan page_count dokumen secara massal",
+    dependencies=[Depends(verify_internal_api_key)],
+)
+def batch_update_document_identity(
+    payload: Union[List[DocumentIdentityItemIn], BatchIdentityIn] = Body(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Endpoint isi-ulang identity_key dan page_count untuk dokumen yang sudah ada (Langkah 17).
+    Maksimal 500 item per permintaan. Menjalankan cek duplikat identitas per dokumen yang diperbarui.
+    """
+    items = payload.items if isinstance(payload, BatchIdentityIn) else payload
+    if len(items) > 500:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Maksimal 500 item per permintaan.",
+        )
+
+    updated_count = 0
+    not_found: List[int] = []
+    duplicates_summary: List[Dict[str, Any]] = []
+
+    for item in items:
+        doc = db.query(Document).filter(Document.id == item.document_id).first()
+        if not doc:
+            not_found.append(item.document_id)
+            continue
+
+        if item.identity_key and item.identity_key.strip():
+            doc.identity_key = item.identity_key.strip()
+        elif not doc.identity_key:
+            fb = fallback_identity_key(doc.regulation_type, doc.regulation_number, doc.regulation_year)
+            if fb:
+                doc.identity_key = fb
+
+        if item.page_count is not None:
+            doc.page_count = item.page_count
+
+        updated_count += 1
+        db.commit()
+
+        # Jalankan cek duplikat per dokumen
+        try:
+            dup_res = check_identity_duplicate(db, doc)
+            if dup_res:
+                db.commit()
+                duplicates_summary.append(dup_res.model_dump())
+        except Exception as exc:
+            db.rollback()
+            logger.exception("Galat cek duplikat saat backfill dokumen ID %s: %s", doc.id, exc)
+
+    return {
+        "updated": updated_count,
+        "not_found": not_found,
+        "duplicates": duplicates_summary,
+    }
+

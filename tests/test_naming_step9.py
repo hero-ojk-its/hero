@@ -439,21 +439,30 @@ def test_n14_filter_documents_by_bidang(client: TestClient, db_session: Session)
 
 # ==================== C01 - C04: CONTRACT & REQUISITES TESTING ====================
 
-def test_c01_contract_builder_idempotent():
+def test_c01_contract_builder_idempotent(tmp_path: Path):
     """C01: scripts/build_api_contract.py dijalankan dua kali -> Tanpa diff (idempoten)"""
+    out_dir = tmp_path / "api"
     # Run once
-    r1 = subprocess.run([sys.executable, "scripts/build_api_contract.py"], capture_output=True, text=True)
+    r1 = subprocess.run(
+        [sys.executable, "scripts/build_api_contract.py", "--output-dir", str(out_dir)],
+        capture_output=True,
+        text=True,
+    )
     assert r1.returncode == 0
-    content1 = Path("docs/api/KONTRAK-API-FASE1.md").read_text(encoding="utf-8")
-    openapi1 = Path("docs/api/openapi-fase1.json").read_text(encoding="utf-8")
-    http1 = Path("docs/api/hero-fase1.http").read_text(encoding="utf-8")
+    content1 = (out_dir / "KONTRAK-API-FASE1.md").read_text(encoding="utf-8")
+    openapi1 = (out_dir / "openapi-fase1.json").read_text(encoding="utf-8")
+    http1 = (out_dir / "hero-fase1.http").read_text(encoding="utf-8")
 
     # Run second time
-    r2 = subprocess.run([sys.executable, "scripts/build_api_contract.py"], capture_output=True, text=True)
+    r2 = subprocess.run(
+        [sys.executable, "scripts/build_api_contract.py", "--output-dir", str(out_dir)],
+        capture_output=True,
+        text=True,
+    )
     assert r2.returncode == 0
-    content2 = Path("docs/api/KONTRAK-API-FASE1.md").read_text(encoding="utf-8")
-    openapi2 = Path("docs/api/openapi-fase1.json").read_text(encoding="utf-8")
-    http2 = Path("docs/api/hero-fase1.http").read_text(encoding="utf-8")
+    content2 = (out_dir / "KONTRAK-API-FASE1.md").read_text(encoding="utf-8")
+    openapi2 = (out_dir / "openapi-fase1.json").read_text(encoding="utf-8")
+    http2 = (out_dir / "hero-fase1.http").read_text(encoding="utf-8")
 
     assert content1 == content2
     assert openapi1 == openapi2
