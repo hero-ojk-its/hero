@@ -74,6 +74,7 @@ class SearchParams:
     bidang: Optional[str] = None
     sort: Optional[SearchSort] = None
     include_inactive: bool = False
+    duplikat: Optional[bool] = None
     skip: int = 0
     limit: int = 20
 
@@ -215,6 +216,12 @@ class SearchService:
         if not params.include_inactive:
             filters.append(Document.is_active == True)
 
+        # Filter duplikat identitas (opsional)
+        if params.duplikat is True:
+            filters.append(Document.duplicate_of_id.isnot(None))
+        elif params.duplikat is False:
+            filters.append(Document.duplicate_of_id.is_(None))
+
         # 10. Tentukan Pengurutan (Sort)
         effective_sort = params.sort
         if effective_sort is None:
@@ -341,6 +348,9 @@ class SearchService:
                 "is_active": doc_obj.is_active,
                 "deactivated_at": doc_obj.deactivated_at,
                 "deactivated_reason": doc_obj.deactivated_reason,
+                "identity_key": getattr(doc_obj, "identity_key", None),
+                "page_count": getattr(doc_obj, "page_count", None),
+                "duplicate_of_id": getattr(doc_obj, "duplicate_of_id", None),
                 "pdf_url": pdf_url,
                 "restricted": is_restricted,
                 "rank": rank_val,

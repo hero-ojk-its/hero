@@ -51,6 +51,8 @@ from app.services.naming_service import (
     is_metadata_sufficient,
     normalize_regulation_type,
 )
+from app.services.identity_service import fallback_identity_key
+from app.services.duplicate_service import check_identity_duplicate
 from app.services.search_service import SearchService, SearchParams, SearchMode, SearchSort
 from app.crawlers.url_utils import extract_regulation_year
 
@@ -93,6 +95,7 @@ def list_documents(
     bidang: Optional[str] = Query(None, description="Filter sektor atau bidang regulasi (misal: Perbankan, BMKS)"),
     sort: Optional[SearchSort] = Query(None, description="Pengurutan hasil pencarian"),
     include_inactive: bool = Query(False, description="Tampilkan juga dokumen nonaktif jika true (default: false)"),
+    duplikat: Optional[bool] = Query(None, description="Filter dokumen duplikat (dokumen dengan duplicate_of_id terisi)"),
     skip: int = Query(0, ge=0, description="Offset pagination"),
     limit: int = Query(20, ge=1, description="Batas dokumen per halaman (maks 100)"),
     db: Session = Depends(get_db),
@@ -126,6 +129,7 @@ def list_documents(
         bidang=bidang,
         sort=sort,
         include_inactive=include_inactive,
+        duplikat=duplikat,
         skip=skip,
         limit=clamped_limit,
     )
@@ -155,6 +159,8 @@ def list_documents(
             "year": year,
             "bidang": bidang,
             "sort": effective_sort.value if hasattr(effective_sort, "value") else str(effective_sort),
+            "include_inactive": include_inactive,
+            "duplikat": duplikat,
             "skip": skip,
             "limit": clamped_limit,
         },
@@ -337,6 +343,9 @@ def _format_single_document_response(doc: Document, db: Session) -> Dict[str, An
         "is_active": getattr(doc, "is_active", True),
         "deactivated_at": getattr(doc, "deactivated_at", None),
         "deactivated_reason": getattr(doc, "deactivated_reason", None),
+        "identity_key": getattr(doc, "identity_key", None),
+        "page_count": getattr(doc, "page_count", None),
+        "duplicate_of_id": getattr(doc, "duplicate_of_id", None),
         "articles": [
             {
                 "id": a.id,
@@ -511,6 +520,10 @@ def patch_document_metadata(
     if not doc:
         raise HTTPException(status_code=404, detail=f"Dokumen dengan ID {document_id} tidak ditemukan.")
 
+    orig_regulation_type = doc.regulation_type
+    orig_regulation_number = doc.regulation_number
+    orig_regulation_year = doc.regulation_year
+
     fields_set = payload.model_fields_set
     if not fields_set:
         raise HTTPException(status_code=422, detail="Minimal satu field metadata harus dikirim.")
@@ -572,6 +585,20 @@ def patch_document_metadata(
             release_date=doc.release_date,
         )
 
+    # Hitung ulang identity_key bila salah satu dari regulation_type, regulation_number, atau regulation_year berubah
+    identity_fields_changed = (
+        doc.regulation_type != orig_regulation_type
+        or doc.regulation_number != orig_regulation_number
+        or doc.regulation_year != orig_regulation_year
+    )
+    if identity_fields_changed:
+        new_key = fallback_identity_key(
+            regulation_type=doc.regulation_type,
+            regulation_number=doc.regulation_number,
+            regulation_year=doc.regulation_year,
+        )
+        doc.identity_key = new_key
+
     # Cek kecukupan metadata
     naming_inp = NamingInput(
         regulation_number=doc.regulation_number,
@@ -629,11 +656,30 @@ def patch_document_metadata(
         )
 
     db.commit()
+
+    # Cek duplikat identitas dalam transaksi mandiri setelah koreksi & penempatan sukses di-commit
+    duplicate_info = None
+    if identity_fields_changed and doc.identity_key:
+        try:
+            dup_res = check_identity_duplicate(db, doc, actor_user_id=actor_user_id)
+            if dup_res:
+                db.commit()
+                duplicate_info = dup_res.model_dump()
+        except Exception as exc:
+            db.rollback()
+            logger.exception(
+                "Galat tak terduga saat cek duplikat identitas pada koreksi metadata dokumen ID %s: %s",
+                doc.id,
+                exc,
+            )
+            duplicate_info = None
+
     db.refresh(doc)
 
     formatted = _format_single_document_response(doc, db)
     formatted["changed_fields"] = changed_fields
     formatted["placement"] = placement_info
+    formatted["duplikat"] = duplicate_info
     return formatted
 
 

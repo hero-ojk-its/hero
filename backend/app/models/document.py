@@ -223,6 +223,25 @@ class Document(Base):
         comment="ID user yang menonaktifkan dokumen"
     )
 
+    identity_key = Column(
+        String(120),
+        nullable=True,
+        index=True,
+        comment="Kunci kanonik identitas regulasi (JENIS|NOMOR|TAHUN)"
+    )
+    page_count = Column(
+        Integer,
+        nullable=True,
+        comment="Jumlah halaman PDF"
+    )
+    duplicate_of_id = Column(
+        Integer,
+        ForeignKey("documents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="ID dokumen pemenang yang dipertahankan jika dokumen ini duplikat"
+    )
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -231,6 +250,7 @@ class Document(Base):
     job = relationship("JobIngest", back_populates="documents")
     corrected_by_user = relationship("User", foreign_keys=[metadata_corrected_by])
     deactivated_by_user = relationship("User", foreign_keys=[deactivated_by])
+    duplicate_of = relationship("Document", remote_side="Document.id", foreign_keys=[duplicate_of_id])
     articles = relationship("Article", back_populates="document", cascade="all, delete-orphan")
     legal_references = relationship(
         "LegalReference",
