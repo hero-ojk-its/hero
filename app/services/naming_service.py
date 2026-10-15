@@ -240,19 +240,30 @@ def build_standard_filename(
         sep = validate_naming_separator(naming_separator)
 
     # 2. Nilai komponen
+    # Tahun
+    year = extract_year(inp)
+    tahun_str = str(year) if year is not None else wildcard
+
     # Nomor
     if inp.regulation_number and inp.regulation_number.strip():
-        nomor_str = _clean_field(inp.regulation_number.strip()) or wildcard
+        raw_num = inp.regulation_number.strip()
+        # Jika raw_num memuat pola seperti '91 Tahun 2026', 'PADK 15 Tahun 2026', 'Nomor 92 Tahun 2026'
+        # dan 'tahun' ada dalam komponen penamaan (atau tahun berhasil diekstrak),
+        # bersihkan bagian 'Tahun YYYY' agar tidak redundan pada nama berkas.
+        m_redundant = re.match(
+            r"^(?:(?:[A-Za-z]+)\s+)?(?:No(?:mor)?\.?\s*)?(\d+)\s+Tahun\s+\d{4}$",
+            raw_num,
+            re.IGNORECASE,
+        )
+        if m_redundant and ("tahun" in comps or year is not None):
+            raw_num = m_redundant.group(1)
+        nomor_str = _clean_field(raw_num) or wildcard
     else:
         nomor_str = wildcard
 
     # Jenis
     norm_type = normalize_regulation_type(inp.regulation_type)
     jenis_str = _clean_field(norm_type) if norm_type else wildcard
-
-    # Tahun
-    year = extract_year(inp)
-    tahun_str = str(year) if year is not None else wildcard
 
     # Bidang
     if inp.bidang and inp.bidang.strip():

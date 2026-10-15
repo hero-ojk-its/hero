@@ -200,3 +200,19 @@ def test_v08_filter_by_source_type(client, tmp_path: Path, monkeypatch):
     assert len(items) == 1
     assert items[0]["source_type"] == "folder_lokal"
     assert items[0]["name"] == "Folder Source"
+
+
+def test_v09_situs_web_ssrf_rejected_at_input(client, monkeypatch):
+    """V09: SSRF di titik input: URL 127.0.0.1 ditolak 400 saat tambah sumber."""
+    monkeypatch.setattr(settings, "crawl_allow_private_networks", False)
+
+    resp = client.post(
+        "/api/v1/scraping-sources/",
+        json={
+            "name": "Sumber UJI_TOLAK",
+            "url": "http://127.0.0.1:8000",
+            "source_type": "situs_web",
+        },
+    )
+    assert resp.status_code == 400
+    assert "SSRF" in resp.json()["detail"] or "diblokir" in resp.json()["detail"]

@@ -561,6 +561,13 @@ def patch_document_metadata(
             new_val = new_val.strip()
         if field == "regulation_number" and new_val is not None:
             new_val = new_val.strip()
+            m_redundant_num = re.match(
+                r"^(?:(?:[A-Za-z]+)\s+)?(?:No(?:mor)?\.?\s*)?(\d+)\s+Tahun\s+\d{4}$",
+                new_val,
+                re.IGNORECASE,
+            )
+            if m_redundant_num:
+                new_val = m_redundant_num.group(1)
         if field == "bidang" and new_val is not None:
             new_val = new_val.strip()
 

@@ -437,6 +437,28 @@ def test_n14_filter_documents_by_bidang(client: TestClient, db_session: Session)
     assert not any(d["title"] == "Regulasi Perbankan 1" for d in items)
 
 
+def test_n15_redundant_year_in_regulation_number_cleaned():
+    """N15: Nomor '91 Tahun 2026' dibersihkan jadi '91' saat naming format memiliki komponen tahun."""
+    inp = NamingInput(
+        title="Penyelenggaraan Usaha Bank",
+        regulation_type="POJK",
+        regulation_number="91 Tahun 2026",
+        regulation_year=2026,
+    )
+    res = build_standard_filename(inp, naming_format=["jenis", "nomor", "tahun"], naming_separator="-")
+    assert res == "POJK-91-2026.pdf"
+
+    # Uji juga pola dengan jenis / nomor di depan: 'PADK 15 Tahun 2026'
+    inp2 = NamingInput(
+        title="Wali Amanat",
+        regulation_type="PADK",
+        regulation_number="PADK 15 Tahun 2026",
+        regulation_year=2026,
+    )
+    res2 = build_standard_filename(inp2, naming_format=["jenis", "nomor", "tahun"], naming_separator="-")
+    assert res2 == "PADK-15-2026.pdf"
+
+
 # ==================== C01 - C04: CONTRACT & REQUISITES TESTING ====================
 
 def test_c01_contract_builder_idempotent(tmp_path: Path):

@@ -559,6 +559,14 @@ def patch_extraction_result(
 
         if payload.regulation_number and payload.regulation_number.strip():
             clean_num = payload.regulation_number.strip()
+            # Bersihkan bila nomor dikirim redundan seperti '91 Tahun 2026' atau 'PADK 15 Tahun 2026'
+            m_redundant_num = re.match(
+                r"^(?:(?:[A-Za-z]+)\s+)?(?:No(?:mor)?\.?\s*)?(\d+)\s+Tahun\s+\d{4}$",
+                clean_num,
+                re.IGNORECASE,
+            )
+            if m_redundant_num:
+                clean_num = m_redundant_num.group(1)
             if doc.regulation_number != clean_num:
                 doc.regulation_number = clean_num
                 changed_fields.append("regulation_number")
