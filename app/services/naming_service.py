@@ -202,6 +202,27 @@ def parse_template_to_components(template: str) -> Tuple[List[str], str]:
     return comps if comps else list(DEFAULT_NAMING_FORMAT), sep
 
 
+def split_redundant_year(number: str | None) -> tuple[str | None, int | None]:
+    """
+    '91 Tahun 2026' -> ('91', 2026); 'PADK 15 Tahun 2026' -> ('15', 2026);
+    'Nomor 92 Tahun 2026' -> ('92', 2026); '11/POJK.03/2022' -> ('11/POJK.03/2022', None);
+    None -> (None, None).
+    """
+    if number is None:
+        return None, None
+    raw = number.strip()
+    if not raw:
+        return None, None
+    m = re.match(
+        r"^(?:(?:[A-Za-z]+)\s+)?(?:No(?:mor)?\.?\s*)?(\d+)\s+Tahun\s+(\d{4})$",
+        raw,
+        re.IGNORECASE,
+    )
+    if m:
+        return m.group(1), int(m.group(2))
+    return raw, None
+
+
 def _clean_field(val: str) -> str:
     r"""Ganti / dan \ dengan -, hapus karakter terlarang : * ? \" < > |, dan rapikan whitespace."""
     if not val:
@@ -246,17 +267,10 @@ def build_standard_filename(
 
     # Nomor
     if inp.regulation_number and inp.regulation_number.strip():
+        clean_num, year_from_num = split_redundant_year(inp.regulation_number)
         raw_num = inp.regulation_number.strip()
-        # Jika raw_num memuat pola seperti '91 Tahun 2026', 'PADK 15 Tahun 2026', 'Nomor 92 Tahun 2026'
-        # dan 'tahun' ada dalam komponen penamaan (atau tahun berhasil diekstrak),
-        # bersihkan bagian 'Tahun YYYY' agar tidak redundan pada nama berkas.
-        m_redundant = re.match(
-            r"^(?:(?:[A-Za-z]+)\s+)?(?:No(?:mor)?\.?\s*)?(\d+)\s+Tahun\s+\d{4}$",
-            raw_num,
-            re.IGNORECASE,
-        )
-        if m_redundant and ("tahun" in comps or year is not None):
-            raw_num = m_redundant.group(1)
+        if year_from_num is not None and ("tahun" in comps or year is not None):
+            raw_num = clean_num or raw_num
         nomor_str = _clean_field(raw_num) or wildcard
     else:
         nomor_str = wildcard
