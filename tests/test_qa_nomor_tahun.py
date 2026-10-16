@@ -183,3 +183,64 @@ def test_q06_naming_build_standard_filename():
     )
     res2 = build_standard_filename(inp2, naming_format=["jenis", "nomor", "tahun"], naming_separator="-")
     assert res2 == "PADK-15-2026.pdf"
+
+
+def test_q07_patch_metadata_slash_number_populates_year(client: TestClient, db_session: Session, test_storage: StorageService):
+    """
+    Q07: Dokumen tanpa tahun; koreksi metadata regulation_number="11/POJK.03/2022".
+    Ekspektasi: regulation_year=2022, identity_key="POJK|11|2022".
+    """
+    doc = _seed_doc(db_session, test_storage, title="Peraturan Uji Q07", reg_num=None, reg_type="POJK", reg_year=None)
+
+    resp = client.patch(
+        f"/api/v1/documents/{doc.id}/metadata",
+        json={
+            "regulation_number": "11/POJK.03/2022",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    db_session.refresh(doc)
+    assert doc.regulation_number == "11/POJK.03/2022"
+    assert doc.regulation_year == 2022
+    assert doc.identity_key == "POJK|11|2022"
+
+
+def test_q08_patch_metadata_release_date_updates_year(client: TestClient, db_session: Session, test_storage: StorageService):
+    """
+    Q08: Dokumen regulation_year=2021, release_date=2021-03-01; koreksi release_date=2022-05-10.
+    Ekspektasi: regulation_year=2022.
+    """
+    doc = _seed_doc(db_session, test_storage, title="Peraturan Uji Q08", reg_num=None, reg_type="POJK", reg_year=2021)
+    doc.release_date = date(2021, 3, 1)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    resp = client.patch(
+        f"/api/v1/documents/{doc.id}/metadata",
+        json={
+            "release_date": "2022-05-10",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    db_session.refresh(doc)
+    assert doc.regulation_year == 2022
+
+
+def test_q09_patch_metadata_title_without_year_keeps_existing_year(client: TestClient, db_session: Session, test_storage: StorageService):
+    """
+    Q09: Dokumen regulation_year=2021; koreksi title saja, yang tidak memuat tahun.
+    Ekspektasi: regulation_year tetap 2021 (tidak dihapus).
+    """
+    doc = _seed_doc(db_session, test_storage, title="Judul Lama", reg_num=None, reg_type="POJK", reg_year=2021)
+
+    resp = client.patch(
+        f"/api/v1/documents/{doc.id}/metadata",
+        json={
+            "title": "Judul Baru Tanpa Tahun Sama Sekali",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    db_session.refresh(doc)
+    assert doc.title == "Judul Baru Tanpa Tahun Sama Sekali"
+    assert doc.regulation_year == 2021
+

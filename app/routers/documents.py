@@ -591,19 +591,22 @@ def patch_document_metadata(
                     doc.regulation_year,
                     doc.id,
                 )
-        elif doc.regulation_year is None and any(f in changed_fields for f in ("title", "release_date")):
-            inferred_yr = extract_regulation_year(
-                regulation_number=doc.regulation_number,
-                title=doc.title,
-                filename=doc.original_filename,
-                release_date=doc.release_date,
-            )
-            if inferred_yr is not None:
-                doc.regulation_year = inferred_yr
-                if "regulation_year" not in changed_fields:
-                    changed_fields.append("regulation_year")
-                before_dict["regulation_year"] = None
-                after_dict["regulation_year"] = inferred_yr
+        else:
+            if any(f in changed_fields for f in ("regulation_number", "title", "release_date")):
+                inferred_yr = extract_regulation_year(
+                    regulation_number=doc.regulation_number,
+                    title=doc.title,
+                    filename=doc.original_filename,
+                    release_date=doc.release_date,
+                )
+                if inferred_yr is not None:
+                    if doc.regulation_year != inferred_yr:
+                        old_yr = doc.regulation_year
+                        doc.regulation_year = inferred_yr
+                        if "regulation_year" not in changed_fields:
+                            changed_fields.append("regulation_year")
+                        before_dict["regulation_year"] = old_yr
+                        after_dict["regulation_year"] = inferred_yr
     else:
         # Jika regulation_year diisi manual di payload dan nomor juga punya tahun yang berbeda
         if year_from_number is not None and doc.regulation_year is not None and doc.regulation_year != year_from_number:
