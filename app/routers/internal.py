@@ -12,10 +12,10 @@ import re
 from typing import Optional, List, Dict, Any, Union
 import urllib.parse
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, ConfigDict, AliasChoices
-from sqlalchemy import or_, and_, desc, select, delete, func, literal_column
+from sqlalchemy import or_, and_, select, delete, func, literal_column
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -26,8 +26,6 @@ from app.models.article import Article
 from app.models.ingest_failure import IngestFailure
 from app.models.job_ingest import JobIngest
 from app.models.enums import (
-    KlasifikasiAkses,
-    PeranDokumen,
     StatusPemrosesan,
     MetodeEkstraksi,
     JenisKegagalan,
@@ -36,7 +34,7 @@ from app.models.enums import (
     StatusJobIngest,
 )
 from app.schemas.article import BulkArticleIn, BulkArticleResponse
-from app.schemas.scan import InternalCandidatesBatchIn, InternalScanClaimItem
+from app.schemas.scan import InternalCandidatesBatchIn
 from app.services.audit_service import (
     record_audit,
     EXTRACTION_RESULT,

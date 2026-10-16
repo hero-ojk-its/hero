@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 from datetime import date
 from typing import Optional, List, Dict, Any, Tuple
-from sqlalchemy import func, or_, and_, desc, asc, literal_column, case
+from sqlalchemy import func, or_, and_, desc, literal_column, case
 from sqlalchemy.orm import Session
 
 from app.config import settings

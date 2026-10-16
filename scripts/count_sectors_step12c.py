@@ -1,6 +1,5 @@
 import csv
 from collections import Counter
-from pathlib import Path
 
 for name, rel_path in [
     ("OJK (Portal)", "docs/reports/scan-benchmark-ojk.csv"),

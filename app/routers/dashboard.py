@@ -4,7 +4,7 @@ Endpoint ringkasan statistik Knowledge Base dan pipeline ingest (Langkah 5).
 Menggunakan query agregat SQL yang dioptimalkan tanpa N+1.
 """
 from datetime import datetime, timezone
-from typing import Dict, Any, List
+from typing import Dict, Any
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, case, desc, or_, and_
 from sqlalchemy.orm import Session

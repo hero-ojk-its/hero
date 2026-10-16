@@ -2,7 +2,7 @@
 app/routers/categories.py
 Endpoint manajemen hierarki kategori Knowledge Base.
 """
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session

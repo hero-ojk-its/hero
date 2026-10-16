@@ -9,7 +9,6 @@ Mendukung:
 - Perhitungan berkas non-PDF pada statistik non_pdf_links.
 PENTING: Modul ini TIDAK BOLEH mengimpor app.database, app.models, app.routers, app.services.
 """
-import hashlib
 import logging
 import os
 import posixpath
@@ -17,18 +16,16 @@ import re
 import ssl
 import time
 from collections import deque
-from typing import Callable, Optional, List, Dict, Set, Tuple, Any
-from urllib.parse import urlsplit, urlunsplit, parse_qs, unquote, quote
+from typing import Callable, Optional, List, Dict, Set, Tuple
+from urllib.parse import urlsplit, parse_qs, unquote, quote
 
 import httpx
 
 from app.crawlers.base import (
-    Crawler,
     PdfCandidate,
     ScanResult,
     FetchedFile,
     CrawlerError,
-    BlockedUrlError,
     FetchTooLargeError,
 )
 from app.crawlers.url_utils import (
@@ -36,7 +33,6 @@ from app.crawlers.url_utils import (
     guard_url,
     detect_captcha_or_waf,
     determine_doc_kind,
-    normalize_crawler_regulation_type,
     clean_onedrive_filename,
     parse_onedrive_filename_metadata,
     validate_regulation_filename_match,

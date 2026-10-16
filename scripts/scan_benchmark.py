@@ -15,10 +15,8 @@ Penggunaan:
 """
 import argparse
 import csv
-import json
 import os
 import posixpath
-import re
 import sys
 import time
 from datetime import datetime

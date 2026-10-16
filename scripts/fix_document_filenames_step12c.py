@@ -13,7 +13,6 @@ Aturan:
 - Perubahan dicatat ke tabel audit_logs dengan action UPDATE_METADATA.
 """
 import argparse
-import os
 import shutil
 import sys
 from pathlib import Path
