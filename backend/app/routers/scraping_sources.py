@@ -36,6 +36,7 @@ from app.services.audit_service import (
 from app.services.folder_connector import _is_hidden, _is_temp_file
 from app.services.naming_service import validate_naming_format, validate_naming_separator
 from app.services.source_runner import SourceRunner
+from app.crawlers.url_utils import guard_url, BlockedUrlError
 
 router = APIRouter()
 
@@ -62,12 +63,20 @@ def _validate_source_url_by_type(url_str: str, source_type: JenisSumber) -> str:
 
     if source_type == JenisSumber.situs_web:
         try:
-            return validate_http_url(trimmed)
+            valid_url = validate_http_url(trimmed)
         except ValueError as err:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Format URL salah: {str(err)}",
             )
+        try:
+            guard_url(valid_url, allow_private=settings.crawl_allow_private_networks)
+        except BlockedUrlError as bue:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Alamat URL tidak diizinkan demi keamanan (SSRF): {bue}",
+            )
+        return valid_url
 
     elif source_type == JenisSumber.folder_lokal:
         try:
@@ -129,6 +138,14 @@ def _validate_source_url_by_type(url_str: str, source_type: JenisSumber) -> str:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Host URL OneDrive tidak valid. Harus berupa onedrive.live.com, 1drv.ms, atau *.sharepoint.com.",
+            )
+
+        try:
+            guard_url(valid_url, allow_private=settings.crawl_allow_private_networks)
+        except BlockedUrlError as bue:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Alamat URL OneDrive tidak diizinkan demi keamanan (SSRF): {bue}",
             )
 
         return valid_url

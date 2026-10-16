@@ -47,7 +47,7 @@ from app.services.audit_service import (
 from app.services.storage_service import StorageService, get_storage_service
 from app.services.category_service import CategoryService
 from app.services.placement_service import PlacementService
-from app.services.naming_service import normalize_regulation_type
+from app.services.naming_service import normalize_regulation_type, split_redundant_year
 from app.services.identity_service import fallback_identity_key
 from app.services.duplicate_service import check_identity_duplicate
 
@@ -82,6 +82,7 @@ class ExtractionResultIn(BaseModel):
     regulation_number: Optional[str] = Field(None, max_length=_DOC_REG_NUM_MAX_LEN, validation_alias="nomor_peraturan")
     regulation_type: Optional[str] = Field(None, max_length=_DOC_REG_TYPE_MAX_LEN, validation_alias="jenis_peraturan")
     release_date: Optional[date] = Field(None, validation_alias="tanggal_terbit")
+    regulation_year: Optional[int] = Field(None, validation_alias=AliasChoices("regulation_year", "tahun_peraturan", "tahun"))
     bidang: Optional[str] = Field(None, max_length=_DOC_BIDANG_MAX_LEN, validation_alias=AliasChoices("bidang", "sektor", "sector"))
     extraction_method: Optional[str] = Field(None, max_length=_DOC_METHOD_MAX_LEN, validation_alias="metode_ekstraksi")
     extraction_engine: Optional[str] = Field(None, max_length=_DOC_ENGINE_MAX_LEN, validation_alias="mesin_ekstraksi")
@@ -547,8 +548,8 @@ def patch_extraction_result(
 
     # Aturan Metadata: jangan menimpa bila sudah dikoreksi manual
     if doc.metadata_corrected_at is not None:
-        for fname in ["title", "regulation_number", "regulation_type", "release_date", "bidang"]:
-            if getattr(payload, fname) is not None:
+        for fname in ["title", "regulation_number", "regulation_type", "release_date", "bidang", "regulation_year"]:
+            if getattr(payload, fname, None) is not None:
                 ignored_fields.append(fname)
     else:
         if payload.title and payload.title.strip():
@@ -557,9 +558,10 @@ def patch_extraction_result(
                 doc.title = clean_title
                 changed_fields.append("title")
 
+        year_from_num = None
         if payload.regulation_number and payload.regulation_number.strip():
-            clean_num = payload.regulation_number.strip()
-            if doc.regulation_number != clean_num:
+            clean_num, year_from_num = split_redundant_year(payload.regulation_number)
+            if clean_num and doc.regulation_number != clean_num:
                 doc.regulation_number = clean_num
                 changed_fields.append("regulation_number")
 
@@ -579,6 +581,25 @@ def patch_extraction_result(
             if doc.bidang != clean_bidang:
                 doc.bidang = clean_bidang
                 changed_fields.append("bidang")
+
+        # Pindahkan tahun dari nomor ke regulation_year jika regulation_year kosong
+        # dan tidak sedang diisi di payload yang sama
+        payload_year = getattr(payload, "regulation_year", None)
+        if payload_year is not None:
+            if doc.regulation_year != payload_year:
+                doc.regulation_year = payload_year
+                changed_fields.append("regulation_year")
+        elif year_from_num is not None:
+            if doc.regulation_year is None:
+                doc.regulation_year = year_from_num
+                changed_fields.append("regulation_year")
+            elif doc.regulation_year != year_from_num:
+                logger.warning(
+                    "Tahun dari nomor regulasi (%s) berbeda dengan regulation_year dokumen (%s) pada dokumen id %s; regulation_year tidak ditimpa.",
+                    year_from_num,
+                    doc.regulation_year,
+                    doc.id,
+                )
 
     # Tangani identity_key dan page_count
     if payload.identity_key and payload.identity_key.strip():

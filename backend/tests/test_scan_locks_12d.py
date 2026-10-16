@@ -28,8 +28,9 @@ from tests.test_crawler_simple import mock_http_server
 
 
 @pytest.fixture
-def test_source(client, mock_http_server) -> int:
+def test_source(client, mock_http_server, monkeypatch) -> int:
     """Fixture membuat sumber scraping web uji terhubung ke mock HTTP server."""
+    monkeypatch.setattr(settings, "crawl_allow_private_networks", True)
     base_url, _ = mock_http_server
     resp = client.post(
         "/api/v1/scraping-sources/",

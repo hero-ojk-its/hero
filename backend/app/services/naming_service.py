@@ -202,6 +202,27 @@ def parse_template_to_components(template: str) -> Tuple[List[str], str]:
     return comps if comps else list(DEFAULT_NAMING_FORMAT), sep
 
 
+def split_redundant_year(number: str | None) -> tuple[str | None, int | None]:
+    """
+    '91 Tahun 2026' -> ('91', 2026); 'PADK 15 Tahun 2026' -> ('15', 2026);
+    'Nomor 92 Tahun 2026' -> ('92', 2026); '11/POJK.03/2022' -> ('11/POJK.03/2022', None);
+    None -> (None, None).
+    """
+    if number is None:
+        return None, None
+    raw = number.strip()
+    if not raw:
+        return None, None
+    m = re.match(
+        r"^(?:(?:[A-Za-z]+)\s+)?(?:No(?:mor)?\.?\s*)?(\d+)\s+Tahun\s+(\d{4})$",
+        raw,
+        re.IGNORECASE,
+    )
+    if m:
+        return m.group(1), int(m.group(2))
+    return raw, None
+
+
 def _clean_field(val: str) -> str:
     r"""Ganti / dan \ dengan -, hapus karakter terlarang : * ? \" < > |, dan rapikan whitespace."""
     if not val:
@@ -240,19 +261,23 @@ def build_standard_filename(
         sep = validate_naming_separator(naming_separator)
 
     # 2. Nilai komponen
+    # Tahun
+    year = extract_year(inp)
+    tahun_str = str(year) if year is not None else wildcard
+
     # Nomor
     if inp.regulation_number and inp.regulation_number.strip():
-        nomor_str = _clean_field(inp.regulation_number.strip()) or wildcard
+        clean_num, year_from_num = split_redundant_year(inp.regulation_number)
+        raw_num = inp.regulation_number.strip()
+        if year_from_num is not None and ("tahun" in comps or year is not None):
+            raw_num = clean_num or raw_num
+        nomor_str = _clean_field(raw_num) or wildcard
     else:
         nomor_str = wildcard
 
     # Jenis
     norm_type = normalize_regulation_type(inp.regulation_type)
     jenis_str = _clean_field(norm_type) if norm_type else wildcard
-
-    # Tahun
-    year = extract_year(inp)
-    tahun_str = str(year) if year is not None else wildcard
 
     # Bidang
     if inp.bidang and inp.bidang.strip():

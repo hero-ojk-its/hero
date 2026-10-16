@@ -50,6 +50,7 @@ from app.services.naming_service import (
     NamingInput,
     is_metadata_sufficient,
     normalize_regulation_type,
+    split_redundant_year,
 )
 from app.services.identity_service import fallback_identity_key
 from app.services.duplicate_service import check_identity_duplicate
@@ -551,6 +552,8 @@ def patch_document_metadata(
     after_dict = {}
     changed_fields = []
 
+    year_from_number = None
+
     for field in fields_set:
         current_val = getattr(doc, field)
         new_val = getattr(payload, field)
@@ -560,7 +563,9 @@ def patch_document_metadata(
         if field == "title" and new_val is not None:
             new_val = new_val.strip()
         if field == "regulation_number" and new_val is not None:
-            new_val = new_val.strip()
+            clean_num, year_from_num = split_redundant_year(new_val)
+            new_val = clean_num
+            year_from_number = year_from_num
         if field == "bidang" and new_val is not None:
             new_val = new_val.strip()
 
@@ -570,20 +575,53 @@ def patch_document_metadata(
             after_dict[field] = new_val.isoformat() if isinstance(new_val, (date, datetime)) else (new_val.value if hasattr(new_val, "value") else new_val)
             setattr(doc, field, new_val)
 
+    # Tangani regulation_year bila tidak sedang diisi di payload:
+    if "regulation_year" not in fields_set:
+        if year_from_number is not None:
+            if doc.regulation_year is None:
+                doc.regulation_year = year_from_number
+                if "regulation_year" not in changed_fields:
+                    changed_fields.append("regulation_year")
+                before_dict["regulation_year"] = None
+                after_dict["regulation_year"] = year_from_number
+            elif doc.regulation_year != year_from_number:
+                logger.warning(
+                    "Tahun dari nomor regulasi (%s) berbeda dengan regulation_year dokumen (%s) pada dokumen id %s; regulation_year tidak ditimpa.",
+                    year_from_number,
+                    doc.regulation_year,
+                    doc.id,
+                )
+        else:
+            if any(f in changed_fields for f in ("regulation_number", "title", "release_date")):
+                inferred_yr = extract_regulation_year(
+                    regulation_number=doc.regulation_number,
+                    title=doc.title,
+                    filename=doc.original_filename,
+                    release_date=doc.release_date,
+                )
+                if inferred_yr is not None:
+                    if doc.regulation_year != inferred_yr:
+                        old_yr = doc.regulation_year
+                        doc.regulation_year = inferred_yr
+                        if "regulation_year" not in changed_fields:
+                            changed_fields.append("regulation_year")
+                        before_dict["regulation_year"] = old_yr
+                        after_dict["regulation_year"] = inferred_yr
+    else:
+        # Jika regulation_year diisi manual di payload dan nomor juga punya tahun yang berbeda
+        if year_from_number is not None and doc.regulation_year is not None and doc.regulation_year != year_from_number:
+            logger.warning(
+                "Tahun dari nomor regulasi (%s) berbeda dengan regulation_year yang diisi pengguna (%s) pada dokumen id %s; isian pengguna dipertahankan.",
+                year_from_number,
+                doc.regulation_year,
+                doc.id,
+            )
+
     actor_user_id = current_user.id if current_user and getattr(current_user, "id", None) else None
     client_ip = request.client.host if request.client else None
 
     doc.metadata_corrected_at = datetime.now(timezone.utc)
     doc.metadata_corrected_by = actor_user_id
-
-    # Perbarui regulation_year jika field pembentuknya berubah
-    if any(f in changed_fields for f in ("regulation_number", "title", "release_date")):
-        doc.regulation_year = extract_regulation_year(
-            regulation_number=doc.regulation_number,
-            title=doc.title,
-            filename=doc.original_filename,
-            release_date=doc.release_date,
-        )
 
     # Hitung ulang identity_key bila salah satu dari regulation_type, regulation_number, atau regulation_year berubah
     identity_fields_changed = (

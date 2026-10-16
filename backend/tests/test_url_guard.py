@@ -35,21 +35,36 @@ def test_k15_guard_url_allowed_when_private_permitted():
     guard_url("http://localhost:8000/test.pdf", allow_private=True)
 
 
-def test_k14_ssrf_post_scans_rejected(client, monkeypatch):
-    """K14: SSRF: crawl_allow_private_networks=false menolak sumber dengan IP privat (HTTP 422)."""
+def test_k14_ssrf_post_scans_rejected(client, db_session, monkeypatch):
+    """K14: SSRF: crawl_allow_private_networks=false menolak sumber dengan IP privat di input (400) dan scan (422)."""
     monkeypatch.setattr(settings, "crawl_allow_private_networks", False)
 
-    # 1. Buat sumber situs_web mengarah ke 127.0.0.1
+    # 1. Titik input: POST /scraping-sources harus ditolak 400
     resp_src = client.post(
         "/api/v1/scraping-sources/",
         json={"name": "SSRF Source", "url": "http://127.0.0.1:8000/regulasi", "source_type": "situs_web"},
     )
-    src_id = resp_src.json()["id"]
+    assert resp_src.status_code == 400
+    assert "SSRF" in resp_src.json()["detail"] or "diblokir" in resp_src.json()["detail"]
 
-    # 2. POST /scans harus mengembalikan 422 dengan pesan SSRF
+    # 2. Pertahanan berlapis: Bila sumber eksisting di database mengarah ke IP privat, POST /scans tetap menolak (422)
+    from app.models.scraping_source import ScrapingSource
+    from app.models.enums import JenisSumber, KlasifikasiAkses
+
+    legacy_src = ScrapingSource(
+        name="Legacy SSRF Source",
+        url="http://127.0.0.1:8000/regulasi",
+        source_type=JenisSumber.situs_web,
+        default_access_classification=KlasifikasiAkses.publik,
+        is_active=True,
+    )
+    db_session.add(legacy_src)
+    db_session.commit()
+    db_session.refresh(legacy_src)
+
     resp_scan = client.post(
         "/api/v1/scans/",
-        json={"source_id": src_id},
+        json={"source_id": legacy_src.id},
     )
     assert resp_scan.status_code == 422
     assert "SSRF" in resp_scan.json()["detail"] or "diblokir" in resp_scan.json()["detail"]
