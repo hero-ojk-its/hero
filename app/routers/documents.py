@@ -54,6 +54,7 @@ from app.services.naming_service import (
 )
 from app.services.identity_service import fallback_identity_key
 from app.services.duplicate_service import check_identity_duplicate
+from app.services.version_service import get_versioning_details, recompute_status
 from app.services.search_service import SearchService, SearchParams, SearchMode, SearchSort
 from app.crawlers.url_utils import extract_regulation_year
 
@@ -325,6 +326,7 @@ def _format_single_document_response(doc: Document, db: Session) -> Dict[str, An
         "access_classification": doc.access_classification,
         "document_role": doc.document_role,
         "status_keberlakuan": doc.status_keberlakuan,
+        "status_source": getattr(doc, "status_source", None),
         "processing_status": doc.processing_status,
         "extraction_method": getattr(doc, "extraction_method", None),
         "extraction_engine": getattr(doc, "extraction_engine", None),
@@ -712,6 +714,15 @@ def patch_document_metadata(
             )
             duplicate_info = None
 
+        try:
+            recompute_status(db, doc)
+        except Exception as rec_exc:
+            logger.exception(
+                "Galat tak terduga saat hitung ulang status relasi pada koreksi metadata dokumen ID %s: %s",
+                doc.id,
+                rec_exc,
+            )
+
     db.refresh(doc)
 
     formatted = _format_single_document_response(doc, db)
@@ -815,6 +826,7 @@ def update_document_status(
     try:
         # 3. Update status keberlakuan
         doc.status_keberlakuan = payload.status_keberlakuan
+        doc.status_source = "manual"
 
         # 4. Buat LegalReference jika status dicabut/diubah dan revoking_document_id ada
         legal_ref: LegalReference | None = None
@@ -995,3 +1007,37 @@ def update_document_active(
         deactivated_reason=doc.deactivated_reason,
         message=msg,
     )
+
+
+@router.get(
+    "/{document_id}/versi",
+    summary="Lihat relasi dan riwayat versi dokumen (mengubah, mencabut, induk, dicabut oleh)",
+    responses={
+        403: {"description": "Dokumen non-publik memerlukan autentikasi aktif"},
+        404: {"description": "Dokumen tidak ditemukan"},
+    },
+)
+def get_document_version(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Mengembalikan informasi versioning dokumen berdasarkan relasi graf hukum (Langkah 18).
+    - induk: peraturan yang diubah oleh dokumen ini
+    - diubah_oleh: peraturan yang mengubah dokumen ini (dengan urutan perubahan_ke)
+    - dicabut_oleh: peraturan yang mencabut dokumen ini
+    - mencabut: peraturan yang dicabut oleh dokumen ini
+    """
+    doc = db.query(Document).filter(Document.id == document_id, Document.is_active == True).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
+
+    if settings.protect_non_public_when_auth_disabled and not settings.auth_enabled:
+        if doc.access_classification == KlasifikasiAkses.non_publik:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.",
+            )
+
+    return get_versioning_details(db, doc, current_user=current_user)

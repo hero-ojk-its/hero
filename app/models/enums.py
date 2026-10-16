@@ -121,3 +121,9 @@ class HasilTarik(str, enum.Enum):
     diunduh = "diunduh"
 
 
+class JenisRelasi(str, enum.Enum):
+    """Jenis relasi antar dokumen regulasi (Langkah 18)"""
+    mengubah = "mengubah"
+    mencabut = "mencabut"
+
+

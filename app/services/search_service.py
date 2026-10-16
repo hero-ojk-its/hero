@@ -337,6 +337,7 @@ class SearchService:
                 "category_id": doc_obj.category_id,
                 "category_path": cpath,
                 "status_keberlakuan": doc_obj.status_keberlakuan,
+                "status_source": getattr(doc_obj, "status_source", None),
                 "processing_status": doc_obj.processing_status,
                 "extraction_method": getattr(doc_obj, "extraction_method", None),
                 "file_path_pdf": doc_obj.file_path_pdf,

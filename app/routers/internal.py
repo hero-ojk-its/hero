@@ -48,6 +48,7 @@ from app.services.placement_service import PlacementService
 from app.services.naming_service import normalize_regulation_type, split_redundant_year
 from app.services.identity_service import fallback_identity_key
 from app.services.duplicate_service import check_identity_duplicate
+from app.services.version_service import recompute_status, sync_relations
 
 logger = logging.getLogger("hero")
 router = APIRouter()
@@ -100,6 +101,31 @@ class DocumentIdentityItemIn(BaseModel):
 
 class BatchIdentityIn(BaseModel):
     items: List[DocumentIdentityItemIn] = Field(..., max_length=500)
+
+
+class RelationItemIn(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    src: str = Field(..., max_length=120)
+    dst: str = Field(..., max_length=120)
+    rel: str
+    sebagian: Union[bool, int] = False
+    pasal_terkait: Optional[str] = None
+    asal: Optional[str] = None
+    bukti: Optional[str] = None
+
+
+class NodeStatusItemIn(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    key: str = Field(..., max_length=120)
+    status: str
+
+
+class SyncRelationsIn(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    relations: List[RelationItemIn] = Field(default_factory=list, max_length=5000)
+    nodes: Optional[List[NodeStatusItemIn]] = Field(default=None, max_length=5000)
+    replace_all: bool = False
+
 
 
 @router.post(
@@ -797,6 +823,13 @@ def patch_extraction_result(
         logger.exception("Galat cek duplikat identitas untuk dokumen ID %s: %s", doc.id, dup_exc)
         duplicate_info = None
 
+    # Hitung ulang status versi bila identitas tersedia
+    if doc.identity_key:
+        try:
+            recompute_status(db, doc)
+        except Exception as rec_exc:
+            logger.exception("Galat hitung ulang status relasi untuk dokumen ID %s: %s", doc.id, rec_exc)
+
     db.refresh(doc)
 
     return {
@@ -958,9 +991,41 @@ def batch_update_document_identity(
             db.rollback()
             logger.exception("Galat cek duplikat saat backfill dokumen ID %s: %s", doc.id, exc)
 
+        # Hitung ulang status versi bila identitas terisi
+        if doc.identity_key:
+            try:
+                recompute_status(db, doc)
+            except Exception as rec_exc:
+                logger.exception("Galat hitung ulang status relasi saat backfill dokumen ID %s: %s", doc.id, rec_exc)
+
     return {
         "updated": updated_count,
         "not_found": not_found,
         "duplicates": duplicates_summary,
     }
+
+
+@router.post(
+    "/relations",
+    summary="[Internal] Sinkronisasi graf relasi dokumen (mengubah/mencabut) dari lapisan data",
+    dependencies=[Depends(verify_internal_api_key)],
+)
+def sync_document_relations(
+    payload: SyncRelationsIn,
+    db: Session = Depends(get_db),
+):
+    """
+    Menerima relasi (mengubah, mencabut) dan status node dari lapisan data (Langkah 18).
+    Maksimal 5000 relasi dan 5000 node per permintaan.
+    """
+    rel_dicts = [r.model_dump() for r in payload.relations]
+    node_dicts = [n.model_dump() for n in payload.nodes] if payload.nodes else None
+
+    result = sync_relations(
+        db=db,
+        relations_data=rel_dicts,
+        nodes_data=node_dicts,
+        replace_all=payload.replace_all,
+    )
+    return result
 
