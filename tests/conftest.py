@@ -83,6 +83,7 @@ def db_session() -> Generator[Session, None, None]:
                 article_references,
                 legal_references,
                 articles,
+                analysis_results,
                 document_relations,
                 documents,
                 ingest_failures,
