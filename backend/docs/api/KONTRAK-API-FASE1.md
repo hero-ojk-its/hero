@@ -27,12 +27,14 @@
 6. [Alur 5: Unggah Berkas Manual & Sinkronisasi Folder Lokal](#6-alur-5-unggah-berkas-manual--sinkronisasi-folder-lokal)
 7. [Alur 6: Eksplorasi Knowledge Base & Pencarian Regulasi](#7-alur-6-eksplorasi-knowledge-base--pencarian-regulasi)
 8. [Alur 7: Detail Dokumen, Pembaca Teks & Penampil PDF](#8-alur-7-detail-dokumen-pembaca-teks--penampil-pdf)
+   - [8.4 Riwayat Versi & Relasi Regulasi](#84-riwayat-versi--relasi-regulasi)
 9. [Alur 8: Kurasi & Koreksi Metadata serta Antrean Penanganan Gagal](#9-alur-8-kurasi--koreksi-metadata-serta-antrean-penanganan-gagal)
 10. [Alur 9: Dashboard Ringkasan Eksekutif](#10-alur-9-dashboard-ringkasan-eksekutif)
 11. [Gerbang Analisa (`/api/v1/ml/*`)](#11-gerbang-analisa-apiv1ml)
 12. [Tabel Referensi Enum & Label Bahasa Indonesia](#12-tabel-referensi-enum--label-bahasa-indonesia)
 13. [Daftar Kode Galat HTTP & Penanganan di UI](#13-daftar-kode-galat-http--penanganan-di-ui)
 14. [Catatan & Pertanyaan untuk Frontend](#14-catatan--pertanyaan-untuk-frontend)
+15. [Layanan Sinkronisasi Relasi Internal (Lapisan Data)](#15-layanan-sinkronisasi-relasi-internal-lapisan-data)
 
 ---
 
@@ -837,6 +839,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
   "access_classification": "publik",
   "document_role": "corpus_eksisting",
   "status_keberlakuan": "tidak_diketahui",
+  "status_source": "relasi",
   "processing_status": "terindeks",
   "extraction_method": "teks_langsung",
   "extraction_engine": null,
@@ -926,7 +929,54 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
     <iframe src="http://localhost:8000/api/v1/documents/1/pdf" width="100%" height="800px" />
     ```
   - **Membaca Nama Berkas Asli:** Gunakan parsing parameter `filename*` dari header `Content-Disposition` (lihat contoh kode di §1.4).
-  - **Perilaku 403 Forbidden:** Jika dokumen berstatus `non_publik` dan autentikasi belum aktif, endpoint mengembalikan galat 403 dengan pesan `"Dokumen non-publik hanya dapat dibuka setelah login diaktifkan."`.
+### 8.4 Riwayat Versi & Relasi Regulasi
+- **Method & Path:** `GET /api/v1/documents/{document_id}/versi`
+- **Tujuan:** Menampilkan silsilah riwayat versi peraturan (regulasi induk yang diubah, daftar regulasi pengubah terurut kronologis, regulasi pencabut, dan regulasi lain yang dicabut).
+- **Proteksi Akses:**
+  - Jika dokumen pemanggil berstatus `non_publik` dan autentikasi dinonaktifkan (`auth_enabled=false` dan `protect_non_public_when_auth_disabled=true`), endpoint langsung mengembalikan galat `403 Forbidden`.
+  - Jika terdapat dokumen target/relasi yang berstatus `non_publik` di dalam pohon riwayat versi, entri tersebut disamarkan (`document_id: null, judul: null, restricted: true`).
+- **Respons (200 OK):**
+```json
+{
+  "document_id": 1,
+  "identity_key": "POJK|10|2026",
+  "status_keberlakuan": "diubah",
+  "status_source": "relasi",
+  "induk": [
+    {
+      "key": "POJK|1|2020",
+      "relasi": "mengubah",
+      "sebagian": false,
+      "perubahan_ke": 2,
+      "document_id": 4,
+      "judul": "Peraturan Otoritas Jasa Keuangan Nomor 1/POJK.03/2020",
+      "pasal_terkait": null
+    }
+  ],
+  "diubah_oleh": [
+    {
+      "key": "POJK|15|2027",
+      "relasi": "mengubah",
+      "sebagian": true,
+      "perubahan_ke": 1,
+      "document_id": 12,
+      "judul": "Peraturan Otoritas Jasa Keuangan Nomor 15/POJK.03/2027",
+      "pasal_terkait": "Pasal 5"
+    }
+  ],
+  "dicabut_oleh": [],
+  "mencabut": [],
+  "catatan": "Draft / Rekomendasi — status dihitung dari relasi antarperaturan; periksa teks resmi."
+}
+```
+- **Keterangan Field:**
+  - `identity_key`: Kunci kanonik identitas regulasi (`JENIS|NOMOR|TAHUN`). Bernilai `null` jika dokumen belum memiliki nomor/tahun/jenis lengkap.
+  - `status_source`: Asal penetapan status keberlakuan (`manual` | `relasi` | `lapisan_data` | `null`).
+  - `induk`: Regulasi induk yang diubah oleh dokumen ini (bila dokumen ini merupakan regulasi perubahan).
+  - `diubah_oleh`: Seluruh regulasi yang mengubah dokumen ini, terurut kronologis dari yang terlama.
+  - `dicabut_oleh`: Seluruh regulasi yang mencabut dokumen ini.
+  - `mencabut`: Seluruh regulasi terdahulu yang dicabut oleh dokumen ini.
+  - `perubahan_ke`: Urutan perubahan regulasi secara kronologis (`1` untuk perubahan pertama, `2` untuk perubahan kedua, dst).
 
 ---
 
@@ -1572,3 +1622,53 @@ Field respons/parameter: `job_status`
 1. **Komponen Penamaan Berulang:** Backend mengizinkan tombol komponen penamaan yang sama diklik lebih dari sekali (misal: `["tahun", "nama", "tahun"]`). Apakah UI telah mendukung representasi chip/badge yang dapat diurutkan secara drag-and-drop?
 2. **Karakter Pemisah Penamaan:** Pemisah default adalah spasi `" "`. Pilihan lain adalah `"_"` dan `"-"`. Jika pengguna tidak memilih pemisah, backend otomatis menggunakan spasi.
 3. **Pemberitahuan Status Asinkron:** Disarankan agar frontend menggunakan library seperti React Query / SWR dengan konfigurasi `refetchInterval: 2000` saat sesi berada dalam status `memindai` atau `menarik`.
+
+---
+
+## 15. LAYANAN SINKRONISASI RELASI INTERNAL (LAPISAN DATA)
+
+Endpoint ini digunakan oleh worker/lapisan data (`hero bridge`) untuk mengirimkan relasi hukum antar peraturan (`mengubah`, `mencabut`) serta status keberlakuan node hasil inferensi.
+
+### 15.1 Sinkronisasi Relasi Antar Regulasi
+- **Method & Path:** `POST /api/v1/internal/relations`
+- **Header Keamanan:** `X-Internal-API-Key: <INTERNAL_API_KEY>` (Wajib). Mengembalikan `401 Unauthorized` jika kunci tidak valid atau tidak disertakan.
+- **Batasan Payload:** Maksimal 5.000 relasi per satu kali panggilan batch.
+- **Body JSON:**
+```json
+{
+  "relations": [
+    {
+      "src": "POJK|10|2026",
+      "dst": "POJK|1|2020",
+      "rel": "MENGUBAH",
+      "sebagian": 0,
+      "pasal_terkait": null,
+      "asal": "ekstraksi",
+      "bukti": "Mengubah POJK 1/2020 tentang Tata Kelola"
+    }
+  ],
+  "node_status": [
+    {
+      "key": "POJK|1|2020",
+      "status": "diubah"
+    }
+  ],
+  "replace_all": false
+}
+```
+- **Respons (200 OK):**
+```json
+{
+  "inserted": 1,
+  "updated": 0,
+  "skipped": 0,
+  "deleted": 0,
+  "documents_status_changed": 1
+}
+```
+- **Keterangan:**
+  - `rel`: Jenis relasi hukum (`MENGUBAH` | `MENCABUT` case-insensitive). Relasi di luar dua jenis ini diabaikan (`skipped`).
+  - `sebagian`: Boolean atau integer 0/1 (`0` = penuh, `1` = sebagian).
+  - `replace_all`: Jika `true`, relasi lama di database yang tidak tercantum dalam daftar kiriman baru akan dihapus bersih.
+  - `documents_status_changed`: Jumlah dokumen di Knowledge Base yang status keberlakuannya otomatis diperbarui.
+

@@ -8,7 +8,6 @@ Mendukung:
 - Penentuan ukuran berkas via HEAD / Range.
 PENTING: Modul ini TIDAK BOLEH mengimpor app.database, app.models, app.routers, app.services.
 """
-import hashlib
 import html
 import logging
 import posixpath
@@ -16,18 +15,16 @@ import re
 import ssl
 import time
 from datetime import date
-from typing import Callable, Optional, List, Dict, Set, Tuple, Any
-from urllib.parse import urlsplit, urlunsplit, urljoin, unquote
+from typing import Callable, Optional, List, Dict, Set, Tuple
+from urllib.parse import urlsplit, unquote
 
 import httpx
 
 from app.crawlers.base import (
-    Crawler,
     PdfCandidate,
     ScanResult,
     FetchedFile,
     CrawlerError,
-    BlockedUrlError,
     FetchTooLargeError,
 )
 from app.crawlers.url_utils import (

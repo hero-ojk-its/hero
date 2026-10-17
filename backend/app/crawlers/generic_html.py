@@ -19,13 +19,12 @@ import time
 from collections import deque
 from html.parser import HTMLParser
 from typing import Callable, Optional, List, Dict, Set, Tuple, Any
-from urllib.parse import urlsplit, urlunsplit, urljoin, unquote
+from urllib.parse import urlsplit, urljoin, unquote
 from urllib.robotparser import RobotFileParser
 
 import httpx
 
 from app.crawlers.base import (
-    Crawler,
     PdfCandidate,
     ScanResult,
     FetchedFile,

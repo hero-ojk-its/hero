@@ -8,7 +8,6 @@ Penggunaan:
   python scripts/backfill_identity.py [--dry-run | --apply]
 """
 import argparse
-import os
 import sys
 from collections import defaultdict
 from pathlib import Path

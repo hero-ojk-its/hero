@@ -241,6 +241,11 @@ class Document(Base):
         index=True,
         comment="ID dokumen pemenang yang dipertahankan jika dokumen ini duplikat"
     )
+    status_source = Column(
+        String(20),
+        nullable=True,
+        comment="Sumber penentuan status_keberlakuan: manual | relasi | lapisan_data",
+    )
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

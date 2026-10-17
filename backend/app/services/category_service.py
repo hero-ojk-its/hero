@@ -2,7 +2,6 @@
 app/services/category_service.py
 Layanan manajemen hierarki kategori/folder Knowledge Base dan resolusi path otomatis.
 """
-from dataclasses import dataclass
 import re
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session

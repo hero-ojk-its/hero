@@ -9,14 +9,14 @@ import io
 import logging
 import time
 import zipfile
-from datetime import date, datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Optional, List, Tuple, Dict, Any
+from typing import Optional, List, Tuple, Dict
 from urllib.parse import urlsplit
 from urllib.request import url2pathname
 
 from fastapi import HTTPException, status
-from sqlalchemy import desc, text, func
+from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -61,7 +61,7 @@ from app.schemas.scan import (
     InternalCandidatesBatchIn,
 )
 from app.services.file_validation import sanitize_filename, validate_pdf, FileValidationError
-from app.services.storage_service import get_storage_service, StorageService
+from app.services.storage_service import get_storage_service
 from app.services.ingest_service import IngestService, IngestItem, IngestOptions, DocumentMetadataInput, ItemOutcome
 from app.services.naming_service import (
     build_standard_filename,

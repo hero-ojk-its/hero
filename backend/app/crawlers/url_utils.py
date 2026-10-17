@@ -9,7 +9,7 @@ import re
 import socket
 from datetime import date
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Any, Union
+from typing import Optional, Dict, Any, Union
 from urllib.parse import urlsplit, urlunsplit, quote, unquote, urljoin
 
 import httpx

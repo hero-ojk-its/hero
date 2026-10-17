@@ -18,7 +18,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
-from app.config import settings
 from app.models.document import Document
 from app.models.category import Category
 from app.models.enums import (
@@ -216,7 +215,6 @@ def main():
         print("==================================================\n")
 
         # 3. EXPLAIN (ANALYZE, BUFFERS)
-        from sqlalchemy.dialects import postgresql
 
         print("==> EXPLAIN (ANALYZE, BUFFERS) - 1. Query Frasa 'sepatu roda' (SearchService):")
         with Session(engine) as session:
