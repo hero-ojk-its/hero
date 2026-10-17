@@ -29,6 +29,7 @@
 8. [Alur 7: Detail Dokumen, Pembaca Teks & Penampil PDF](#8-alur-7-detail-dokumen-pembaca-teks--penampil-pdf)
    - [8.4 Riwayat Versi & Relasi Regulasi](#84-riwayat-versi--relasi-regulasi)
    - [8.5 Penautan Lampiran & Tanggal Berlaku Regulasi](#85-penautan-lampiran--tanggal-berlaku-regulasi)
+   - [8.6 Perbandingan Hasil Analisa Deterministik vs AI (US-05)](#86-perbandingan-hasil-analisa-deterministik-vs-ai-us-05)
 9. [Alur 8: Kurasi & Koreksi Metadata serta Antrean Penanganan Gagal](#9-alur-8-kurasi--koreksi-metadata-serta-antrean-penanganan-gagal)
 10. [Alur 9: Dashboard Ringkasan Eksekutif](#10-alur-9-dashboard-ringkasan-eksekutif)
 11. [Gerbang Analisa (`/api/v1/ml/*`)](#11-gerbang-analisa-apiv1ml)
@@ -1034,7 +1035,45 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
     *(Bernilai `null` jika bukan lampiran, induk belum terdaftar di KB, atau induk berklasifikasi non-publik saat mode lindung aktif).*
 - **Filter Pencarian:**
   - `GET /api/v1/documents/?lampiran=true` untuk menampilkan hanya dokumen lampiran.
-  - `GET /api/v1/documents/?lampiran=false` untuk menyembunyikan lampiran dan hanya menampilkan regulasi utama.
+### 8.6 Perbandingan Hasil Analisa Deterministik vs AI (US-05)
+- **Method & Path:** `GET /api/v1/documents/{document_id}/analisa/banding`
+- **Tujuan:** Menampilkan hasil analisa deterministik dan hasil AI secara berdampingan untuk perbandingan komparatif (US-05 #49).
+- **Perilaku Endpoint:**
+  - Data **hanya dibaca dari penyimpanan lokal** (tabel `analysis_results`), tanpa memicu panggilan kalkulasi ke layanan ML.
+  - Bila salah satu atau kedua mode belum pernah dianalisa, nilai slot tersebut adalah `null`.
+  - Tanda `"basi": true` otomatis disematkan jika sidik jari dokumen (`file_hash` atau `extracted_at`) telah berubah sejak analisa tersebut disimpan.
+  - Hasil analisa tersimpan selalu melewati penyaringan rujukan dinamis (`saring_rujukan`), sehingga rujukan ke dokumen yang kemudian dinonaktifkan tidak akan bocor.
+- **Proteksi Akses:**
+  - Mengembalikan `404` jika dokumen tidak ditemukan atau berstatus nonaktif.
+  - Mengembalikan `403` jika dokumen berklasifikasi `non_publik` saat mode lindung aktif tanpa login.
+- **Respons (200 OK):**
+```json
+{
+  "document_id": 71,
+  "deterministik": {
+    "dibuat": "2026-10-17T10:00:00Z",
+    "basi": false,
+    "ml_version": "v1.2.0",
+    "hasil": {
+      "mode_dipakai": "deterministik",
+      "ringkasan": "Ringkasan regulasi berbasis pola deterministik...",
+      "poin_kunci": [
+        "Kewajiban pelaporan berkala perbankan",
+        "Batas waktu penyampaian laporan"
+      ],
+      "rujukan_hukum": [
+        {
+          "teks": "Pasal 5 POJK 1/2020",
+          "document_id": 12,
+          "judul": "POJK Nomor 1 Tahun 2020"
+        }
+      ]
+    }
+  },
+  "ai": null,
+  "catatan": "Draft / Rekomendasi — hasil AI tidak menggantikan hasil deterministik; bandingkan keduanya."
+}
+```
 
 ---
 
@@ -1472,7 +1511,25 @@ Frontend cukup memanggil satu asal (`API_BASE_URL` backend) tanpa perlu menghubu
 ### 11.3 Analisa Struktur & Poin Kunci Dokumen
 - **Method & Path:** `GET /api/v1/ml/analisa/{document_id}`
 - **Parameter Path:** `document_id` (integer ID dokumen backend)
-- **Parameter Query:** `mode` (opsional): `deterministik` (default) | `ai`
+- **Parameter Query:**
+  - `mode` (opsional): `deterministik` (default) | `ai`
+  - `segar` (opsional, default: `false`): Jika `true`, memaksa kalkulasi ulang ke layanan ML (cache bypass/refresh). Digunakan untuk tombol "Analisa Ulang" di UI.
+- **Mekanisme Cache & Penyimpanan (US-05 #49):**
+  - **Cache Hit:** Jika sudah ada hasil analisa tersimpan untuk `(document_id, kind=analisa, mode)` dengan `source_fingerprint` yang cocok dan `segar=false`, hasil dikembalikan langsung dari database lokal tanpa memanggil layanan ML (`cache.hit: true`).
+  - **Fallback Saat ML Offline (503/504):** Jika layanan ML tidak tersedia (`ConnectError`/503/504) namun sudah ada hasil tersimpan sebelumnya (meski fingerprint berubah/basi), backend mengembalikan data tersimpan tersebut dengan HTTP 200 dan tanda `"cache": {"hit": true, "basi": true, ...}`. Bila belum pernah dianalisa, mengembalikan HTTP 503 `layanan_analisa_tidak_tersedia`.
+  - **Fallback Mode AI:** Jika pengguna meminta `mode=ai` tetapi layanan ML mengembalikan `mode_dipakai: "deterministik"` (misalnya model AI kehabisan token atau gagal), hasil disimpan sebagai entri `deterministik` dan tidak akan menimpa/membuat entri `ai`.
+  - **Penyaringan Akses Dinamis:** Jawaban mentah disimpan di database, dan penyaringan hak akses (`saring_rujukan`) selalu dijalankan saat membaca hasil, memastikan dokumen yang baru dinonaktifkan tidak bocor.
+- **Objek Metadata Cache pada Respons:**
+  Semua jawaban (dari cache maupun dari panggilan baru) memuat blok `cache`:
+  ```json
+  "cache": {
+    "hit": true,
+    "dibuat": "2026-10-17T10:00:00Z",
+    "basi": false,
+    "mode_tersimpan": "deterministik"
+  }
+  ```
+  *(Untuk panggilan baru/kalkulasi ML: `hit: false, dibuat: <timestamp_sekarang>, basi: false`)*.
 - **Proteksi Akses:** Mengembalikan `404` jika dokumen tidak ditemukan atau telah dinonaktifkan (`dokumen_nonaktif`), dan `403` jika dokumen non-publik diakses saat login belum aktif.
 
 ### 11.4 Pencarian Klausul Relevan Regulasi
@@ -1483,7 +1540,12 @@ Frontend cukup memanggil satu asal (`API_BASE_URL` backend) tanpa perlu menghubu
 
 ### 11.5 Harmonisasi Draft Regulasi
 - **Method & Path:** `POST /api/v1/ml/harmonisasi/{document_id}`
+- **Parameter Query:**
+  - `segar` (opsional, default: `false`): Jika `true`, memaksa perhitungan ulang harmonisasi ke layanan ML.
 - **Body:** `null` (membandingkan terhadap seluruh korpus yang diizinkan) atau daftar array ID dokumen pembanding `[id1, id2, ...]`.
+- **Mekanisme Cache & Parameter Hash:**
+  - Hash parameter `params_hash` dihitung dari SHA-256 daftar dokumen pembanding yang telah disaring (`sorted(forward_body)`). Bila korpus dokumen aktif berubah, hash otomatis berubah dan memicu kalkulasi ulang.
+  - Jejak audit `RUN_HARMONIZATION` mencatat atribut `"cache_hit": true|false` pada detail audit.
 - **Penyaringan & Audit:** Backend membatasi korpus pembanding pada dokumen aktif dan diizinkan, membuang temuan/kandidat dokumen nonaktif, mengosongkan ID rujukan di luar korpus, serta mencatat jejak audit `RUN_HARMONIZATION`.
 
 ### 11.6 Pencarian Semantik Regulasi

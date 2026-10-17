@@ -127,3 +127,16 @@ class JenisRelasi(str, enum.Enum):
     mencabut = "mencabut"
 
 
+class JenisAnalisa(str, enum.Enum):
+    """Tipe analisa yang dijalankan: analisa ringkasan/poin kunci atau harmonisasi draft (Langkah 20)"""
+    analisa = "analisa"
+    harmonisasi = "harmonisasi"
+
+
+class ModeAnalisa(str, enum.Enum):
+    """Mode komputasi analisa ML: deterministik atau ai (Langkah 20)"""
+    deterministik = "deterministik"
+    ai = "ai"
+
+
+

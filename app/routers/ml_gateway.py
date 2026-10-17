@@ -9,7 +9,9 @@ Tanggung jawab gerbang:
 4. Mencatat jejak audit ringkas RUN_HARMONIZATION saat harmonisasi dijalankan.
 """
 import logging
+import time
 from collections.abc import AsyncIterator
+from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
 import httpx
@@ -20,8 +22,14 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.document import Document
-from app.models.enums import KlasifikasiAkses, StatusPemrosesan
+from app.models.enums import JenisAnalisa, KlasifikasiAkses, ModeAnalisa, StatusPemrosesan
 from app.routers.auth import get_current_user
+from app.services.analysis_result_service import (
+    compute_params_hash,
+    get_cached_result,
+    get_document_fingerprint,
+    save_analysis_result,
+)
 from app.services.audit_service import RUN_HARMONIZATION, record_audit
 
 logger = logging.getLogger("hero")
@@ -292,21 +300,119 @@ async def get_ml_dokumen(
 async def get_ml_analisa(
     document_id: int,
     mode: Optional[Literal["deterministik", "ai"]] = Query("deterministik"),
+    segar: bool = Query(False, description="Paksa hitung ulang tanpa cache"),
     db: Session = Depends(get_db),
     client: httpx.AsyncClient = Depends(get_ml_client),
     current_user=Depends(get_current_user),
 ):
     """Ringkasan terstruktur dan poin kunci berbasis pasal."""
-    check_document_access(db, document_id)
+    doc = check_document_access(db, document_id)
+    allowed_ids = allowed_document_ids(db)
+
+    req_mode = ModeAnalisa.ai if mode == "ai" else ModeAnalisa.deterministik
+    params_hash = compute_params_hash(JenisAnalisa.analisa)
+    curr_fingerprint = get_document_fingerprint(doc)
+
+    # 1. Cek Cache Hit
+    if settings.ml_cache_enabled and not segar:
+        cached = get_cached_result(
+            db,
+            document_id=document_id,
+            kind=JenisAnalisa.analisa,
+            mode=req_mode,
+            params_hash=params_hash,
+            expected_fingerprint=curr_fingerprint,
+        )
+        if cached:
+            filtered_data, discarded = saring_rujukan(cached.result, allowed_ids)
+            if isinstance(filtered_data, dict):
+                filtered_data["disaring_backend"] = discarded
+                filtered_data["cache"] = {
+                    "hit": True,
+                    "dibuat": cached.created_at.isoformat() if cached.created_at else None,
+                    "basi": False,
+                    "mode_tersimpan": cached.mode.value if hasattr(cached.mode, "value") else str(cached.mode),
+                }
+            return filtered_data
+
+    # 2. Panggil Layanan ML
     params = {"mode": mode} if mode else {}
-    status_code, data = await forward_ml_request(client, "GET", f"/analisa/{document_id}", params=params)
-    if status_code >= 400:
+    start_time = time.perf_counter()
+    status_code = None
+    data = None
+    ml_exc = None
+
+    try:
+        status_code, data = await forward_ml_request(client, "GET", f"/analisa/{document_id}", params=params)
+    except HTTPException as exc:
+        ml_exc = exc
+
+    # 3. Tangani kegagalan ML (503/504 fallback ke cache basi jika ada)
+    if ml_exc is not None:
+        if ml_exc.status_code in (status.HTTP_503_SERVICE_UNAVAILABLE, status.HTTP_504_GATEWAY_TIMEOUT):
+            fallback = get_cached_result(
+                db,
+                document_id=document_id,
+                kind=JenisAnalisa.analisa,
+                mode=req_mode,
+                params_hash=params_hash,
+                expected_fingerprint=None,
+            )
+            if fallback:
+                filtered_data, discarded = saring_rujukan(fallback.result, allowed_ids)
+                if isinstance(filtered_data, dict):
+                    filtered_data["disaring_backend"] = discarded
+                    filtered_data["cache"] = {
+                        "hit": True,
+                        "dibuat": fallback.created_at.isoformat() if fallback.created_at else None,
+                        "basi": True,
+                        "mode_tersimpan": fallback.mode.value if hasattr(fallback.mode, "value") else str(fallback.mode),
+                    }
+                return filtered_data
+        raise ml_exc
+
+    if status_code is not None and status_code >= 400:
         return JSONResponse(status_code=status_code, content=data)
 
-    allowed_ids = allowed_document_ids(db)
+    duration_ms = int((time.perf_counter() - start_time) * 1000)
+
+    # 4. Tentukan mode yang benar-benar dipakai dan simpan ke cache jika diaktifkan
+    actual_mode_str = data.get("mode_dipakai") if isinstance(data, dict) else None
+    if not actual_mode_str:
+        actual_mode_str = "deterministik"
+    save_mode = ModeAnalisa.ai if actual_mode_str == "ai" else ModeAnalisa.deterministik
+
+    saved_row = None
+    actor_user_id = getattr(current_user, "id", None) if current_user else None
+    if settings.ml_cache_enabled and isinstance(data, dict):
+        saved_row = save_analysis_result(
+            db=db,
+            document_id=document_id,
+            kind=JenisAnalisa.analisa,
+            mode=save_mode,
+            params_hash=params_hash,
+            source_fingerprint=curr_fingerprint,
+            raw_result=data,
+            ml_version=data.get("versi"),
+            duration_ms=duration_ms,
+            user_id=actor_user_id,
+        )
+
+    # 5. Saring rujukan dan kembalikan dengan metadata cache
     filtered_data, discarded = saring_rujukan(data, allowed_ids)
     if isinstance(filtered_data, dict):
         filtered_data["disaring_backend"] = discarded
+        dibuat_str = (
+            saved_row.created_at.isoformat()
+            if saved_row and saved_row.created_at
+            else datetime.now(timezone.utc).isoformat()
+        )
+        filtered_data["cache"] = {
+            "hit": False,
+            "dibuat": dibuat_str,
+            "basi": False,
+            "mode_tersimpan": save_mode.value,
+        }
     return filtered_data
 
 
@@ -337,6 +443,7 @@ async def get_ml_analisa_klausul(
 async def post_ml_harmonisasi(
     document_id: int,
     request: Request,
+    segar: bool = Query(False, description="Paksa hitung ulang tanpa cache"),
     body: Optional[list[int]] = Body(None),
     db: Session = Depends(get_db),
     client: httpx.AsyncClient = Depends(get_ml_client),
@@ -346,7 +453,7 @@ async def post_ml_harmonisasi(
     Analisa harmonisasi draft terhadap korpus dokumen regulasi.
     Body opsional berisi daftar document_id pembatas korpus (null = seluruh korpus yang diizinkan).
     """
-    check_document_access(db, document_id)
+    doc = check_document_access(db, document_id)
     allowed_ids = allowed_document_ids(db)
 
     if body is None:
@@ -363,21 +470,142 @@ async def post_ml_harmonisasi(
             },
         )
 
-    status_code, data = await forward_ml_request(
-        client,
-        "POST",
-        f"/harmonisasi/{document_id}",
-        json_data=forward_body,
-    )
-    if status_code >= 400:
+    curr_fingerprint = get_document_fingerprint(doc)
+    params_hash = compute_params_hash(JenisAnalisa.harmonisasi, extra=forward_body)
+    kind = JenisAnalisa.harmonisasi
+    mode = ModeAnalisa.deterministik
+    actor_user_id = getattr(current_user, "id", None) if current_user else None
+    client_ip = request.client.host if request and request.client else None
+
+    # 1. Cek Cache Hit
+    if settings.ml_cache_enabled and not segar:
+        cached = get_cached_result(
+            db,
+            document_id=document_id,
+            kind=kind,
+            mode=mode,
+            params_hash=params_hash,
+            expected_fingerprint=curr_fingerprint,
+        )
+        if cached:
+            filtered_data, discarded = saring_rujukan(cached.result, allowed_ids)
+            if isinstance(filtered_data, dict):
+                filtered_data["disaring_backend"] = discarded
+                filtered_data["cache"] = {
+                    "hit": True,
+                    "dibuat": cached.created_at.isoformat() if cached.created_at else None,
+                    "basi": False,
+                    "mode_tersimpan": "deterministik",
+                }
+            record_audit(
+                db,
+                action=RUN_HARMONIZATION,
+                user_id=actor_user_id,
+                target_resource=f"document:{document_id}",
+                detail={
+                    "document_id": document_id,
+                    "jumlah_temuan": len(filtered_data.get("temuan", [])) if isinstance(filtered_data, dict) else 0,
+                    "jumlah_korpus": len(forward_body),
+                    "korpus_dibatasi_pengguna": body is not None,
+                    "cache_hit": True,
+                },
+                ip_address=client_ip,
+                commit=True,
+            )
+            return filtered_data
+
+    # 2. Panggil Layanan ML
+    start_time = time.perf_counter()
+    status_code = None
+    data = None
+    ml_exc = None
+
+    try:
+        status_code, data = await forward_ml_request(
+            client,
+            "POST",
+            f"/harmonisasi/{document_id}",
+            json_data=forward_body,
+        )
+    except HTTPException as exc:
+        ml_exc = exc
+
+    # 3. Tangani kegagalan ML (503/504 fallback ke cache basi jika ada)
+    if ml_exc is not None:
+        if ml_exc.status_code in (status.HTTP_503_SERVICE_UNAVAILABLE, status.HTTP_504_GATEWAY_TIMEOUT):
+            fallback = get_cached_result(
+                db,
+                document_id=document_id,
+                kind=kind,
+                mode=mode,
+                params_hash=params_hash,
+                expected_fingerprint=None,
+            )
+            if fallback:
+                filtered_data, discarded = saring_rujukan(fallback.result, allowed_ids)
+                if isinstance(filtered_data, dict):
+                    filtered_data["disaring_backend"] = discarded
+                    filtered_data["cache"] = {
+                        "hit": True,
+                        "dibuat": fallback.created_at.isoformat() if fallback.created_at else None,
+                        "basi": True,
+                        "mode_tersimpan": "deterministik",
+                    }
+                record_audit(
+                    db,
+                    action=RUN_HARMONIZATION,
+                    user_id=actor_user_id,
+                    target_resource=f"document:{document_id}",
+                    detail={
+                        "document_id": document_id,
+                        "jumlah_temuan": len(filtered_data.get("temuan", [])) if isinstance(filtered_data, dict) else 0,
+                        "jumlah_korpus": len(forward_body),
+                        "korpus_dibatasi_pengguna": body is not None,
+                        "cache_hit": True,
+                    },
+                    ip_address=client_ip,
+                    commit=True,
+                )
+                return filtered_data
+        raise ml_exc
+
+    if status_code is not None and status_code >= 400:
         return JSONResponse(status_code=status_code, content=data)
 
+    duration_ms = int((time.perf_counter() - start_time) * 1000)
+
+    # 4. Simpan ke cache jika diaktifkan
+    saved_row = None
+    if settings.ml_cache_enabled and isinstance(data, dict):
+        saved_row = save_analysis_result(
+            db=db,
+            document_id=document_id,
+            kind=kind,
+            mode=mode,
+            params_hash=params_hash,
+            source_fingerprint=curr_fingerprint,
+            raw_result=data,
+            ml_version=data.get("versi"),
+            duration_ms=duration_ms,
+            user_id=actor_user_id,
+        )
+
+    # 5. Saring rujukan dan catat audit
     filtered_data, discarded = saring_rujukan(data, allowed_ids)
     if isinstance(filtered_data, dict):
         filtered_data["disaring_backend"] = discarded
+        dibuat_str = (
+            saved_row.created_at.isoformat()
+            if saved_row and saved_row.created_at
+            else datetime.now(timezone.utc).isoformat()
+        )
+        filtered_data["cache"] = {
+            "hit": False,
+            "dibuat": dibuat_str,
+            "basi": False,
+            "mode_tersimpan": "deterministik",
+        }
 
-    actor_user_id = getattr(current_user, "id", None) if current_user else None
-    client_ip = request.client.host if request and request.client else None
     record_audit(
         db,
         action=RUN_HARMONIZATION,
@@ -388,6 +616,7 @@ async def post_ml_harmonisasi(
             "jumlah_temuan": len(filtered_data.get("temuan", [])) if isinstance(filtered_data, dict) else 0,
             "jumlah_korpus": len(forward_body),
             "korpus_dibatasi_pengguna": body is not None,
+            "cache_hit": False,
         },
         ip_address=client_ip,
         commit=True,
