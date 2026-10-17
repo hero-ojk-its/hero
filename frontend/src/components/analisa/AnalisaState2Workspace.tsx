@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getMlAnalisa, getDocumentStatus } from '../../lib/analisaApi';
-import { ApiError, API_BASE_URL } from '../../lib/api';
+import { ApiError, API_BASE_URL, apiFetchBlob } from '../../lib/api';
 import type { MlAnalisaResponse, DocumentArticleSummary } from '../../lib/analisaApi';
 
 // Garuda Pancasila SVG Emblem untuk Naskah Resmi OJK
@@ -69,6 +69,12 @@ export default function AnalisaState2Workspace({
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // State Pemuatan Berkas PDF Asli (Blob Object URL)
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState<boolean>(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const pdfBlobUrlRef = useRef<string | null>(null);
 
   // State Animasi Progress Pipeline
   const [pipelineStep, setPipelineStep] = useState<number>(1);
@@ -218,6 +224,75 @@ export default function AnalisaState2Workspace({
     };
   }, [loadAnalysis, clearPipelineTimers]);
 
+  // Pemuatan Berkas PDF Asli secara aman via apiFetchBlob
+  const fetchPdf = useCallback((signal?: AbortSignal) => {
+    if (!documentId) return;
+
+    setPdfLoading(true);
+    setPdfError(null);
+
+    if (pdfBlobUrlRef.current) {
+      URL.revokeObjectURL(pdfBlobUrlRef.current);
+      pdfBlobUrlRef.current = null;
+    }
+    setPdfBlobUrl(null);
+
+    const pdfEndpoint = data?.pdf && (data.pdf.startsWith('http://') || data.pdf.startsWith('https://'))
+      ? data.pdf
+      : `/api/v1/documents/${documentId}/pdf`;
+
+    apiFetchBlob(pdfEndpoint, { signal })
+      .then((blob) => {
+        if (signal?.aborted) return;
+        const objectUrl = URL.createObjectURL(blob);
+        pdfBlobUrlRef.current = objectUrl;
+        setPdfBlobUrl(objectUrl);
+        setPdfLoading(false);
+        setPdfError(null);
+      })
+      .catch((err: unknown) => {
+        if (signal?.aborted) return;
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (err instanceof Error && err.name === 'AbortError') return;
+
+        if (err instanceof ApiError && err.status === 403) {
+          setPdfError(
+            typeof err.detail === 'string'
+              ? err.detail
+              : 'Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.'
+          );
+        } else if (err instanceof ApiError && err.status === 404) {
+          setPdfError('Berkas PDF asli tidak ditemukan di penyimpanan peladen.');
+        } else {
+          setPdfError(err instanceof Error ? err.message : 'Gagal memuat berkas PDF dari peladen.');
+        }
+        setPdfLoading(false);
+      });
+  }, [documentId, data]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    const controller = new AbortController();
+
+    const runFetch = async () => {
+      await Promise.resolve();
+      if (!isCancelled) {
+        fetchPdf(controller.signal);
+      }
+    };
+
+    runFetch();
+
+    return () => {
+      isCancelled = true;
+      controller.abort();
+      if (pdfBlobUrlRef.current) {
+        URL.revokeObjectURL(pdfBlobUrlRef.current);
+        pdfBlobUrlRef.current = null;
+      }
+    };
+  }, [fetchPdf]);
+
   // Handler Expand/Collapse BAB
   const toggleBab = (babName: string) => {
     setExpandedBabs(prev => ({
@@ -355,10 +430,12 @@ export default function AnalisaState2Workspace({
 
   const actualMode = data?.mode_dipakai || mode;
   const isFallback = mode === 'ai' && data?.mode_dipakai === 'deterministik';
-  const rawPdf = data?.pdf;
-  const pdfUrl = rawPdf
-    ? (rawPdf.startsWith('http') || rawPdf.startsWith('/') ? rawPdf : `${API_BASE_URL}/${rawPdf.replace(/^\/+/, '')}`)
-    : `${API_BASE_URL}/api/v1/documents/${documentId}/pdf`;
+  const fallbackAbsolutePdfUrl = data?.pdf && (data.pdf.startsWith('http://') || data.pdf.startsWith('https://'))
+    ? data.pdf
+    : (API_BASE_URL
+        ? `${API_BASE_URL}/api/v1/documents/${documentId}/pdf`
+        : `/api/v1/documents/${documentId}/pdf`);
+  const resolvedPdfUrl = pdfBlobUrl || fallbackAbsolutePdfUrl;
 
   return (
     <div className="max-w-[1360px] mx-auto space-y-4 pb-16 font-sans">
@@ -726,10 +803,16 @@ export default function AnalisaState2Workspace({
 
               <div className="flex items-center gap-2.5">
                 <a
-                  href={pdfUrl}
+                  href={resolvedPdfUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-600 hover:text-red-700 transition"
+                  onClick={(e) => {
+                    if (pdfBlobUrl) {
+                      e.preventDefault();
+                      window.open(pdfBlobUrl, '_blank');
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-600 hover:text-red-700 transition cursor-pointer"
                 >
                   <ExternalLink size={12} />
                   <span>Buka PDF Asli</span>
@@ -756,11 +839,42 @@ export default function AnalisaState2Workspace({
             {/* Konten Naskah: PDF Asli atau Salinan Formal OJK */}
             {viewMode === 'pdf' ? (
               <div className="flex-1 bg-gray-100 flex flex-col items-center justify-center p-2 relative overflow-hidden">
-                <iframe
-                  src={pdfUrl}
-                  className="w-full h-full border-0 rounded bg-white"
-                  title={`Naskah PDF Asli #${documentId}`}
-                />
+                {pdfLoading ? (
+                  <div className="flex flex-col items-center justify-center gap-2.5 p-8 text-gray-500">
+                    <Loader2 size={24} className="animate-spin text-red-700" />
+                    <span className="text-xs font-medium">Memuat berkas PDF asli dari peladen...</span>
+                  </div>
+                ) : pdfError ? (
+                  <div className="p-6 max-w-sm mx-auto text-center space-y-3 bg-white rounded-xl border border-gray-200 shadow-xs">
+                    <div className="w-10 h-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center mx-auto">
+                      <AlertCircle size={20} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-gray-900">Gagal Memuat PDF Asli</h4>
+                      <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">
+                        {pdfError}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => fetchPdf()}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-700 hover:bg-red-800 text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer"
+                    >
+                      <RefreshCw size={12} />
+                      <span>Coba Lagi</span>
+                    </button>
+                  </div>
+                ) : pdfBlobUrl ? (
+                  <iframe
+                    src={pdfBlobUrl}
+                    className="w-full h-full border-0 rounded bg-white shadow-2xs"
+                    title={`Naskah PDF Asli #${documentId}`}
+                  />
+                ) : (
+                  <div className="text-xs text-gray-400 p-8 text-center">
+                    Berkas PDF asli tidak tersedia untuk dokumen ini.
+                  </div>
+                )}
               </div>
             ) : (
               <div 
