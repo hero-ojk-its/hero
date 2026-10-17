@@ -11,8 +11,11 @@ from app.models.document import Document
 
 logger = logging.getLogger("hero")
 
-# Pola regex untuk mendeteksi kata 'LAMPIRAN' yang berdiri sendiri / dipisahkan delimitator
-_RE_ATTACHMENT_WORD = re.compile(r"(?i)(?:^|[^a-zA-Z0-9])LAMPIRAN(?:[^a-zA-Z0-9]|$)")
+# Pola regex untuk mendeteksi nama berkas lampiran:
+# Nama berkas hanya dianggap lampiran bila diawali kata LAMPIRAN
+# (mengabaikan awalan non-huruf seperti angka urut, garis bawah, atau tanda hubung).
+# Sesudah kata LAMPIRAN harus ada pemisah (spasi, _, -, .) atau akhir nama.
+_RE_FILENAME_ATTACHMENT = re.compile(r"(?i)^[^a-zA-Z]*LAMPIRAN(?:[\s_\-.]|$)")
 
 # Pola label lampiran: LAMPIRAN diikuti spasi/delimitator dan nomor romawi/arab
 _RE_LABEL_PATTERN = re.compile(r"(?i)(?:^|[^a-zA-Z0-9])LAMPIRAN[\s_\-]+([IVXLCDM]+|\d+)(?:[^a-zA-Z0-9]|$)")
@@ -25,7 +28,7 @@ def detect_attachment_heuristic(
     """
     Heuristik pendeteksian otomatis lampiran:
     - Judul (setelah strip) diawali LAMPIRAN (case-insensitive),
-      atau original_filename memuat LAMPIRAN sebagai kata -> is_attachment = True.
+      atau original_filename diawali LAMPIRAN (mengabaikan awalan non-huruf) -> is_attachment = True.
     - attachment_label diambil dari pola LAMPIRAN\\s+([IVXLC]+|\\d+), menjadi mis. Lampiran I.
       Bila tidak terbaca, isi Lampiran.
     """
@@ -40,8 +43,8 @@ def detect_attachment_heuristic(
 
     filename_is_attachment = False
     if clean_filename:
-        # Cek apakah original_filename memuat LAMPIRAN sebagai kata
-        if _RE_ATTACHMENT_WORD.search(clean_filename):
+        # Cek apakah original_filename diawali LAMPIRAN (mengabaikan awalan non-huruf)
+        if _RE_FILENAME_ATTACHMENT.search(clean_filename):
             filename_is_attachment = True
 
     is_attachment = title_is_attachment or filename_is_attachment

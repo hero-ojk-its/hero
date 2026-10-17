@@ -665,3 +665,66 @@ def test_t16_attachment_from_non_public_parent_in_protect_mode_returns_null_indu
     finally:
         settings.protect_non_public_when_auth_disabled = orig_protect
         settings.auth_enabled = orig_auth
+
+
+def test_t17_detect_attachment_heuristic_filename_boundary():
+    """
+    T17: Uji unit detect_attachment_heuristic(title=None, original_filename=...)
+    Nama berkas hanya dianggap lampiran bila diawali kata LAMPIRAN (mengabaikan awalan non-huruf).
+    """
+    from app.services.attachment_service import detect_attachment_heuristic
+
+    cases = [
+        ("LAMPIRAN_I.pdf", True, "Lampiran I"),
+        ("Lampiran II POJK 91.pdf", True, "Lampiran II"),
+        ("01_LAMPIRAN_III.pdf", True, "Lampiran III"),
+        ("lampiran.pdf", True, "Lampiran"),
+        ("POJK 91 Tahun 2026 beserta Lampiran.pdf", False, None),
+        ("SEOJK_7_2026_dan_lampiran.pdf", False, None),
+        ("Lampirannya.pdf", False, None),
+    ]
+    for filename, expected_is_att, expected_label in cases:
+        is_att, label = detect_attachment_heuristic(title=None, original_filename=filename)
+        assert is_att == expected_is_att, f"Gagal pada {filename}: is_attachment expected {expected_is_att}, got {is_att}"
+        assert label == expected_label, f"Gagal pada {filename}: label expected {expected_label}, got {label}"
+
+
+def test_t18_patch_extraction_main_doc_with_lampiran_in_filename(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """
+    T18: PATCH extraction dokumen dengan original_filename="POJK 91 Tahun 2026 beserta Lampiran.pdf"
+    dan judul biasa (bukan diawali LAMPIRAN).
+    Ekspektasi: is_attachment=False dan identity_key tetap terbentuk (POJK|91|2026).
+    """
+    doc = _seed_test_doc(
+        db_session,
+        test_storage,
+        title="Draf Peraturan OJK",
+        original_filename="POJK 91 Tahun 2026 beserta Lampiran.pdf",
+        identity_key=None,
+    )
+    payload = {
+        "title": "Peraturan Otoritas Jasa Keuangan Nomor 91/POJK.03/2026 tentang Tata Kelola",
+        "regulation_type": "POJK",
+        "regulation_number": "91",
+        "regulation_year": 2026,
+    }
+    resp = client.patch(
+        f"/api/v1/internal/documents/{doc.id}/extraction",
+        json=payload,
+        headers=INTERNAL_HEADERS,
+    )
+    assert resp.status_code == 200, resp.text
+    db_session.refresh(doc)
+    assert doc.is_attachment is False
+    assert doc.identity_key == "POJK|91|2026"
+
+    # Verifikasi juga respons GET dokumen
+    res_get = client.get(f"/api/v1/documents/{doc.id}")
+    assert res_get.status_code == 200
+    data_get = res_get.json()
+    assert data_get["is_attachment"] is False
+    assert data_get["identity_key"] == "POJK|91|2026"
+
+
