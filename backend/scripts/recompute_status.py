@@ -62,7 +62,7 @@ def run_recompute(db: Session, apply: bool = False) -> Dict[str, Any]:
         }
 
     # Jalankan recompute_status tanpa langsung auto-commit
-    changed_count = recompute_status(db, active_docs, commit=False)
+    recompute_status(db, active_docs, commit=False)
 
     # Identifikasi dokumen mana saja yang berubah
     changed_items: List[Dict[str, Any]] = []

@@ -222,7 +222,6 @@ class FailureService:
         Mencatat dokumen duplikat ke tabel ingest_failures dengan status awal 'diabaikan'.
         """
         try:
-            clean_name = sanitize_filename(item.filename)
             file_hash = None
             file_size = 0
             if item.content:
@@ -515,10 +514,6 @@ class FailureService:
 
         # Import IngestService di dalam method untuk menghindari circular import
         from app.services.ingest_service import (
-            IngestService,
-            IngestItem,
-            IngestOptions,
-            DocumentMetadataInput,
             ItemOutcome,
         )
 

@@ -134,7 +134,7 @@ def main():
 
         # Eksekusi sumber
         if stype == "folder_lokal":
-            print(f"    Menjalankan sinkronisasi folder lokal (wait=true)...")
+            print("    Menjalankan sinkronisasi folder lokal (wait=true)...")
             run_resp = http_request(args.base_url, "POST", f"/api/v1/scraping-sources/{source_id}/run?wait=true")
             if run_resp.get("error"):
                 print(f"    [WARN] Eksekusi folder lokal gagal: {run_resp.get('detail')}")
@@ -146,7 +146,7 @@ def main():
                 summary_results.append({"name": name, "type": stype, "found": processed, "pulled": success, "status": "sukses"})
 
         elif stype == "situs_web":
-            print(f"    Menjalankan pemindaian situs (POST /api/v1/scans?wait=true)...")
+            print("    Menjalankan pemindaian situs (POST /api/v1/scans?wait=true)...")
             scan_payload = {
                 "source_id": source_id,
                 "max_depth": src_conf.get("crawl_depth", 2),
@@ -182,7 +182,7 @@ def main():
                 print(f"    Penarikan selesai. Berhasil ditarik: {pulled_cnt}")
                 summary_results.append({"name": name, "type": stype, "found": found_count, "pulled": pulled_cnt, "status": "sukses"})
             else:
-                print(f"    Tidak ada kandidat berstatus 'baru' untuk ditarik.")
+                print("    Tidak ada kandidat berstatus 'baru' untuk ditarik.")
                 summary_results.append({"name": name, "type": stype, "found": found_count, "pulled": 0, "status": "tidak_ada_kandidat_baru"})
 
     # 4. Cetak Tabel Ringkasan

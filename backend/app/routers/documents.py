@@ -84,6 +84,43 @@ class UpdateMetadataIn(BaseModel):
     attachment_label: Optional[str] = Field(None, max_length=100)
 
 
+class VersionRelationItem(BaseModel):
+    key: Optional[str] = None
+    relasi: Optional[str] = None
+    sebagian: Optional[bool] = None
+    perubahan_ke: Optional[int] = None
+    document_id: Optional[int] = None
+    judul: Optional[str] = None
+    pasal_terkait: Optional[str] = None
+    restricted: Optional[bool] = None
+
+
+class DocumentVersionResponse(BaseModel):
+    document_id: int
+    identity_key: Optional[str] = None
+    status_keberlakuan: Optional[str] = None
+    status_source: Optional[str] = None
+    induk: List[VersionRelationItem] = Field(default_factory=list)
+    diubah_oleh: List[VersionRelationItem] = Field(default_factory=list)
+    dicabut_oleh: List[VersionRelationItem] = Field(default_factory=list)
+    mencabut: List[VersionRelationItem] = Field(default_factory=list)
+    catatan: str
+
+
+class ModeAnalysisDetail(BaseModel):
+    dibuat: Optional[str] = None
+    basi: bool = False
+    ml_version: Optional[str] = None
+    hasil: Optional[Dict[str, Any]] = None
+
+
+class DocumentAnalysisComparisonResponse(BaseModel):
+    document_id: int
+    deterministik: Optional[ModeAnalysisDetail] = None
+    ai: Optional[ModeAnalysisDetail] = None
+    catatan: str
+
+
 @router.get("/", summary="Daftar & pencarian dokumen regulasi")
 def list_documents(
     q: Optional[str] = Query(None, description="Kata kunci pencarian"),
@@ -1030,6 +1067,7 @@ def update_document_status(
         status="ok",
         document_id=doc.id,
         status_keberlakuan=status_label,
+        status_source=doc.status_source,
         legal_reference_created=ref_created,
         legal_reference_id=legal_ref.id if legal_ref else None,
         message=message,
@@ -1145,6 +1183,7 @@ def update_document_active(
 
 @router.get(
     "/{document_id}/versi",
+    response_model=DocumentVersionResponse,
     summary="Lihat relasi dan riwayat versi dokumen (mengubah, mencabut, induk, dicabut oleh)",
     responses={
         403: {"description": "Dokumen non-publik memerlukan autentikasi aktif"},
@@ -1179,6 +1218,7 @@ def get_document_version(
 
 @router.get(
     "/{document_id}/analisa/banding",
+    response_model=DocumentAnalysisComparisonResponse,
     summary="Bandingkan hasil analisa deterministik dan AI berdampingan (US-05 #49)",
     responses={
         403: {"description": "Dokumen non-publik memerlukan autentikasi aktif"},
@@ -1216,4 +1256,3 @@ def get_document_analysis_comparison(
 
     allowed_ids = allowed_document_ids(db)
     return get_analysis_comparison(db, doc, allowed_ids, saring_rujukan)
-

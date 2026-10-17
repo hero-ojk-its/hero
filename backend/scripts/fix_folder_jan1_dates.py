@@ -124,13 +124,13 @@ def run_fix(dry_run: bool = True) -> int:
         if not dry_run:
             db.commit()
             print("\n" + "=" * 80)
-            print(f"[SUKSES] Berhasil menerapkan perbaikan ke database:")
+            print("[SUKSES] Berhasil menerapkan perbaikan ke database:")
             print(f"  - Dokumen diperbarui : {total_doc_fixed}")
             print(f"  - Kandidat diperbarui: {total_cand_fixed}")
             print("=" * 80)
         else:
             print("\n" + "=" * 80)
-            print(f"[SIMULASI SELESAI] Target perbaikan:")
+            print("[SIMULASI SELESAI] Target perbaikan:")
             print(f"  - Dokumen target : {total_doc_fixed}")
             print(f"  - Kandidat target: {total_cand_fixed}")
             print("  Tidak ada data database yang diubah.")
