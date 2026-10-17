@@ -1174,4 +1174,46 @@ def get_document_version(
                 detail="Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.",
             )
 
-    return get_versioning_details(db, doc, current_user=current_user)
+    return get_versioning_details(db, doc, current_user=current_user)
+
+
+@router.get(
+    "/{document_id}/analisa/banding",
+    summary="Bandingkan hasil analisa deterministik dan AI berdampingan (US-05 #49)",
+    responses={
+        403: {"description": "Dokumen non-publik memerlukan autentikasi aktif"},
+        404: {"description": "Dokumen tidak ditemukan atau nonaktif"},
+    },
+)
+def get_document_analysis_comparison(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Mengembalikan hasil analisa deterministik dan hasil AI yang tersimpan secara terpisah
+    untuk perbandingan berdampingan (US-05).
+    Data hanya dibaca dari penyimpanan lokal (tanpa memanggil layanan ML).
+    """
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
+    if not doc.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "dokumen_nonaktif", "message": "Dokumen tidak aktif / telah dinonaktifkan."},
+        )
+
+    if settings.protect_non_public_when_auth_disabled and not settings.auth_enabled:
+        if doc.access_classification == KlasifikasiAkses.non_publik:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.",
+            )
+
+    from app.routers.ml_gateway import allowed_document_ids, saring_rujukan
+    from app.services.analysis_result_service import get_analysis_comparison
+
+    allowed_ids = allowed_document_ids(db)
+    return get_analysis_comparison(db, doc, allowed_ids, saring_rujukan)
+

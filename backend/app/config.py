@@ -65,10 +65,11 @@ class Settings(BaseSettings):
     crawl_head_for_size: bool = True
     scan_stuck_minutes: int = 15
 
-    # Gerbang Analisa / Layanan ML (Langkah 16)
+    # Gerbang Analisa / Layanan ML (Langkah 16 & 20)
     ml_service_url: str = ""
     ml_timeout_seconds: float = 120.0
     ml_default_search_method: str = "lsa"
+    ml_cache_enabled: bool = True
 
     @field_validator("category_path_template")
     @classmethod
