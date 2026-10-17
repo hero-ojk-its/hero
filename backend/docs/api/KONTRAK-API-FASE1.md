@@ -692,6 +692,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
         "2026"
       ],
       "status_keberlakuan": "tidak_diketahui",
+      "status_source": null,
       "processing_status": "terindeks",
       "extraction_method": "teks_langsung",
       "file_path_pdf": "kb/POJK/2026/Penyelenggaraan Usaha Bank Umum_POJK_2026_Perbankan.pdf",
@@ -704,9 +705,9 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "deactivated_at": null,
       "deactivated_reason": null,
       "identity_key": null,
-      "effective_date": "2026-03-15",
       "page_count": null,
       "duplicate_of_id": null,
+      "effective_date": null,
       "is_attachment": false,
       "parent_document_id": null,
       "attachment_label": null,
@@ -768,6 +769,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
         "2026"
       ],
       "status_keberlakuan": "tidak_diketahui",
+      "status_source": null,
       "processing_status": "terindeks",
       "extraction_method": "teks_langsung",
       "file_path_pdf": "kb/POJK/2026/Penyelenggaraan Usaha Bank Umum_POJK_2026_Perbankan.pdf",
@@ -780,9 +782,9 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "deactivated_at": null,
       "deactivated_reason": null,
       "identity_key": null,
-      "effective_date": "2026-03-15",
       "page_count": null,
       "duplicate_of_id": null,
+      "effective_date": null,
       "is_attachment": false,
       "parent_document_id": null,
       "attachment_label": null,
@@ -835,6 +837,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
   "regulation_number": "POJK 10/POJK.03/2026",
   "regulation_type": "POJK",
   "release_date": "2026-03-15",
+  "effective_date": null,
   "regulation_year": 2026,
   "bidang": "Perbankan",
   "naming_format": [
@@ -851,7 +854,13 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
   "access_classification": "publik",
   "document_role": "corpus_eksisting",
   "status_keberlakuan": "tidak_diketahui",
-  "status_source": "relasi",
+  "status_source": null,
+  "is_attachment": false,
+  "parent_document_id": null,
+  "parent_identity_key": null,
+  "attachment_label": null,
+  "lampiran": [],
+  "induk": null,
   "processing_status": "terindeks",
   "extraction_method": "teks_langsung",
   "extraction_engine": null,
@@ -881,15 +890,8 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
   "deactivated_at": null,
   "deactivated_reason": null,
   "identity_key": null,
-  "effective_date": "2026-03-15",
   "page_count": null,
   "duplicate_of_id": null,
-  "is_attachment": false,
-  "parent_document_id": null,
-  "parent_identity_key": null,
-  "attachment_label": null,
-  "lampiran": [],
-  "induk": null,
   "articles": [
     {
       "id": 1,
@@ -1094,6 +1096,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
   "regulation_number": "POJK 10/POJK.03/2026",
   "regulation_type": "POJK",
   "release_date": "2026-03-15",
+  "effective_date": null,
   "regulation_year": 2026,
   "bidang": "Perbankan",
   "naming_format": [
@@ -1110,6 +1113,13 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
   "access_classification": "publik",
   "document_role": "corpus_eksisting",
   "status_keberlakuan": "tidak_diketahui",
+  "status_source": null,
+  "is_attachment": false,
+  "parent_document_id": null,
+  "parent_identity_key": null,
+  "attachment_label": null,
+  "lampiran": [],
+  "induk": null,
   "processing_status": "terindeks",
   "extraction_method": "teks_langsung",
   "extraction_engine": null,
@@ -1176,7 +1186,8 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "POJK",
       "2026"
     ]
-  }
+  },
+  "duplikat": null
 }
 ```
 <!-- /AUTO:document_patch_metadata_response -->

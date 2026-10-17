@@ -20,7 +20,7 @@ BASE_URL = os.getenv("DEMO_API_BASE", "http://127.0.0.1:8000")
 
 def main():
     print("=" * 80)
-    print(f"   DEMONSTRASI NYATA ALUR PINDAI SITUS WEB (LANGKAH 7 §5)")
+    print("   DEMONSTRASI NYATA ALUR PINDAI SITUS WEB (LANGKAH 7 §5)")
     print(f"   Target Server: {BASE_URL}")
     print("=" * 80)
 

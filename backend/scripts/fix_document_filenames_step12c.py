@@ -34,7 +34,7 @@ def process_fixes(dry_run: bool = True) -> int:
     db = SessionLocal()
 
     print("=" * 80)
-    print(f"HERO BACKEND - PERBAIKAN NOMOR REGULASI & NAMA BERKAS (LANGKAH 12c)")
+    print("HERO BACKEND - PERBAIKAN NOMOR REGULASI & NAMA BERKAS (LANGKAH 12c)")
     print(f"Mode         : {'DRY-RUN (Simulasi saja)' if dry_run else 'APPLY (Eksekusi nyata)'}")
     print(f"Storage Path : {storage_dir}")
     print("=" * 80)

@@ -193,7 +193,6 @@ def main():
                     t1 = time.perf_counter()
                     query_times.append((t1 - t0) * 1000.0)
                 
-                avg_time = sum(query_times) / len(query_times)
                 latencies_ms.extend(query_times)
                 # print(f"Query {idx:02d} ({q_param.q or 'no-q'}, mode={q_param.mode}): {avg_time:.2f} ms (matches: {count_res})")
 
@@ -219,10 +218,6 @@ def main():
         print("==> EXPLAIN (ANALYZE, BUFFERS) - 1. Query Frasa 'sepatu roda' (SearchService):")
         with Session(engine) as session:
             svc = SearchService(session)
-            
-            # Query Frasa via SearchService
-            # Dapatkan statement SQL murni dengan parameter literal
-            q_phrase = SearchParams(q="sepatu roda", mode=SearchMode.phrase)
             
             with engine.connect() as conn:
                 phrase_explain = conn.execute(text("""

@@ -204,6 +204,8 @@ def recompute_status(
                     "identity_key": doc.identity_key,
                     "before": before_status.value if hasattr(before_status, "value") else str(before_status),
                     "after": target_status.value if hasattr(target_status, "value") else str(target_status),
+                    "before_source": before_source,
+                    "after_source": target_source,
                     "rule": rule_matched,
                 },
                 commit=False,

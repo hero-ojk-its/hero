@@ -659,7 +659,23 @@ def build_markdown_contract(blocks: Dict[str, str], output_dir: Path | None = No
     target_dir = Path(output_dir) if output_dir else (BASE_DIR / "docs" / "api")
     contract_path = target_dir / "KONTRAK-API-FASE1.md"
     max_upload_mb = settings.max_upload_bytes // (1024 * 1024)
-    
+
+    if contract_path.exists():
+        existing_content = contract_path.read_text(encoding="utf-8")
+        updated_content = existing_content
+        for key, value in blocks.items():
+            pattern = re.compile(
+                rf"(<!-- AUTO:{re.escape(key)} -->).*?(<!-- /AUTO:{re.escape(key)} -->)",
+                re.DOTALL,
+            )
+            updated_content = pattern.sub(
+                lambda m, v=value: f"{m.group(1)}\n{v}\n{m.group(2)}",
+                updated_content,
+            )
+        contract_path.write_text(updated_content, encoding="utf-8")
+        print(f"Kontrak API berhasil diperbarui (blok AUTO) ke: {contract_path}")
+        return
+
     doc_content = f"""# KONTRAK API HERO BACKEND — FASE 1 (MVP)
 
 > **Untuk Tim Frontend**  
