@@ -54,7 +54,8 @@ from app.services.naming_service import (
 )
 from app.services.identity_service import fallback_identity_key
 from app.services.duplicate_service import check_identity_duplicate
-from app.services.version_service import get_versioning_details, recompute_status
+from app.services.version_service import get_versioning_details, recompute_status, is_accessible
+from app.services.attachment_service import link_attachment, link_pending_children
 from app.services.search_service import SearchService, SearchParams, SearchMode, SearchSort
 from app.crawlers.url_utils import extract_regulation_year
 
@@ -72,11 +73,15 @@ class UpdateMetadataIn(BaseModel):
     regulation_number: Optional[str] = Field(None, max_length=_DOC_REG_NUM_MAX_LEN)
     regulation_type: Optional[str] = Field(None, max_length=_DOC_REG_TYPE_MAX_LEN)
     release_date: Optional[date] = None
+    effective_date: Optional[date] = None
     regulation_year: Optional[int] = None
     bidang: Optional[str] = Field(None, max_length=_DOC_BIDANG_MAX_LEN)
     category_id: Optional[int] = None
     access_classification: Optional[KlasifikasiAkses] = None
     document_role: Optional[PeranDokumen] = None
+    is_attachment: Optional[bool] = None
+    parent_document_id: Optional[int] = None
+    attachment_label: Optional[str] = Field(None, max_length=100)
 
 
 @router.get("/", summary="Daftar & pencarian dokumen regulasi")
@@ -98,6 +103,7 @@ def list_documents(
     sort: Optional[SearchSort] = Query(None, description="Pengurutan hasil pencarian"),
     include_inactive: bool = Query(False, description="Tampilkan juga dokumen nonaktif jika true (default: false)"),
     duplikat: Optional[bool] = Query(None, description="Filter dokumen duplikat (dokumen dengan duplicate_of_id terisi)"),
+    lampiran: Optional[bool] = Query(None, description="Filter dokumen lampiran (true: hanya lampiran, false: hanya non-lampiran)"),
     skip: int = Query(0, ge=0, description="Offset pagination"),
     limit: int = Query(20, ge=1, description="Batas dokumen per halaman (maks 100)"),
     db: Session = Depends(get_db),
@@ -132,6 +138,7 @@ def list_documents(
         sort=sort,
         include_inactive=include_inactive,
         duplikat=duplikat,
+        lampiran=lampiran,
         skip=skip,
         limit=clamped_limit,
     )
@@ -163,6 +170,7 @@ def list_documents(
             "sort": effective_sort.value if hasattr(effective_sort, "value") else str(effective_sort),
             "include_inactive": include_inactive,
             "duplikat": duplikat,
+            "lampiran": lampiran,
             "skip": skip,
             "limit": clamped_limit,
         },
@@ -278,7 +286,7 @@ def get_documents_needing_review(
     }
 
 
-def _format_single_document_response(doc: Document, db: Session) -> Dict[str, Any]:
+def _format_single_document_response(doc: Document, db: Session, current_user: Optional[Any] = None) -> Dict[str, Any]:
     """Helper untuk memformat detail dokumen tunggal dengan seluruh metadata Step 5."""
     top_articles = (
         db.query(Article)
@@ -309,12 +317,46 @@ def _format_single_document_response(doc: Document, db: Session) -> Dict[str, An
             if isinstance(v, (int, float)) and v < settings.metadata_confidence_threshold
         ]
 
+    lampiran_docs = (
+        db.query(Document)
+        .filter(
+            Document.parent_document_id == doc.id,
+            Document.is_active == True,  # noqa: E712
+        )
+        .order_by(Document.id.asc())
+        .all()
+    )
+    lampiran_items = [
+        {
+            "document_id": c.id,
+            "title": c.title,
+            "attachment_label": c.attachment_label,
+        }
+        for c in lampiran_docs
+        if is_accessible(c, current_user)
+    ]
+
+    induk_data = None
+    if getattr(doc, "is_attachment", False) and doc.parent_document_id:
+        p_doc = (
+            db.query(Document)
+            .filter(Document.id == doc.parent_document_id, Document.is_active == True)  # noqa: E712
+            .first()
+        )
+        if p_doc and is_accessible(p_doc, current_user):
+            induk_data = {
+                "document_id": p_doc.id,
+                "title": p_doc.title,
+                "status_keberlakuan": p_doc.status_keberlakuan.value if hasattr(p_doc.status_keberlakuan, "value") else str(p_doc.status_keberlakuan),
+            }
+
     return {
         "id": doc.id,
         "title": doc.title,
         "regulation_number": doc.regulation_number,
         "regulation_type": getattr(doc, "regulation_type", None),
         "release_date": doc.release_date,
+        "effective_date": getattr(doc, "effective_date", None),
         "regulation_year": getattr(doc, "regulation_year", None),
         "bidang": getattr(doc, "bidang", None),
         "naming_format": getattr(doc, "naming_format", None),
@@ -327,6 +369,12 @@ def _format_single_document_response(doc: Document, db: Session) -> Dict[str, An
         "document_role": doc.document_role,
         "status_keberlakuan": doc.status_keberlakuan,
         "status_source": getattr(doc, "status_source", None),
+        "is_attachment": bool(getattr(doc, "is_attachment", False)),
+        "parent_document_id": getattr(doc, "parent_document_id", None),
+        "parent_identity_key": getattr(doc, "parent_identity_key", None),
+        "attachment_label": getattr(doc, "attachment_label", None),
+        "lampiran": lampiran_items,
+        "induk": induk_data,
         "processing_status": doc.processing_status,
         "extraction_method": getattr(doc, "extraction_method", None),
         "extraction_engine": getattr(doc, "extraction_engine", None),
@@ -382,13 +430,17 @@ def _format_single_document_response(doc: Document, db: Session) -> Dict[str, An
         404: {"description": "Dokumen tidak ditemukan"},
     },
 )
-def get_document(document_id: int, db: Session = Depends(get_db)):
+def get_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     """Mengembalikan detail lengkap dokumen beserta pasal level teratas, rujukan hukum, dan status penempatan KB."""
     doc = db.query(Document).filter(Document.id == document_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
 
-    return _format_single_document_response(doc, db)
+    return _format_single_document_response(doc, db, current_user=current_user)
 
 
 @router.get(
@@ -549,6 +601,17 @@ def patch_document_metadata(
         if not cat:
             raise HTTPException(status_code=404, detail=f"Kategori dengan ID {payload.category_id} tidak ditemukan.")
 
+    if "parent_document_id" in fields_set:
+        pid = payload.parent_document_id
+        if pid is not None:
+            if pid == doc.id:
+                raise HTTPException(status_code=422, detail="Dokumen tidak dapat menjadi induk dirinya sendiri.")
+            parent_doc = db.query(Document).filter(Document.id == pid).first()
+            if not parent_doc:
+                raise HTTPException(status_code=422, detail=f"Dokumen induk dengan ID {pid} tidak ditemukan.")
+            if getattr(parent_doc, "is_attachment", False):
+                raise HTTPException(status_code=422, detail="Dokumen induk tidak boleh berupa lampiran.")
+
     # Catat perubahan diff
     before_dict = {}
     after_dict = {}
@@ -557,6 +620,9 @@ def patch_document_metadata(
     year_from_number = None
 
     for field in fields_set:
+        if field in ("is_attachment", "parent_document_id", "attachment_label"):
+            continue
+
         current_val = getattr(doc, field)
         new_val = getattr(payload, field)
 
@@ -576,6 +642,58 @@ def patch_document_metadata(
             before_dict[field] = current_val.isoformat() if isinstance(current_val, (date, datetime)) else (current_val.value if hasattr(current_val, "value") else current_val)
             after_dict[field] = new_val.isoformat() if isinstance(new_val, (date, datetime)) else (new_val.value if hasattr(new_val, "value") else new_val)
             setattr(doc, field, new_val)
+
+    # Tangani field lampiran khusus
+    if "is_attachment" in fields_set:
+        new_is_att = bool(payload.is_attachment)
+        if doc.is_attachment != new_is_att:
+            changed_fields.append("is_attachment")
+            before_dict["is_attachment"] = doc.is_attachment
+            after_dict["is_attachment"] = new_is_att
+            doc.is_attachment = new_is_att
+
+        if not new_is_att:
+            # Kosongkan parent_document_id, parent_identity_key, dan attachment_label bila is_attachment=false
+            if doc.parent_document_id is not None:
+                changed_fields.append("parent_document_id")
+                before_dict["parent_document_id"] = doc.parent_document_id
+                after_dict["parent_document_id"] = None
+                doc.parent_document_id = None
+            if doc.parent_identity_key is not None:
+                doc.parent_identity_key = None
+            if doc.attachment_label is not None:
+                changed_fields.append("attachment_label")
+                before_dict["attachment_label"] = doc.attachment_label
+                after_dict["attachment_label"] = None
+                doc.attachment_label = None
+
+    if "parent_document_id" in fields_set:
+        pid = payload.parent_document_id
+        if pid is not None:
+            parent_doc = db.query(Document).filter(Document.id == pid).first()
+            if doc.parent_document_id != pid:
+                changed_fields.append("parent_document_id")
+                before_dict["parent_document_id"] = doc.parent_document_id
+                after_dict["parent_document_id"] = pid
+                doc.parent_document_id = pid
+            doc.parent_identity_key = parent_doc.identity_key if parent_doc else None
+            doc.is_attachment = True
+            doc.identity_key = None
+        else:
+            if doc.parent_document_id is not None:
+                changed_fields.append("parent_document_id")
+                before_dict["parent_document_id"] = doc.parent_document_id
+                after_dict["parent_document_id"] = None
+                doc.parent_document_id = None
+            doc.parent_identity_key = None
+
+    if "attachment_label" in fields_set:
+        new_lbl = payload.attachment_label.strip() if payload.attachment_label else None
+        if doc.attachment_label != new_lbl:
+            changed_fields.append("attachment_label")
+            before_dict["attachment_label"] = doc.attachment_label
+            after_dict["attachment_label"] = new_lbl
+            doc.attachment_label = new_lbl
 
     # Tangani regulation_year bila tidak sedang diisi di payload:
     if "regulation_year" not in fields_set:
@@ -632,12 +750,17 @@ def patch_document_metadata(
         or doc.regulation_year != orig_regulation_year
     )
     if identity_fields_changed:
-        new_key = fallback_identity_key(
-            regulation_type=doc.regulation_type,
-            regulation_number=doc.regulation_number,
-            regulation_year=doc.regulation_year,
-        )
-        doc.identity_key = new_key
+        if doc.is_attachment:
+            doc.identity_key = None
+        else:
+            new_key = fallback_identity_key(
+                regulation_type=doc.regulation_type,
+                regulation_number=doc.regulation_number,
+                regulation_year=doc.regulation_year,
+            )
+            doc.identity_key = new_key
+    elif doc.is_attachment:
+        doc.identity_key = None
 
     # Cek kecukupan metadata
     naming_inp = NamingInput(
@@ -697,9 +820,20 @@ def patch_document_metadata(
 
     db.commit()
 
-    # Cek duplikat identitas dalam transaksi mandiri setelah koreksi & penempatan sukses di-commit
+    # Penautan lampiran dalam transaksi mandiri
+    try:
+        if doc.is_attachment:
+            link_attachment(db, doc)
+        else:
+            link_pending_children(db, doc)
+        db.commit()
+    except Exception as att_exc:
+        db.rollback()
+        logger.exception("Galat penautan lampiran pada koreksi metadata dokumen ID %s: %s", doc.id, att_exc)
+
+    # Cek duplikat identitas dalam transaksi mandiri setelah koreksi & penempatan sukses di-commit (hanya non-lampiran)
     duplicate_info = None
-    if identity_fields_changed and doc.identity_key:
+    if not doc.is_attachment and identity_fields_changed and doc.identity_key:
         try:
             dup_res = check_identity_duplicate(db, doc, actor_user_id=actor_user_id)
             if dup_res:
@@ -714,18 +848,18 @@ def patch_document_metadata(
             )
             duplicate_info = None
 
-        try:
-            recompute_status(db, doc)
-        except Exception as rec_exc:
-            logger.exception(
-                "Galat tak terduga saat hitung ulang status relasi pada koreksi metadata dokumen ID %s: %s",
-                doc.id,
-                rec_exc,
-            )
+    try:
+        recompute_status(db, doc)
+    except Exception as rec_exc:
+        logger.exception(
+            "Galat tak terduga saat hitung ulang status relasi pada koreksi metadata dokumen ID %s: %s",
+            doc.id,
+            rec_exc,
+        )
 
     db.refresh(doc)
 
-    formatted = _format_single_document_response(doc, db)
+    formatted = _format_single_document_response(doc, db, current_user=current_user)
     formatted["changed_fields"] = changed_fields
     formatted["placement"] = placement_info
     formatted["duplikat"] = duplicate_info

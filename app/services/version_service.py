@@ -2,7 +2,7 @@
 app/services/version_service.py
 Layanan versioning regulasi: relasi mengubah/mencabut, rekonsiliasi status, dan riwayat versi.
 """
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import logging
 import re
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
@@ -64,6 +64,9 @@ def is_doc_accessible(doc: Document, user: Optional[Any] = None) -> bool:
     return True
 
 
+is_accessible = is_doc_accessible
+
+
 def recompute_status(
     db: Session,
     documents: Union[Sequence[Document], Document, None] = None,
@@ -72,14 +75,20 @@ def recompute_status(
     commit: bool = True,
 ) -> int:
     """
-    Menghitung ulang status_keberlakuan dokumen berdasarkan aturan relasi hukum (Langkah 18b):
+    Menghitung ulang status_keberlakuan dokumen berdasarkan aturan relasi hukum dan tanggal berlaku (Langkah 19):
     1. status_source == "manual" -> jangan diubah.
     2. Ada relasi masuk mencabut dengan partial=false -> dicabut (relasi).
     3. Lapisan data mengirim status node dicabut untuk kunci ini -> dicabut (lapisan_data).
     4. Ada relasi masuk mengubah, atau mencabut dengan partial=true -> diubah (relasi).
     5. Lapisan data mengirim status node lain (berlaku / diubah) -> pakai status itu (lapisan_data).
+    5a. Tidak ada relasi masuk, dan status_source in {None, relasi, tanggal_berlaku},
+        dan effective_date terisi dan <= hari ini -> berlaku, status_source = "tanggal_berlaku", rule: "tanggal_berlaku".
     6. Tidak ada aturan yang berlaku, tetapi status_source == "relasi" -> kembalikan ke tidak_diketahui, status_source = None, rule: "relasi_dihapus".
     7. Selain itu -> biarkan.
+
+    Ketentuan khusus:
+    - Dokumen lampiran (is_attachment=True) hanya menjalankan aturan 5a.
+    - Dokumen tanpa identity_key tetap menjalankan aturan 5a (relasi tidak relevan).
     """
     if documents is None:
         if target_keys:
@@ -94,63 +103,91 @@ def recompute_status(
         documents = [documents]
 
     changed_count = 0
+    today = date.today()
 
     for doc in documents:
-        if not doc.identity_key:
-            continue
-
         # 1. Keputusan pengguna manual menang
         if doc.status_source == "manual":
             continue
-
-        in_rels = (
-            db.query(DocumentRelation)
-            .filter(DocumentRelation.target_key == doc.identity_key)
-            .all()
-        )
 
         target_status: Optional[StatusKeberlakuan] = None
         target_source: Optional[str] = None
         rule_matched: Optional[str] = None
 
-        has_full_repeal = any(
-            r.relation == JenisRelasi.mencabut and not r.partial for r in in_rels
-        )
-        has_amendment = any(
-            r.relation == JenisRelasi.mengubah or (r.relation == JenisRelasi.mencabut and r.partial)
-            for r in in_rels
-        )
+        is_attachment = bool(getattr(doc, "is_attachment", False))
 
-        node_st = node_status_map.get(doc.identity_key) if node_status_map else None
-
-        if has_full_repeal:
-            # 2. Ada relasi masuk mencabut dengan partial=false -> dicabut (relasi)
-            target_status = StatusKeberlakuan.dicabut
-            target_source = "relasi"
-            rule_matched = "mencabut_penuh"
-        elif node_st == StatusKeberlakuan.dicabut:
-            # 3. Lapisan data mengirim status node dicabut untuk kunci ini -> dicabut (lapisan_data)
-            target_status = StatusKeberlakuan.dicabut
-            target_source = "lapisan_data"
-            rule_matched = "lapisan_data"
-        elif has_amendment:
-            # 4. Ada relasi masuk mengubah, atau mencabut dengan partial=true -> diubah (relasi)
-            target_status = StatusKeberlakuan.diubah
-            target_source = "relasi"
-            rule_matched = "mengubah_atau_mencabut_sebagian"
-        elif node_st in (StatusKeberlakuan.berlaku, StatusKeberlakuan.diubah):
-            # 5. Lapisan data mengirim status node lain (berlaku / diubah) -> pakai status itu (lapisan_data)
-            target_status = node_st
-            target_source = "lapisan_data"
-            rule_matched = "lapisan_data"
-        elif doc.status_source == "relasi":
-            # 6. Tidak ada aturan yang berlaku, tetapi status_source == "relasi" -> kembalikan ke tidak_diketahui, status_source = None
-            target_status = StatusKeberlakuan.tidak_diketahui
-            target_source = None
-            rule_matched = "relasi_dihapus"
+        if is_attachment:
+            # Dokumen lampiran: hanya menjalankan aturan 5a
+            if (
+                doc.status_source in (None, "relasi", "tanggal_berlaku")
+                and doc.effective_date
+                and doc.effective_date <= today
+            ):
+                target_status = StatusKeberlakuan.berlaku
+                target_source = "tanggal_berlaku"
+                rule_matched = "tanggal_berlaku"
+            else:
+                continue
         else:
-            # 7. Selain itu -> biarkan
-            continue
+            in_rels: List[DocumentRelation] = []
+            node_st: Optional[StatusKeberlakuan] = None
+
+            if doc.identity_key:
+                in_rels = (
+                    db.query(DocumentRelation)
+                    .filter(DocumentRelation.target_key == doc.identity_key)
+                    .all()
+                )
+                if node_status_map:
+                    node_st = node_status_map.get(doc.identity_key)
+
+            has_full_repeal = any(
+                r.relation == JenisRelasi.mencabut and not r.partial for r in in_rels
+            )
+            has_amendment = any(
+                r.relation == JenisRelasi.mengubah or (r.relation == JenisRelasi.mencabut and r.partial)
+                for r in in_rels
+            )
+
+            if has_full_repeal:
+                # 2. Ada relasi masuk mencabut dengan partial=false -> dicabut (relasi)
+                target_status = StatusKeberlakuan.dicabut
+                target_source = "relasi"
+                rule_matched = "mencabut_penuh"
+            elif node_st == StatusKeberlakuan.dicabut:
+                # 3. Lapisan data mengirim status node dicabut untuk kunci ini -> dicabut (lapisan_data)
+                target_status = StatusKeberlakuan.dicabut
+                target_source = "lapisan_data"
+                rule_matched = "lapisan_data"
+            elif has_amendment:
+                # 4. Ada relasi masuk mengubah, atau mencabut dengan partial=true -> diubah (relasi)
+                target_status = StatusKeberlakuan.diubah
+                target_source = "relasi"
+                rule_matched = "mengubah_atau_mencabut_sebagian"
+            elif node_st in (StatusKeberlakuan.berlaku, StatusKeberlakuan.diubah):
+                # 5. Lapisan data mengirim status node lain (berlaku / diubah) -> pakai status itu (lapisan_data)
+                target_status = node_st
+                target_source = "lapisan_data"
+                rule_matched = "lapisan_data"
+            elif (
+                len(in_rels) == 0
+                and doc.status_source in (None, "relasi", "tanggal_berlaku")
+                and doc.effective_date
+                and doc.effective_date <= today
+            ):
+                # 5a. Tidak ada relasi masuk, dan status_source in {None, relasi, tanggal_berlaku},
+                #     dan effective_date terisi dan <= hari ini -> berlaku (tanggal_berlaku)
+                target_status = StatusKeberlakuan.berlaku
+                target_source = "tanggal_berlaku"
+                rule_matched = "tanggal_berlaku"
+            elif doc.status_source == "relasi":
+                # 6. Tidak ada aturan yang berlaku, tetapi status_source == "relasi" -> kembalikan ke tidak_diketahui, status_source = None
+                target_status = StatusKeberlakuan.tidak_diketahui
+                target_source = None
+                rule_matched = "relasi_dihapus"
+            else:
+                # 7. Selain itu -> biarkan
+                continue
 
         before_status = doc.status_keberlakuan
         before_source = doc.status_source

@@ -49,6 +49,7 @@ from app.services.naming_service import normalize_regulation_type, split_redunda
 from app.services.identity_service import fallback_identity_key
 from app.services.duplicate_service import check_identity_duplicate
 from app.services.version_service import recompute_status, sync_relations
+from app.services.attachment_service import detect_attachment_heuristic, link_attachment, link_pending_children
 
 logger = logging.getLogger("hero")
 router = APIRouter()
@@ -89,6 +90,9 @@ class ExtractionResultIn(BaseModel):
     confidence: Optional[Dict[str, float]] = None
     identity_key: Optional[str] = Field(None, max_length=120, validation_alias=AliasChoices("identity_key", "kunci_identitas"))
     page_count: Optional[int] = Field(None, ge=1, validation_alias=AliasChoices("page_count", "jumlah_halaman"))
+    effective_date: Optional[date] = Field(None, validation_alias=AliasChoices("effective_date", "tanggal_berlaku", "mulai_berlaku"))
+    lampiran_dari: Optional[str] = Field(None, max_length=120, validation_alias=AliasChoices("lampiran_dari", "parent_identity_key"))
+    label_lampiran: Optional[str] = Field(None, max_length=100, validation_alias=AliasChoices("label_lampiran", "attachment_label"))
     error: Optional[ExtractionErrorIn] = None
 
 
@@ -575,7 +579,17 @@ def patch_extraction_result(
 
     # Aturan Metadata: jangan menimpa bila sudah dikoreksi manual
     if doc.metadata_corrected_at is not None:
-        for fname in ["title", "regulation_number", "regulation_type", "release_date", "bidang", "regulation_year"]:
+        for fname in [
+            "title",
+            "regulation_number",
+            "regulation_type",
+            "release_date",
+            "bidang",
+            "regulation_year",
+            "effective_date",
+            "lampiran_dari",
+            "label_lampiran",
+        ]:
             if getattr(payload, fname, None) is not None:
                 ignored_fields.append(fname)
     else:
@@ -603,6 +617,11 @@ def patch_extraction_result(
                 doc.release_date = payload.release_date
                 changed_fields.append("release_date")
 
+        if payload.effective_date is not None:
+            if doc.effective_date != payload.effective_date:
+                doc.effective_date = payload.effective_date
+                changed_fields.append("effective_date")
+
         if payload.bidang and payload.bidang.strip():
             clean_bidang = payload.bidang.strip()
             if doc.bidang != clean_bidang:
@@ -628,22 +647,51 @@ def patch_extraction_result(
                     doc.id,
                 )
 
+        # Deteksi lampiran: eksplisit dari worker atau heuristik backend
+        if payload.lampiran_dari and payload.lampiran_dari.strip():
+            clean_parent_key = payload.lampiran_dari.strip()
+            doc.is_attachment = True
+            doc.parent_identity_key = clean_parent_key
+            if payload.label_lampiran and payload.label_lampiran.strip():
+                doc.attachment_label = payload.label_lampiran.strip()
+            changed_fields.append("is_attachment")
+        else:
+            is_att, att_lbl = detect_attachment_heuristic(title=doc.title, original_filename=doc.original_filename)
+            if is_att:
+                doc.is_attachment = True
+                if not doc.attachment_label:
+                    doc.attachment_label = att_lbl
+                if not doc.parent_identity_key:
+                    if payload.identity_key and payload.identity_key.strip():
+                        doc.parent_identity_key = payload.identity_key.strip()
+                    else:
+                        doc.parent_identity_key = fallback_identity_key(
+                            doc.regulation_type,
+                            doc.regulation_number,
+                            doc.regulation_year,
+                        )
+                changed_fields.append("is_attachment")
+
     # Tangani identity_key dan page_count
-    if payload.identity_key and payload.identity_key.strip():
-        clean_key = payload.identity_key.strip()
-        if doc.identity_key != clean_key:
-            doc.identity_key = clean_key
-            changed_fields.append("identity_key")
-    elif not doc.identity_key:
-        # Cadangan bila kunci_identitas tidak dikirim dan dokumen belum punya kunci
-        fallback_key = fallback_identity_key(
-            regulation_type=doc.regulation_type,
-            regulation_number=doc.regulation_number,
-            regulation_year=doc.regulation_year,
-        )
-        if fallback_key and doc.identity_key != fallback_key:
-            doc.identity_key = fallback_key
-            changed_fields.append("identity_key")
+    if doc.is_attachment:
+        # Dokumen lampiran tidak menggunakan identity_key
+        doc.identity_key = None
+    else:
+        if payload.identity_key and payload.identity_key.strip():
+            clean_key = payload.identity_key.strip()
+            if doc.identity_key != clean_key:
+                doc.identity_key = clean_key
+                changed_fields.append("identity_key")
+        elif not doc.identity_key:
+            # Cadangan bila kunci_identitas tidak dikirim dan dokumen belum punya kunci
+            fallback_key = fallback_identity_key(
+                regulation_type=doc.regulation_type,
+                regulation_number=doc.regulation_number,
+                regulation_year=doc.regulation_year,
+            )
+            if fallback_key and doc.identity_key != fallback_key:
+                doc.identity_key = fallback_key
+                changed_fields.append("identity_key")
 
     if payload.page_count is not None:
         if doc.page_count != payload.page_count:
@@ -814,24 +862,35 @@ def patch_extraction_result(
         "category_path": place_res.category_path,
     }
 
-    # Cek duplikat identitas dalam transaksi mandiri
-    duplicate_info = None
+    # Penautan lampiran dalam transaksi mandiri
     try:
-        dup_res = check_identity_duplicate(db, doc)
-        if dup_res:
-            db.commit()
-            duplicate_info = dup_res.model_dump()
-    except Exception as dup_exc:
+        if doc.is_attachment:
+            link_attachment(db, doc)
+        else:
+            link_pending_children(db, doc)
+        db.commit()
+    except Exception as att_exc:
         db.rollback()
-        logger.exception("Galat cek duplikat identitas untuk dokumen ID %s: %s", doc.id, dup_exc)
-        duplicate_info = None
+        logger.exception("Galat penautan lampiran untuk dokumen ID %s: %s", doc.id, att_exc)
 
-    # Hitung ulang status versi bila identitas tersedia
-    if doc.identity_key:
+    # Cek duplikat identitas dalam transaksi mandiri (hanya untuk dokumen non-lampiran)
+    duplicate_info = None
+    if not doc.is_attachment and doc.identity_key:
         try:
-            recompute_status(db, doc)
-        except Exception as rec_exc:
-            logger.exception("Galat hitung ulang status relasi untuk dokumen ID %s: %s", doc.id, rec_exc)
+            dup_res = check_identity_duplicate(db, doc)
+            if dup_res:
+                db.commit()
+                duplicate_info = dup_res.model_dump()
+        except Exception as dup_exc:
+            db.rollback()
+            logger.exception("Galat cek duplikat identitas untuk dokumen ID %s: %s", doc.id, dup_exc)
+            duplicate_info = None
+
+    # Hitung ulang status versi (selalu dijalankan untuk mengevaluasi relasi maupun tanggal berlaku)
+    try:
+        recompute_status(db, doc)
+    except Exception as rec_exc:
+        logger.exception("Galat hitung ulang status untuk dokumen ID %s: %s", doc.id, rec_exc)
 
     db.refresh(doc)
 
@@ -984,15 +1043,27 @@ def batch_update_document_identity(
         updated_count += 1
         db.commit()
 
-        # Jalankan cek duplikat per dokumen
+        # Tautkan lampiran bila dokumen ini lampiran atau merupakan calon induk
         try:
-            dup_res = check_identity_duplicate(db, doc)
-            if dup_res:
-                db.commit()
-                duplicates_summary.append(dup_res.model_dump())
-        except Exception as exc:
+            if doc.is_attachment:
+                link_attachment(db, doc)
+            else:
+                link_pending_children(db, doc)
+            db.commit()
+        except Exception as att_exc:
             db.rollback()
-            logger.exception("Galat cek duplikat saat backfill dokumen ID %s: %s", doc.id, exc)
+            logger.exception("Galat penautan lampiran saat backfill dokumen ID %s: %s", doc.id, att_exc)
+
+        # Jalankan cek duplikat per dokumen (hanya dokumen non-lampiran)
+        if not doc.is_attachment:
+            try:
+                dup_res = check_identity_duplicate(db, doc)
+                if dup_res:
+                    db.commit()
+                    duplicates_summary.append(dup_res.model_dump())
+            except Exception as exc:
+                db.rollback()
+                logger.exception("Galat cek duplikat saat backfill dokumen ID %s: %s", doc.id, exc)
 
         # Hitung ulang status versi bila identitas terisi
         if doc.identity_key:

@@ -75,6 +75,7 @@ class SearchParams:
     sort: Optional[SearchSort] = None
     include_inactive: bool = False
     duplikat: Optional[bool] = None
+    lampiran: Optional[bool] = None
     skip: int = 0
     limit: int = 20
 
@@ -222,6 +223,10 @@ class SearchService:
         elif params.duplikat is False:
             filters.append(Document.duplicate_of_id.is_(None))
 
+        # Filter lampiran (opsional: true | false)
+        if params.lampiran is not None:
+            filters.append(Document.is_attachment == params.lampiran)
+
         # 10. Tentukan Pengurutan (Sort)
         effective_sort = params.sort
         if effective_sort is None:
@@ -352,6 +357,10 @@ class SearchService:
                 "identity_key": getattr(doc_obj, "identity_key", None),
                 "page_count": getattr(doc_obj, "page_count", None),
                 "duplicate_of_id": getattr(doc_obj, "duplicate_of_id", None),
+                "effective_date": doc_obj.effective_date,
+                "is_attachment": bool(getattr(doc_obj, "is_attachment", False)),
+                "parent_document_id": getattr(doc_obj, "parent_document_id", None),
+                "attachment_label": getattr(doc_obj, "attachment_label", None),
                 "pdf_url": pdf_url,
                 "restricted": is_restricted,
                 "rank": rank_val,
