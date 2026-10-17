@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 from datetime import date
 from typing import Optional, List, Dict, Any, Tuple
-from sqlalchemy import func, or_, and_, desc, asc, literal_column, case
+from sqlalchemy import func, or_, and_, desc, literal_column, case
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -337,6 +337,7 @@ class SearchService:
                 "category_id": doc_obj.category_id,
                 "category_path": cpath,
                 "status_keberlakuan": doc_obj.status_keberlakuan,
+                "status_source": getattr(doc_obj, "status_source", None),
                 "processing_status": doc_obj.processing_status,
                 "extraction_method": getattr(doc_obj, "extraction_method", None),
                 "file_path_pdf": doc_obj.file_path_pdf,

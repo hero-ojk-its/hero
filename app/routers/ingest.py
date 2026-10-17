@@ -4,15 +4,13 @@ Endpoint untuk menerima upload dokumen PDF, screening deduplikasi,
 pemantauan job, dan antrian penanganan kegagalan / retry (Langkah 2 & 3).
 """
 from datetime import date
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, Query, status
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
 
 from app.config import settings
 from app.database import get_db
 from app.models.document import Document
-from app.models.category import Category
 from app.models.enums import (
     JenisJobIngest,
     KlasifikasiAkses,

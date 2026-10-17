@@ -30,7 +30,6 @@ from app.services.file_validation import (
     FileFingerprint,
     FileValidationError,
     fingerprint,
-    sanitize_filename,
     validate_pdf,
 )
 from app.services.naming_service import NamingInput, build_standard_filename

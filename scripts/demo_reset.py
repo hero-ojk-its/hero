@@ -9,7 +9,6 @@ Penggunaan:
     python scripts/demo_reset.py --yes --i-understand-production  (jika di production)
 """
 import argparse
-import os
 import shutil
 import sys
 from pathlib import Path

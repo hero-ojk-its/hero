@@ -3,9 +3,8 @@ app/routers/scans.py
 Router publik untuk Alur Pindai Situs (Scan -> Bandingkan -> Centang -> Tarik).
 [US-16, FR-SCR-02, FR-SCR-05]
 """
-import io
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List, Any
+from typing import Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy import desc, or_
@@ -18,8 +17,7 @@ from app.models.enums import StatusPindai, StatusKandidat, TujuanTarik, StatusJo
 from app.models.scan_session import ScanSession
 from app.models.scan_candidate import ScanCandidate
 from app.models.job_ingest import JobIngest
-from app.models.document import Document
-from app.services.scan_service import ScanService, get_scan_service
+from app.services.scan_service import ScanService
 from app.schemas.scan import (
     ScanCreate,
     ScanSessionResponse,

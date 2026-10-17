@@ -11,8 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.category import Category
-from app.models.enums import JenisSumber, KlasifikasiAkses, PeranDokumen
-from app.models.job_ingest import JobIngest
+from app.models.enums import JenisSumber, KlasifikasiAkses
 from app.models.scraping_source import ScrapingSource
 from app.models.source_file import SourceFile
 from app.schemas.scraping_source import (
