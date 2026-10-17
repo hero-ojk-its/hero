@@ -30,7 +30,8 @@ from app.services.analysis_result_service import (
     get_document_fingerprint,
     save_analysis_result,
 )
-from app.services.audit_service import RUN_HARMONIZATION, record_audit
+from app.services.audit_service import RUN_ANALYSIS, RUN_HARMONIZATION, record_audit
+from app.services.analysis_run_service import record_run
 
 logger = logging.getLogger("hero")
 
@@ -299,6 +300,7 @@ async def get_ml_dokumen(
 @router.get("/analisa/{document_id}", summary="Analisa Regulasi")
 async def get_ml_analisa(
     document_id: int,
+    request: Request,
     mode: Optional[Literal["deterministik", "ai"]] = Query("deterministik"),
     segar: bool = Query(False, description="Paksa hitung ulang tanpa cache"),
     db: Session = Depends(get_db),
@@ -312,6 +314,9 @@ async def get_ml_analisa(
     req_mode = ModeAnalisa.ai if mode == "ai" else ModeAnalisa.deterministik
     params_hash = compute_params_hash(JenisAnalisa.analisa)
     curr_fingerprint = get_document_fingerprint(doc)
+    params_dict = {"mode": mode if mode else "deterministik"}
+    actor_user_id = getattr(current_user, "id", None) if current_user else None
+    client_ip = request.client.host if request and request.client else None
 
     # 1. Cek Cache Hit
     if settings.ml_cache_enabled and not segar:
@@ -324,6 +329,48 @@ async def get_ml_analisa(
             expected_fingerprint=curr_fingerprint,
         )
         if cached:
+            run_id = None
+            try:
+                run_id = record_run(
+                    db=db,
+                    document_id=document_id,
+                    kind=JenisAnalisa.analisa,
+                    mode_diminta=req_mode,
+                    mode_dipakai=cached.mode,
+                    sumber="cache",
+                    segar=segar,
+                    params=params_dict,
+                    params_hash=params_hash,
+                    source_fingerprint=curr_fingerprint,
+                    http_status=200,
+                    duration_ms=0,
+                    ml_version=cached.ml_version,
+                    result_raw=cached.result,
+                    created_by=actor_user_id,
+                )
+            except Exception as exc:
+                logger.warning("Gagal memanggil record_run pada cache hit analisa: %s", exc)
+
+            mode_tersimpan_str = cached.mode.value if hasattr(cached.mode, "value") else str(cached.mode)
+            try:
+                record_audit(
+                    db,
+                    action=RUN_ANALYSIS,
+                    user_id=actor_user_id,
+                    target_resource=f"document:{document_id}",
+                    detail={
+                        "mode_diminta": req_mode.value,
+                        "mode_dipakai": mode_tersimpan_str,
+                        "sumber": "cache",
+                        "http_status": 200,
+                        "run_id": run_id,
+                    },
+                    ip_address=client_ip,
+                    commit=True,
+                )
+            except Exception as exc:
+                logger.warning("Gagal mencatat audit RUN_ANALYSIS: %s", exc)
+
             filtered_data, discarded = saring_rujukan(cached.result, allowed_ids)
             if isinstance(filtered_data, dict):
                 filtered_data["disaring_backend"] = discarded
@@ -331,7 +378,8 @@ async def get_ml_analisa(
                     "hit": True,
                     "dibuat": cached.created_at.isoformat() if cached.created_at else None,
                     "basi": False,
-                    "mode_tersimpan": cached.mode.value if hasattr(cached.mode, "value") else str(cached.mode),
+                    "mode_tersimpan": mode_tersimpan_str,
+                    "run_id": run_id,
                 }
             return filtered_data
 
@@ -349,6 +397,7 @@ async def get_ml_analisa(
 
     # 3. Tangani kegagalan ML (503/504 fallback ke cache basi jika ada)
     if ml_exc is not None:
+        duration_ms = int((time.perf_counter() - start_time) * 1000)
         if ml_exc.status_code in (status.HTTP_503_SERVICE_UNAVAILABLE, status.HTTP_504_GATEWAY_TIMEOUT):
             fallback = get_cached_result(
                 db,
@@ -359,6 +408,48 @@ async def get_ml_analisa(
                 expected_fingerprint=None,
             )
             if fallback:
+                run_id = None
+                try:
+                    run_id = record_run(
+                        db=db,
+                        document_id=document_id,
+                        kind=JenisAnalisa.analisa,
+                        mode_diminta=req_mode,
+                        mode_dipakai=fallback.mode,
+                        sumber="cache_basi",
+                        segar=segar,
+                        params=params_dict,
+                        params_hash=params_hash,
+                        source_fingerprint=curr_fingerprint,
+                        http_status=200,
+                        duration_ms=duration_ms,
+                        ml_version=fallback.ml_version,
+                        result_raw=fallback.result,
+                        created_by=actor_user_id,
+                    )
+                except Exception as exc:
+                    logger.warning("Gagal memanggil record_run pada cache basi analisa: %s", exc)
+
+                mode_tersimpan_str = fallback.mode.value if hasattr(fallback.mode, "value") else str(fallback.mode)
+                try:
+                    record_audit(
+                        db,
+                        action=RUN_ANALYSIS,
+                        user_id=actor_user_id,
+                        target_resource=f"document:{document_id}",
+                        detail={
+                            "mode_diminta": req_mode.value,
+                            "mode_dipakai": mode_tersimpan_str,
+                            "sumber": "cache_basi",
+                            "http_status": 200,
+                            "run_id": run_id,
+                        },
+                        ip_address=client_ip,
+                        commit=True,
+                    )
+                except Exception as exc:
+                    logger.warning("Gagal mencatat audit RUN_ANALYSIS: %s", exc)
+
                 filtered_data, discarded = saring_rujukan(fallback.result, allowed_ids)
                 if isinstance(filtered_data, dict):
                     filtered_data["disaring_backend"] = discarded
@@ -366,24 +457,111 @@ async def get_ml_analisa(
                         "hit": True,
                         "dibuat": fallback.created_at.isoformat() if fallback.created_at else None,
                         "basi": True,
-                        "mode_tersimpan": fallback.mode.value if hasattr(fallback.mode, "value") else str(fallback.mode),
+                        "mode_tersimpan": mode_tersimpan_str,
+                        "run_id": run_id,
                     }
                 return filtered_data
-        raise ml_exc
 
-    if status_code is not None and status_code >= 400:
-        return JSONResponse(status_code=status_code, content=data)
+        # Tidak ada fallback cache basi, catat riwayat gagal & audit sebelum melempar exception
+        error_code = ml_exc.detail.get("code") if isinstance(ml_exc.detail, dict) else None
+        run_id = None
+        try:
+            run_id = record_run(
+                db=db,
+                document_id=document_id,
+                kind=JenisAnalisa.analisa,
+                mode_diminta=req_mode,
+                mode_dipakai=None,
+                sumber="gagal",
+                segar=segar,
+                params=params_dict,
+                params_hash=params_hash,
+                source_fingerprint=curr_fingerprint,
+                http_status=ml_exc.status_code,
+                duration_ms=duration_ms,
+                error_code=error_code,
+                created_by=actor_user_id,
+            )
+        except Exception as exc:
+            logger.warning("Gagal memanggil record_run pada kegagalan analisa: %s", exc)
+
+        try:
+            record_audit(
+                db,
+                action=RUN_ANALYSIS,
+                user_id=actor_user_id,
+                target_resource=f"document:{document_id}",
+                detail={
+                    "mode_diminta": req_mode.value,
+                    "mode_dipakai": None,
+                    "sumber": "gagal",
+                    "http_status": ml_exc.status_code,
+                    "run_id": run_id,
+                },
+                ip_address=client_ip,
+                commit=True,
+            )
+        except Exception as exc:
+            logger.warning("Gagal mencatat audit RUN_ANALYSIS: %s", exc)
+
+        raise ml_exc
 
     duration_ms = int((time.perf_counter() - start_time) * 1000)
 
-    # 4. Tentukan mode yang benar-benar dipakai dan simpan ke cache jika diaktifkan
+    # 4. Tangani respons error HTTP lain dari ML (status_code >= 400)
+    if status_code is not None and status_code >= 400:
+        error_code = None
+        if isinstance(data, dict):
+            error_code = data.get("code") or (data.get("detail") if isinstance(data.get("detail"), str) else None)
+        run_id = None
+        try:
+            run_id = record_run(
+                db=db,
+                document_id=document_id,
+                kind=JenisAnalisa.analisa,
+                mode_diminta=req_mode,
+                mode_dipakai=None,
+                sumber="gagal",
+                segar=segar,
+                params=params_dict,
+                params_hash=params_hash,
+                source_fingerprint=curr_fingerprint,
+                http_status=status_code,
+                duration_ms=duration_ms,
+                error_code=error_code,
+                created_by=actor_user_id,
+            )
+        except Exception as exc:
+            logger.warning("Gagal memanggil record_run pada error response analisa: %s", exc)
+
+        try:
+            record_audit(
+                db,
+                action=RUN_ANALYSIS,
+                user_id=actor_user_id,
+                target_resource=f"document:{document_id}",
+                detail={
+                    "mode_diminta": req_mode.value,
+                    "mode_dipakai": None,
+                    "sumber": "gagal",
+                    "http_status": status_code,
+                    "run_id": run_id,
+                },
+                ip_address=client_ip,
+                commit=True,
+            )
+        except Exception as exc:
+            logger.warning("Gagal mencatat audit RUN_ANALYSIS: %s", exc)
+
+        return JSONResponse(status_code=status_code, content=data)
+
+    # 5. Tentukan mode yang benar-benar dipakai dan simpan ke cache jika diaktifkan
     actual_mode_str = data.get("mode_dipakai") if isinstance(data, dict) else None
     if not actual_mode_str:
         actual_mode_str = "deterministik"
     save_mode = ModeAnalisa.ai if actual_mode_str == "ai" else ModeAnalisa.deterministik
 
     saved_row = None
-    actor_user_id = getattr(current_user, "id", None) if current_user else None
     if settings.ml_cache_enabled and isinstance(data, dict):
         saved_row = save_analysis_result(
             db=db,
@@ -398,7 +576,50 @@ async def get_ml_analisa(
             user_id=actor_user_id,
         )
 
-    # 5. Saring rujukan dan kembalikan dengan metadata cache
+    # 6. Catat riwayat eksekusi (sumber=ml)
+    run_id = None
+    try:
+        run_id = record_run(
+            db=db,
+            document_id=document_id,
+            kind=JenisAnalisa.analisa,
+            mode_diminta=req_mode,
+            mode_dipakai=save_mode,
+            sumber="ml",
+            segar=segar,
+            params=params_dict,
+            params_hash=params_hash,
+            source_fingerprint=curr_fingerprint,
+            http_status=200,
+            duration_ms=duration_ms,
+            ml_version=data.get("versi") if isinstance(data, dict) else None,
+            result_raw=data if isinstance(data, dict) else None,
+            created_by=actor_user_id,
+        )
+    except Exception as exc:
+        logger.warning("Gagal memanggil record_run analisa: %s", exc)
+
+    # 7. Catat audit RUN_ANALYSIS
+    try:
+        record_audit(
+            db,
+            action=RUN_ANALYSIS,
+            user_id=actor_user_id,
+            target_resource=f"document:{document_id}",
+            detail={
+                "mode_diminta": req_mode.value,
+                "mode_dipakai": save_mode.value,
+                "sumber": "ml",
+                "http_status": 200,
+                "run_id": run_id,
+            },
+            ip_address=client_ip,
+            commit=True,
+        )
+    except Exception as exc:
+        logger.warning("Gagal mencatat audit RUN_ANALYSIS: %s", exc)
+
+    # 8. Saring rujukan dan kembalikan dengan metadata cache
     filtered_data, discarded = saring_rujukan(data, allowed_ids)
     if isinstance(filtered_data, dict):
         filtered_data["disaring_backend"] = discarded
@@ -412,6 +633,7 @@ async def get_ml_analisa(
             "dibuat": dibuat_str,
             "basi": False,
             "mode_tersimpan": save_mode.value,
+            "run_id": run_id,
         }
     return filtered_data
 
@@ -474,6 +696,7 @@ async def post_ml_harmonisasi(
     params_hash = compute_params_hash(JenisAnalisa.harmonisasi, extra=forward_body)
     kind = JenisAnalisa.harmonisasi
     mode = ModeAnalisa.deterministik
+    params_dict = {"mode": "deterministik", "pembanding": forward_body}
     actor_user_id = getattr(current_user, "id", None) if current_user else None
     client_ip = request.client.host if request and request.client else None
 
@@ -488,6 +711,28 @@ async def post_ml_harmonisasi(
             expected_fingerprint=curr_fingerprint,
         )
         if cached:
+            run_id = None
+            try:
+                run_id = record_run(
+                    db=db,
+                    document_id=document_id,
+                    kind=kind,
+                    mode_diminta=mode,
+                    mode_dipakai=mode,
+                    sumber="cache",
+                    segar=segar,
+                    params=params_dict,
+                    params_hash=params_hash,
+                    source_fingerprint=curr_fingerprint,
+                    http_status=200,
+                    duration_ms=0,
+                    ml_version=cached.ml_version,
+                    result_raw=cached.result,
+                    created_by=actor_user_id,
+                )
+            except Exception as exc:
+                logger.warning("Gagal memanggil record_run pada cache hit harmonisasi: %s", exc)
+
             filtered_data, discarded = saring_rujukan(cached.result, allowed_ids)
             if isinstance(filtered_data, dict):
                 filtered_data["disaring_backend"] = discarded
@@ -496,22 +741,31 @@ async def post_ml_harmonisasi(
                     "dibuat": cached.created_at.isoformat() if cached.created_at else None,
                     "basi": False,
                     "mode_tersimpan": "deterministik",
+                    "run_id": run_id,
                 }
-            record_audit(
-                db,
-                action=RUN_HARMONIZATION,
-                user_id=actor_user_id,
-                target_resource=f"document:{document_id}",
-                detail={
-                    "document_id": document_id,
-                    "jumlah_temuan": len(filtered_data.get("temuan", [])) if isinstance(filtered_data, dict) else 0,
-                    "jumlah_korpus": len(forward_body),
-                    "korpus_dibatasi_pengguna": body is not None,
-                    "cache_hit": True,
-                },
-                ip_address=client_ip,
-                commit=True,
-            )
+            try:
+                record_audit(
+                    db,
+                    action=RUN_HARMONIZATION,
+                    user_id=actor_user_id,
+                    target_resource=f"document:{document_id}",
+                    detail={
+                        "document_id": document_id,
+                        "jumlah_temuan": len(filtered_data.get("temuan", [])) if isinstance(filtered_data, dict) else 0,
+                        "jumlah_korpus": len(forward_body),
+                        "korpus_dibatasi_pengguna": body is not None,
+                        "cache_hit": True,
+                        "mode_dipakai": "deterministik",
+                        "sumber": "cache",
+                        "http_status": 200,
+                        "run_id": run_id,
+                    },
+                    ip_address=client_ip,
+                    commit=True,
+                )
+            except Exception as exc:
+                logger.warning("Gagal mencatat audit RUN_HARMONIZATION: %s", exc)
+
             return filtered_data
 
     # 2. Panggil Layanan ML
@@ -532,6 +786,7 @@ async def post_ml_harmonisasi(
 
     # 3. Tangani kegagalan ML (503/504 fallback ke cache basi jika ada)
     if ml_exc is not None:
+        duration_ms = int((time.perf_counter() - start_time) * 1000)
         if ml_exc.status_code in (status.HTTP_503_SERVICE_UNAVAILABLE, status.HTTP_504_GATEWAY_TIMEOUT):
             fallback = get_cached_result(
                 db,
@@ -542,6 +797,28 @@ async def post_ml_harmonisasi(
                 expected_fingerprint=None,
             )
             if fallback:
+                run_id = None
+                try:
+                    run_id = record_run(
+                        db=db,
+                        document_id=document_id,
+                        kind=kind,
+                        mode_diminta=mode,
+                        mode_dipakai=mode,
+                        sumber="cache_basi",
+                        segar=segar,
+                        params=params_dict,
+                        params_hash=params_hash,
+                        source_fingerprint=curr_fingerprint,
+                        http_status=200,
+                        duration_ms=duration_ms,
+                        ml_version=fallback.ml_version,
+                        result_raw=fallback.result,
+                        created_by=actor_user_id,
+                    )
+                except Exception as exc:
+                    logger.warning("Gagal memanggil record_run pada cache basi harmonisasi: %s", exc)
+
                 filtered_data, discarded = saring_rujukan(fallback.result, allowed_ids)
                 if isinstance(filtered_data, dict):
                     filtered_data["disaring_backend"] = discarded
@@ -550,31 +827,135 @@ async def post_ml_harmonisasi(
                         "dibuat": fallback.created_at.isoformat() if fallback.created_at else None,
                         "basi": True,
                         "mode_tersimpan": "deterministik",
+                        "run_id": run_id,
                     }
-                record_audit(
-                    db,
-                    action=RUN_HARMONIZATION,
-                    user_id=actor_user_id,
-                    target_resource=f"document:{document_id}",
-                    detail={
-                        "document_id": document_id,
-                        "jumlah_temuan": len(filtered_data.get("temuan", [])) if isinstance(filtered_data, dict) else 0,
-                        "jumlah_korpus": len(forward_body),
-                        "korpus_dibatasi_pengguna": body is not None,
-                        "cache_hit": True,
-                    },
-                    ip_address=client_ip,
-                    commit=True,
-                )
-                return filtered_data
-        raise ml_exc
+                try:
+                    record_audit(
+                        db,
+                        action=RUN_HARMONIZATION,
+                        user_id=actor_user_id,
+                        target_resource=f"document:{document_id}",
+                        detail={
+                            "document_id": document_id,
+                            "jumlah_temuan": len(filtered_data.get("temuan", [])) if isinstance(filtered_data, dict) else 0,
+                            "jumlah_korpus": len(forward_body),
+                            "korpus_dibatasi_pengguna": body is not None,
+                            "cache_hit": True,
+                            "mode_dipakai": "deterministik",
+                            "sumber": "cache_basi",
+                            "http_status": 200,
+                            "run_id": run_id,
+                        },
+                        ip_address=client_ip,
+                        commit=True,
+                    )
+                except Exception as exc:
+                    logger.warning("Gagal mencatat audit RUN_HARMONIZATION: %s", exc)
 
-    if status_code is not None and status_code >= 400:
-        return JSONResponse(status_code=status_code, content=data)
+                return filtered_data
+
+        # Tidak ada fallback, catat run gagal & audit sebelum melempar exception
+        error_code = ml_exc.detail.get("code") if isinstance(ml_exc.detail, dict) else None
+        run_id = None
+        try:
+            run_id = record_run(
+                db=db,
+                document_id=document_id,
+                kind=kind,
+                mode_diminta=mode,
+                mode_dipakai=None,
+                sumber="gagal",
+                segar=segar,
+                params=params_dict,
+                params_hash=params_hash,
+                source_fingerprint=curr_fingerprint,
+                http_status=ml_exc.status_code,
+                duration_ms=duration_ms,
+                error_code=error_code,
+                created_by=actor_user_id,
+            )
+        except Exception as exc:
+            logger.warning("Gagal memanggil record_run pada kegagalan harmonisasi: %s", exc)
+
+        try:
+            record_audit(
+                db,
+                action=RUN_HARMONIZATION,
+                user_id=actor_user_id,
+                target_resource=f"document:{document_id}",
+                detail={
+                    "document_id": document_id,
+                    "jumlah_temuan": 0,
+                    "jumlah_korpus": len(forward_body),
+                    "korpus_dibatasi_pengguna": body is not None,
+                    "cache_hit": False,
+                    "mode_dipakai": None,
+                    "sumber": "gagal",
+                    "http_status": ml_exc.status_code,
+                    "run_id": run_id,
+                },
+                ip_address=client_ip,
+                commit=True,
+            )
+        except Exception as exc:
+            logger.warning("Gagal mencatat audit RUN_HARMONIZATION: %s", exc)
+
+        raise ml_exc
 
     duration_ms = int((time.perf_counter() - start_time) * 1000)
 
-    # 4. Simpan ke cache jika diaktifkan
+    # 4. Tangani respons error HTTP lain dari ML (status_code >= 400)
+    if status_code is not None and status_code >= 400:
+        error_code = None
+        if isinstance(data, dict):
+            error_code = data.get("code") or (data.get("detail") if isinstance(data.get("detail"), str) else None)
+        run_id = None
+        try:
+            run_id = record_run(
+                db=db,
+                document_id=document_id,
+                kind=kind,
+                mode_diminta=mode,
+                mode_dipakai=None,
+                sumber="gagal",
+                segar=segar,
+                params=params_dict,
+                params_hash=params_hash,
+                source_fingerprint=curr_fingerprint,
+                http_status=status_code,
+                duration_ms=duration_ms,
+                error_code=error_code,
+                created_by=actor_user_id,
+            )
+        except Exception as exc:
+            logger.warning("Gagal memanggil record_run pada error response harmonisasi: %s", exc)
+
+        try:
+            record_audit(
+                db,
+                action=RUN_HARMONIZATION,
+                user_id=actor_user_id,
+                target_resource=f"document:{document_id}",
+                detail={
+                    "document_id": document_id,
+                    "jumlah_temuan": 0,
+                    "jumlah_korpus": len(forward_body),
+                    "korpus_dibatasi_pengguna": body is not None,
+                    "cache_hit": False,
+                    "mode_dipakai": None,
+                    "sumber": "gagal",
+                    "http_status": status_code,
+                    "run_id": run_id,
+                },
+                ip_address=client_ip,
+                commit=True,
+            )
+        except Exception as exc:
+            logger.warning("Gagal mencatat audit RUN_HARMONIZATION: %s", exc)
+
+        return JSONResponse(status_code=status_code, content=data)
+
+    # 5. Simpan ke cache jika diaktifkan
     saved_row = None
     if settings.ml_cache_enabled and isinstance(data, dict):
         saved_row = save_analysis_result(
@@ -590,7 +971,30 @@ async def post_ml_harmonisasi(
             user_id=actor_user_id,
         )
 
-    # 5. Saring rujukan dan catat audit
+    # 6. Catat riwayat eksekusi (sumber=ml)
+    run_id = None
+    try:
+        run_id = record_run(
+            db=db,
+            document_id=document_id,
+            kind=kind,
+            mode_diminta=mode,
+            mode_dipakai=mode,
+            sumber="ml",
+            segar=segar,
+            params=params_dict,
+            params_hash=params_hash,
+            source_fingerprint=curr_fingerprint,
+            http_status=200,
+            duration_ms=duration_ms,
+            ml_version=data.get("versi") if isinstance(data, dict) else None,
+            result_raw=data if isinstance(data, dict) else None,
+            created_by=actor_user_id,
+        )
+    except Exception as exc:
+        logger.warning("Gagal memanggil record_run harmonisasi: %s", exc)
+
+    # 7. Saring rujukan dan catat audit
     filtered_data, discarded = saring_rujukan(data, allowed_ids)
     if isinstance(filtered_data, dict):
         filtered_data["disaring_backend"] = discarded
@@ -604,23 +1008,31 @@ async def post_ml_harmonisasi(
             "dibuat": dibuat_str,
             "basi": False,
             "mode_tersimpan": "deterministik",
+            "run_id": run_id,
         }
 
-    record_audit(
-        db,
-        action=RUN_HARMONIZATION,
-        user_id=actor_user_id,
-        target_resource=f"document:{document_id}",
-        detail={
-            "document_id": document_id,
-            "jumlah_temuan": len(filtered_data.get("temuan", [])) if isinstance(filtered_data, dict) else 0,
-            "jumlah_korpus": len(forward_body),
-            "korpus_dibatasi_pengguna": body is not None,
-            "cache_hit": False,
-        },
-        ip_address=client_ip,
-        commit=True,
-    )
+    try:
+        record_audit(
+            db,
+            action=RUN_HARMONIZATION,
+            user_id=actor_user_id,
+            target_resource=f"document:{document_id}",
+            detail={
+                "document_id": document_id,
+                "jumlah_temuan": len(filtered_data.get("temuan", [])) if isinstance(filtered_data, dict) else 0,
+                "jumlah_korpus": len(forward_body),
+                "korpus_dibatasi_pengguna": body is not None,
+                "cache_hit": False,
+                "mode_dipakai": "deterministik",
+                "sumber": "ml",
+                "http_status": 200,
+                "run_id": run_id,
+            },
+            ip_address=client_ip,
+            commit=True,
+        )
+    except Exception as exc:
+        logger.warning("Gagal mencatat audit RUN_HARMONIZATION: %s", exc)
 
     return filtered_data
 
