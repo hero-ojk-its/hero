@@ -157,6 +157,7 @@ class UpdateDocumentStatusResponse(BaseModel):
     status: str = Field("ok", description="Status operasi")
     document_id: int
     status_keberlakuan: str
+    status_source: Optional[str] = Field(None, description="Sumber penentu status keberlakuan")
     legal_reference_created: bool = Field(
         False,
         description="True jika entri LegalReference baru berhasil dibuat",

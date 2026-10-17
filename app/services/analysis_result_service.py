@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import logging
-from typing import Any, Optional, Tuple
+from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 

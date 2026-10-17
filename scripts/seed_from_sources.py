@@ -289,10 +289,10 @@ def main():
         max_pages = spec["max_pages"]
         is_jdih = spec["is_jdih"]
 
-        print(f"-----------------------------------------------------------------")
+        print("-----------------------------------------------------------------")
         print(f"PROSES SUMBER: [{s_key.upper()}] {src_name}")
         print(f"URL: {src_url} | Tipe: {src_type} | Batas Paging: {max_pages}")
-        print(f"-----------------------------------------------------------------")
+        print("-----------------------------------------------------------------")
 
         # 4.1 Registrasi atau Ambil Sumber
         source_id = None
@@ -355,7 +355,7 @@ def main():
                     if poll_count % 5 == 0:
                         print(f"        [Memindai...] Halaman: {pages}, Kandidat: {c_cnt}")
                 if poll_count > 300:  # batas maksimal 10 menit
-                    print(f"        [TIMEOUT] Waktu tunggu pemindaian melebihi batas 10 menit.")
+                    print("        [TIMEOUT] Waktu tunggu pemindaian melebihi batas 10 menit.")
                     break
 
             total_cands = scan_res.get("candidates_summary", {}).get("total", 0) if isinstance(scan_res.get("candidates_summary"), dict) else 0
@@ -438,7 +438,7 @@ def main():
                 if p_count % 5 == 0:
                     print(f"        [Menarik berkas...] Selesai: {prog.get('processed_count', 0)}/{prog.get('total_found', len(selected_ids))}")
             if p_count > 300:
-                print(f"        [TIMEOUT] Waktu tunggu penarikan melebihi batas 10 menit.")
+                print("        [TIMEOUT] Waktu tunggu penarikan melebihi batas 10 menit.")
                 break
 
         # Ambil statistik penarikan dari seluruh kandidat terpilih (melalui paginasi)
