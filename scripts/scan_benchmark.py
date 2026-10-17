@@ -160,13 +160,13 @@ def run_benchmark_for_source(
 
     page_boundary_label = f"limit_pages={limit_pages}" if limit_pages is not None else f"penuh (tanpa batas, default max={effective_pages})"
 
-    print(f"\n=======================================================")
+    print("\n=======================================================")
     print(f" Memulai Benchmark: {src_info['name']} ({src_key})")
     print(f" URL          : {'[link share OneDrive DPEA]' if src_key == 'onedrive' else src_info['url']}")
     print(f" Adapter      : {src_info['adapter']}")
     print(f" Ground Truth : {src_info['ground_truth_label']}")
     print(f" Batas Scan   : {page_boundary_label}, max_candidates={max_candidates}, head_for_size={head_for_size}")
-    print(f"=======================================================")
+    print("=======================================================")
 
     crawler_cls = src_info["crawler_cls"]
     crawler = crawler_cls(delay_seconds=0.02, head_for_size=head_for_size, allow_private=False)
@@ -318,15 +318,15 @@ def main():
 
     # Susun tabel ringkasan Markdown Gabungan 3 Sumber
     md_lines = [
-        f"# Hasil Live Scan Benchmark — HERO Backend (Langkah 10d)",
-        f"",
+        "# Hasil Live Scan Benchmark — HERO Backend (Langkah 10d)",
+        "",
         f"> **Tanggal Pengujian:** {datetime.now().strftime('%d %B %Y %H:%M:%S WIB')}  ",
-        f"> **Metode:** Uji live benchmark penuh ke endpoint publik internet (tanpa Playwright / browser headless).",
-        f"",
-        f"## 1. Ringkasan Performa Benchmark dan Perbandingan Ground Truth",
-        f"",
-        f"| Sumber Data | Adapter | Batas Paging | Halaman Terakhir | Regulasi | PDF | Lengkap Metadata Hukum | Match Warnings | Ground Truth | Selisih | Durasi | Requests | Status |",
-        f"|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "> **Metode:** Uji live benchmark penuh ke endpoint publik internet (tanpa Playwright / browser headless).",
+        "",
+        "## 1. Ringkasan Performa Benchmark dan Perbandingan Ground Truth",
+        "",
+        "| Sumber Data | Adapter | Batas Paging | Halaman Terakhir | Regulasi | PDF | Lengkap Metadata Hukum | Match Warnings | Ground Truth | Selisih | Durasi | Requests | Status |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
 
     for r in all_summaries:
@@ -342,9 +342,9 @@ def main():
         )
 
     md_lines.extend([
-        f"",
-        f"## 2. Rincian dan Berkas CSV Hasil Pemindaian",
-        f"",
+        "",
+        "## 2. Rincian dan Berkas CSV Hasil Pemindaian",
+        "",
     ])
 
     for r in all_summaries:
@@ -369,13 +369,13 @@ def main():
         if r.get("subfolders_count"):
             md_lines.append(f"- **Rincian Berkas per Subfolder:** `{r['subfolders_count']}`")
         md_lines.extend([
-            f"- **Statistik Lengkap:**",
-            f"  ```json",
+            "- **Statistik Lengkap:**",
+            "  ```json",
             f"  {r['stats']}",
-            f"  ```",
+            "  ```",
         ])
         if r["errors"]:
-            md_lines.append(f"- **Catatan / Error:**")
+            md_lines.append("- **Catatan / Error:**")
             for err in r["errors"]:
                 md_lines.append(f"  - {err}")
         md_lines.append("")

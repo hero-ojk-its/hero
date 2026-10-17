@@ -25,7 +25,7 @@ def main():
     output_csv = REPO_ROOT / "docs" / "reports" / "match-onedrive-ojk.csv"
 
     if not ojk_csv.exists() or not onedrive_csv.exists():
-        print(f"Error: scan-benchmark-ojk.csv atau scan-benchmark-onedrive.csv tidak ditemukan.")
+        print("Error: scan-benchmark-ojk.csv atau scan-benchmark-onedrive.csv tidak ditemukan.")
         return
 
     # 1. Baca data Regulasi OJK
@@ -110,12 +110,12 @@ def main():
         writer.writeheader()
         writer.writerows(results)
 
-    print(f"\n================ HASIL PENCOCOKAN ================")
+    print("\n================ HASIL PENCOCOKAN ================")
     print(f"Berkas Cocok Tepat (Exact Match) : {matched_count} ({matched_count/len(downloads_rows)*100:.1f}%)")
     print(f"Berkas Tidak Cocok               : {unmatched_count} ({unmatched_count/len(downloads_rows)*100:.1f}%)")
     print(f"CSV disimpan ke                  : {output_csv}")
 
-    print(f"\n================ RINCIAN TIDAK COCOK PER JENIS & TAHUN ================")
+    print("\n================ RINCIAN TIDAK COCOK PER JENIS & TAHUN ================")
     total_ge = sum(unmatched_ge_2013.values())
     total_lt = sum(unmatched_lt_2013.values())
     print(f"Total Tidak Cocok Tahun >= 2013 (Era OJK)     : {total_ge} berkas")

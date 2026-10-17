@@ -1200,6 +1200,24 @@
             "description": "Filter dokumen duplikat (dokumen dengan duplicate_of_id terisi)"
           },
           {
+            "name": "lampiran",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter dokumen lampiran (true: hanya lampiran, false: hanya non-lampiran)",
+              "title": "Lampiran"
+            },
+            "description": "Filter dokumen lampiran (true: hanya lampiran, false: hanya non-lampiran)"
+          },
+          {
             "name": "skip",
             "in": "query",
             "required": false,
@@ -1360,6 +1378,11 @@
         "summary": "Detail satu dokumen beserta pasalnya",
         "description": "Mengembalikan detail lengkap dokumen beserta pasal level teratas, rujukan hukum, dan status penempatan KB.",
         "operationId": "get_document_api_v1_documents__document_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "document_id",
@@ -1755,6 +1778,114 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/documents/{document_id}/versi": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Lihat relasi dan riwayat versi dokumen (mengubah, mencabut, induk, dicabut oleh)",
+        "description": "Mengembalikan informasi versioning dokumen berdasarkan relasi graf hukum (Langkah 18).\n- induk: peraturan yang diubah oleh dokumen ini\n- diubah_oleh: peraturan yang mengubah dokumen ini (dengan urutan perubahan_ke)\n- dicabut_oleh: peraturan yang mencabut dokumen ini\n- mencabut: peraturan yang dicabut oleh dokumen ini",
+        "operationId": "get_document_version_api_v1_documents__document_id__versi_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentVersionResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Dokumen non-publik memerlukan autentikasi aktif"
+          },
+          "404": {
+            "description": "Dokumen tidak ditemukan"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/documents/{document_id}/analisa/banding": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Bandingkan hasil analisa deterministik dan AI berdampingan (US-05 #49)",
+        "description": "Mengembalikan hasil analisa deterministik dan hasil AI yang tersimpan secara terpisah\nuntuk perbandingan berdampingan (US-05).\nData hanya dibaca dari penyimpanan lokal (tanpa memanggil layanan ML).",
+        "operationId": "get_document_analysis_comparison_api_v1_documents__document_id__analisa_banding_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentAnalysisComparisonResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Dokumen non-publik memerlukan autentikasi aktif"
+          },
+          "404": {
+            "description": "Dokumen tidak ditemukan atau nonaktif"
           },
           "422": {
             "description": "Validation Error",
@@ -2256,6 +2387,64 @@
                   }
                 ],
                 "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/internal/relations": {
+      "post": {
+        "tags": [
+          "Internal"
+        ],
+        "summary": "[Internal] Sinkronisasi graf relasi dokumen (mengubah/mencabut) dari lapisan data",
+        "description": "Menerima relasi (mengubah, mencabut) dan status node dari lapisan data (Langkah 18).\nMaksimal 5000 relasi dan 5000 node per permintaan.",
+        "operationId": "sync_document_relations_api_v1_internal_relations_post",
+        "parameters": [
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncRelationsIn"
               }
             }
           }
@@ -3663,6 +3852,18 @@
               "default": "deterministik",
               "title": "Mode"
             }
+          },
+          {
+            "name": "segar",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Paksa hitung ulang tanpa cache",
+              "default": false,
+              "title": "Segar"
+            },
+            "description": "Paksa hitung ulang tanpa cache"
           }
         ],
         "responses": {
@@ -3779,6 +3980,18 @@
               "type": "integer",
               "title": "Document Id"
             }
+          },
+          {
+            "name": "segar",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Paksa hitung ulang tanpa cache",
+              "default": false,
+              "title": "Segar"
+            },
+            "description": "Paksa hitung ulang tanpa cache"
           }
         ],
         "requestBody": {
@@ -4980,6 +5193,44 @@
         ],
         "title": "CategoryDetailResponse"
       },
+      "DocumentAnalysisComparisonResponse": {
+        "properties": {
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "deterministik": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModeAnalysisDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ai": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModeAnalysisDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "catatan": {
+            "type": "string",
+            "title": "Catatan"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "catatan"
+        ],
+        "title": "DocumentAnalysisComparisonResponse"
+      },
       "DocumentIdentityItemIn": {
         "properties": {
           "document_id": {
@@ -5016,6 +5267,85 @@
           "document_id"
         ],
         "title": "DocumentIdentityItemIn"
+      },
+      "DocumentVersionResponse": {
+        "properties": {
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "identity_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identity Key"
+          },
+          "status_keberlakuan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Keberlakuan"
+          },
+          "status_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Source"
+          },
+          "induk": {
+            "items": {
+              "$ref": "#/components/schemas/VersionRelationItem"
+            },
+            "type": "array",
+            "title": "Induk"
+          },
+          "diubah_oleh": {
+            "items": {
+              "$ref": "#/components/schemas/VersionRelationItem"
+            },
+            "type": "array",
+            "title": "Diubah Oleh"
+          },
+          "dicabut_oleh": {
+            "items": {
+              "$ref": "#/components/schemas/VersionRelationItem"
+            },
+            "type": "array",
+            "title": "Dicabut Oleh"
+          },
+          "mencabut": {
+            "items": {
+              "$ref": "#/components/schemas/VersionRelationItem"
+            },
+            "type": "array",
+            "title": "Mencabut"
+          },
+          "catatan": {
+            "type": "string",
+            "title": "Catatan"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "catatan"
+        ],
+        "title": "DocumentVersionResponse"
       },
       "DuplicateCheckResponse": {
         "properties": {
@@ -5159,6 +5489,17 @@
             ],
             "title": "Tanggal Terbit"
           },
+          "regulation_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Year"
+          },
           "bidang": {
             "anyOf": [
               {
@@ -5243,6 +5584,42 @@
               }
             ],
             "title": "Page Count"
+          },
+          "effective_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Date"
+          },
+          "lampiran_dari": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lampiran Dari"
+          },
+          "label_lampiran": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Lampiran"
           },
           "error": {
             "anyOf": [
@@ -6518,6 +6895,51 @@
         "title": "KlasifikasiAkses",
         "description": "Klasifikasi akses dokumen:\n- publik: dokumen regulasi terbuka / umum\n- non_publik: dokumen internal / draft yang tunduk pada NDA"
       },
+      "ModeAnalysisDetail": {
+        "properties": {
+          "dibuat": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dibuat"
+          },
+          "basi": {
+            "type": "boolean",
+            "title": "Basi",
+            "default": false
+          },
+          "ml_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ml Version"
+          },
+          "hasil": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hasil"
+          }
+        },
+        "type": "object",
+        "title": "ModeAnalysisDetail"
+      },
       "NamingComponentItem": {
         "properties": {
           "key": {
@@ -6740,6 +7162,25 @@
         "title": "NamingSampleInput",
         "description": "Sampel metadata kustom untuk pratinjau penamaan berkas."
       },
+      "NodeStatusItemIn": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Key"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "status"
+        ],
+        "title": "NodeStatusItemIn"
+      },
       "PeranDokumen": {
         "type": "string",
         "enum": [
@@ -6815,6 +7256,76 @@
         ],
         "title": "RejectedSelection",
         "description": "Informasi kandidat yang ditolak centangnya (misal: status sudah_ada)."
+      },
+      "RelationItemIn": {
+        "properties": {
+          "src": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Src"
+          },
+          "dst": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Dst"
+          },
+          "rel": {
+            "type": "string",
+            "title": "Rel"
+          },
+          "sebagian": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Sebagian",
+            "default": false
+          },
+          "pasal_terkait": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pasal Terkait"
+          },
+          "asal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asal"
+          },
+          "bukti": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bukti"
+          }
+        },
+        "type": "object",
+        "required": [
+          "src",
+          "dst",
+          "rel"
+        ],
+        "title": "RelationItemIn"
       },
       "ScanCreate": {
         "properties": {
@@ -7969,6 +8480,45 @@
         "title": "StatusPindai",
         "description": "Status tahapan sesi pemindaian situs web (Langkah 7)"
       },
+      "SyncRelationsIn": {
+        "properties": {
+          "relations": {
+            "items": {
+              "$ref": "#/components/schemas/RelationItemIn"
+            },
+            "type": "array",
+            "maxItems": 5000,
+            "title": "Relations"
+          },
+          "nodes": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/NodeStatusItemIn"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nodes"
+          },
+          "replace_all": {
+            "type": "boolean",
+            "title": "Replace All",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "SyncRelationsIn"
+      },
       "TujuanTarik": {
         "type": "string",
         "enum": [
@@ -8119,6 +8669,18 @@
             "type": "string",
             "title": "Status Keberlakuan"
           },
+          "status_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Source",
+            "description": "Sumber penentu status keberlakuan"
+          },
           "legal_reference_created": {
             "type": "boolean",
             "title": "Legal Reference Created",
@@ -8201,6 +8763,18 @@
             ],
             "title": "Release Date"
           },
+          "effective_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Date"
+          },
           "regulation_year": {
             "anyOf": [
               {
@@ -8254,6 +8828,40 @@
                 "type": "null"
               }
             ]
+          },
+          "is_attachment": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Attachment"
+          },
+          "parent_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Document Id"
+          },
+          "attachment_label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachment Label"
           }
         },
         "type": "object",
@@ -8298,6 +8906,100 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VersionRelationItem": {
+        "properties": {
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "relasi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relasi"
+          },
+          "sebagian": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sebagian"
+          },
+          "perubahan_ke": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Perubahan Ke"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "judul": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judul"
+          },
+          "pasal_terkait": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pasal Terkait"
+          },
+          "restricted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Restricted"
+          }
+        },
+        "type": "object",
+        "title": "VersionRelationItem"
       }
     },
     "securitySchemes": {
