@@ -552,3 +552,155 @@ def test_r14_forced_error_in_recompute_status_does_not_fail_patch_extraction(
             },
         )
         assert resp.status_code == 200
+
+
+def test_r15_relation_amend_and_nodes_dicabut_prefers_lapisan_data_dicabut(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """
+    R15: Relasi masuk MENGUBAH ke A dan nodes {A: "dicabut"}.
+    Ekspektasi: A -> dicabut, status_source=lapisan_data (aturan 3 lebih kuat daripada aturan 4).
+    """
+    doc_a = _seed_test_doc(
+        db_session,
+        test_storage,
+        title="Dokumen A R15",
+        identity_key="POJK|150|2022",
+        status_keberlakuan=StatusKeberlakuan.tidak_diketahui,
+    )
+
+    resp = client.post(
+        "/api/v1/internal/relations",
+        json={
+            "relations": [
+                {"src": "POJK|1|2025", "dst": "POJK|150|2022", "rel": "MENGUBAH", "sebagian": 0},
+            ],
+            "nodes": {"POJK|150|2022": "dicabut"},
+        },
+        headers=INTERNAL_HEADERS,
+    )
+    assert resp.status_code == 200, resp.text
+    db_session.refresh(doc_a)
+    assert doc_a.status_keberlakuan == StatusKeberlakuan.dicabut
+    assert doc_a.status_source == "lapisan_data"
+
+
+def test_r16_replace_all_without_relation_resets_status_and_records_audit(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """
+    R16: A dicabut karena relasi; kirim ulang replace_all=true tanpa relasi itu.
+    Ekspektasi: A -> tidak_diketahui, status_source=None, audit rule='relasi_dihapus'.
+    """
+    doc_a = _seed_test_doc(
+        db_session,
+        test_storage,
+        title="Dokumen A R16",
+        identity_key="POJK|160|2022",
+        status_keberlakuan=StatusKeberlakuan.tidak_diketahui,
+    )
+
+    # 1. Kirim relasi pencabutan awal
+    resp1 = client.post(
+        "/api/v1/internal/relations",
+        json={
+            "relations": [
+                {"src": "POJK|2|2026", "dst": "POJK|160|2022", "rel": "MENCABUT", "sebagian": 0},
+            ],
+        },
+        headers=INTERNAL_HEADERS,
+    )
+    assert resp1.status_code == 200
+    db_session.refresh(doc_a)
+    assert doc_a.status_keberlakuan == StatusKeberlakuan.dicabut
+    assert doc_a.status_source == "relasi"
+
+    # 2. Kirim ulang dengan replace_all=True tanpa relasi itu
+    resp2 = client.post(
+        "/api/v1/internal/relations",
+        json={
+            "relations": [],
+            "replace_all": True,
+        },
+        headers=INTERNAL_HEADERS,
+    )
+    assert resp2.status_code == 200
+    db_session.refresh(doc_a)
+    assert doc_a.status_keberlakuan == StatusKeberlakuan.tidak_diketahui
+    assert doc_a.status_source is None
+
+    # Verifikasi jejak audit relasi_dihapus
+    audit = (
+        db_session.query(AuditLog)
+        .filter(
+            AuditLog.action == STATUS_FROM_RELATION,
+            AuditLog.target_resource == f"document:{doc_a.id}",
+        )
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    assert audit is not None
+    assert audit.detail.get("rule") == "relasi_dihapus"
+    assert audit.detail.get("after") == "tidak_diketahui"
+
+
+def test_r17_lapisan_data_status_not_reset_on_patch_extraction(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """
+    R17: A status_source=lapisan_data (berlaku); PATCH extraction memicu recompute tanpa relasi.
+    Ekspektasi: A tetap berlaku dengan status_source=lapisan_data.
+    """
+    doc_a = _seed_test_doc(
+        db_session,
+        test_storage,
+        title="Dokumen A R17",
+        identity_key="POJK|170|2022",
+        status_keberlakuan=StatusKeberlakuan.berlaku,
+        status_source="lapisan_data",
+    )
+
+    resp = client.patch(
+        f"/api/v1/internal/documents/{doc_a.id}/extraction",
+        headers=INTERNAL_HEADERS,
+        json={
+            "jenis_peraturan": "POJK",
+            "nomor_peraturan": "170",
+            "tahun": 2022,
+        },
+    )
+    assert resp.status_code == 200
+    db_session.refresh(doc_a)
+    assert doc_a.status_keberlakuan == StatusKeberlakuan.berlaku
+    assert doc_a.status_source == "lapisan_data"
+
+
+def test_r18_manual_status_preserved_on_replace_all_empty(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """
+    R18: A manual dicabut; replace_all=true kosong.
+    Ekspektasi: A tetap dicabut dan status_source tetap manual.
+    """
+    doc_a = _seed_test_doc(
+        db_session,
+        test_storage,
+        title="Dokumen A R18",
+        identity_key="POJK|180|2022",
+        status_keberlakuan=StatusKeberlakuan.dicabut,
+        status_source="manual",
+    )
+
+    resp = client.post(
+        "/api/v1/internal/relations",
+        json={
+            "relations": [],
+            "replace_all": True,
+        },
+        headers=INTERNAL_HEADERS,
+    )
+    assert resp.status_code == 200
+    db_session.refresh(doc_a)
+    assert doc_a.status_keberlakuan == StatusKeberlakuan.dicabut
+    assert doc_a.status_source == "manual"
+

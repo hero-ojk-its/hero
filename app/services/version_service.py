@@ -72,12 +72,14 @@ def recompute_status(
     commit: bool = True,
 ) -> int:
     """
-    Menghitung ulang status_keberlakuan dokumen berdasarkan aturan relasi hukum:
-    1. Bila status_source == 'manual' -> jangan diubah.
-    2. Bila ada relasi masuk 'mencabut' dengan partial=False -> dicabut (status_source='relasi').
-    3. Selain itu, bila ada relasi masuk 'mengubah', atau 'mencabut' dengan partial=True -> diubah (status_source='relasi').
-    4. Selain itu, bila lapisan data mengirim status node untuk kunci ini -> pakai status itu (status_source='lapisan_data').
-    5. Selain itu -> biarkan.
+    Menghitung ulang status_keberlakuan dokumen berdasarkan aturan relasi hukum (Langkah 18b):
+    1. status_source == "manual" -> jangan diubah.
+    2. Ada relasi masuk mencabut dengan partial=false -> dicabut (relasi).
+    3. Lapisan data mengirim status node dicabut untuk kunci ini -> dicabut (lapisan_data).
+    4. Ada relasi masuk mengubah, atau mencabut dengan partial=true -> diubah (relasi).
+    5. Lapisan data mengirim status node lain (berlaku / diubah) -> pakai status itu (lapisan_data).
+    6. Tidak ada aturan yang berlaku, tetapi status_source == "relasi" -> kembalikan ke tidak_diketahui, status_source = None, rule: "relasi_dihapus".
+    7. Selain itu -> biarkan.
     """
     if documents is None:
         if target_keys:
@@ -119,23 +121,35 @@ def recompute_status(
             for r in in_rels
         )
 
+        node_st = node_status_map.get(doc.identity_key) if node_status_map else None
+
         if has_full_repeal:
-            # 2. Dicabut penuh
+            # 2. Ada relasi masuk mencabut dengan partial=false -> dicabut (relasi)
             target_status = StatusKeberlakuan.dicabut
             target_source = "relasi"
             rule_matched = "mencabut_penuh"
+        elif node_st == StatusKeberlakuan.dicabut:
+            # 3. Lapisan data mengirim status node dicabut untuk kunci ini -> dicabut (lapisan_data)
+            target_status = StatusKeberlakuan.dicabut
+            target_source = "lapisan_data"
+            rule_matched = "lapisan_data"
         elif has_amendment:
-            # 3. Diubah atau dicabut sebagian
+            # 4. Ada relasi masuk mengubah, atau mencabut dengan partial=true -> diubah (relasi)
             target_status = StatusKeberlakuan.diubah
             target_source = "relasi"
             rule_matched = "mengubah_atau_mencabut_sebagian"
-        elif node_status_map and doc.identity_key in node_status_map:
-            # 4. Status dari lapisan data
-            target_status = node_status_map[doc.identity_key]
+        elif node_st in (StatusKeberlakuan.berlaku, StatusKeberlakuan.diubah):
+            # 5. Lapisan data mengirim status node lain (berlaku / diubah) -> pakai status itu (lapisan_data)
+            target_status = node_st
             target_source = "lapisan_data"
             rule_matched = "lapisan_data"
+        elif doc.status_source == "relasi":
+            # 6. Tidak ada aturan yang berlaku, tetapi status_source == "relasi" -> kembalikan ke tidak_diketahui, status_source = None
+            target_status = StatusKeberlakuan.tidak_diketahui
+            target_source = None
+            rule_matched = "relasi_dihapus"
         else:
-            # 5. Biarkan
+            # 7. Selain itu -> biarkan
             continue
 
         before_status = doc.status_keberlakuan
@@ -261,6 +275,19 @@ def sync_relations(
                 db.delete(rel)
                 deleted += 1
 
+        docs_with_rel_source = (
+            db.query(Document.identity_key)
+            .filter(
+                Document.status_source == "relasi",
+                Document.is_active == True,
+                Document.identity_key.isnot(None),
+            )
+            .all()
+        )
+        for (rk,) in docs_with_rel_source:
+            if rk:
+                touched_keys.add(rk)
+
     db.flush()
 
     # 3. Proses node status dari lapisan data
@@ -271,12 +298,26 @@ def sync_relations(
             StatusKeberlakuan.diubah.value: StatusKeberlakuan.diubah,
             StatusKeberlakuan.dicabut.value: StatusKeberlakuan.dicabut,
         }
-        for n in nodes_data:
-            k = (n.get("key") or "").strip()
-            st = (n.get("status") or "").strip().lower()
-            if k and st in valid_statuses:
-                node_status_map[k] = valid_statuses[st]
-                touched_keys.add(k)
+        if isinstance(nodes_data, dict):
+            for k, st_raw in nodes_data.items():
+                k_clean = str(k).strip()
+                st = str(st_raw).strip().lower()
+                if k_clean and st in valid_statuses:
+                    node_status_map[k_clean] = valid_statuses[st]
+                    touched_keys.add(k_clean)
+        elif isinstance(nodes_data, list):
+            for n in nodes_data:
+                if isinstance(n, dict):
+                    k = (n.get("key") or n.get("identity_key") or "").strip()
+                    st = (n.get("status") or "").strip().lower()
+                elif hasattr(n, "key"):
+                    k = (n.key or "").strip()
+                    st = (n.status or "").strip().lower()
+                else:
+                    continue
+                if k and st in valid_statuses:
+                    node_status_map[k] = valid_statuses[st]
+                    touched_keys.add(k)
 
     # 4. Hitung ulang status untuk semua dokumen aktif yang disentuh
     docs_to_recompute = (

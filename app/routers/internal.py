@@ -105,25 +105,28 @@ class BatchIdentityIn(BaseModel):
 
 class RelationItemIn(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    src: str = Field(..., max_length=120)
-    dst: str = Field(..., max_length=120)
-    rel: str
-    sebagian: Union[bool, int] = False
-    pasal_terkait: Optional[str] = None
-    asal: Optional[str] = None
-    bukti: Optional[str] = None
+    src: str = Field(..., max_length=120, validation_alias=AliasChoices("src", "source_key"))
+    dst: str = Field(..., max_length=120, validation_alias=AliasChoices("dst", "target_key"))
+    rel: str = Field(..., validation_alias=AliasChoices("rel", "relation"))
+    sebagian: Union[bool, int] = Field(default=False, validation_alias=AliasChoices("sebagian", "partial"))
+    pasal_terkait: Optional[str] = Field(default=None, validation_alias=AliasChoices("pasal_terkait", "articles_text"))
+    asal: Optional[str] = Field(default=None, validation_alias=AliasChoices("asal", "origin"))
+    bukti: Optional[str] = Field(default=None, validation_alias=AliasChoices("bukti", "evidence"))
 
 
 class NodeStatusItemIn(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    key: str = Field(..., max_length=120)
+    key: str = Field(..., max_length=120, validation_alias=AliasChoices("key", "identity_key"))
     status: str
 
 
 class SyncRelationsIn(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     relations: List[RelationItemIn] = Field(default_factory=list, max_length=5000)
-    nodes: Optional[List[NodeStatusItemIn]] = Field(default=None, max_length=5000)
+    nodes: Optional[Union[Dict[str, str], List[NodeStatusItemIn]]] = Field(
+        default=None,
+        validation_alias=AliasChoices("nodes", "node_status"),
+    )
     replace_all: bool = False
 
 
@@ -1019,7 +1022,12 @@ def sync_document_relations(
     Maksimal 5000 relasi dan 5000 node per permintaan.
     """
     rel_dicts = [r.model_dump() for r in payload.relations]
-    node_dicts = [n.model_dump() for n in payload.nodes] if payload.nodes else None
+    if payload.nodes is None:
+        node_dicts = None
+    elif isinstance(payload.nodes, dict):
+        node_dicts = payload.nodes
+    else:
+        node_dicts = [n.model_dump() if hasattr(n, "model_dump") else n for n in payload.nodes]
 
     result = sync_relations(
         db=db,
