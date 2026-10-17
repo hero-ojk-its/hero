@@ -84,19 +84,20 @@ def check_identity_duplicate(
     - Audit log DUPLICATE_IDENTITY_DETECTED dicatat.
     - Mengembalikan ringkasan DuplicateResult atau None jika tidak ada penonaktifan.
     """
-    if not doc.identity_key or not doc.is_active:
+    if not doc.identity_key or not doc.is_active or getattr(doc, "is_attachment", False):
         return None
 
     role_val = doc.document_role.value if hasattr(doc.document_role, "value") else str(doc.document_role)
     if role_val != PeranDokumen.corpus_eksisting.value:
         return None
 
-    # Cari pasangan aktif dengan identity_key yang sama
+    # Cari pasangan aktif dengan identity_key yang sama (hanya sesama non-lampiran)
     peers = (
         db.query(Document)
         .filter(
             Document.identity_key == doc.identity_key,
             Document.id != doc.id,
+            Document.is_attachment == False,  # noqa: E712
             Document.document_role == PeranDokumen.corpus_eksisting,
             Document.is_active == True,  # noqa: E712
             Document.processing_status.in_([

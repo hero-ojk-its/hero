@@ -67,6 +67,7 @@ def setup_test_database():
 def bind_test_session_local(monkeypatch):
     """Pastikan SessionLocal yang dibuat oleh background task/service selalu memakai test database."""
     monkeypatch.setattr("app.database.SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr("app.main.SessionLocal", TestingSessionLocal)
     monkeypatch.setattr("app.services.source_runner.SessionLocal", TestingSessionLocal)
     monkeypatch.setattr("app.services.scan_service.SessionLocal", TestingSessionLocal)
 

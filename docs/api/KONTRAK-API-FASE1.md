@@ -28,6 +28,7 @@
 7. [Alur 6: Eksplorasi Knowledge Base & Pencarian Regulasi](#7-alur-6-eksplorasi-knowledge-base--pencarian-regulasi)
 8. [Alur 7: Detail Dokumen, Pembaca Teks & Penampil PDF](#8-alur-7-detail-dokumen-pembaca-teks--penampil-pdf)
    - [8.4 Riwayat Versi & Relasi Regulasi](#84-riwayat-versi--relasi-regulasi)
+   - [8.5 Penautan Lampiran & Tanggal Berlaku Regulasi](#85-penautan-lampiran--tanggal-berlaku-regulasi)
 9. [Alur 8: Kurasi & Koreksi Metadata serta Antrean Penanganan Gagal](#9-alur-8-kurasi--koreksi-metadata-serta-antrean-penanganan-gagal)
 10. [Alur 9: Dashboard Ringkasan Eksekutif](#10-alur-9-dashboard-ringkasan-eksekutif)
 11. [Gerbang Analisa (`/api/v1/ml/*`)](#11-gerbang-analisa-apiv1ml)
@@ -702,8 +703,12 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "deactivated_at": null,
       "deactivated_reason": null,
       "identity_key": null,
+      "effective_date": "2026-03-15",
       "page_count": null,
       "duplicate_of_id": null,
+      "is_attachment": false,
+      "parent_document_id": null,
+      "attachment_label": null,
       "pdf_url": "/api/v1/documents/1/pdf",
       "restricted": false,
       "rank": null,
@@ -730,6 +735,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
     "sort": "release_date_desc",
     "include_inactive": false,
     "duplikat": null,
+    "lampiran": null,
     "skip": 0,
     "limit": 10
   }
@@ -773,8 +779,12 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "deactivated_at": null,
       "deactivated_reason": null,
       "identity_key": null,
+      "effective_date": "2026-03-15",
       "page_count": null,
       "duplicate_of_id": null,
+      "is_attachment": false,
+      "parent_document_id": null,
+      "attachment_label": null,
       "pdf_url": "/api/v1/documents/1/pdf",
       "restricted": false,
       "rank": 0.4,
@@ -801,6 +811,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
     "sort": "relevance",
     "include_inactive": false,
     "duplikat": null,
+    "lampiran": null,
     "skip": 0,
     "limit": 20
   }
@@ -869,8 +880,15 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
   "deactivated_at": null,
   "deactivated_reason": null,
   "identity_key": null,
+  "effective_date": "2026-03-15",
   "page_count": null,
   "duplicate_of_id": null,
+  "is_attachment": false,
+  "parent_document_id": null,
+  "parent_identity_key": null,
+  "attachment_label": null,
+  "lampiran": [],
+  "induk": null,
   "articles": [
     {
       "id": 1,
@@ -978,13 +996,56 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
   - `mencabut`: Seluruh regulasi terdahulu yang dicabut oleh dokumen ini.
   - `perubahan_ke`: Urutan perubahan regulasi secara kronologis (`1` untuk perubahan pertama, `2` untuk perubahan kedua, dst).
 
+### 8.5 Penautan Lampiran & Tanggal Berlaku Regulasi
+
+#### A. Tanggal Mulai Berlaku (`effective_date`)
+- **Format:** `YYYY-MM-DD` (ISO Date) atau `null`.
+- **Aturan Status Otomatis (Aturan 5a):** Jika suatu dokumen tidak memiliki relasi pencabutan/pengubahan aktif, berstatus sumber `relasi`, `tanggal_berlaku`, atau belum ditentukan (`null`), dan `effective_date <= hari ini`, maka sistem secara otomatis menetapkan `status_keberlakuan = "berlaku"` dengan `status_source = "tanggal_berlaku"`.
+- Dokumen dengan status manual (`status_source = "manual"`) atau berasal dari lapisan data (`status_source = "lapisan_data"`) tidak akan ditimpa oleh aturan ini.
+- `recompute_status` dieksekusi secara otomatis saat `effective_date` diperbarui lewat PATCH extraction worker maupun koreksi metadata pengguna.
+
+#### B. Dokumen Lampiran (`is_attachment`)
+- **Karakteristik Lampiran:**
+  - `is_attachment = true`.
+  - Tidak memiliki `identity_key` sendiri (`identity_key = null`) untuk mencegah tabrakan identitas dengan regulasi induk yang bernomor sama.
+  - Diabaikan dari pemeriksaan duplikasi regulasi (`check_identity_duplicate`).
+  - `parent_identity_key`: Kunci identitas regulasi induk (misal: `"POJK|91|2026"`). Digunakan untuk penautan otomatis saat dokumen induk masuk kemudian (`link_pending_children`).
+  - `parent_document_id`: ID dokumen regulasi induk di Knowledge Base jika sudah tertaut.
+  - `attachment_label`: Label penanda lampiran, misal `"Lampiran I"`, `"Lampiran II"`, dsb.
+- **Hierarki pada Respons `GET /api/v1/documents/{id}`:**
+  - **Dokumen Induk:** Menyertakan array `lampiran`:
+    ```json
+    "lampiran": [
+      {
+        "document_id": 88,
+        "title": "LAMPIRAN I PERATURAN OTORITAS JASA KEUANGAN NOMOR 91/POJK.03/2026 ...",
+        "attachment_label": "Lampiran I"
+      }
+    ]
+    ```
+  - **Dokumen Lampiran:** Menyertakan objek `induk`:
+    ```json
+    "induk": {
+      "document_id": 71,
+      "title": "Peraturan Otoritas Jasa Keuangan Nomor 91/POJK.03/2026 ...",
+      "status_keberlakuan": "berlaku"
+    }
+    ```
+    *(Bernilai `null` jika bukan lampiran, induk belum terdaftar di KB, atau induk berklasifikasi non-publik saat mode lindung aktif).*
+- **Filter Pencarian:**
+  - `GET /api/v1/documents/?lampiran=true` untuk menampilkan hanya dokumen lampiran.
+  - `GET /api/v1/documents/?lampiran=false` untuk menyembunyikan lampiran dan hanya menampilkan regulasi utama.
+
 ---
 
 ## 9. ALUR 8: KURASI & KOREKSI METADATA SERTA ANTREAN PENANGANAN GAGAL
 
 ### 9.1 Koreksi Metadata Dokumen
 - **Method & Path:** `PATCH /api/v1/documents/{document_id}/metadata`
-- **Body:** Mendukung pembaruan `title`, `regulation_number`, `regulation_type`, `release_date`, `bidang`, `category_id`, `status_keberlakuan`, `access_classification`, `document_role`.
+- **Body:** Mendukung pembaruan `title`, `regulation_number`, `regulation_type`, `release_date`, `effective_date`, `bidang`, `category_id`, `status_keberlakuan`, `access_classification`, `document_role`, `is_attachment`, `parent_document_id`, `attachment_label`.
+- **Validasi Khusus Lampiran:**
+  - `parent_document_id` harus dokumen yang ada, bukan dirinya sendiri, dan bukan merupakan dokumen lampiran lain (HTTP 422 bila melanggar).
+  - Jika `is_attachment = false`, sistem otomatis mengosongkan `parent_document_id`, `parent_identity_key`, dan `attachment_label`.
 - **Respons (200 OK):**
 <!-- AUTO:document_patch_metadata_response -->
 ```json
