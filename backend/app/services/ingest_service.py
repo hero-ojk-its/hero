@@ -358,6 +358,15 @@ class IngestService:
                         self._on_item_failed(job, item, result, options)
                     return result
 
+            # Deteksi otomatis lampiran
+            from app.services.attachment_service import detect_attachment_heuristic, link_attachment, link_pending_children
+            from app.services.identity_service import fallback_identity_key
+
+            is_att, att_label = detect_attachment_heuristic(title=doc_title, original_filename=item.filename)
+            parent_id_key = None
+            if is_att:
+                parent_id_key = fallback_identity_key(doc_reg_type, doc_reg_number, doc_regulation_year)
+
             # Buat instance Document
             doc = Document(
                 title=doc_title,
@@ -380,6 +389,9 @@ class IngestService:
                 processing_status=StatusPemrosesan.diterima,
                 category_id=options.category_id,
                 job_id=job.id,
+                is_attachment=is_att,
+                attachment_label=att_label if is_att else None,
+                parent_identity_key=parent_id_key,
             )
             self.db.add(doc)
             self.db.flush()
@@ -396,6 +408,17 @@ class IngestService:
 
             self.db.commit()
             self.db.refresh(doc)
+
+            # Penautan lampiran otomatis
+            try:
+                if doc.is_attachment:
+                    link_attachment(self.db, doc)
+                else:
+                    link_pending_children(self.db, doc)
+                self.db.commit()
+            except Exception as att_exc:
+                self.db.rollback()
+                logger.exception("Galat penautan lampiran ingest dokumen ID %s: %s", doc.id, att_exc)
 
             # 7. Eksekusi Penempatan Folder KB otomatis (Langkah 3)
             placement_extra = {

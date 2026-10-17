@@ -246,6 +246,37 @@ class Document(Base):
         nullable=True,
         comment="Sumber penentuan status_keberlakuan: manual | relasi | lapisan_data",
     )
+    effective_date = Column(
+        Date,
+        nullable=True,
+        comment="Tanggal mulai berlaku regulasi",
+    )
+    is_attachment = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+        index=True,
+        comment="Dokumen ini lampiran",
+    )
+    parent_document_id = Column(
+        Integer,
+        ForeignKey("documents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Induk lampiran",
+    )
+    parent_identity_key = Column(
+        String(120),
+        nullable=True,
+        index=True,
+        comment="Kunci induk bila dokumennya belum ada di KB",
+    )
+    attachment_label = Column(
+        String(100),
+        nullable=True,
+        comment="Label lampiran, misal: Lampiran I",
+    )
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -256,6 +287,8 @@ class Document(Base):
     corrected_by_user = relationship("User", foreign_keys=[metadata_corrected_by])
     deactivated_by_user = relationship("User", foreign_keys=[deactivated_by])
     duplicate_of = relationship("Document", remote_side="Document.id", foreign_keys=[duplicate_of_id])
+    parent_document = relationship("Document", remote_side="Document.id", foreign_keys=[parent_document_id], back_populates="attachments")
+    attachments = relationship("Document", foreign_keys=[parent_document_id], back_populates="parent_document")
     articles = relationship("Article", back_populates="document", cascade="all, delete-orphan")
     legal_references = relationship(
         "LegalReference",
