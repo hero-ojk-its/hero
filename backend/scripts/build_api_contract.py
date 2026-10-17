@@ -7,14 +7,12 @@ Semua contoh respons JSON diuji dan ditangkap langsung dari eksekusi nyata TestC
 terhadap database pengujian (hero_test).
 """
 import argparse
-import io
 import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 from unittest.mock import patch
 
 # Pastikan root proyek masuk ke sys.path
@@ -35,15 +33,12 @@ from fastapi.testclient import TestClient
 from app.config import settings
 from app.database import get_db, seed_initial_categories
 from app.main import app
-from app.models import enums
 from app.models.enums import (
     HasilTarik,
     JenisJobIngest,
     JenisKegagalan,
-    JenisRujukan,
     JenisSumber,
     KlasifikasiAkses,
-    MetodeEkstraksi,
     PeranDokumen,
     StatusJobIngest,
     StatusKandidat,
@@ -53,13 +48,8 @@ from app.models.enums import (
     StatusTindakLanjut,
     TujuanTarik,
 )
-from app.models.document import Document
-from app.models.article import Article
-from app.models.scraping_source import ScrapingSource
 from app.models.scan_session import ScanSession
 from app.models.scan_candidate import ScanCandidate
-from app.models.ingest_failure import IngestFailure
-from app.services.storage_service import get_storage_service
 from app.services.scan_service import ScanService
 from app.services.source_runner import SourceRunner
 

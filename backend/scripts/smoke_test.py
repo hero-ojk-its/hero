@@ -14,7 +14,6 @@ Penggunaan:
     python scripts/smoke_test.py [BASE_URL]
     Contoh: python scripts/smoke_test.py http://127.0.0.1:8000
 """
-import io
 import os
 from pathlib import Path
 import sys

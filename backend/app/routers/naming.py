@@ -4,7 +4,7 @@ Router: /api/v1/naming
 Endpoint pembangun dan pratinjau penamaan berkas dinamis (US-20c).
 """
 from datetime import date
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -18,12 +18,10 @@ from app.schemas.naming import (
     NamingPreviewResponse,
 )
 from app.services.naming_service import (
-    VALID_NAMING_COMPONENTS,
     COMPONENT_ORDER_UI,
     COMPONENT_LABELS,
     ALLOWED_SEPARATORS,
     DEFAULT_NAMING_FORMAT,
-    DEFAULT_NAMING_SEPARATOR,
     DEFAULT_WILDCARD,
     MAX_COMPONENTS,
     NamingInput,

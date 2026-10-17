@@ -3,7 +3,6 @@ scripts/demo_real_folder.py
 Demonstrasi nyata pendaftaran dan sinkronisasi folder lokal dengan 5 PDF peraturan perbankan OJK pada hero_db.
 """
 import json
-import os
 from pathlib import Path
 import httpx
 

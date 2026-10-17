@@ -3,8 +3,8 @@ app/schemas/naming.py
 Skema Pydantic untuk endpoint format penamaan dinamis berkas regulasi (US-20c).
 """
 from datetime import date
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Optional, List
+from pydantic import BaseModel, Field
 
 
 class NamingComponentItem(BaseModel):

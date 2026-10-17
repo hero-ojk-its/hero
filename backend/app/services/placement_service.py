@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.category import Category
 from app.models.document import Document
-from app.services.storage_service import StorageService, get_storage_service
+from app.services.storage_service import StorageService
 from app.services.category_service import CategoryService
 from app.services.naming_service import (
     NamingInput,
