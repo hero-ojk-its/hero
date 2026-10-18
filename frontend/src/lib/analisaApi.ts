@@ -11,8 +11,8 @@
  *    - GET /api/v1/documents/{document_id}: Pengecekan status ekstraksi dan ketersediaan pasal
  */
 
-import { apiFetch, API_BASE_URL, buildQueryString } from './api';
-import type { DocumentsResponse, DocumentItem } from './api';
+import { apiFetch, apiFetchBlob, API_BASE_URL, buildQueryString } from './api';
+import type { DocumentsResponse, DocumentItem, DocumentBlob } from './api';
 import { uploadManualPdf } from './ingestApi';
 import type { IngestUploadResponse } from './ingestApi';
 
@@ -130,6 +130,7 @@ export interface MlAnalisaCache {
   dibuat?: string | null;
   basi?: boolean;
   mode_tersimpan?: string;
+  run_id?: number | null;
 }
 
 export interface MlAnalisaResponse {
@@ -401,7 +402,72 @@ export async function getKnowledgeBaseDocuments(
 }
 
 // ============================================================================
-// 8. Helper Penentu Kesiapan Dokumen untuk Polling
+// 8. Ekspor Hasil Analisa Regulasi (GET /api/v1/documents/{document_id}/analisa/ekspor)
+// ============================================================================
+
+export type AnalysisExportFormat = 'docx' | 'csv' | 'json';
+
+export interface ExportDocumentAnalysisParams {
+  format?: AnalysisExportFormat;
+  mode?: 'deterministik' | 'ai';
+  run_id?: number | null;
+}
+
+/**
+ * Mengekspor hasil analisa regulasi (DOCX, CSV, JSON) langsung dari basis data backend (US-40).
+ * Endpoint: GET /api/v1/documents/{document_id}/analisa/ekspor
+ *
+ * Parameter yang didukung:
+ * - documentId: ID dokumen regulasi yang diekspor
+ * - paramsOrFormat: Opsi ekspor ({ format, mode, run_id }) atau langsung string format ('docx' | 'csv' | 'json')
+ * - mode: Mode analisa ('deterministik' | 'ai') jika parameter kedua berupa string format
+ * - runId: ID eksekusi tertentu dari riwayat analisa (opsional)
+ * - signal: AbortSignal untuk pembatalan fetch
+ *
+ * Mengembalikan DocumentBlob dengan properti .filename dan .contentType dari header response.
+ */
+export async function exportDocumentAnalysis(
+  documentId: number,
+  paramsOrFormat?: AnalysisExportFormat | ExportDocumentAnalysisParams,
+  mode?: 'deterministik' | 'ai',
+  runId?: number | null,
+  signal?: AbortSignal
+): Promise<DocumentBlob> {
+  let formatVal: AnalysisExportFormat = 'docx';
+  let modeVal: 'deterministik' | 'ai' | undefined = undefined;
+  let runIdVal: number | null | undefined = undefined;
+  let abortSignal: AbortSignal | undefined = signal;
+
+  if (typeof paramsOrFormat === 'string') {
+    formatVal = paramsOrFormat;
+    modeVal = mode;
+    runIdVal = runId;
+    abortSignal = signal;
+  } else if (paramsOrFormat && typeof paramsOrFormat === 'object') {
+    if (paramsOrFormat.format) formatVal = paramsOrFormat.format;
+    modeVal = paramsOrFormat.mode;
+    runIdVal = paramsOrFormat.run_id;
+    if (mode && typeof (mode as unknown) === 'object' && 'aborted' in (mode as unknown as Record<string, unknown>)) {
+      abortSignal = mode as unknown as AbortSignal;
+    }
+  }
+
+  const queryParams: Record<string, unknown> = {
+    format: formatVal,
+  };
+  if (modeVal) {
+    queryParams.mode = modeVal;
+  }
+  if (typeof runIdVal === 'number' && runIdVal > 0) {
+    queryParams.run_id = runIdVal;
+  }
+
+  const qs = buildQueryString(queryParams);
+  return apiFetchBlob(`/api/v1/documents/${documentId}/analisa/ekspor${qs}`, { signal: abortSignal });
+}
+
+// ============================================================================
+// 9. Helper Penentu Kesiapan Dokumen untuk Polling
 // ============================================================================
 
 /**
@@ -420,4 +486,4 @@ export function isDocumentProcessingFailed(doc: DocumentStatusResponse): boolean
   return doc.processing_status === 'gagal' || doc.processing_status === 'ditolak';
 }
 
-export type { DocumentsResponse, DocumentItem };
+export type { DocumentsResponse, DocumentItem, DocumentBlob };

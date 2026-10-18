@@ -471,6 +471,148 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/documents/{document_id}/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Aktifkan atau nonaktifkan dokumen regulasi
+         * @description Mengaktifkan atau menonaktifkan dokumen regulasi secara administratif (US-30 / FR-KB-08).
+         *
+         *     Perbedaan status keberlakuan vs status aktif:
+         *     - Dicabut/Diubah (`status_keberlakuan`) adalah status HUKUM: dokumen tetap tampil di Knowledge Base dengan penanda keberlakuan.
+         *     - Nonaktif (`is_active`) adalah keputusan ADMINISTRATIF Admin KB (misalnya salah unggah, bukan dokumen regulasi, atau duplikat berbeda hash).
+         *       Dokumen nonaktif disembunyikan dari Knowledge Base dan statistik, tetapi tidak dihapus dan dapat diaktifkan kembali. Berkas fisik PDF tidak dipindah dan tidak dihapus.
+         *
+         *     Validasi & Perilaku:
+         *     - Jika `is_active == False`, `reason` wajib diisi minimal 5 karakter (divalidasi oleh skema).
+         *     - Jika `document_id` tidak ditemukan, kembalikan 404.
+         *     - Jika status saat ini sama dengan `payload.is_active` (idempoten), kembalikan 200 dengan `changed: False` tanpa entri audit baru.
+         *     - Jika berubah status:
+         *       - Menonaktifkan (`is_active=False`): isi `deactivated_at`, `deactivated_reason`, `deactivated_by` (`current_user.id` jika ada).
+         *       - Mengaktifkan (`is_active=True`): kosongkan `deactivated_at`, `deactivated_reason`, `deactivated_by`.
+         *       - Catat audit: `DEACTIVATE_DOCUMENT` atau `ACTIVATE_DOCUMENT` dengan detail `reason`, `before.is_active`, dan `after.is_active`.
+         */
+        put: operations["update_document_active_api_v1_documents__document_id__active_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/documents/{document_id}/versi": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lihat relasi dan riwayat versi dokumen (mengubah, mencabut, induk, dicabut oleh)
+         * @description Mengembalikan informasi versioning dokumen berdasarkan relasi graf hukum (Langkah 18).
+         *     - induk: peraturan yang diubah oleh dokumen ini
+         *     - diubah_oleh: peraturan yang mengubah dokumen ini (dengan urutan perubahan_ke)
+         *     - dicabut_oleh: peraturan yang mencabut dokumen ini
+         *     - mencabut: peraturan yang dicabut oleh dokumen ini
+         */
+        get: operations["get_document_version_api_v1_documents__document_id__versi_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/documents/{document_id}/analisa/banding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bandingkan hasil analisa deterministik dan AI berdampingan (US-05 #49)
+         * @description Mengembalikan hasil analisa deterministik dan hasil AI yang tersimpan secara terpisah
+         *     untuk perbandingan berdampingan (US-05).
+         *     Data hanya dibaca dari penyimpanan lokal (tanpa memanggil layanan ML).
+         */
+        get: operations["get_document_analysis_comparison_api_v1_documents__document_id__analisa_banding_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/documents/{document_id}/analisa/riwayat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Riwayat eksekusi analisa dan harmonisasi regulasi (US-10 #56)
+         * @description Mengembalikan riwayat eksekusi analisa dan harmonisasi (append-only) untuk suatu dokumen.
+         */
+        get: operations["get_document_analysis_runs_api_v1_documents__document_id__analisa_riwayat_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/documents/{document_id}/analisa/riwayat/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Detail satu riwayat eksekusi analisa beserta output mentah tersaring (US-10 #56)
+         * @description Mengembalikan detail satu eksekusi analisa beserta output mentah (diresolusi melalui result_hash bila cache),
+         *     disaring sesuai hak akses dokumen terkini, dan petunjuk cara_ulang.
+         */
+        get: operations["get_document_analysis_run_detail_api_v1_documents__document_id__analisa_riwayat__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/documents/{document_id}/analisa/ekspor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ekspor hasil analisa regulasi (DOCX, CSV, JSON) (US-40 #62)
+         * @description Mengekspor hasil analisa regulasi (summary, Key Takeaways, rujukan pasal, metadata)
+         *     ke berkas DOCX, CSV, atau JSON langsung dari data lokal (tanpa memanggil ML).
+         */
+        get: operations["export_document_analysis_api_v1_documents__document_id__analisa_ekspor_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/internal/articles": {
         parameters: {
             query?: never;
@@ -618,6 +760,48 @@ export interface paths {
          *     Saat done=true, sistem otomatis menjalankan perbandingan dengan basis pengetahuan.
          */
         post: operations["push_scan_candidates_endpoint_api_v1_internal_scans__scan_id__candidates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/internal/documents/identity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * [Internal] Isi-ulang identity_key dan page_count dokumen secara massal
+         * @description Endpoint isi-ulang identity_key dan page_count untuk dokumen yang sudah ada (Langkah 17).
+         *     Maksimal 500 item per permintaan. Menjalankan cek duplikat identitas per dokumen yang diperbarui.
+         */
+        patch: operations["batch_update_document_identity_api_v1_internal_documents_identity_patch"];
+        trace?: never;
+    };
+    "/api/v1/internal/relations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * [Internal] Sinkronisasi graf relasi dokumen (mengubah/mencabut) dari lapisan data
+         * @description Menerima relasi (mengubah, mencabut) dan status node dari lapisan data (Langkah 18).
+         *     Maksimal 5000 relasi dan 5000 node per permintaan.
+         */
+        post: operations["sync_document_relations_api_v1_internal_relations_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -952,6 +1136,147 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ml/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Kesiapan Layanan Analisa ML
+         * @description Mengecek status kesiapan layanan analisa (indeks vektor, korpus, mode AI).
+         */
+        get: operations["get_ml_health_api_v1_ml_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ml/dokumen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Daftar Dokumen Siap Analisa
+         * @description Dokumen backend yang siap dianalisa, disaring sesuai hak akses.
+         */
+        get: operations["get_ml_dokumen_api_v1_ml_dokumen_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ml/analisa/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Analisa Regulasi
+         * @description Ringkasan terstruktur dan poin kunci berbasis pasal.
+         */
+        get: operations["get_ml_analisa_api_v1_ml_analisa__document_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ml/analisa/{document_id}/klausul": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pencarian Klausul Relevan
+         * @description Pasal yang relevan dengan kebutuhan pengguna dalam dokumen.
+         */
+        get: operations["get_ml_analisa_klausul_api_v1_ml_analisa__document_id__klausul_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ml/harmonisasi/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Harmonisasi Draft Regulasi
+         * @description Analisa harmonisasi draft terhadap korpus dokumen regulasi.
+         *     Body opsional berisi daftar document_id pembatas korpus (null = seluruh korpus yang diizinkan).
+         */
+        post: operations["post_ml_harmonisasi_api_v1_ml_harmonisasi__document_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ml/cari": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pencarian Semantik Regulasi
+         * @description Pencarian pasal semantik/leksikal dengan penyesuaian metode default.
+         */
+        get: operations["get_ml_cari_api_v1_ml_cari_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ml/pasal-mirip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pencarian Pasal Mirip Korpus
+         * @description Pencarian pasal termirip di korpus backend untuk sepotong teks.
+         */
+        get: operations["get_ml_pasal_mirip_api_v1_ml_pasal_mirip_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -986,10 +1311,130 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/debug-routes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Debug Routes */
+        get: operations["debug_routes_debug_routes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AnalysisRunDetailResponse */
+        AnalysisRunDetailResponse: {
+            /** Run Id */
+            run_id: number;
+            /** Kind */
+            kind: string;
+            /** Dibuat */
+            dibuat?: string | null;
+            /** Oleh */
+            oleh?: string | null;
+            /** Mode Diminta */
+            mode_diminta: string;
+            /** Mode Dipakai */
+            mode_dipakai?: string | null;
+            /** Sumber */
+            sumber: string;
+            /** Segar */
+            segar: boolean;
+            /** Http Status */
+            http_status: number;
+            /** Error Code */
+            error_code?: string | null;
+            /** Ml Version */
+            ml_version?: string | null;
+            /** Params */
+            params?: {
+                [key: string]: unknown;
+            } | null;
+            /** Result Hash */
+            result_hash?: string | null;
+            /** Ringkasan Output */
+            ringkasan_output?: {
+                [key: string]: unknown;
+            } | null;
+            /** Duration Ms */
+            duration_ms?: number | null;
+            /** Fingerprint Sama Dengan Sekarang */
+            fingerprint_sama_dengan_sekarang: boolean;
+            /** Hasil */
+            hasil?: {
+                [key: string]: unknown;
+            } | null;
+            /** Cara Ulang */
+            cara_ulang: string;
+            /**
+             * Catatan
+             * @default Draft / Rekomendasi — riwayat eksekusi analisa untuk penelusuran.
+             */
+            catatan: string;
+        };
+        /** AnalysisRunItemResponse */
+        AnalysisRunItemResponse: {
+            /** Run Id */
+            run_id: number;
+            /** Kind */
+            kind: string;
+            /** Dibuat */
+            dibuat?: string | null;
+            /** Oleh */
+            oleh?: string | null;
+            /** Mode Diminta */
+            mode_diminta: string;
+            /** Mode Dipakai */
+            mode_dipakai?: string | null;
+            /** Sumber */
+            sumber: string;
+            /** Segar */
+            segar: boolean;
+            /** Http Status */
+            http_status: number;
+            /** Error Code */
+            error_code?: string | null;
+            /** Ml Version */
+            ml_version?: string | null;
+            /** Params */
+            params?: {
+                [key: string]: unknown;
+            } | null;
+            /** Result Hash */
+            result_hash?: string | null;
+            /** Ringkasan Output */
+            ringkasan_output?: {
+                [key: string]: unknown;
+            } | null;
+            /** Duration Ms */
+            duration_ms?: number | null;
+            /** Fingerprint Sama Dengan Sekarang */
+            fingerprint_sama_dengan_sekarang: boolean;
+        };
+        /** AnalysisRunsListResponse */
+        AnalysisRunsListResponse: {
+            /** Document Id */
+            document_id: number;
+            /** Total */
+            total: number;
+            /** Items */
+            items: components["schemas"]["AnalysisRunItemResponse"][];
+            /**
+             * Catatan
+             * @default Draft / Rekomendasi — riwayat eksekusi analisa untuk penelusuran.
+             */
+            catatan: string;
+        };
         /**
          * ArticleChunkIn
          * @description Schema untuk satu buah chunk pasal dari hasil ekstraksi ML pipeline.
@@ -1058,6 +1503,11 @@ export interface components {
              * @description Vektor embedding dimensi 1536 (pgvector). Kirimkan null / omit jika embedding belum tersedia.
              */
             embedding?: number[] | null;
+        };
+        /** BatchIdentityIn */
+        BatchIdentityIn: {
+            /** Items */
+            items: components["schemas"]["DocumentIdentityItemIn"][];
         };
         /** BatchRetryResponse */
         BatchRetryResponse: {
@@ -1233,6 +1683,11 @@ export interface components {
             title: string;
             /** Regulation Number */
             regulation_number?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
         };
         /**
          * CandidateResponse
@@ -1333,6 +1788,45 @@ export interface components {
             /** Document Count */
             document_count: number;
         };
+        /** DocumentAnalysisComparisonResponse */
+        DocumentAnalysisComparisonResponse: {
+            /** Document Id */
+            document_id: number;
+            deterministik?: components["schemas"]["ModeAnalysisDetail"] | null;
+            ai?: components["schemas"]["ModeAnalysisDetail"] | null;
+            /** Catatan */
+            catatan: string;
+        };
+        /** DocumentIdentityItemIn */
+        DocumentIdentityItemIn: {
+            /** Document Id */
+            document_id: number;
+            /** Identity Key */
+            identity_key?: string | null;
+            /** Page Count */
+            page_count?: number | null;
+        };
+        /** DocumentVersionResponse */
+        DocumentVersionResponse: {
+            /** Document Id */
+            document_id: number;
+            /** Identity Key */
+            identity_key?: string | null;
+            /** Status Keberlakuan */
+            status_keberlakuan?: string | null;
+            /** Status Source */
+            status_source?: string | null;
+            /** Induk */
+            induk?: components["schemas"]["VersionRelationItem"][];
+            /** Diubah Oleh */
+            diubah_oleh?: components["schemas"]["VersionRelationItem"][];
+            /** Dicabut Oleh */
+            dicabut_oleh?: components["schemas"]["VersionRelationItem"][];
+            /** Mencabut */
+            mencabut?: components["schemas"]["VersionRelationItem"][];
+            /** Catatan */
+            catatan: string;
+        };
         /** DuplicateCheckResponse */
         DuplicateCheckResponse: {
             /** Is Duplicate */
@@ -1352,6 +1846,11 @@ export interface components {
             title: string;
             /** Regulation Number */
             regulation_number?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
         };
         /** ExtractionErrorIn */
         ExtractionErrorIn: {
@@ -1370,6 +1869,8 @@ export interface components {
             jenis_peraturan?: string | null;
             /** Tanggal Terbit */
             tanggal_terbit?: string | null;
+            /** Regulation Year */
+            regulation_year?: number | null;
             /** Bidang */
             bidang?: string | null;
             /** Metode Ekstraksi */
@@ -1382,6 +1883,16 @@ export interface components {
             confidence?: {
                 [key: string]: number;
             } | null;
+            /** Identity Key */
+            identity_key?: string | null;
+            /** Page Count */
+            page_count?: number | null;
+            /** Effective Date */
+            effective_date?: string | null;
+            /** Lampiran Dari */
+            lampiran_dari?: string | null;
+            /** Label Lampiran */
+            label_lampiran?: string | null;
             error?: components["schemas"]["ExtractionErrorIn"] | null;
         };
         /** FailureBatchRetryRequest */
@@ -1801,6 +2312,22 @@ export interface components {
          * @enum {string}
          */
         KlasifikasiAkses: "publik" | "non_publik";
+        /** ModeAnalysisDetail */
+        ModeAnalysisDetail: {
+            /** Dibuat */
+            dibuat?: string | null;
+            /**
+             * Basi
+             * @default false
+             */
+            basi: boolean;
+            /** Ml Version */
+            ml_version?: string | null;
+            /** Hasil */
+            hasil?: {
+                [key: string]: unknown;
+            } | null;
+        };
         /**
          * NamingComponentItem
          * @description Satu komponen nama berkas yang tersedia di UI.
@@ -1891,6 +2418,13 @@ export interface components {
             /** Regulation Year */
             regulation_year?: number | null;
         };
+        /** NodeStatusItemIn */
+        NodeStatusItemIn: {
+            /** Key */
+            key: string;
+            /** Status */
+            status: string;
+        };
         /**
          * PeranDokumen
          * @description Peran dokumen dalam basis pengetahuan / kajian
@@ -1922,6 +2456,26 @@ export interface components {
             id: number;
             /** Reason */
             reason: string;
+        };
+        /** RelationItemIn */
+        RelationItemIn: {
+            /** Src */
+            src: string;
+            /** Dst */
+            dst: string;
+            /** Rel */
+            rel: string;
+            /**
+             * Sebagian
+             * @default false
+             */
+            sebagian: boolean | number;
+            /** Pasal Terkait */
+            pasal_terkait?: string | null;
+            /** Asal */
+            asal?: string | null;
+            /** Bukti */
+            bukti?: string | null;
         };
         /**
          * ScanCreate
@@ -2323,12 +2877,83 @@ export interface components {
          * @enum {string}
          */
         StatusPindai: "antrian" | "memindai" | "siap_dipilih" | "menarik" | "selesai" | "gagal" | "dibatalkan";
+        /** SyncRelationsIn */
+        SyncRelationsIn: {
+            /** Relations */
+            relations?: components["schemas"]["RelationItemIn"][];
+            /** Nodes */
+            nodes?: {
+                [key: string]: string;
+            } | components["schemas"]["NodeStatusItemIn"][] | null;
+            /**
+             * Replace All
+             * @default false
+             */
+            replace_all: boolean;
+        };
         /**
          * TujuanTarik
          * @description Tujuan penarikan dokumen dari sesi pemindaian
          * @enum {string}
          */
         TujuanTarik: "knowledge_base" | "unduh_folder";
+        /**
+         * UpdateDocumentActiveIn
+         * @description Payload untuk mengaktifkan atau menonaktifkan dokumen Knowledge Base secara administratif.
+         * @example {
+         *       "is_active": false,
+         *       "reason": "Salah unggah: bukan dokumen regulasi"
+         *     }
+         */
+        UpdateDocumentActiveIn: {
+            /**
+             * Is Active
+             * @description True untuk mengaktifkan dokumen, False untuk menonaktifkan dokumen dari Knowledge Base
+             */
+            is_active: boolean;
+            /**
+             * Reason
+             * @description Alasan penonaktifan dokumen. Wajib diisi minimal 5 karakter jika is_active=False.
+             * @example Salah unggah: bukan dokumen regulasi
+             */
+            reason?: string | null;
+        };
+        /**
+         * UpdateDocumentActiveResponse
+         * @description Respons setelah status aktif dokumen diperbarui.
+         */
+        UpdateDocumentActiveResponse: {
+            /**
+             * Document Id
+             * @description ID dokumen
+             */
+            document_id: number;
+            /**
+             * Is Active
+             * @description Status aktif dokumen saat ini
+             */
+            is_active: boolean;
+            /**
+             * Changed
+             * @description True jika terjadi perubahan status aktif, False jika status sudah sama
+             */
+            changed: boolean;
+            /**
+             * Deactivated At
+             * @description Waktu dokumen dinonaktifkan
+             */
+            deactivated_at?: string | null;
+            /**
+             * Deactivated Reason
+             * @description Alasan penonaktifan dokumen
+             */
+            deactivated_reason?: string | null;
+            /**
+             * Message
+             * @description Pesan ringkasan operasi
+             */
+            message: string;
+        };
         /**
          * UpdateDocumentStatusIn
          * @description Payload untuk memperbarui status keberlakuan dokumen regulasi.
@@ -2365,6 +2990,11 @@ export interface components {
             /** Status Keberlakuan */
             status_keberlakuan: string;
             /**
+             * Status Source
+             * @description Sumber penentu status keberlakuan
+             */
+            status_source?: string | null;
+            /**
              * Legal Reference Created
              * @description True jika entri LegalReference baru berhasil dibuat
              * @default false
@@ -2388,6 +3018,8 @@ export interface components {
             regulation_type?: string | null;
             /** Release Date */
             release_date?: string | null;
+            /** Effective Date */
+            effective_date?: string | null;
             /** Regulation Year */
             regulation_year?: number | null;
             /** Bidang */
@@ -2396,6 +3028,12 @@ export interface components {
             category_id?: number | null;
             access_classification?: components["schemas"]["KlasifikasiAkses"] | null;
             document_role?: components["schemas"]["PeranDokumen"] | null;
+            /** Is Attachment */
+            is_attachment?: boolean | null;
+            /** Parent Document Id */
+            parent_document_id?: number | null;
+            /** Attachment Label */
+            attachment_label?: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -2409,6 +3047,25 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** VersionRelationItem */
+        VersionRelationItem: {
+            /** Key */
+            key?: string | null;
+            /** Relasi */
+            relasi?: string | null;
+            /** Sebagian */
+            sebagian?: boolean | null;
+            /** Perubahan Ke */
+            perubahan_ke?: number | null;
+            /** Document Id */
+            document_id?: number | null;
+            /** Judul */
+            judul?: string | null;
+            /** Pasal Terkait */
+            pasal_terkait?: string | null;
+            /** Restricted */
+            restricted?: boolean | null;
         };
     };
     responses: never;
@@ -2463,6 +3120,8 @@ export interface operations {
                 user_id?: number | null;
                 /** @description Filter berdasarkan target resource (prefix match, misal: document:12) */
                 target_resource?: string | null;
+                /** @description Filter berdasarkan mode analisa (detail->>'mode_dipakai') */
+                mode?: ("deterministik" | "ai") | null;
             };
             header?: never;
             path?: never;
@@ -2964,6 +3623,12 @@ export interface operations {
                 bidang?: string | null;
                 /** @description Pengurutan hasil pencarian */
                 sort?: components["schemas"]["SearchSort"] | null;
+                /** @description Tampilkan juga dokumen nonaktif jika true (default: false) */
+                include_inactive?: boolean;
+                /** @description Filter dokumen duplikat (dokumen dengan duplicate_of_id terisi) */
+                duplikat?: boolean | null;
+                /** @description Filter dokumen lampiran (true: hanya lampiran, false: hanya non-lampiran) */
+                lampiran?: boolean | null;
                 /** @description Offset pagination */
                 skip?: number;
                 /** @description Batas dokumen per halaman (maks 100) */
@@ -3298,6 +3963,285 @@ export interface operations {
             };
         };
     };
+    update_document_active_api_v1_documents__document_id__active_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateDocumentActiveIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateDocumentActiveResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_document_version_api_v1_documents__document_id__versi_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentVersionResponse"];
+                };
+            };
+            /** @description Dokumen non-publik memerlukan autentikasi aktif */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Dokumen tidak ditemukan */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_document_analysis_comparison_api_v1_documents__document_id__analisa_banding_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentAnalysisComparisonResponse"];
+                };
+            };
+            /** @description Dokumen non-publik memerlukan autentikasi aktif */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Dokumen tidak ditemukan atau nonaktif */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_document_analysis_runs_api_v1_documents__document_id__analisa_riwayat_get: {
+        parameters: {
+            query?: {
+                /** @description Filter jenis analisa */
+                kind?: ("analisa" | "harmonisasi") | null;
+                /** @description Filter mode yang dipakai */
+                mode?: ("deterministik" | "ai") | null;
+                /** @description Offset pagination */
+                skip?: number;
+                /** @description Batas jumlah per halaman */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisRunsListResponse"];
+                };
+            };
+            /** @description Dokumen non-publik memerlukan autentikasi aktif */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Dokumen tidak ditemukan atau nonaktif */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_document_analysis_run_detail_api_v1_documents__document_id__analisa_riwayat__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: number;
+                run_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisRunDetailResponse"];
+                };
+            };
+            /** @description Dokumen non-publik memerlukan autentikasi aktif */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Dokumen tidak ditemukan, nonaktif, atau run_id tidak valid */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_document_analysis_api_v1_documents__document_id__analisa_ekspor_get: {
+        parameters: {
+            query?: {
+                /** @description Format berkas ekspor */
+                format?: "docx" | "csv" | "json";
+                /** @description Mode analisa (dipakai bila run_id kosong) */
+                mode?: "deterministik" | "ai";
+                /** @description ID eksekusi tertentu dari riwayat analisa */
+                run_id?: number | null;
+            };
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Berkas ekspor hasil analisa dalam format DOCX, CSV, atau JSON. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": unknown;
+                    "text/csv": unknown;
+                };
+            };
+            /** @description Dokumen non-publik memerlukan autentikasi aktif */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Dokumen tidak ditemukan, belum dianalisa, atau run_id tidak valid */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     bulk_insert_articles_api_v1_internal_articles_post: {
         parameters: {
             query?: never;
@@ -3521,6 +4465,76 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["InternalCandidatesBatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    batch_update_document_identity_api_v1_internal_documents_identity_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Internal-API-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentIdentityItemIn"][] | components["schemas"]["BatchIdentityIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_document_relations_api_v1_internal_relations_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Internal-API-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncRelationsIn"];
             };
         };
         responses: {
@@ -4249,6 +5263,232 @@ export interface operations {
             };
         };
     };
+    get_ml_health_api_v1_ml_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_ml_dokumen_api_v1_ml_dokumen_get: {
+        parameters: {
+            query?: {
+                peran?: ("corpus_eksisting" | "draft_kajian") | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ml_analisa_api_v1_ml_analisa__document_id__get: {
+        parameters: {
+            query?: {
+                mode?: ("deterministik" | "ai") | null;
+                /** @description Paksa hitung ulang tanpa cache */
+                segar?: boolean;
+            };
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ml_analisa_klausul_api_v1_ml_analisa__document_id__klausul_get: {
+        parameters: {
+            query: {
+                kebutuhan: string;
+                k?: number;
+            };
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ml_harmonisasi_api_v1_ml_harmonisasi__document_id__post: {
+        parameters: {
+            query?: {
+                /** @description Paksa hitung ulang tanpa cache */
+                segar?: boolean;
+            };
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": number[] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ml_cari_api_v1_ml_cari_get: {
+        parameters: {
+            query: {
+                q: string;
+                metode?: ("lexical" | "lsa" | "semantic" | "hybrid" | "pgvector") | null;
+                k?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ml_pasal_mirip_api_v1_ml_pasal_mirip_get: {
+        parameters: {
+            query: {
+                teks: string;
+                k?: number;
+                kecuali_dokumen?: number | null;
+                hanya_publik?: boolean | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     root__get: {
         parameters: {
             query?: never;
@@ -4270,6 +5510,26 @@ export interface operations {
         };
     };
     health_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    debug_routes_debug_routes_get: {
         parameters: {
             query?: never;
             header?: never;

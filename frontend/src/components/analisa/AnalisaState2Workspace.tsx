@@ -21,9 +21,20 @@ import {
   Clock
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { getMlAnalisa, getDocumentStatus, checkMlHealth, isDocumentReadyForAnalysis } from '../../lib/analisaApi';
+import {
+  getMlAnalisa,
+  getDocumentStatus,
+  checkMlHealth,
+  isDocumentReadyForAnalysis,
+  exportDocumentAnalysis
+} from '../../lib/analisaApi';
 import { ApiError, API_BASE_URL, apiFetchBlob } from '../../lib/api';
-import type { MlAnalisaResponse, DocumentArticleSummary, DocumentStatusResponse } from '../../lib/analisaApi';
+import type {
+  MlAnalisaResponse,
+  DocumentArticleSummary,
+  DocumentStatusResponse,
+  AnalysisExportFormat
+} from '../../lib/analisaApi';
 
 // Garuda Pancasila SVG Emblem untuk Naskah Resmi OJK
 function GarudaEmblem() {
@@ -71,6 +82,12 @@ export default function AnalisaState2Workspace({
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // State Ekspor Analisis (US-40: DOCX, CSV, JSON)
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState<boolean>(false);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [exportingFormat, setExportingFormat] = useState<AnalysisExportFormat | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+
   // State Pemuatan Berkas PDF Asli (Blob Object URL)
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState<boolean>(false);
@@ -87,6 +104,18 @@ export default function AnalisaState2Workspace({
   const retryStartTimeRef = useRef<number | null>(null);
   const isMountedRef = useRef<boolean>(true);
   const loadAnalysisRef = useRef<(forceFresh?: boolean, isRetryAttempt?: boolean) => Promise<void>>(null);
+
+  // Tutup dropdown menu ekspor saat klik di luar
+  useEffect(() => {
+    if (!isExportMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!(e.target as Element).closest('.export-dropdown-container')) {
+        setIsExportMenuOpen(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [isExportMenuOpen]);
 
   // State Workspace Panel 1: Struktur Dokumen
   const [expandedBabs, setExpandedBabs] = useState<Record<string, boolean>>({
@@ -509,43 +538,97 @@ export default function AnalisaState2Workspace({
     });
   };
 
-  // Ekspor Ringkasan Analisis ke File Teks
-  const handleDownloadSummary = () => {
-    if (!data) return;
-    const content = `========================================================\n` +
-      `HERO - RINGKASAN ANALISA REGULASI OTOMATIS OJK\n` +
-      `STATUS: DRAFT / REKOMENDASI — MEMERLUKAN REVIEW\n` +
-      `========================================================\n` +
-      `PERHATIAN: Seluruh ringkasan, ekstraksi norma, dan poin analisis\n` +
-      `pada dokumen ini berstatus DRAFT / REKOMENDASI dan wajib\n` +
-      `diverifikasi serta ditelaah oleh analis atau pejabat berwenang\n` +
-      `sebelum dijadikan rujukan resmi.\n` +
-      `========================================================\n\n` +
-      `Dokumen: ${displayJudulRegulasi}\n` +
-      `Tanggal Terbit: ${displayTanggalTerbit}\n` +
-      `Tahun: ${data.identitas?.tahun || data.identitas?.year || '-'}\n` +
-      `Mode Diminta: ${mode}\n` +
-      `Mode Dipakai: ${data.mode_dipakai || mode}\n\n` +
-      `--- RINGKASAN EKSEKUTIF ---\n` +
-      `${data.ringkasan_teks || ''}\n\n` +
-      `--- POIN KUNCI & KEWAJIBAN ---\n` +
-      (data.poin_utama || []).map((p, i) => `${i + 1}. [${p.kategori}] ${p.teks} (${p.ref || p.pasal || ''})`).join('\n') +
-      `\n\n--- DASAR HUKUM ---\n` +
-      (data.dasar_hukum || []).map((dh, i) => `${i + 1}. ${dh}`).join('\n') +
-      `\n\n--- METRIK REGULASI ---\n` +
-      `Jumlah Bab: ${displayJumlahBab}\n` +
-      `Jumlah Pasal: ${displayJumlahPasal}\n` +
-      `Jumlah Kewajiban: ${displayJumlahKewajiban}\n` +
-      `Jumlah Larangan: ${displayJumlahLarangan}\n\n` +
-      `Catatan:\n${data.catatan || 'Keluaran sistem bukan keputusan final. Wajib diverifikasi oleh pejabat/analis berwenang.'}\n`;
+  // Ekspor Hasil Analisis (DOCX, CSV, JSON) via Backend US-40
+  const handleExportFormat = async (format: AnalysisExportFormat) => {
+    if (isExporting || !data || loading) return;
 
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `Ringkasan_Analisis_Dokumen_${documentId}.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
+    setIsExportMenuOpen(false);
+    setIsExporting(true);
+    setExportingFormat(format);
+    setExportError(null);
+
+    try {
+      const actualMode: 'deterministik' | 'ai' =
+        data.mode_dipakai === 'ai' || data.mode_dipakai === 'deterministik'
+          ? data.mode_dipakai
+          : mode;
+
+      // Hanya teruskan run_id jika sah tersedia dari data eksekusi/cache saat ini
+      const activeRunId =
+        typeof data.cache?.run_id === 'number' && data.cache.run_id > 0
+          ? data.cache.run_id
+          : undefined;
+
+      const blob = await exportDocumentAnalysis(documentId, {
+        format,
+        mode: actualMode,
+        run_id: activeRunId,
+      });
+
+      // Gunakan nama file dari header Content-Disposition (blob.filename), fallback jika kosong
+      let resolvedFilename = blob.filename;
+      if (!resolvedFilename || resolvedFilename.trim() === '') {
+        const jenisClean = data.identitas?.jenis
+          ? String(data.identitas.jenis).replace(/[/\\:*?"<>|.]/g, '_').trim()
+          : '';
+        const nomorClean = data.identitas?.nomor || data.identitas?.number
+          ? String(data.identitas?.nomor || data.identitas?.number).replace(/[/\\:*?"<>|.]/g, '_').trim()
+          : '';
+        const tahunClean = data.identitas?.tahun || data.identitas?.year
+          ? String(data.identitas?.tahun || data.identitas?.year).trim()
+          : '';
+
+        if (jenisClean && nomorClean && tahunClean) {
+          resolvedFilename = `analisa_${jenisClean}_${nomorClean}_${tahunClean}_${actualMode}.${format}`;
+        } else {
+          resolvedFilename = `analisa_dokumen_${documentId}_${actualMode}.${format}`;
+        }
+      }
+
+      // Buat object URL dari blob, picu download via anchor, lalu revoke secara aman
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = resolvedFilename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+    } catch (err: unknown) {
+      let userMessage = 'Terjadi kesalahan saat mengunduh berkas ekspor.';
+      if (err instanceof ApiError) {
+        if (err.status === 403) {
+          userMessage = 'Akses ditolak: Dokumen non-publik memerlukan sesi login aktif.';
+        } else if (err.status === 404) {
+          const detailObj =
+            err.detail && typeof err.detail === 'object'
+              ? (err.detail as Record<string, unknown>)
+              : null;
+          if (detailObj?.code === 'belum_dianalisa') {
+            userMessage =
+              'Dokumen belum pernah dianalisa pada mode ini. Silakan jalankan analisa terlebih dahulu.';
+          } else if (detailObj?.code === 'run_id_tidak_valid') {
+            userMessage = 'ID riwayat eksekusi analisa tidak valid atau tidak ditemukan.';
+          } else if (detailObj?.code === 'dokumen_nonaktif') {
+            userMessage = 'Dokumen tidak aktif / telah dinonaktifkan.';
+          } else {
+            userMessage = err.message || 'Hasil analisa tidak ditemukan di basis data backend.';
+          }
+        } else if (err.status === 422) {
+          userMessage = `Parameter ekspor tidak valid: ${err.message}`;
+        } else if (err.status >= 500) {
+          userMessage = `Terjadi gangguan server backend (HTTP ${err.status}). Silakan coba beberapa saat lagi.`;
+        } else {
+          userMessage = err.message || userMessage;
+        }
+      } else if (err instanceof Error) {
+        userMessage = err.message;
+      }
+      setExportError(userMessage);
+    } finally {
+      setIsExporting(false);
+      setExportingFormat(null);
+    }
   };
 
   // Zoom Handler
@@ -1465,11 +1548,11 @@ export default function AnalisaState2Workspace({
                       </div>
                       <div className="p-2.5 bg-gray-50 border border-gray-100 rounded-lg">
                         <span className="text-lg font-bold text-red-700 block">{displayJumlahKewajiban}</span>
-                        <span className="text-[10px] text-gray-500 uppercase">Kewajiban</span>
+                        <span className="text-[10px] text-gray-500 uppercase leading-tight block">Kewajiban di Poin Utama</span>
                       </div>
                       <div className="p-2.5 bg-gray-50 border border-gray-100 rounded-lg">
                         <span className="text-lg font-bold text-amber-700 block">{displayJumlahLarangan}</span>
-                        <span className="text-[10px] text-gray-500 uppercase">Larangan</span>
+                        <span className="text-[10px] text-gray-500 uppercase leading-tight block">Larangan di Poin Utama</span>
                       </div>
                     </div>
                   </div>
@@ -1553,19 +1636,90 @@ export default function AnalisaState2Workspace({
             Tinjau Kembali
           </button>
 
-          <button
-            type="button"
-            disabled={!data || loading}
-            onClick={handleDownloadSummary}
-            className={`inline-flex items-center gap-1.5 px-4 py-2 border text-xs font-semibold rounded-lg transition shadow-2xs cursor-pointer ${
-              data && !loading
-                ? 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'
-                : 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
-            }`}
-          >
-            <Download size={13} />
-            <span>Unduh Ringkasan Analisis</span>
-          </button>
+          {/* Kontrol Ekspor Analisis (DOCX, CSV, JSON) */}
+          <div className="relative export-dropdown-container">
+            <button
+              type="button"
+              disabled={!data || loading || isExporting}
+              onClick={() => setIsExportMenuOpen(prev => !prev)}
+              className={`inline-flex items-center gap-1.5 px-4 py-2 border text-xs font-semibold rounded-lg transition shadow-2xs cursor-pointer ${
+                data && !loading && !isExporting
+                  ? 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'
+                  : 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+              }`}
+              title="Ekspor hasil analisis regulasi ke format Word (.docx), Excel / CSV (.csv), atau JSON (.json)"
+            >
+              {isExporting ? (
+                <Loader2 size={13} className="animate-spin text-red-700" />
+              ) : (
+                <Download size={13} />
+              )}
+              <span>{isExporting ? `Mengekspor ${exportingFormat ? `(${exportingFormat.toUpperCase()})...` : '...'}` : 'Ekspor Analisis'}</span>
+              <ChevronDown size={12} className={`transition-transform duration-150 ${isExportMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isExportMenuOpen && (
+              <div className="absolute right-0 bottom-full mb-2 w-72 bg-white rounded-xl shadow-lg border border-gray-200 py-1.5 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150">
+                <div className="px-3 py-1.5 border-b border-gray-100">
+                  <p className="text-[11px] font-bold text-gray-900 uppercase tracking-wider">Format Ekspor Analisis</p>
+                  <p className="text-[10px] text-gray-500">Pilih format berkas resmi yang dibutuhkan</p>
+                </div>
+                <div className="p-1 space-y-0.5">
+                  <button
+                    type="button"
+                    disabled={isExporting}
+                    onClick={() => handleExportFormat('docx')}
+                    className="w-full flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-left hover:bg-blue-50/70 transition group cursor-pointer disabled:opacity-50"
+                  >
+                    <div className="p-1.5 rounded-lg bg-blue-50 text-blue-700 shrink-0 mt-0.5">
+                      <FileText size={15} />
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-gray-800 group-hover:text-blue-900 flex items-center gap-1.5">
+                        <span>Word (.docx)</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 bg-blue-100 text-blue-800 rounded">Rekomendasi</span>
+                      </div>
+                      <p className="text-[10px] text-gray-500 mt-0.5 leading-snug">Naskah resmi, intisari eksekutif, tabel poin utama & pasal rujukan</p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isExporting}
+                    onClick={() => handleExportFormat('csv')}
+                    className="w-full flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-left hover:bg-emerald-50/70 transition group cursor-pointer disabled:opacity-50"
+                  >
+                    <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 shrink-0 mt-0.5">
+                      <FileCode size={15} />
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-gray-800 group-hover:text-emerald-900">
+                        Excel / CSV (.csv)
+                      </div>
+                      <p className="text-[10px] text-gray-500 mt-0.5 leading-snug">Tabel poin utama, norma & kepatuhan dengan UTF-8 BOM</p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isExporting}
+                    onClick={() => handleExportFormat('json')}
+                    className="w-full flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-left hover:bg-purple-50/70 transition group cursor-pointer disabled:opacity-50"
+                  >
+                    <div className="p-1.5 rounded-lg bg-purple-50 text-purple-700 shrink-0 mt-0.5">
+                      <FileCode size={15} />
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-gray-800 group-hover:text-purple-900">
+                        JSON (.json)
+                      </div>
+                      <p className="text-[10px] text-gray-500 mt-0.5 leading-snug">Struktur data mentah lengkap untuk arsip & integrasi sistem</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           <button
             type="button"
@@ -1583,6 +1737,25 @@ export default function AnalisaState2Workspace({
           </button>
         </div>
       </div>
+
+      {/* Toast Notifikasi Error Ekspor */}
+      {exportError && (
+        <div className="fixed bottom-16 right-6 max-w-md bg-white border border-red-300 rounded-xl p-3.5 shadow-xl z-50 flex items-start gap-2.5 animate-in fade-in slide-in-from-bottom-2">
+          <AlertCircle size={18} className="text-red-700 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold text-red-900">Gagal Mengekspor Hasil Analisis</p>
+            <p className="text-xs text-red-700 mt-0.5 leading-relaxed">{exportError}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setExportError(null)}
+            className="text-gray-400 hover:text-gray-700 text-xs font-bold p-1 cursor-pointer"
+            title="Tutup pesan"
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }
