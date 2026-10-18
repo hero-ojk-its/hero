@@ -6,6 +6,7 @@ Kasus Uji: X01 - X15.
 import csv
 from datetime import date, datetime, timezone
 import io
+import re
 from typing import Optional
 import docx
 import httpx
@@ -28,6 +29,7 @@ from app.models.enums import (
     StatusKeberlakuan,
     StatusPemrosesan,
 )
+from app.models.user import User
 from app.routers.ml_gateway import get_ml_client
 from app.services.analysis_result_service import compute_params_hash, get_document_fingerprint
 from app.services.analysis_run_service import compute_result_hash
@@ -121,7 +123,7 @@ SAMPLE_RESULT = {
         {
             "id": 1,
             "kategori": "Kewajiban",
-            "pasal": "2",
+            "pasal": "Pasal 2",
             "halaman": 5,
             "teks": "Penyusunan kerangka manajemen risiko wajib disetujui oleh Direksi dan Dewan Komisaris.",
             "terpotong": False,
@@ -129,7 +131,7 @@ SAMPLE_RESULT = {
         {
             "id": 2,
             "kategori": "Larangan",
-            "pasal": "7",
+            "pasal": "Pasal 7 ayat (1)",
             "halaman": 12,
             "teks": "Bank dilarang mengabaikan limit risiko kredit yang telah ditetapkan dalam rencana bisnis.",
             "terpotong": True,
@@ -137,7 +139,7 @@ SAMPLE_RESULT = {
         {
             "id": 3,
             "kategori": "Pelaporan",
-            "pasal": "15",
+            "pasal": "Pasal 15",
             "halaman": 20,
             "teks": "Laporan profil risiko triwulanan wajib disampaikan kepada OJK paling lambat tanggal 15.",
             "terpotong": False,
@@ -161,7 +163,7 @@ SAMPLE_AI_RESULT = {
         {
             "id": 1,
             "kategori": "Kewajiban",
-            "pasal": "2",
+            "pasal": "Pasal 2",
             "halaman": 5,
             "teks": "Penyusunan kerangka manajemen risiko wajib disetujui oleh Direksi dan Dewan Komisaris.",
             "terpotong": False,
@@ -170,7 +172,7 @@ SAMPLE_AI_RESULT = {
         {
             "id": 2,
             "kategori": "Larangan",
-            "pasal": "7",
+            "pasal": "Pasal 7 ayat (1)",
             "halaman": 12,
             "teks": "Bank dilarang mengabaikan limit risiko kredit yang telah ditetapkan dalam rencana bisnis.",
             "terpotong": True,
@@ -179,7 +181,7 @@ SAMPLE_AI_RESULT = {
         {
             "id": 3,
             "kategori": "Pelaporan",
-            "pasal": "15",
+            "pasal": "Pasal 15",
             "halaman": 20,
             "teks": "Laporan profil risiko triwulanan wajib disampaikan kepada OJK paling lambat tanggal 15.",
             "terpotong": False,
@@ -586,3 +588,140 @@ def test_x15_ml_never_called(
     client.get(f"/api/v1/documents/{doc.id}/analisa/ekspor?format=docx")
     client.get(f"/api/v1/documents/{doc.id}/analisa/ekspor?format=csv")
     client.get(f"/api/v1/documents/{doc.id}/analisa/ekspor?format=json")
+
+
+def test_x16_no_pasal_pasal_in_docx_and_csv(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """X16: docx dan csv tidak mengandung 'Pasal Pasal'. Docx mengandung 'Pasal 7 ayat (1), hal.'."""
+    doc = _seed_test_doc(db_session, test_storage, title="Doc X16", reg_num="16/X16/2024")
+    _seed_analysis_result(db_session, doc)
+
+    # 1. docx
+    r_docx = client.get(f"/api/v1/documents/{doc.id}/analisa/ekspor?format=docx")
+    assert r_docx.status_code == 200
+    doc_file = docx.Document(io.BytesIO(r_docx.content))
+    full_docx_text = "\n".join(
+        [p.text for p in doc_file.paragraphs]
+        + [cell.text for t in doc_file.tables for row in t.rows for cell in row.cells]
+    )
+    assert "Pasal Pasal" not in full_docx_text
+    assert "Pasal 7 ayat (1), hal." in full_docx_text
+
+    # 2. csv
+    r_csv = client.get(f"/api/v1/documents/{doc.id}/analisa/ekspor?format=csv")
+    assert r_csv.status_code == 200
+    csv_text = r_csv.content.decode("utf-8-sig")
+    assert "Pasal Pasal" not in csv_text
+    assert "Pasal 7 ayat (1)" in csv_text
+
+
+def test_x17_legacy_data_pure_number_pasal_prepends_pasal(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """X17: data lama dengan 'pasal': '9' (murni nomor) -> docx memuat 'Pasal 9', bukan '9' saja."""
+    doc = _seed_test_doc(db_session, test_storage, title="Doc X17", reg_num="17/X17/2024")
+    legacy_result = {
+        **SAMPLE_RESULT,
+        "poin_utama": [
+            {
+                "id": 1,
+                "kategori": "Kewajiban",
+                "pasal": "9",
+                "halaman": 4,
+                "teks": "Kewajiban lama.",
+                "terpotong": False,
+            }
+        ],
+    }
+    _seed_analysis_result(db_session, doc, raw_result=legacy_result)
+
+    r_docx = client.get(f"/api/v1/documents/{doc.id}/analisa/ekspor?format=docx")
+    assert r_docx.status_code == 200
+    doc_file = docx.Document(io.BytesIO(r_docx.content))
+    full_docx_text = "\n".join(
+        [p.text for p in doc_file.paragraphs]
+        + [cell.text for t in doc_file.tables for row in t.rows for cell in row.cells]
+    )
+    assert "Pasal 9" in full_docx_text
+    assert "— Pasal 9, hal. 4" in full_docx_text
+
+
+def test_x18_dianalisa_oleh_and_diekspor_oleh(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """X18: tanpa pengguna login, sementara hasil analisa punya created_by -> 'Diekspor Oleh' = '-' dan 'Dianalisa Oleh' = username pembuat."""
+    creator = User(
+        username="analis_step22b",
+        hashed_password="hash",
+        role="analis",
+        is_active=True,
+    )
+    db_session.add(creator)
+    db_session.commit()
+    db_session.refresh(creator)
+
+    doc = _seed_test_doc(db_session, test_storage, title="Doc X18", reg_num="18/X18/2024")
+    row = AnalysisResult(
+        document_id=doc.id,
+        kind=JenisAnalisa.analisa,
+        mode=ModeAnalisa.deterministik,
+        params_hash=compute_params_hash(JenisAnalisa.analisa),
+        source_fingerprint=get_document_fingerprint(doc),
+        result=SAMPLE_RESULT,
+        ml_version="1.0",
+        duration_ms=1000,
+        created_by=creator.id,
+        created_at=datetime.now(timezone.utc),
+    )
+    db_session.add(row)
+    db_session.commit()
+
+    resp = client.get(f"/api/v1/documents/{doc.id}/analisa/ekspor?format=docx")
+    assert resp.status_code == 200
+
+    doc_file = docx.Document(io.BytesIO(resp.content))
+    tbl_eksekusi = doc_file.tables[1]
+    rows_dict = {r.cells[0].text.strip(): r.cells[1].text.strip() for r in tbl_eksekusi.rows}
+
+    assert rows_dict.get("Diekspor Oleh") == "-"
+    assert rows_dict.get("Dianalisa Oleh") == "analis_step22b"
+
+
+def test_x19_non_ascii_filename_handled(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """X19: identitas.nomor = '11–POJK.03' (en dash) -> respons 200. filename= hanya ASCII, filename*= memuat versi percent-encoded."""
+    doc = _seed_test_doc(db_session, test_storage, title="Doc X19", reg_num="19/X19/2024")
+    result_with_endash = {
+        **SAMPLE_RESULT,
+        "identitas": {
+            **SAMPLE_RESULT["identitas"],
+            "jenis": "POJK",
+            "nomor": "11\u2013POJK.03",  # En-dash '–'
+            "tahun": "2024",
+        },
+    }
+    _seed_analysis_result(db_session, doc, raw_result=result_with_endash)
+
+    resp = client.get(f"/api/v1/documents/{doc.id}/analisa/ekspor?format=docx")
+    assert resp.status_code == 200
+
+    cd = resp.headers.get("content-disposition", "")
+    assert "attachment;" in cd
+    assert "filename=" in cd
+    assert "filename*=" in cd
+
+    # Ekstrak filename="..."
+    m_fn = re.search(r'filename="([^"]+)"', cd)
+    assert m_fn is not None
+    ascii_fn = m_fn.group(1)
+    assert ascii_fn.isascii()
+    assert "\u2013" not in ascii_fn
+
+    # Ekstrak filename*=UTF-8''...
+    m_fn_star = re.search(r"filename\*=UTF-8''([^\s;]+)", cd)
+    assert m_fn_star is not None
+    encoded_fn = m_fn_star.group(1)
+    assert "%E2%80%93" in encoded_fn
+

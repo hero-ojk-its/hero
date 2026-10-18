@@ -9,6 +9,7 @@ import json
 import logging
 import re
 from typing import Any, Dict, Optional, Set, Tuple
+import unicodedata
 import urllib.parse
 
 import docx
@@ -28,16 +29,34 @@ logger = logging.getLogger("hero")
 LABEL_REKOMENDASI = "DRAFT / REKOMENDASI — hasil analisa otomatis, wajib diverifikasi analis."
 
 
+def format_pasal_ref(pasal: Any) -> str:
+    """
+    Format rujukan pasal untuk Key Takeaways.
+    Bila nilai berupa teks lengkap (mis. 'Pasal 4 ayat (1)' atau 'Bagian II'), dipakai apa adanya.
+    Awalan 'Pasal ' hanya ditambahkan bila nilainya murni nomor/huruf (mis. '9', '4A') untuk data lama.
+    """
+    if pasal is None:
+        return ""
+    p_str = str(pasal).strip()
+    if not p_str:
+        return ""
+    if re.match(r"^\d+[A-Z]?$", p_str):
+        return f"Pasal {p_str}"
+    return p_str
+
+
 def generate_export_filename(
     identitas: Optional[Dict[str, Any]],
     document_id: int,
     mode: str,
     ext: str,
-) -> str:
+) -> Tuple[str, str]:
     """
     Format: analisa_{jenis}_{nomor}_{tahun}_{mode}.{ext}, dari identitas.
     Bila kosong, pakai analisa_dokumen_{document_id}_{mode}.{ext}.
-    Karakter tidak aman diganti dengan '_'.
+    Mengembalikan tuple (filename_ascii, filename_utf8).
+    filename_ascii dibersihkan dari non-ASCII dan karakter tidak aman untuk header HTTP.
+    filename_utf8 mempertahankan karakter Unicode asli untuk filename* (RFC 5987).
     """
     jenis = None
     nomor = None
@@ -52,10 +71,18 @@ def generate_export_filename(
     else:
         raw_name = f"analisa_dokumen_{document_id}_{mode}.{ext}"
 
-    # Bersihkan karakter tidak aman: /, \, spasi, :, dsb.
-    cleaned = re.sub(r'[\s/\\:*?"<>|]+', "_", raw_name)
-    cleaned = re.sub(r"_+", "_", cleaned)
-    return cleaned
+    # UTF-8: bersihkan karakter yang tidak aman untuk nama berkas
+    cleaned_utf8 = re.sub(r'[\s/\\:*?"<>|]+', "_", raw_name)
+    cleaned_utf8 = re.sub(r"_+", "_", cleaned_utf8)
+
+    # ASCII: normalisasi NFKD lalu buang karakter non-ASCII, kemudian bersihkan
+    norm_ascii = unicodedata.normalize("NFKD", raw_name).encode("ascii", "ignore").decode("ascii")
+    cleaned_ascii = re.sub(r'[\s/\\:*?"<>|]+', "_", norm_ascii)
+    cleaned_ascii = re.sub(r"_+", "_", cleaned_ascii)
+    if not cleaned_ascii or cleaned_ascii == f".{ext}":
+        cleaned_ascii = f"analisa_dokumen_{document_id}_{mode}.{ext}"
+
+    return cleaned_ascii, cleaned_utf8
 
 
 def export_to_docx(
@@ -67,6 +94,7 @@ def export_to_docx(
     run_id: Optional[int],
     basi: bool,
     exported_by: Optional[str],
+    dianalisa_oleh: Optional[str] = None,
 ) -> bytes:
     """Membangun dokumen DOCX hasil analisa sesuai spesifikasi US-40."""
     document = docx.Document()
@@ -146,6 +174,7 @@ def export_to_docx(
         ("Mode Dipakai", mode),
         ("Versi Aturan", versi_aturan),
         ("Dibuat", waktu_dibuat_str),
+        ("Dianalisa Oleh", dianalisa_oleh or "-"),
         ("Run ID", str(run_id) if run_id is not None else "-"),
         ("Diekspor Pada", waktu_ekspor_str),
         ("Diekspor Oleh", exported_by or "-"),
@@ -206,7 +235,9 @@ def export_to_docx(
                 halaman = item.get("halaman")
                 ref_parts = []
                 if pasal:
-                    ref_parts.append(f"Pasal {pasal}")
+                    pasal_formatted = format_pasal_ref(pasal)
+                    if pasal_formatted:
+                        ref_parts.append(pasal_formatted)
                 if halaman is not None:
                     ref_parts.append(f"hal. {halaman}")
 
@@ -313,7 +344,7 @@ def export_to_csv(result: Dict[str, Any]) -> bytes:
                     "poin_utama",
                     idx,
                     kategori,
-                    str(pasal) if pasal is not None else "",
+                    format_pasal_ref(pasal),
                     str(halaman) if halaman is not None else "",
                     teks,
                     str(parafrase) if parafrase is not None else "",
@@ -450,14 +481,19 @@ def export_analysis(
     curr_fingerprint = get_document_fingerprint(doc)
     basi = bool(source_fingerprint and source_fingerprint != curr_fingerprint)
 
-    # Identifikasi username pembuat atau pengekspor
+    # Identifikasi username pembuat (Dianalisa Oleh) dan pengekspor (Diekspor Oleh)
     exported_by = None
     if current_user:
         exported_by = getattr(current_user, "username", None)
-    if not exported_by and created_by_user_id:
-        u = db.query(User).filter(User.id == created_by_user_id).first()
-        if u:
-            exported_by = u.username
+
+    dianalisa_oleh = None
+    if created_by_user_id is not None:
+        if isinstance(created_by_user_id, int):
+            u = db.query(User).filter(User.id == created_by_user_id).first()
+            if u:
+                dianalisa_oleh = u.username
+        elif isinstance(created_by_user_id, str):
+            dianalisa_oleh = created_by_user_id
 
     # Format ekspor
     identitas = filtered_result.get("identitas") if isinstance(filtered_result, dict) else None
@@ -472,6 +508,7 @@ def export_analysis(
             run_id=run_id,
             basi=basi,
             exported_by=exported_by,
+            dianalisa_oleh=dianalisa_oleh,
         )
         media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         ext = "docx"
@@ -502,10 +539,12 @@ def export_analysis(
             detail=f"Format ekspor tidak didukung: '{format_type}'. Format yang didukung: docx, csv, json.",
         )
 
-    filename = generate_export_filename(identitas=identitas, document_id=doc.id, mode=actual_mode, ext=ext)
-    encoded_filename = urllib.parse.quote(filename)
+    filename_ascii, filename_utf8 = generate_export_filename(
+        identitas=identitas, document_id=doc.id, mode=actual_mode, ext=ext
+    )
+    encoded_filename = urllib.parse.quote(filename_utf8)
     headers = {
-        "Content-Disposition": f'attachment; filename="{filename}"; filename*=UTF-8\'\'{encoded_filename}'
+        "Content-Disposition": f'attachment; filename="{filename_ascii}"; filename*=UTF-8\'\'{encoded_filename}'
     }
 
     return content_bytes, media_type, headers, basi, actual_mode
