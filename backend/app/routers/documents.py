@@ -9,7 +9,7 @@ import re
 from typing import Optional, List, Dict, Any, Literal
 import urllib.parse
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, and_, desc
@@ -1378,3 +1378,89 @@ def get_document_analysis_run_detail(
         allowed_ids=allowed_ids,
         saring_rujukan_fn=saring_rujukan,
     )
+
+
+@router.get(
+    "/{document_id}/analisa/ekspor",
+    summary="Ekspor hasil analisa regulasi (DOCX, CSV, JSON) (US-40 #62)",
+    responses={
+        200: {
+            "content": {
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {},
+                "text/csv": {},
+                "application/json": {},
+            },
+            "description": "Berkas ekspor hasil analisa dalam format DOCX, CSV, atau JSON.",
+        },
+        403: {"description": "Dokumen non-publik memerlukan autentikasi aktif"},
+        404: {"description": "Dokumen tidak ditemukan, belum dianalisa, atau run_id tidak valid"},
+    },
+)
+def export_document_analysis(
+    document_id: int,
+    request: Request,
+    format: Literal["docx", "csv", "json"] = Query("docx", description="Format berkas ekspor"),
+    mode: Literal["deterministik", "ai"] = Query("deterministik", description="Mode analisa (dipakai bila run_id kosong)"),
+    run_id: Optional[int] = Query(None, description="ID eksekusi tertentu dari riwayat analisa"),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Mengekspor hasil analisa regulasi (summary, Key Takeaways, rujukan pasal, metadata)
+    ke berkas DOCX, CSV, atau JSON langsung dari data lokal (tanpa memanggil ML).
+    """
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
+    if not doc.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "dokumen_nonaktif", "message": "Dokumen tidak aktif / telah dinonaktifkan."},
+        )
+
+    if settings.protect_non_public_when_auth_disabled and not settings.auth_enabled:
+        if doc.access_classification == KlasifikasiAkses.non_publik:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.",
+            )
+
+    from app.routers.ml_gateway import allowed_document_ids, saring_rujukan
+    from app.services.analysis_export_service import export_analysis
+    from app.services.audit_service import EXPORT_ANALYSIS
+
+    allowed_ids = allowed_document_ids(db)
+    content_bytes, media_type, headers, basi, actual_mode = export_analysis(
+        db=db,
+        doc=doc,
+        format_type=format,
+        mode=mode,
+        run_id=run_id,
+        current_user=current_user,
+        allowed_ids=allowed_ids,
+        saring_rujukan_fn=saring_rujukan,
+    )
+
+    actor_user_id = getattr(current_user, "id", None) if current_user else None
+    client_ip = request.client.host if request and request.client else None
+    record_audit(
+        db,
+        action=EXPORT_ANALYSIS,
+        user_id=actor_user_id,
+        target_resource=f"document:{doc.id}",
+        detail={
+            "format": format,
+            "mode": actual_mode,
+            "run_id": run_id,
+            "basi": basi,
+        },
+        ip_address=client_ip,
+        commit=True,
+    )
+
+    return Response(
+        content=content_bytes,
+        media_type=media_type,
+        headers=headers,
+    )
+
