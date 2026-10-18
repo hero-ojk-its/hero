@@ -133,6 +133,28 @@
               "title": "Target Resource"
             },
             "description": "Filter berdasarkan target resource (prefix match, misal: document:12)"
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "deterministik",
+                    "ai"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter berdasarkan mode analisa (detail->>'mode_dipakai')",
+              "title": "Mode"
+            },
+            "description": "Filter berdasarkan mode analisa (detail->>'mode_dipakai')"
           }
         ],
         "responses": {
@@ -1886,6 +1908,194 @@
           },
           "404": {
             "description": "Dokumen tidak ditemukan atau nonaktif"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/documents/{document_id}/analisa/riwayat": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Riwayat eksekusi analisa dan harmonisasi regulasi (US-10 #56)",
+        "description": "Mengembalikan riwayat eksekusi analisa dan harmonisasi (append-only) untuk suatu dokumen.",
+        "operationId": "get_document_analysis_runs_api_v1_documents__document_id__analisa_riwayat_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "analisa",
+                    "harmonisasi"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter jenis analisa",
+              "title": "Kind"
+            },
+            "description": "Filter jenis analisa"
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "deterministik",
+                    "ai"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter mode yang dipakai",
+              "title": "Mode"
+            },
+            "description": "Filter mode yang dipakai"
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Offset pagination",
+              "default": 0,
+              "title": "Skip"
+            },
+            "description": "Offset pagination"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Batas jumlah per halaman",
+              "default": 20,
+              "title": "Limit"
+            },
+            "description": "Batas jumlah per halaman"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisRunsListResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Dokumen non-publik memerlukan autentikasi aktif"
+          },
+          "404": {
+            "description": "Dokumen tidak ditemukan atau nonaktif"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/documents/{document_id}/analisa/riwayat/{run_id}": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Detail satu riwayat eksekusi analisa beserta output mentah tersaring (US-10 #56)",
+        "description": "Mengembalikan detail satu eksekusi analisa beserta output mentah (diresolusi melalui result_hash bila cache),\ndisaring sesuai hak akses dokumen terkini, dan petunjuk cara_ulang.",
+        "operationId": "get_document_analysis_run_detail_api_v1_documents__document_id__analisa_riwayat__run_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisRunDetailResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Dokumen non-publik memerlukan autentikasi aktif"
+          },
+          "404": {
+            "description": "Dokumen tidak ditemukan, nonaktif, atau run_id tidak valid"
           },
           "422": {
             "description": "Validation Error",
@@ -4271,6 +4481,347 @@
   },
   "components": {
     "schemas": {
+      "AnalysisRunDetailResponse": {
+        "properties": {
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "dibuat": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dibuat"
+          },
+          "oleh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oleh"
+          },
+          "mode_diminta": {
+            "type": "string",
+            "title": "Mode Diminta"
+          },
+          "mode_dipakai": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode Dipakai"
+          },
+          "sumber": {
+            "type": "string",
+            "title": "Sumber"
+          },
+          "segar": {
+            "type": "boolean",
+            "title": "Segar"
+          },
+          "http_status": {
+            "type": "integer",
+            "title": "Http Status"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "ml_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ml Version"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Params"
+          },
+          "result_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Hash"
+          },
+          "ringkasan_output": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ringkasan Output"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "fingerprint_sama_dengan_sekarang": {
+            "type": "boolean",
+            "title": "Fingerprint Sama Dengan Sekarang"
+          },
+          "hasil": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hasil"
+          },
+          "cara_ulang": {
+            "type": "string",
+            "title": "Cara Ulang"
+          },
+          "catatan": {
+            "type": "string",
+            "title": "Catatan",
+            "default": "Draft / Rekomendasi — riwayat eksekusi analisa untuk penelusuran."
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "kind",
+          "mode_diminta",
+          "sumber",
+          "segar",
+          "http_status",
+          "fingerprint_sama_dengan_sekarang",
+          "cara_ulang"
+        ],
+        "title": "AnalysisRunDetailResponse"
+      },
+      "AnalysisRunItemResponse": {
+        "properties": {
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "dibuat": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dibuat"
+          },
+          "oleh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oleh"
+          },
+          "mode_diminta": {
+            "type": "string",
+            "title": "Mode Diminta"
+          },
+          "mode_dipakai": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode Dipakai"
+          },
+          "sumber": {
+            "type": "string",
+            "title": "Sumber"
+          },
+          "segar": {
+            "type": "boolean",
+            "title": "Segar"
+          },
+          "http_status": {
+            "type": "integer",
+            "title": "Http Status"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "ml_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ml Version"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Params"
+          },
+          "result_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Hash"
+          },
+          "ringkasan_output": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ringkasan Output"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "fingerprint_sama_dengan_sekarang": {
+            "type": "boolean",
+            "title": "Fingerprint Sama Dengan Sekarang"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "kind",
+          "mode_diminta",
+          "sumber",
+          "segar",
+          "http_status",
+          "fingerprint_sama_dengan_sekarang"
+        ],
+        "title": "AnalysisRunItemResponse"
+      },
+      "AnalysisRunsListResponse": {
+        "properties": {
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AnalysisRunItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "catatan": {
+            "type": "string",
+            "title": "Catatan",
+            "default": "Draft / Rekomendasi — riwayat eksekusi analisa untuk penelusuran."
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "total",
+          "items"
+        ],
+        "title": "AnalysisRunsListResponse"
+      },
       "ArticleChunkIn": {
         "properties": {
           "document_id": {

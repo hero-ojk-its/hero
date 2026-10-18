@@ -30,6 +30,7 @@
    - [8.4 Riwayat Versi & Relasi Regulasi](#84-riwayat-versi--relasi-regulasi)
    - [8.5 Penautan Lampiran & Tanggal Berlaku Regulasi](#85-penautan-lampiran--tanggal-berlaku-regulasi)
    - [8.6 Perbandingan Hasil Analisa Deterministik vs AI (US-05)](#86-perbandingan-hasil-analisa-deterministik-vs-ai-us-05)
+   - [8.7 Riwayat Eksekusi Analisa (US-10)](#87-riwayat-eksekusi-analisa-us-10)
 9. [Alur 8: Kurasi & Koreksi Metadata serta Antrean Penanganan Gagal](#9-alur-8-kurasi--koreksi-metadata-serta-antrean-penanganan-gagal)
 10. [Alur 9: Dashboard Ringkasan Eksekutif](#10-alur-9-dashboard-ringkasan-eksekutif)
 11. [Gerbang Analisa (`/api/v1/ml/*`)](#11-gerbang-analisa-apiv1ml)
@@ -1074,6 +1075,102 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
   },
   "ai": null,
   "catatan": "Draft / Rekomendasi — hasil AI tidak menggantikan hasil deterministik; bandingkan keduanya."
+}
+```
+
+### 8.7 Riwayat Eksekusi Analisa (US-10)
+
+Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setiap eksekusi yang lolos pemeriksaan akses tercatat secara *append-only* (input, mode diminta/dipakai, versi aturan/ML, status HTTP, durasi, dan output).
+
+#### 8.7.1 Daftar Riwayat Eksekusi Analisa
+- **Method & Path:** `GET /api/v1/documents/{document_id}/analisa/riwayat`
+- **Query Parameters:**
+  - `kind` (opsional): Filter jenis analisa (`analisa` atau `harmonisasi`).
+  - `mode` (opsional): Filter mode yang dipakai (`deterministik` atau `ai`).
+  - `skip` (opsional, default: `0`): Offset paginasi.
+  - `limit` (opsional, default: `20`, maks: `100`): Batas jumlah item per halaman.
+- **Urutan:** Terbaru dahulu (`created_at DESC, id DESC`).
+- **Proteksi Akses:**
+  - `404 Not Found`: Dokumen tidak ditemukan atau berstatus nonaktif.
+  - `403 Forbidden`: Dokumen non-publik saat mode lindung aktif tanpa login.
+- **Respons (200 OK):**
+```json
+{
+  "document_id": 12,
+  "total": 3,
+  "items": [
+    {
+      "run_id": 45,
+      "kind": "analisa",
+      "dibuat": "2026-10-18T02:00:00Z",
+      "oleh": "analis_hukum",
+      "mode_diminta": "ai",
+      "mode_dipakai": "deterministik",
+      "sumber": "ml",
+      "segar": true,
+      "http_status": 200,
+      "error_code": null,
+      "ml_version": "v1.2.0-rules",
+      "params": {
+        "mode": "ai"
+      },
+      "result_hash": "a1b2c3d4e5f67890abcdef1234567890abcdef1234567890abcdef1234567890",
+      "ringkasan_output": {
+        "jumlah_poin": 12,
+        "kata_ringkasan": 150,
+        "waktu_ms": 1830
+      },
+      "duration_ms": 1830,
+      "fingerprint_sama_dengan_sekarang": true
+    }
+  ],
+  "catatan": "Draft / Rekomendasi — riwayat eksekusi analisa untuk penelusuran."
+}
+```
+
+#### 8.7.2 Detail Riwayat Eksekusi Analisa
+- **Method & Path:** `GET /api/v1/documents/{document_id}/analisa/riwayat/{run_id}`
+- **Perilaku Endpoint:**
+  - Menampilkan seluruh atribut eksekusi beserta output lengkap (`hasil`).
+  - Bila eksekusi bersumber dari cache (`sumber = "cache"` atau `"cache_basi"`), isi `hasil` otomatis diresolusi dari eksekusi `sumber = "ml"` paling awal yang memiliki `result_hash` yang sama.
+  - Field `hasil` selalu disaring melalui `saring_rujukan` menggunakan himpunan dokumen yang diizinkan saat ini.
+  - Menyertakan field petunjuk `cara_ulang` agar pengguna dapat mengulang eksekusi tersebut dengan mudah di antarmuka frontend.
+- **Proteksi Akses:**
+  - `404 Not Found`: Dokumen tidak ditemukan, nonaktif, atau `run_id` tidak valid / bukan milik dokumen tersebut.
+  - `403 Forbidden`: Dokumen non-publik saat mode lindung aktif tanpa login.
+- **Respons (200 OK):**
+```json
+{
+  "run_id": 45,
+  "kind": "analisa",
+  "dibuat": "2026-10-18T02:00:00Z",
+  "oleh": "analis_hukum",
+  "mode_diminta": "ai",
+  "mode_dipakai": "deterministik",
+  "sumber": "ml",
+  "segar": true,
+  "http_status": 200,
+  "error_code": null,
+  "ml_version": "v1.2.0-rules",
+  "params": {
+    "mode": "ai"
+  },
+  "result_hash": "a1b2c3d4e5f67890abcdef1234567890abcdef1234567890abcdef1234567890",
+  "ringkasan_output": {
+    "jumlah_poin": 12,
+    "kata_ringkasan": 150,
+    "waktu_ms": 1830
+  },
+  "duration_ms": 1830,
+  "fingerprint_sama_dengan_sekarang": true,
+  "hasil": {
+    "mode_dipakai": "deterministik",
+    "ringkasan": "Ringkasan dokumen regulasi...",
+    "poin_kunci": ["Poin 1", "Poin 2"],
+    "disaring_backend": 0
+  },
+  "cara_ulang": "GET /api/v1/ml/analisa/12?mode=ai&segar=true",
+  "catatan": "Draft / Rekomendasi — riwayat eksekusi analisa untuk penelusuran."
 }
 ```
 
