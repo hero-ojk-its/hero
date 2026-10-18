@@ -31,6 +31,7 @@
    - [8.5 Penautan Lampiran & Tanggal Berlaku Regulasi](#85-penautan-lampiran--tanggal-berlaku-regulasi)
    - [8.6 Perbandingan Hasil Analisa Deterministik vs AI (US-05)](#86-perbandingan-hasil-analisa-deterministik-vs-ai-us-05)
    - [8.7 Riwayat Eksekusi Analisa (US-10)](#87-riwayat-eksekusi-analisa-us-10)
+   - [8.8 Ekspor Hasil Analisa (US-40)](#88-ekspor-hasil-analisa-us-40)
 9. [Alur 8: Kurasi & Koreksi Metadata serta Antrean Penanganan Gagal](#9-alur-8-kurasi--koreksi-metadata-serta-antrean-penanganan-gagal)
 10. [Alur 9: Dashboard Ringkasan Eksekutif](#10-alur-9-dashboard-ringkasan-eksekutif)
 11. [Gerbang Analisa (`/api/v1/ml/*`)](#11-gerbang-analisa-apiv1ml)
@@ -1173,6 +1174,29 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
   "catatan": "Draft / Rekomendasi — riwayat eksekusi analisa untuk penelusuran."
 }
 ```
+
+### 8.8 Ekspor Hasil Analisa (US-40)
+
+- **Method & Path:** `GET /api/v1/documents/{document_id}/analisa/ekspor`
+- **Tujuan:** Mengekspor hasil analisa regulasi (summary, Key Takeaways, rujukan pasal, metadata) ke berkas DOCX, CSV, atau JSON langsung dari data lokal tanpa memanggil layanan ML (US-40 #62).
+- **Query Parameters:**
+  - `format` (opsional, default: `docx`): Format berkas ekspor (`docx`, `csv`, atau `json`).
+  - `mode` (opsional, default: `deterministik`): Mode analisa (`deterministik` atau `ai`). Digunakan bila `run_id` tidak diisi.
+  - `run_id` (opsional): ID eksekusi tertentu dari riwayat analisa (`analysis_runs`). Bila diisi, hasil diambil dari eksekusi tersebut (mendukung resolusi cache lewat `result_hash`).
+- **Proteksi Akses:**
+  - `404 Not Found`: Dokumen tidak ditemukan atau berstatus nonaktif.
+  - `403 Forbidden`: Dokumen non-publik saat mode lindung aktif tanpa login.
+  - `404 Not Found` dengan `{"code": "belum_dianalisa"}`: Dokumen belum pernah dianalisa pada mode tersebut (bila `run_id` tidak diisi).
+  - `404 Not Found` dengan `{"code": "hasil_tidak_tersedia"}`: Run ID yang diminta berstatus gagal atau output tidak tersedia.
+- **Nama Berkas & Header:**
+  - Format nama: `analisa_{jenis}_{nomor}_{tahun}_{mode}.{ext}` (dari identitas dokumen). Bila kosong, fallback ke `analisa_dokumen_{document_id}_{mode}.{ext}`.
+  - Dikirim melalui header `Content-Disposition` dengan format RFC 5987 (`filename="..."` dan `filename*=UTF-8''...`).
+- **Audit:**
+  - Mencatat aksi audit `EXPORT_ANALYSIS` dengan detail `{"format", "mode", "run_id", "basi"}`.
+- **Format Respons:**
+  - `docx`: `application/vnd.openxmlformats-officedocument.wordprocessingml.document` (memuat label draf, tabel identitas, tabel eksekusi, ringkasan, Key Takeaways, dasar hukum, sanksi, dan catatan kaki).
+  - `csv`: `text/csv; charset=utf-8` dengan UTF-8 BOM (`bagian,urutan,kategori,pasal_rujukan,halaman,teks,parafrase`).
+  - `json`: `application/json` (`{"label": "Draft / Rekomendasi", "document_id": ..., "mode_dipakai": "...", "run_id": ..., "basi": ..., "dibuat": "...", "diekspor": "...", "hasil": { ... }}`).
 
 ---
 
