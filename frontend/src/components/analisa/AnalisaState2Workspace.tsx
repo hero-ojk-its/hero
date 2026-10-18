@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   FileText, 
   ExternalLink, 
@@ -17,12 +17,13 @@ import {
   Building2, 
   ShieldAlert, 
   Paperclip,
-  Sparkles
+  Sparkles,
+  Clock
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { getMlAnalisa, getDocumentStatus } from '../../lib/analisaApi';
+import { getMlAnalisa, getDocumentStatus, checkMlHealth, isDocumentReadyForAnalysis } from '../../lib/analisaApi';
 import { ApiError, API_BASE_URL, apiFetchBlob } from '../../lib/api';
-import type { MlAnalisaResponse, DocumentArticleSummary } from '../../lib/analisaApi';
+import type { MlAnalisaResponse, DocumentArticleSummary, DocumentStatusResponse } from '../../lib/analisaApi';
 
 // Garuda Pancasila SVG Emblem untuk Naskah Resmi OJK
 function GarudaEmblem() {
@@ -81,6 +82,11 @@ export default function AnalisaState2Workspace({
   const [pipelineProgress, setPipelineProgress] = useState<number>(15);
   const [showProcessingBanner, setShowProcessingBanner] = useState<boolean>(true);
   const pipelineTimerRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const retryStartTimeRef = useRef<number | null>(null);
+  const isMountedRef = useRef<boolean>(true);
+  const loadAnalysisRef = useRef<(forceFresh?: boolean, isRetryAttempt?: boolean) => Promise<void>>(null);
 
   // State Workspace Panel 1: Struktur Dokumen
   const [expandedBabs, setExpandedBabs] = useState<Record<string, boolean>>({
@@ -114,6 +120,33 @@ export default function AnalisaState2Workspace({
     pipelineTimerRef.current = [];
   }, []);
 
+  // Bersihkan timer retry otomatis saat unmount atau dibatalkan
+  const clearRetryTimer = useCallback(() => {
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+  }, []);
+
+  // Batalkan request analisis in-flight jika komponen unmount atau di-reset
+  const abortAnalysisRequest = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  }, []);
+
+  // Pastikan ref isMounted dibersihkan saat unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      clearRetryTimer();
+      abortAnalysisRequest();
+      clearPipelineTimers();
+    };
+  }, [clearRetryTimer, abortAnalysisRequest, clearPipelineTimers]);
+
   // Lewati animasi dan langsung tampilkan hasil
   const handleSkipLoading = () => {
     clearPipelineTimers();
@@ -122,88 +155,212 @@ export default function AnalisaState2Workspace({
     setLoading(false);
   };
 
-  // Muat analisis (eksplisit demo atau panggilan API nyata)
-  const loadAnalysis = useCallback(async (forceFresh: boolean = false) => {
-    clearPipelineTimers();
-    setLoading(true);
-    setIsRefreshing(forceFresh);
-    setErrorStatus(null);
-    setErrorMessage(null);
-    setShowProcessingBanner(true);
+  // Muat analisis (eksplisit demo atau panggilan API nyata dengan retry otomatis untuk 404 sementara)
+  const loadAnalysis = useCallback(async (forceFresh: boolean = false, isRetryAttempt: boolean = false) => {
+    clearRetryTimer();
+    abortAnalysisRequest();
 
-    // Inisialisasi pipeline progress visual
-    setPipelineStep(1);
-    setPipelineProgress(20);
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
-    const t1 = setTimeout(() => {
-      setPipelineStep(2);
-      setPipelineProgress(48);
-    }, 500);
+    if (!isRetryAttempt) {
+      retryStartTimeRef.current = Date.now();
+      clearPipelineTimers();
+      setLoading(true);
+      setIsRefreshing(forceFresh);
+      setErrorStatus(null);
+      setErrorMessage(null);
+      setShowProcessingBanner(true);
 
-    const t2 = setTimeout(() => {
-      setPipelineStep(3);
-      setPipelineProgress(76);
-    }, 1100);
+      // Inisialisasi pipeline progress visual
+      setPipelineStep(1);
+      setPipelineProgress(20);
 
-    const t3 = setTimeout(() => {
-      setPipelineStep(4);
-      setPipelineProgress(94);
-    }, 1700);
+      const t1 = setTimeout(() => {
+        if (!controller.signal.aborted) {
+          setPipelineStep(2);
+          setPipelineProgress(48);
+        }
+      }, 500);
 
-    pipelineTimerRef.current = [t1, t2, t3];
+      const t2 = setTimeout(() => {
+        if (!controller.signal.aborted) {
+          setPipelineStep(3);
+          setPipelineProgress(76);
+        }
+      }, 1100);
+
+      const t3 = setTimeout(() => {
+        if (!controller.signal.aborted) {
+          setPipelineStep(4);
+          setPipelineProgress(94);
+        }
+      }, 1700);
+
+      pipelineTimerRef.current = [t1, t2, t3];
+    }
 
     // Pemanggilan API Nyata ke Backend ML & Dokumen Status
     try {
+      // 1. Tentukan requestedMode: hanya 'ai' jika mode === 'ai' DAN mlHealth?.mode_ai === true
+      let requestedMode: 'deterministik' | 'ai' = 'deterministik';
+      if (mode === 'ai') {
+        try {
+          const health = await checkMlHealth(controller.signal);
+          if (health?.mode_ai === true) {
+            requestedMode = 'ai';
+          } else {
+            requestedMode = 'deterministik';
+          }
+        } catch {
+          requestedMode = 'deterministik';
+        }
+      }
+
+      if (controller.signal.aborted || !isMountedRef.current) return;
+
       const [mlRes, statusRes] = await Promise.allSettled([
-        getMlAnalisa(documentId, mode, forceFresh),
-        getDocumentStatus(documentId),
+        getMlAnalisa(documentId, requestedMode, forceFresh, controller.signal),
+        getDocumentStatus(documentId, controller.signal),
       ]);
 
-      if (mlRes.status === 'fulfilled') {
-        setData(mlRes.value);
-      } else {
-        throw mlRes.reason;
+      if (controller.signal.aborted || !isMountedRef.current) return;
+
+      let statusDoc: DocumentStatusResponse | null = null;
+      if (statusRes.status === 'fulfilled') {
+        statusDoc = statusRes.value;
+        if (Array.isArray(statusRes.value.articles)) {
+          setArticles(statusRes.value.articles);
+        }
       }
 
-      if (statusRes.status === 'fulfilled' && Array.isArray(statusRes.value.articles)) {
-        setArticles(statusRes.value.articles);
-      }
-    } catch (err: unknown) {
-      setData(null);
-      if (err instanceof ApiError) {
-        setErrorStatus(err.status);
-        if (err.status === 404) {
-          setErrorMessage(
-            'Dokumen belum siap dianalisis: dokumen belum memiliki pasal yang terbaca di lapisan data. ' +
-            'Pastikan proses ekstraksi dokumen telah tuntas dan layanan sinkronisasi aktif.'
-          );
-        } else if (err.status === 403) {
-          setErrorMessage('Akses ditolak: Anda tidak memiliki wewenang untuk menelaah dokumen ini.');
-        } else if (err.status === 503) {
-          setErrorMessage('Layanan analisis ML belum siap. Pastikan perintah "hero bridge serve" aktif di server.');
-        } else if (err.status === 504) {
-          setErrorMessage('Layanan analisis membutuhkan waktu terlalu lama (melebihi batas waktu respons).');
-        } else if (err.status === 422) {
-          setErrorMessage('Parameter permintaan analisis tidak valid.');
-        } else {
-          setErrorMessage(err.message || 'Terjadi galat teknis saat memuat data analisis.');
-        }
-      } else if (err instanceof Error) {
-        setErrorStatus(0);
-        setErrorMessage(err.message || 'Gagal terhubung ke layanan analisis regulasi.');
-      } else {
-        setErrorStatus(0);
-        setErrorMessage('Terjadi galat tak dikenal saat memuat data analisis.');
-      }
-    } finally {
-      const tFinal = setTimeout(() => {
+      if (mlRes.status === 'fulfilled') {
+        retryStartTimeRef.current = null;
+        setData(mlRes.value);
+        setErrorStatus(null);
+        setErrorMessage(null);
         setPipelineProgress(100);
         setLoading(false);
         setIsRefreshing(false);
-      }, 2000);
-      pipelineTimerRef.current.push(tFinal);
+      } else {
+        const err = mlRes.reason;
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (err instanceof Error && err.name === 'AbortError') return;
+
+        if (err instanceof ApiError) {
+          if (err.status === 404) {
+            // Cek apakah dokumen sudah selesai diekstraksi di backend tetapi belum tersinkron ke ML
+            const isExtracted = Boolean(
+              statusDoc && (
+                isDocumentReadyForAnalysis(statusDoc) ||
+                (Array.isArray(statusDoc.articles) && statusDoc.articles.length > 0) ||
+                (typeof statusDoc.full_text_length === 'number' && statusDoc.full_text_length > 0) ||
+                statusDoc.processing_status === 'terindeks'
+              )
+            );
+
+            const elapsed = Date.now() - (retryStartTimeRef.current || Date.now());
+            const MAX_RETRY_MS = 300000; // Batas retry maksimal 5 menit
+
+            if (isExtracted && elapsed < MAX_RETRY_MS) {
+              // Kondisi 404 sementara: dokumen sudah selesai diekstraksi tetapi ML masih proses/sinkron
+              setErrorMessage('Draft sedang diproses layanan analisa, coba lagi sebentar');
+              setLoading(true);
+              setErrorStatus(null);
+
+              retryTimerRef.current = setTimeout(() => {
+                if (isMountedRef.current && !controller.signal.aborted) {
+                  loadAnalysisRef.current?.(false, true);
+                }
+              }, 2500);
+              return;
+            } else if (isExtracted && elapsed >= MAX_RETRY_MS) {
+              // Batas waktu retry 5 menit tercapai
+              retryStartTimeRef.current = null;
+              setData(null);
+              setErrorStatus(404);
+              setErrorMessage('Batas waktu sinkronisasi analisis tercapai (5 menit). Silakan coba lagi.');
+              setPipelineProgress(100);
+              setLoading(false);
+              setIsRefreshing(false);
+              return;
+            } else {
+              // Bukan kondisi sinkronisasi sementara (dokumen belum diekstraksi / tidak ditemukan)
+              retryStartTimeRef.current = null;
+              setData(null);
+              setErrorStatus(404);
+              if (statusDoc) {
+                setErrorMessage('Dokumen sedang dalam antrean atau pemrosesan ekstraksi di peladen. Silakan tunggu beberapa saat.');
+              } else {
+                setErrorMessage('Dokumen regulasi tidak ditemukan di peladen.');
+              }
+              setPipelineProgress(100);
+              setLoading(false);
+              setIsRefreshing(false);
+              return;
+            }
+          }
+
+          // Error selain 404: 403, 503, 504, 422, dll.
+          retryStartTimeRef.current = null;
+          setData(null);
+          setErrorStatus(err.status);
+          if (err.status === 403) {
+            // Pastikan pesan hanya dipakai untuk kondisi 403 yang relevan (dokumen non-publik / login)
+            const detailStr = typeof err.detail === 'string'
+              ? err.detail.toLowerCase()
+              : JSON.stringify(err.detail || '').toLowerCase();
+            const isNonPublicRestriction = Boolean(
+              statusDoc?.access_classification === 'non_publik' ||
+              detailStr.includes('non-publik') ||
+              detailStr.includes('non_publik') ||
+              detailStr.includes('login') ||
+              detailStr.includes('autentikasi')
+            );
+            if (isNonPublicRestriction) {
+              setErrorMessage('Dokumen non-publik baru bisa dianalisis setelah fitur login aktif.');
+            } else {
+              setErrorMessage(err.message || 'Akses ditolak: Anda tidak memiliki wewenang untuk menelaah dokumen ini.');
+            }
+          } else if (err.status === 503) {
+            setErrorMessage('Layanan analisis ML belum siap. Pastikan perintah "hero bridge serve" aktif di server.');
+          } else if (err.status === 504) {
+            setErrorMessage('Layanan analisis membutuhkan waktu terlalu lama (melebihi batas waktu respons).');
+          } else if (err.status === 422) {
+            setErrorMessage('Parameter permintaan analisis tidak valid.');
+          } else {
+            setErrorMessage(err.message || 'Terjadi galat teknis saat memuat data analisis.');
+          }
+        } else if (err instanceof Error) {
+          retryStartTimeRef.current = null;
+          setData(null);
+          setErrorStatus(0);
+          setErrorMessage(err.message || 'Gagal terhubung ke layanan analisis regulasi.');
+        } else {
+          retryStartTimeRef.current = null;
+          setData(null);
+          setErrorStatus(0);
+          setErrorMessage('Terjadi galat tak dikenal saat memuat data analisis.');
+        }
+        setPipelineProgress(100);
+        setLoading(false);
+        setIsRefreshing(false);
+      }
+    } catch (err: unknown) {
+      if (controller.signal.aborted || !isMountedRef.current) return;
+      retryStartTimeRef.current = null;
+      setData(null);
+      setErrorStatus(0);
+      setErrorMessage(err instanceof Error ? err.message : 'Terjadi galat teknis saat memuat analisis.');
+      setPipelineProgress(100);
+      setLoading(false);
+      setIsRefreshing(false);
     }
-  }, [clearPipelineTimers, documentId, mode]);
+  }, [abortAnalysisRequest, clearPipelineTimers, clearRetryTimer, documentId, mode]);
+
+  useEffect(() => {
+    loadAnalysisRef.current = loadAnalysis;
+  }, [loadAnalysis]);
 
   // Efek inisialisasi load analysis
   useEffect(() => {
@@ -211,8 +368,8 @@ export default function AnalisaState2Workspace({
 
     const initialize = async () => {
       await Promise.resolve();
-      if (!isCancelled) {
-        loadAnalysis(false);
+      if (!isCancelled && isMountedRef.current) {
+        loadAnalysis(false, false);
       }
     };
 
@@ -220,9 +377,11 @@ export default function AnalisaState2Workspace({
 
     return () => {
       isCancelled = true;
+      clearRetryTimer();
+      abortAnalysisRequest();
       clearPipelineTimers();
     };
-  }, [loadAnalysis, clearPipelineTimers]);
+  }, [loadAnalysis, clearRetryTimer, abortAnalysisRequest, clearPipelineTimers]);
 
   // Pemuatan Berkas PDF Asli secara aman via apiFetchBlob
   const fetchPdf = useCallback((signal?: AbortSignal) => {
@@ -345,7 +504,7 @@ export default function AnalisaState2Workspace({
     navigate('/harmonisasi', {
       state: {
         draftId: documentId,
-        draftTitle: data?.identitas?.nomor || data?.identitas?.title || 'POJK 11/2024 tentang Ketahanan & Keamanan Siber'
+        draftTitle: displayJudulRegulasi
       }
     });
   };
@@ -362,8 +521,9 @@ export default function AnalisaState2Workspace({
       `diverifikasi serta ditelaah oleh analis atau pejabat berwenang\n` +
       `sebelum dijadikan rujukan resmi.\n` +
       `========================================================\n\n` +
-      `Dokumen: ${data.identitas?.nomor || data.identitas?.title || 'Draf Regulasi'}\n` +
-      `Tahun: ${data.identitas?.tahun || data.identitas?.year || new Date().getFullYear()}\n` +
+      `Dokumen: ${displayJudulRegulasi}\n` +
+      `Tanggal Terbit: ${displayTanggalTerbit}\n` +
+      `Tahun: ${data.identitas?.tahun || data.identitas?.year || '-'}\n` +
       `Mode Diminta: ${mode}\n` +
       `Mode Dipakai: ${data.mode_dipakai || mode}\n\n` +
       `--- RINGKASAN EKSEKUTIF ---\n` +
@@ -373,10 +533,10 @@ export default function AnalisaState2Workspace({
       `\n\n--- DASAR HUKUM ---\n` +
       (data.dasar_hukum || []).map((dh, i) => `${i + 1}. ${dh}`).join('\n') +
       `\n\n--- METRIK REGULASI ---\n` +
-      `Jumlah Bab: ${String(data.metrik?.jumlah_bab ?? '-')}\n` +
-      `Jumlah Pasal: ${String(data.metrik?.jumlah_pasal ?? '-')}\n` +
-      `Jumlah Kewajiban: ${String(data.metrik?.jumlah_kewajiban ?? '-')}\n` +
-      `Jumlah Larangan: ${String(data.metrik?.jumlah_larangan ?? '-')}\n\n` +
+      `Jumlah Bab: ${displayJumlahBab}\n` +
+      `Jumlah Pasal: ${displayJumlahPasal}\n` +
+      `Jumlah Kewajiban: ${displayJumlahKewajiban}\n` +
+      `Jumlah Larangan: ${displayJumlahLarangan}\n\n` +
       `Catatan:\n${data.catatan || 'Keluaran sistem bukan keputusan final. Wajib diverifikasi oleh pejabat/analis berwenang.'}\n`;
 
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
@@ -437,6 +597,45 @@ export default function AnalisaState2Workspace({
         : `/api/v1/documents/${documentId}/pdf`);
   const resolvedPdfUrl = pdfBlobUrl || fallbackAbsolutePdfUrl;
 
+  // ============================================================================
+  // Pemetaan Data Aktual Tanpa Fallback Hardcode (Aturan B)
+  // ============================================================================
+  // 1. Jumlah Bab: kerangka.length
+  const jumlahBab = Array.isArray(data?.kerangka) ? data.kerangka.length : null;
+  const displayJumlahBab = jumlahBab !== null && !isNaN(jumlahBab) ? String(jumlahBab) : '-';
+
+  // 2. Jumlah Pasal: identitas.jumlah_pasal
+  const rawJumlahPasal = data?.identitas?.jumlah_pasal;
+  const jumlahPasal = typeof rawJumlahPasal === 'number' && !isNaN(rawJumlahPasal) ? rawJumlahPasal : null;
+  const displayJumlahPasal = jumlahPasal !== null ? String(jumlahPasal) : '-';
+
+  // 3. Jumlah Kewajiban dan Larangan: hitung dari poin_utama berdasarkan kategori aktual kontrak
+  const poinUtama = Array.isArray(data?.poin_utama) ? data.poin_utama : null;
+  const jumlahKewajiban = poinUtama
+    ? poinUtama.filter(p => typeof p.kategori === 'string' && p.kategori.trim().toLowerCase() === 'kewajiban').length
+    : null;
+  const displayJumlahKewajiban = jumlahKewajiban !== null ? String(jumlahKewajiban) : '-';
+
+  const jumlahLarangan = poinUtama
+    ? poinUtama.filter(p => typeof p.kategori === 'string' && p.kategori.trim().toLowerCase() === 'larangan').length
+    : null;
+  const displayJumlahLarangan = jumlahLarangan !== null ? String(jumlahLarangan) : '-';
+
+  // 4. Judul Regulasi: identitas.tentang
+  const judulRegulasi = data?.identitas?.tentang?.trim() || null;
+  const displayJudulRegulasi = judulRegulasi || data?.identitas?.nomor?.trim() || '-';
+
+  // 5. Tanggal Terbit: identitas.tanggal_terbit
+  const tanggalTerbit = data?.identitas?.tanggal_terbit?.trim() || null;
+  const displayTanggalTerbit = tanggalTerbit || '-';
+
+  // 6. Kategori Poin Utama yang benar-benar ada di respon API
+  const availableCategories = useMemo(() => {
+    if (!data?.poin_utama) return ['Semua'];
+    const cats = Array.from(new Set(data.poin_utama.map(p => p.kategori).filter(Boolean)));
+    return ['Semua', ...cats];
+  }, [data?.poin_utama]);
+
   return (
     <div className="max-w-[1360px] mx-auto space-y-4 pb-16 font-sans">
       {/* 1. Header Workspace Breadcrumb */}
@@ -476,7 +675,7 @@ export default function AnalisaState2Workspace({
             onClick={() => loadAnalysis(true)}
             disabled={loading}
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold shadow-2xs transition cursor-pointer"
-            title="Kirim permintaan analisis ulang ke backend (parameter segar=true). Catatan: bypass cache di peladen memerlukan dukungan rute backend terkait."
+            title="Kirim permintaan analisis ulang ke backend dengan parameter segar=true untuk memaksa kalkulasi ulang tanpa cache."
           >
             <RefreshCw size={12} className={loading && isRefreshing ? 'animate-spin text-red-700' : ''} />
             <span>Analisis Ulang</span>
@@ -493,20 +692,31 @@ export default function AnalisaState2Workspace({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-bold text-gray-900 truncate">
-                {data?.identitas?.nomor || data?.identitas?.title || (loading ? 'Memuat identitas draft...' : `Draft Peraturan #${documentId}`)}
+                {displayJudulRegulasi !== '-' ? displayJudulRegulasi : (loading ? 'Memuat identitas draft...' : `Draft Peraturan #${documentId}`)}
               </h2>
               <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold border border-emerald-200/60 shrink-0">
                 Dokumen Aktif
               </span>
             </div>
             <p className="text-xs text-gray-500 mt-0.5 truncate">
-              {data?.identitas?.tanggal || data?.identitas?.date || '17 Okt 2024'} • Perbankan • {String(data?.metrik?.jumlah_bab ?? 14)} Bab • {String(data?.metrik?.jumlah_pasal ?? 92)} Pasal
+              {displayTanggalTerbit} • {data?.identitas?.jenis || '-'} • {displayJumlahBab} Bab • {displayJumlahPasal} Pasal
             </p>
           </div>
         </div>
 
         {/* Right Badges & Controls */}
         <div className="flex items-center gap-2.5 shrink-0 self-end md:self-auto">
+          {/* Badge Cache Basi ("Hasil lama") */}
+          {data?.cache?.basi === true && (
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-xs font-semibold"
+              title={`Hasil analisis lama tersimpan (${data.cache.dibuat ? new Date(data.cache.dibuat).toLocaleString('id-ID') : 'cache terdahulu'})`}
+            >
+              <Clock size={13} className="text-amber-600" />
+              <span>Hasil lama</span>
+            </div>
+          )}
+
           {/* Badge Mode Aktual */}
           <div 
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 text-xs font-semibold"
@@ -579,7 +789,9 @@ export default function AnalisaState2Workspace({
               </div>
             </div>
             <div className="flex items-center justify-between text-[11px] text-gray-400 font-mono">
-              <span>Mengekstraksi naskah regulasi dan memvalidasi norma hukum...</span>
+              <span className={errorMessage ? 'text-amber-700 font-semibold animate-pulse' : ''}>
+                {errorMessage || 'Mengekstraksi naskah regulasi dan memvalidasi norma hukum...'}
+              </span>
               <span className="font-semibold text-gray-700">{pipelineProgress}%</span>
             </div>
           </div>
@@ -622,7 +834,7 @@ export default function AnalisaState2Workspace({
               <Check size={12} strokeWidth={3} />
             </div>
             <span>
-              <strong>Analisis Berhasil:</strong> Seluruh tahap ekstraksi dan identifikasi norma telah tuntas. {String(data.metrik?.jumlah_pasal ?? 92)} pasal dan {String(data.metrik?.jumlah_bab ?? 14)} bab siap ditelaah pada 3 panel workspace.
+              <strong>Analisis Berhasil:</strong> Seluruh tahap ekstraksi dan identifikasi norma telah tuntas. {displayJumlahPasal} pasal dan {displayJumlahBab} bab siap ditelaah pada 3 panel workspace.
             </span>
           </div>
           <button
@@ -645,7 +857,7 @@ export default function AnalisaState2Workspace({
             <div>
               <h3 className="text-base font-bold text-gray-900">
                 {errorStatus === 404 
-                  ? 'Dokumen Belum Siap Dianalisis' 
+                  ? (errorMessage?.includes('Batas waktu') ? 'Batas Waktu Sinkronisasi Tercapai' : 'Dokumen Belum Siap Dianalisis')
                   : errorStatus === 403
                   ? 'Akses Ditolak'
                   : errorStatus === 503
@@ -663,7 +875,7 @@ export default function AnalisaState2Workspace({
             <div className="flex items-center justify-center">
               <button
                 type="button"
-                onClick={() => loadAnalysis(false)}
+                onClick={() => loadAnalysis(false, false)}
                 className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-700 hover:bg-red-800 text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer"
               >
                 <RefreshCw size={13} />
@@ -690,7 +902,7 @@ export default function AnalisaState2Workspace({
                   </h3>
                 </div>
                 <span className="text-[11px] font-semibold text-gray-500">
-                  {String(data.metrik?.jumlah_bab ?? 14)} Bab, {String(data.metrik?.jumlah_pasal ?? 92)} Pasal
+                  {displayJumlahBab} Bab, {displayJumlahPasal} Pasal
                 </span>
               </div>
 
@@ -1109,7 +1321,7 @@ export default function AnalisaState2Workspace({
                       RINGKASAN EKSEKUTIF
                     </span>
                     <p className="text-xs text-gray-700 leading-relaxed">
-                      {data.ringkasan_teks || (data.ringkasan && data.ringkasan[0]?.kalimat) || 'Regulasi ini mengatur ketentuan pokok, tata kelola, dan batasan operasional bagi sektor terkait.'}
+                      {data.ringkasan_teks || (data.ringkasan && data.ringkasan[0]?.kalimat) || '-'}
                     </p>
                   </div>
 
@@ -1158,7 +1370,7 @@ export default function AnalisaState2Workspace({
 
                   {/* Filter Kategori */}
                   <div className="flex items-center gap-1 overflow-x-auto pb-1 text-[11px]">
-                    {['Semua', 'Tata Kelola', 'Manajemen Risiko', 'Kewajiban', 'Larangan', 'Sanksi'].map(kat => (
+                    {availableCategories.map(kat => (
                       <button
                         key={kat}
                         type="button"
@@ -1244,19 +1456,19 @@ export default function AnalisaState2Workspace({
                     </h4>
                     <div className="grid grid-cols-2 gap-2 text-center">
                       <div className="p-2.5 bg-gray-50 border border-gray-100 rounded-lg">
-                        <span className="text-lg font-bold text-gray-900 block">{String(data.metrik?.jumlah_bab ?? 14)}</span>
+                        <span className="text-lg font-bold text-gray-900 block">{displayJumlahBab}</span>
                         <span className="text-[10px] text-gray-500 uppercase">Jumlah Bab</span>
                       </div>
                       <div className="p-2.5 bg-gray-50 border border-gray-100 rounded-lg">
-                        <span className="text-lg font-bold text-gray-900 block">{String(data.metrik?.jumlah_pasal ?? 92)}</span>
+                        <span className="text-lg font-bold text-gray-900 block">{displayJumlahPasal}</span>
                         <span className="text-[10px] text-gray-500 uppercase">Jumlah Pasal</span>
                       </div>
                       <div className="p-2.5 bg-gray-50 border border-gray-100 rounded-lg">
-                        <span className="text-lg font-bold text-red-700 block">{String(data.metrik?.jumlah_kewajiban ?? 48)}</span>
+                        <span className="text-lg font-bold text-red-700 block">{displayJumlahKewajiban}</span>
                         <span className="text-[10px] text-gray-500 uppercase">Kewajiban</span>
                       </div>
                       <div className="p-2.5 bg-gray-50 border border-gray-100 rounded-lg">
-                        <span className="text-lg font-bold text-amber-700 block">{String(data.metrik?.jumlah_larangan ?? 14)}</span>
+                        <span className="text-lg font-bold text-amber-700 block">{displayJumlahLarangan}</span>
                         <span className="text-[10px] text-gray-500 uppercase">Larangan</span>
                       </div>
                     </div>
@@ -1328,7 +1540,7 @@ export default function AnalisaState2Workspace({
         <div className="flex items-center gap-2 text-xs text-gray-700">
           <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
           <span>
-            Analisis selesai. {String(data?.metrik?.jumlah_pasal ?? 92)} pasal dan {String(data?.metrik?.jumlah_bab ?? 14)} bab terindeks lengkap secara {data?.mode_dipakai || mode}.
+            Analisis selesai. {displayJumlahPasal} pasal dan {displayJumlahBab} bab terindeks lengkap secara {data?.mode_dipakai || mode}.
           </span>
         </div>
 

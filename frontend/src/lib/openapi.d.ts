@@ -481,8 +481,18 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * [Internal] Bulk insert chunk pasal dari ML pipeline
-         * @description Bulk insert pasal dari pipeline ML.
+         * [Internal] Bulk insert/upsert chunk pasal dari ML pipeline
+         * @description Bulk insert / upsert pasal dari pipeline ML (Data).
+         *
+         *     Fitur utama kontrak pasal:
+         *     - **Upsert idempoten**: Menggunakan `INSERT ... ON CONFLICT (document_id, order_index) WHERE order_index IS NOT NULL DO UPDATE`.
+         *       Memperbarui kolom `level`, `chapter_title`, `article_number`, `content_text`, `page`, `parent_id`, dan `embedding` (hanya bila embedding baru tidak null).
+         *     - **replace_document_ids**: Opsi untuk menghapus seluruh pasal milik dokumen yang didaftarkan sebelum melakukan upsert,
+         *       dalam transaksi atomik yang sama. Berguna untuk ekstraksi ulang bersih atau saat pasal baru lebih sedikit dari sebelumnya.
+         *     - **page**: Halaman PDF tempat pasal/ayat dimulai (1-indexed).
+         *     - **parent_order_index**: Menyelesaikan hierarki ayat/pasal ke `parent_id`, baik induk ada pada request sebelumnya
+         *       (sudah tersimpan di DB) maupun berada di dalam batch yang sama. Mengembalikan 422 jika induk tidak ditemukan.
+         *     - **Validasi Dokumen**: Memverifikasi semua `document_id` ada di tabel `documents`. Mengembalikan 422 bila ada ID yang tidak dikenal.
          */
         post: operations["bulk_insert_articles_api_v1_internal_articles_post"];
         delete?: never;
@@ -976,23 +986,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/debug-routes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Debug Routes */
-        get: operations["debug_routes_debug_routes_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1007,7 +1000,8 @@ export interface components {
          *       "content_text": "Ketentuan ini berlaku bagi seluruh lembaga keuangan...",
          *       "document_id": 1,
          *       "level": "pasal",
-         *       "order_index": 4
+         *       "order_index": 4,
+         *       "page": 1
          *     }
          */
         ArticleChunkIn: {
@@ -1047,6 +1041,18 @@ export interface components {
              * @example 4
              */
             order_index?: number | null;
+            /**
+             * Page
+             * @description Halaman PDF tempat pasal ini dimulai (1-indexed)
+             * @example 1
+             */
+            page?: number | null;
+            /**
+             * Parent Order Index
+             * @description order_index pasal induk dalam dokumen yang sama (0-based)
+             * @example 0
+             */
+            parent_order_index?: number | null;
             /**
              * Embedding
              * @description Vektor embedding dimensi 1536 (pgvector). Kirimkan null / omit jika embedding belum tersedia.
@@ -1162,10 +1168,15 @@ export interface components {
              * @description Daftar chunk pasal yang akan dimasukkan ke database (min. 1 item)
              */
             articles: components["schemas"]["ArticleChunkIn"][];
+            /**
+             * Replace Document Ids
+             * @description Daftar ID dokumen yang seluruh pasalnya akan dihapus terlebih dahulu sebelum upsert dalam transaksi yang sama
+             */
+            replace_document_ids?: number[] | null;
         };
         /**
          * BulkArticleResponse
-         * @description Response setelah bulk insert berhasil.
+         * @description Response setelah bulk insert/upsert berhasil.
          */
         BulkArticleResponse: {
             /**
@@ -1176,9 +1187,21 @@ export interface components {
             status: string;
             /**
              * Inserted Count
-             * @description Jumlah pasal yang berhasil disimpan
+             * @description Jumlah pasal baru yang berhasil disimpan
              */
             inserted_count: number;
+            /**
+             * Updated Count
+             * @description Jumlah pasal yang berhasil diperbarui (upsert)
+             * @default 0
+             */
+            updated_count: number;
+            /**
+             * Deleted Count
+             * @description Jumlah pasal yang dihapus (dari replace_document_ids)
+             * @default 0
+             */
+            deleted_count: number;
             /**
              * Message
              * @description Pesan ringkasan
@@ -4247,26 +4270,6 @@ export interface operations {
         };
     };
     health_health_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    debug_routes_debug_routes_get: {
         parameters: {
             query?: never;
             header?: never;

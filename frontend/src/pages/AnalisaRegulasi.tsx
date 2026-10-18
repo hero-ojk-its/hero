@@ -58,6 +58,8 @@ export default function AnalisaRegulasi() {
   const [releaseDate, setReleaseDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
+  // Klasifikasi akses dokumen: 'publik' | 'non_publik' (Kepatuhan NDA)
+  const [accessClassification, setAccessClassification] = useState<'publik' | 'non_publik'>('non_publik');
 
   // 4. State Layanan ML & Eksekusi Upload
   const [mlHealth, setMlHealth] = useState<MlHealthResponse | null>(null);
@@ -70,20 +72,21 @@ export default function AnalisaRegulasi() {
   const [isPollingActive, setIsPollingActive] = useState<boolean>(false);
   const [pollingTimeoutOccurred, setPollingTimeoutOccurred] = useState<boolean>(false);
 
-  // Hook Polling Status Dokumen Backend (Interval 2s, Max 60s)
+  // Hook Polling Status Dokumen Backend (Interval 2s, Batas waktu ~5 menit / 300.000 ms)
   const documentPolling = usePolling<DocumentStatusResponse>({
     fn: (signal) => getDocumentStatus(uploadedDocumentId!, signal),
     isTerminal: (doc) => isDocumentReadyForAnalysis(doc) || isDocumentProcessingFailed(doc),
     interval: 2000,
-    maxDuration: 60000,
+    maxDuration: 300000,
     enabled: isPollingActive && uploadedDocumentId !== null && uploadedDocumentId > 0,
     onSuccess: (doc) => {
       setIsPollingActive(false);
       if (isDocumentReadyForAnalysis(doc)) {
         // Dokumen siap dianalisis: transisi ke State 2 Workspace via useSearchParams
+        const effectiveMode = mlHealth?.mode_ai === true ? selectedMode : 'deterministik';
         setSearchParams({
           documentId: String(uploadedDocumentId),
-          mode: selectedMode,
+          mode: effectiveMode,
         });
       }
     },
@@ -95,14 +98,25 @@ export default function AnalisaRegulasi() {
     },
   });
 
+  // Hentikan dan bersihkan polling saat komponen dilepas (unmount)
+  useEffect(() => {
+    return () => {
+      documentPolling.stop();
+    };
+  }, [documentPolling]);
+
   // Pengecekan Kesiapan Layanan ML Lapisan Data saat inisialisasi
   const checkHealthStatus = useCallback(async () => {
     setMlHealthLoading(true);
     try {
       const health = await checkMlHealth();
       setMlHealth(health);
+      if (health.mode_ai !== true) {
+        setSelectedMode('deterministik');
+      }
     } catch {
       setMlHealth(null);
+      setSelectedMode('deterministik');
     } finally {
       setMlHealthLoading(false);
     }
@@ -157,9 +171,9 @@ export default function AnalisaRegulasi() {
       setUploadError('Berkas harus berupa dokumen format PDF (.pdf).');
       return;
     }
-    // Validasi batas ukuran 50 MB
-    if (file.size > 50 * 1024 * 1024) {
-      setUploadError('Ukuran berkas melebihi batas maksimum 50 MB.');
+    // Validasi batas ukuran 100 MB (mengikuti batas backend)
+    if (file.size > 100 * 1024 * 1024) {
+      setUploadError('Ukuran berkas melebihi batas maksimum 100 MB.');
       return;
     }
 
@@ -204,9 +218,10 @@ export default function AnalisaRegulasi() {
         regulation_type: regulationType.trim() || undefined,
         bidang: bidang.trim() || undefined,
         release_date: releaseDate.trim() || undefined,
+        access_classification: accessClassification,
       };
 
-      // Unggah via API client (access_classification='non_publik', document_role='draft_kajian')
+      // Unggah via API client (access_classification='publik' | 'non_publik', document_role='draft_kajian')
       const result = await uploadDraftPdf(selectedFile, metadata);
 
       const docId = result.documentId;
@@ -224,15 +239,19 @@ export default function AnalisaRegulasi() {
 
   // Handler Pembukaan Dokumen ke State 2
   const handleOpenWorkspace = (docId: number, mode: 'deterministik' | 'ai' = selectedMode) => {
+    documentPolling.stop();
+    setIsPollingActive(false);
+    const effectiveMode = (mlHealth && mlHealth.mode_ai === false) ? 'deterministik' : mode;
     setSearchParams({
       documentId: String(docId),
-      mode,
+      mode: effectiveMode,
     });
   };
 
   // Handler Kembali dari State 2 ke State 1
   const handleBackToState1 = () => {
     setSearchParams({});
+    documentPolling.stop();
     setIsPollingActive(false);
     setUploadedDocumentId(null);
     setPollingTimeoutOccurred(false);
@@ -409,6 +428,7 @@ export default function AnalisaRegulasi() {
                 <button
                   type="button"
                   onClick={() => {
+                    documentPolling.stop();
                     setIsPollingActive(false);
                     setPollingTimeoutOccurred(false);
                   }}
@@ -431,11 +451,15 @@ export default function AnalisaRegulasi() {
                 1. Unggah Draft Peraturan untuk Dianalisis
               </h2>
               <p className="text-xs text-gray-500 mt-0.5">
-                Unggah naskah rancangan peraturan baru dalam format PDF. Dokumen otomatis diproses secara privat (Non-Publik) untuk kajian telaah dan ekstraksi pasal.
+                Unggah naskah rancangan peraturan baru dalam format PDF. Dokumen diklasifikasikan sebagai {accessClassification === 'non_publik' ? 'Non-Publik' : 'Publik'} untuk kajian telaah dan ekstraksi pasal.
               </p>
             </div>
-            <span className="self-start sm:self-auto px-2.5 py-1 rounded-full text-[10px] font-semibold bg-red-50 text-red-700 border border-red-200 shrink-0">
-              Klasifikasi: Non-Publik (Draf Kajian)
+            <span className={`self-start sm:self-auto px-2.5 py-1 rounded-full text-[10px] font-semibold border shrink-0 ${
+              accessClassification === 'non_publik'
+                ? 'bg-red-50 text-red-700 border-red-200'
+                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+            }`}>
+              Klasifikasi: {accessClassification === 'non_publik' ? 'Non-Publik (Draf Kajian)' : 'Publik (Terbuka)'}
             </span>
           </div>
 
@@ -467,7 +491,7 @@ export default function AnalisaRegulasi() {
                   Tarik dan lepaskan berkas PDF draf regulasi ke sini, atau <span className="text-red-700 underline font-semibold">pilih dari komputer</span>
                 </p>
                 <p className="text-[11px] text-gray-400 mt-1">
-                  Format wajib: Dokumen PDF (.pdf) • Batas maksimum ukuran: 50 MB
+                  Format wajib: Dokumen PDF (.pdf) • Batas maksimum ukuran: 100 MB
                 </p>
               </div>
             </div>
@@ -575,6 +599,59 @@ export default function AnalisaRegulasi() {
                 className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700 transition"
               />
             </div>
+
+            {/* Klasifikasi Dokumen (Publik vs Non-publik) */}
+            <div className="md:col-span-2 space-y-1.5 pt-1">
+              <label className="text-xs font-bold text-gray-700 flex items-center justify-between">
+                <span>Klasifikasi Akses Dokumen <span className="text-red-600">*</span></span>
+                <span className="text-[11px] font-normal text-gray-400">Pilih klasifikasi sesuai kepatuhan NDA regulasi</span>
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setAccessClassification('non_publik')}
+                  className={`p-3 rounded-lg border text-left flex items-start gap-2.5 transition cursor-pointer ${
+                    accessClassification === 'non_publik'
+                      ? 'border-red-700 bg-red-50/40 text-red-900 ring-1 ring-red-700 shadow-2xs'
+                      : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <div className={`w-4 h-4 rounded-full border mt-0.5 flex items-center justify-center shrink-0 ${
+                    accessClassification === 'non_publik' ? 'border-red-700 bg-red-700' : 'border-gray-300'
+                  }`}>
+                    {accessClassification === 'non_publik' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-bold block">Non-publik (Draf Kajian)</span>
+                    <span className="text-[11px] text-gray-500 leading-relaxed block">
+                      Tunduk pada NDA / rahasia internal. Hanya dapat dianalisis setelah login diaktifkan.
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAccessClassification('publik')}
+                  className={`p-3 rounded-lg border text-left flex items-start gap-2.5 transition cursor-pointer ${
+                    accessClassification === 'publik'
+                      ? 'border-emerald-700 bg-emerald-50/40 text-emerald-900 ring-1 ring-emerald-700 shadow-2xs'
+                      : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <div className={`w-4 h-4 rounded-full border mt-0.5 flex items-center justify-center shrink-0 ${
+                    accessClassification === 'publik' ? 'border-emerald-700 bg-emerald-700' : 'border-gray-300'
+                  }`}>
+                    {accessClassification === 'publik' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-bold block">Publik (Terbuka)</span>
+                    <span className="text-[11px] text-gray-500 leading-relaxed block">
+                      Dokumen regulasi terbuka untuk umum. Dapat langsung dianalisis tanpa login.
+                    </span>
+                  </div>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -609,16 +686,32 @@ export default function AnalisaRegulasi() {
 
             {/* Opsi AI */}
             <div
-              onClick={() => setSelectedMode('ai')}
-              className={`p-4 rounded-xl border-2 transition cursor-pointer space-y-1.5 ${
-                selectedMode === 'ai'
-                  ? 'border-red-700 bg-red-50/20 shadow-xs'
-                  : 'border-gray-200 bg-white hover:border-gray-300'
+              onClick={() => {
+                if (mlHealth?.mode_ai === true) {
+                  setSelectedMode('ai');
+                }
+              }}
+              className={`p-4 rounded-xl border-2 transition space-y-1.5 ${
+                mlHealth?.mode_ai !== true
+                  ? 'border-gray-200 bg-gray-50/70 opacity-60 cursor-not-allowed'
+                  : selectedMode === 'ai'
+                  ? 'border-red-700 bg-red-50/20 shadow-xs cursor-pointer'
+                  : 'border-gray-200 bg-white hover:border-gray-300 cursor-pointer'
               }`}
             >
-              <h3 className="text-sm font-bold text-gray-900">Mode AI</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-gray-900">Mode AI</h3>
+                {mlHealth?.mode_ai !== true && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-gray-200 text-gray-700">
+                    Belum tersedia
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-gray-600 leading-relaxed">
-                Penelaahan kontekstual berbasis pemahaman teks untuk intisari tematik dan perangkuman klausul kompleks. Otomatis beralih ke Deterministik bila model AI offline.
+                Penelaahan kontekstual berbasis pemahaman teks untuk intisari tematik dan perangkuman klausul kompleks.{' '}
+                {mlHealth?.mode_ai !== true
+                  ? 'Layanan model AI belum aktif pada mesin analisis.'
+                  : 'Otomatis beralih ke Deterministik bila model AI offline.'}
               </p>
             </div>
           </div>

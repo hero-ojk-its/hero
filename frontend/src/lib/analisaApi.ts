@@ -99,7 +99,11 @@ export interface MlAnalisaIdentity {
   tahun?: number;
   jenis?: string;
   tanggal?: string;
+  tanggal_terbit?: string;
+  tentang?: string;
+  status?: string;
   penerbit?: string;
+  jumlah_pasal?: number;
 }
 
 export interface MlAnalisaAiDetails {
@@ -119,6 +123,13 @@ export interface MlAnalisaMetrics {
   jumlah_kewajiban?: number;
   jumlah_larangan?: number;
   [key: string]: unknown;
+}
+
+export interface MlAnalisaCache {
+  hit?: boolean;
+  dibuat?: string | null;
+  basi?: boolean;
+  mode_tersimpan?: string;
 }
 
 export interface MlAnalisaResponse {
@@ -143,6 +154,8 @@ export interface MlAnalisaResponse {
   ai?: MlAnalisaAiDetails | null;
   ringkasan_ai?: string;
   catatan?: string;
+  cache?: MlAnalisaCache;
+  disaring_backend?: boolean;
 }
 
 // ============================================================================
@@ -217,6 +230,7 @@ export interface DraftUploadMetadata {
   regulation_type?: string;
   bidang?: string;
   release_date?: string;
+  access_classification?: 'publik' | 'non_publik';
 }
 
 export interface UploadDraftResult {
@@ -247,7 +261,7 @@ export async function checkMlHealth(signal?: AbortSignal): Promise<MlHealthRespo
  * 
  * Ketentuan Kepatuhan & Arsitektur:
  * - Menggunakan kembali uploadManualPdf (/api/v1/ingest/upload-pdf) dari ingestApi.ts.
- * - WAJIB menyematkan access_classification='non_publik' (kepatuhan NDA).
+ * - Menyematkan access_classification dari formulir ('publik' atau 'non_publik') sesuai kepatuhan NDA.
  * - WAJIB menyematkan document_role='draft_kajian' agar tidak disimpan sebagai regulasi eksisting KBS.
  * - Memvalidasi details[0] dan mengekstrak document_id / duplicate_of_document_id secara ketat.
  * - TIDAK PERNAH menggunakan job_id sebagai document_id.
@@ -259,7 +273,7 @@ export async function uploadDraftPdf(
 ): Promise<UploadDraftResult> {
   const formData = new FormData();
   formData.append('files', file);
-  formData.append('access_classification', 'non_publik');
+  formData.append('access_classification', metadata?.access_classification || 'non_publik');
   formData.append('document_role', 'draft_kajian');
 
   if (metadata?.title && metadata.title.trim() !== '') {
@@ -327,15 +341,9 @@ export async function getDocumentStatus(
  * Mengambil ringkasan terstruktur dan poin kunci berbasis pasal dari layanan ML.
  * Endpoint: GET /analisa/{document_id}?mode={mode}&segar={segar}
  * 
- * CATATAN PENTING KONTRAK AKTUAL:
- * 1. Mesin lapisan data internal (hero/pipeline/hero/analysis/structured.py) memiliki parameter
- *    `use_cache: bool = True` dan menyimpan cache di tabel SQLite `analysis_v2`.
- * 2. Namun, router FastAPI publik di hero/pipeline/hero/bridge/ml_api.py saat ini baru
- *    mendeklarasikan: `mode: str = Query("deterministik", pattern="^(deterministik|ai)$")`.
- * 3. Parameter `segar` dan header `Cache-Control` tetap disiapkan dan dikirimkan oleh frontend
- *    agar bila rute backend mengekspos `segar: bool = Query(False)`, frontend langsung kompatibel.
- *    Jangan mengasumsikan kalkulasi ulang tanpa cache di sisi server sudah aktif sampai rute bridge
- *    resmi menambahkan parameter tersebut.
+ * Dukungan parameter:
+ * - mode: 'deterministik' | 'ai'
+ * - segar: boolean (Query param 'segar=true' didukung backend ml_gateway untuk memaksa kalkulasi ulang tanpa cache)
  */
 export async function getMlAnalisa(
   documentId: number,
