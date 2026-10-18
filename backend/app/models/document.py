@@ -301,6 +301,11 @@ class Document(Base):
         back_populates="document",
         cascade="all, delete-orphan",
     )
+    analysis_runs = relationship(
+        "AnalysisRun",
+        back_populates="document",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self):
         return f"<Document id={self.id} reg={self.regulation_number} status={self.status_keberlakuan} role={self.document_role}>"

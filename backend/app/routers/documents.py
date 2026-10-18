@@ -6,7 +6,7 @@ unduhan PDF, pembacaan teks, koreksi metadata, serta antrean koreksi (needs-revi
 from datetime import date, datetime, timezone
 import logging
 import re
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 import urllib.parse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -119,6 +119,38 @@ class DocumentAnalysisComparisonResponse(BaseModel):
     deterministik: Optional[ModeAnalysisDetail] = None
     ai: Optional[ModeAnalysisDetail] = None
     catatan: str
+
+
+class AnalysisRunItemResponse(BaseModel):
+    run_id: int
+    kind: str
+    dibuat: Optional[str] = None
+    oleh: Optional[str] = None
+    mode_diminta: str
+    mode_dipakai: Optional[str] = None
+    sumber: str
+    segar: bool
+    http_status: int
+    error_code: Optional[str] = None
+    ml_version: Optional[str] = None
+    params: Optional[Dict[str, Any]] = None
+    result_hash: Optional[str] = None
+    ringkasan_output: Optional[Dict[str, Any]] = None
+    duration_ms: Optional[int] = None
+    fingerprint_sama_dengan_sekarang: bool
+
+
+class AnalysisRunsListResponse(BaseModel):
+    document_id: int
+    total: int
+    items: List[AnalysisRunItemResponse]
+    catatan: str = "Draft / Rekomendasi — riwayat eksekusi analisa untuk penelusuran."
+
+
+class AnalysisRunDetailResponse(AnalysisRunItemResponse):
+    hasil: Optional[Dict[str, Any]] = None
+    cara_ulang: str
+    catatan: str = "Draft / Rekomendasi — riwayat eksekusi analisa untuk penelusuran."
 
 
 @router.get("/", summary="Daftar & pencarian dokumen regulasi")
@@ -1256,3 +1288,93 @@ def get_document_analysis_comparison(
 
     allowed_ids = allowed_document_ids(db)
     return get_analysis_comparison(db, doc, allowed_ids, saring_rujukan)
+
+
+@router.get(
+    "/{document_id}/analisa/riwayat",
+    response_model=AnalysisRunsListResponse,
+    summary="Riwayat eksekusi analisa dan harmonisasi regulasi (US-10 #56)",
+    responses={
+        403: {"description": "Dokumen non-publik memerlukan autentikasi aktif"},
+        404: {"description": "Dokumen tidak ditemukan atau nonaktif"},
+    },
+)
+def get_document_analysis_runs(
+    document_id: int,
+    kind: Optional[Literal["analisa", "harmonisasi"]] = Query(None, description="Filter jenis analisa"),
+    mode: Optional[Literal["deterministik", "ai"]] = Query(None, description="Filter mode yang dipakai"),
+    skip: int = Query(0, ge=0, description="Offset pagination"),
+    limit: int = Query(20, ge=1, le=100, description="Batas jumlah per halaman"),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Mengembalikan riwayat eksekusi analisa dan harmonisasi (append-only) untuk suatu dokumen.
+    """
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
+    if not doc.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "dokumen_nonaktif", "message": "Dokumen tidak aktif / telah dinonaktifkan."},
+        )
+
+    if settings.protect_non_public_when_auth_disabled and not settings.auth_enabled:
+        if doc.access_classification == KlasifikasiAkses.non_publik:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.",
+            )
+
+    from app.services.analysis_run_service import get_analysis_runs_list
+
+    return get_analysis_runs_list(db, doc, kind=kind, mode=mode, skip=skip, limit=limit)
+
+
+@router.get(
+    "/{document_id}/analisa/riwayat/{run_id}",
+    response_model=AnalysisRunDetailResponse,
+    summary="Detail satu riwayat eksekusi analisa beserta output mentah tersaring (US-10 #56)",
+    responses={
+        403: {"description": "Dokumen non-publik memerlukan autentikasi aktif"},
+        404: {"description": "Dokumen tidak ditemukan, nonaktif, atau run_id tidak valid"},
+    },
+)
+def get_document_analysis_run_detail(
+    document_id: int,
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Mengembalikan detail satu eksekusi analisa beserta output mentah (diresolusi melalui result_hash bila cache),
+    disaring sesuai hak akses dokumen terkini, dan petunjuk cara_ulang.
+    """
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
+    if not doc.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "dokumen_nonaktif", "message": "Dokumen tidak aktif / telah dinonaktifkan."},
+        )
+
+    if settings.protect_non_public_when_auth_disabled and not settings.auth_enabled:
+        if doc.access_classification == KlasifikasiAkses.non_publik:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.",
+            )
+
+    from app.routers.ml_gateway import allowed_document_ids, saring_rujukan
+    from app.services.analysis_run_service import get_analysis_run_detail
+
+    allowed_ids = allowed_document_ids(db)
+    return get_analysis_run_detail(
+        db=db,
+        doc=doc,
+        run_id=run_id,
+        allowed_ids=allowed_ids,
+        saring_rujukan_fn=saring_rujukan,
+    )
