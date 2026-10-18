@@ -416,7 +416,7 @@ def test_h10_audit_run_harmonization_extended_detail(
 def test_h11_audit_filter_by_mode(
     client: TestClient, db_session: Session, test_storage: StorageService
 ):
-    """H11: GET /audit/?mode=ai -> hanya entri dengan detail.mode_dipakai == 'ai'."""
+    """H11: GET /audit-logs/?mode=ai -> hanya entri dengan detail.mode_dipakai == 'ai'."""
     doc1 = _seed_test_doc(db_session, test_storage, title="Doc H11 Det", reg_num="11/DET/2026")
     doc2 = _seed_test_doc(db_session, test_storage, title="Doc H11 AI", reg_num="11/AI/2026")
 
@@ -430,13 +430,13 @@ def test_h11_audit_filter_by_mode(
     client.get(f"/api/v1/ml/analisa/{doc1.id}")
     client.get(f"/api/v1/ml/analisa/{doc2.id}?mode=ai")
 
-    resp_all = client.get("/api/v1/audit/?action=RUN_ANALYSIS")
+    resp_all = client.get("/api/v1/audit-logs/?action=RUN_ANALYSIS")
     assert resp_all.status_code == 200
     items_all = resp_all.json()
     assert isinstance(items_all, list)
     assert len(items_all) >= 2
 
-    resp_ai = client.get("/api/v1/audit/?action=RUN_ANALYSIS&mode=ai")
+    resp_ai = client.get("/api/v1/audit-logs/?action=RUN_ANALYSIS&mode=ai")
     assert resp_ai.status_code == 200
     items_ai = resp_ai.json()
     assert isinstance(items_ai, list)

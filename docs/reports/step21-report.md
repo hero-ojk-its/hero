@@ -43,7 +43,7 @@ Langkah 21 mengimplementasikan pencatatan riwayat eksekusi analisa dan harmonisa
    - Menambahkan konstanta `RUN_ANALYSIS = "RUN_ANALYSIS"`.
    - `GET /ml/analisa` mencatat audit `RUN_ANALYSIS` dengan detail `{"mode_diminta", "mode_dipakai", "sumber", "http_status", "run_id"}`.
    - `POST /ml/harmonisasi` memperluas audit `RUN_HARMONIZATION` dengan menyertakan `mode_dipakai`, `sumber`, `http_status`, dan `run_id` di samping field-field audit yang sudah ada (`cache_hit`, `jumlah_korpus`, dll.).
-   - `GET /api/v1/audit/` dan `/api/v1/audit-logs/` kini mendukung filter query opsional `mode: Literal["deterministik", "ai"]` yang mencocokkan `detail->>'mode_dipakai'`.
+   - `GET /api/v1/audit-logs/` kini mendukung filter query opsional `mode: Literal["deterministik", "ai"]` yang mencocokkan `detail->>'mode_dipakai'`.
 
 5. **Endpoint Riwayat Dokumen (`app/routers/documents.py`):**
    - `GET /api/v1/documents/{document_id}/analisa/riwayat`: Daftar riwayat eksekusi analisa dokumen (filter `kind`, `mode`, `skip`, `limit`).
@@ -66,7 +66,7 @@ Langkah 21 mengimplementasikan pencatatan riwayat eksekusi analisa dan harmonisa
 | **H08** | Harmonisasi Korpus Disaring | Harmonisasi dengan dokumen pembanding aktif & nonaktif | Tercatat `kind=harmonisasi`, `params.pembanding` hanya memuat dokumen aktif setelah disaring | **LULUS** |
 | **H09** | Audit `RUN_ANALYSIS` | Verifikasi entri audit setelah eksekusi analisa H01 | Ada 1 entri audit `RUN_ANALYSIS` dengan `detail.mode_dipakai`, `detail.sumber`, dan `detail.run_id` sesuai baris H01 | **LULUS** |
 | **H10** | Audit `RUN_HARMONIZATION` | Verifikasi detail audit harmonisasi yang diperluas | `detail` memuat `cache_hit` (lama) DAN `mode_dipakai`, `sumber`, `run_id` (baru) | **LULUS** |
-| **H11** | Filter Audit Berdasarkan Mode | `GET /audit/?mode=ai` | Mengembalikan hanya entri audit dengan `detail.mode_dipakai == "ai"` | **LULUS** |
+| **H11** | Filter Audit Berdasarkan Mode | `GET /audit-logs/?mode=ai` | Mengembalikan hanya entri audit dengan `detail.mode_dipakai == "ai"` | **LULUS** |
 | **H12** | Daftar Riwayat Dokumen | `GET /documents/{id}/analisa/riwayat` setelah H01–H03 | `total=3`, urut terbaru dahulu, ringkasan output ada, tanpa memuat field `hasil` penuh | **LULUS** |
 | **H13** | Filter Riwayat Dokumen | Filter riwayat dengan `kind=harmonisasi` dan `mode=ai` | Hanya baris yang cocok dengan filter yang dikembalikan | **LULUS** |
 | **H14** | Resolusi Hasil Cache | `GET .../riwayat/{run_id}` untuk baris `cache` (H02) | `hasil` berhasil diresolusi dari baris `ml` H01 via `result_hash`, `cara_ulang` terbentuk benar | **LULUS** |
@@ -213,7 +213,7 @@ docker compose up -d --build backend
 Start-Sleep -Seconds 15
 curl.exe -s http://localhost:8000/health
 curl.exe -s "http://localhost:8000/api/v1/documents/71/analisa/riwayat"
-curl.exe -s "http://localhost:8000/api/v1/audit/?action=RUN_ANALYSIS&limit=3"
+curl.exe -s "http://localhost:8000/api/v1/audit-logs/?action=RUN_ANALYSIS&limit=3"
 ```
 Output:
 ```json

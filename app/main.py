@@ -202,7 +202,6 @@ async def security_headers(request, call_next):
 
 # DAFTARKAN ROUTER
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
-app.include_router(audit_router, prefix="/api/v1/audit", tags=["Audit Logs"])
 app.include_router(audit_router, prefix="/api/v1/audit-logs", tags=["Audit Logs"])
 app.include_router(categories_router, prefix="/api/v1/categories", tags=["Categories"])
 app.include_router(ingest_router, prefix="/api/v1/ingest", tags=["Ingest"])
