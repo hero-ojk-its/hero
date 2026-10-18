@@ -2110,6 +2110,111 @@
         }
       }
     },
+    "/api/v1/documents/{document_id}/analisa/ekspor": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Ekspor hasil analisa regulasi (DOCX, CSV, JSON) (US-40 #62)",
+        "description": "Mengekspor hasil analisa regulasi (summary, Key Takeaways, rujukan pasal, metadata)\nke berkas DOCX, CSV, atau JSON langsung dari data lokal (tanpa memanggil ML).",
+        "operationId": "export_document_analysis_api_v1_documents__document_id__analisa_ekspor_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "docx",
+                "csv",
+                "json"
+              ],
+              "type": "string",
+              "description": "Format berkas ekspor",
+              "default": "docx",
+              "title": "Format"
+            },
+            "description": "Format berkas ekspor"
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "deterministik",
+                "ai"
+              ],
+              "type": "string",
+              "description": "Mode analisa (dipakai bila run_id kosong)",
+              "default": "deterministik",
+              "title": "Mode"
+            },
+            "description": "Mode analisa (dipakai bila run_id kosong)"
+          },
+          {
+            "name": "run_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ID eksekusi tertentu dari riwayat analisa",
+              "title": "Run Id"
+            },
+            "description": "ID eksekusi tertentu dari riwayat analisa"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Berkas ekspor hasil analisa dalam format DOCX, CSV, atau JSON.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {},
+              "text/csv": {}
+            }
+          },
+          "403": {
+            "description": "Dokumen non-publik memerlukan autentikasi aktif"
+          },
+          "404": {
+            "description": "Dokumen tidak ditemukan, belum dianalisa, atau run_id tidak valid"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/internal/articles": {
       "post": {
         "tags": [
