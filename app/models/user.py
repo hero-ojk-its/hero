@@ -2,11 +2,13 @@
 Model SQLAlchemy: User
 Menyimpan data pengguna sistem HERO beserta hashed password dan role akses.
 """
+import logging
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, CheckConstraint
 from sqlalchemy.sql import func
-
 from sqlalchemy.orm import validates
 from app.database import Base
+
+logger = logging.getLogger("hero")
 
 
 class User(Base):
@@ -74,9 +76,13 @@ class User(Base):
     def validate_role(self, key: str, value: str) -> str:
         """Memetakan peran lama 'admin' -> 'admin_sistem' dan 'user' -> 'analis' demi kompatibilitas."""
         if value == "admin":
-            return "admin_sistem"
+            baru = "admin_sistem"
+            logger.warning("Peran lama '%s' dipetakan ke '%s'", value, baru)
+            return baru
         if value == "user":
-            return "analis"
+            baru = "analis"
+            logger.warning("Peran lama '%s' dipetakan ke '%s'", value, baru)
+            return baru
         return value
 
     def __repr__(self) -> str:

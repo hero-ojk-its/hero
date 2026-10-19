@@ -305,10 +305,10 @@ def test_p07_non_public_document_access_auth_enabled(
     user_tokens,
     sample_docs,
 ):
-    """P07: Dokumen non-publik dapat diakses Analis (200), tetapi ditolak 403 KB_BACA_NONPUBLIK untuk Admin Sistem."""
+    """P07: Dokumen non-publik dapat diakses Analis (200), tetapi Admin Sistem ditolak 403 KB_BACA di tingkat endpoint."""
     _, doc_nonpub = sample_docs
 
-    # Analis (punya KB_BACA_NONPUBLIK)
+    # Analis (punya KB_BACA dan KB_BACA_NONPUBLIK)
     token_analis = user_tokens[PeranPengguna.analis]
     res_analis = client.get(
         f"/api/v1/documents/{doc_nonpub.id}/text",
@@ -316,7 +316,7 @@ def test_p07_non_public_document_access_auth_enabled(
     )
     assert res_analis.status_code == 200
 
-    # Admin Sistem (tidak punya KB_BACA_NONPUBLIK)
+    # Admin Sistem (tidak punya KB_BACA, ditolak di tingkat endpoint)
     token_admin = user_tokens[PeranPengguna.admin_sistem]
     res_admin = client.get(
         f"/api/v1/documents/{doc_nonpub.id}/text",
@@ -325,7 +325,54 @@ def test_p07_non_public_document_access_auth_enabled(
     assert res_admin.status_code == 403
     detail = res_admin.json().get("detail", {})
     assert detail.get("code") == "akses_ditolak"
-    assert detail.get("izin") == "KB_BACA_NONPUBLIK"
+    assert detail.get("izin") == "KB_BACA"
+    assert detail.get("peran") == "admin_sistem"
+
+
+def test_p07b_admin_kb_without_non_public_permission_rejected(
+    client: TestClient,
+    auth_enabled_env,
+    user_tokens,
+    sample_docs,
+):
+    """P07b: Jika peran punya KB_BACA tetapi tidak punya KB_BACA_NONPUBLIK, akses dokumen non-publik ditolak 403 KB_BACA_NONPUBLIK."""
+    _, doc_nonpub = sample_docs
+    token_kb = user_tokens[PeranPengguna.admin_kb]
+
+    # Monkeypatch HAK_AKSES_PERAN: cabut KB_BACA_NONPUBLIK dari admin_kb
+    orig_kb_perms = HAK_AKSES_PERAN[PeranPengguna.admin_kb].copy()
+    try:
+        HAK_AKSES_PERAN[PeranPengguna.admin_kb] = orig_kb_perms - {Izin.KB_BACA_NONPUBLIK}
+
+        res = client.get(
+            f"/api/v1/documents/{doc_nonpub.id}/text",
+            headers={"Authorization": f"Bearer {token_kb}"},
+        )
+        assert res.status_code == 403
+        detail = res.json().get("detail", {})
+        assert detail.get("code") == "akses_ditolak"
+        assert detail.get("izin") == "KB_BACA_NONPUBLIK"
+    finally:
+        HAK_AKSES_PERAN[PeranPengguna.admin_kb] = orig_kb_perms
+
+
+def test_p07c_no_classification_leak_for_unauthorized_users(
+    client: TestClient,
+    auth_enabled_env,
+    user_tokens,
+    sample_docs,
+):
+    """P07c: Admin Sistem yang mengakses dokumen non-publik vs publik menerima detail respons 403 yang sama persis tanpa membocorkan klasifikasi."""
+    doc_pub, doc_nonpub = sample_docs
+    token_admin = user_tokens[PeranPengguna.admin_sistem]
+    headers = {"Authorization": f"Bearer {token_admin}"}
+
+    res_pub = client.get(f"/api/v1/documents/{doc_pub.id}/text", headers=headers)
+    res_nonpub = client.get(f"/api/v1/documents/{doc_nonpub.id}/text", headers=headers)
+
+    assert res_pub.status_code == 403
+    assert res_nonpub.status_code == 403
+    assert res_pub.json()["detail"] == res_nonpub.json()["detail"]
 
 
 # ==============================================================================
@@ -620,3 +667,42 @@ def test_p17_create_user_script_idempotent(db_session: Session):
     assert "sudah terdaftar" in res2.stdout
     assert secret_password not in res2.stdout
     assert secret_password not in res2.stderr
+
+
+# ==============================================================================
+# P18 - Skrip legacy create_admin.py tidak mencetak password & set role admin_sistem
+# ==============================================================================
+def test_p18_legacy_create_admin_script(db_session: Session):
+    """P18: Skrip legacy create_admin.py tidak mencetak password dan menetapkan role admin_sistem."""
+    # Bersihkan admin jika sudah ada
+    existing = db_session.query(User).filter(User.username == "admin").first()
+    if existing:
+        db_session.delete(existing)
+        db_session.commit()
+
+    secret_admin_pw = "CustomAdminPass456!"
+    env = os.environ.copy()
+    env["ADMIN_PASSWORD"] = secret_admin_pw
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["DATABASE_URL"] = os.getenv(
+        "TEST_DATABASE_URL",
+        "postgresql+psycopg://hero_user:hero_password@127.0.0.1:5432/hero_test",
+    )
+
+    python_exe = sys.executable
+    script_path = str(Path(__file__).resolve().parent.parent / "app" / "create_admin.py")
+
+    res = subprocess.run(
+        [python_exe, script_path],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0, f"create_admin.py gagal: {res.stderr}"
+    assert secret_admin_pw not in res.stdout
+    assert secret_admin_pw not in res.stderr
+    assert "Username: admin" in res.stdout
+
+    admin_db = db_session.query(User).filter(User.username == "admin").first()
+    assert admin_db is not None
+    assert admin_db.role == "admin_sistem"

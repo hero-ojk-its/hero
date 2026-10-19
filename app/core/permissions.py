@@ -10,8 +10,7 @@ Prinsip utama:
 from enum import Enum
 from typing import Any, Callable, Dict, Optional, Set
 
-from fastapi import Depends, HTTPException, Request, status
-from sqlalchemy.orm import Session
+from fastapi import Depends, HTTPException, status
 
 from app.config import settings
 
@@ -147,12 +146,9 @@ def perlu_izin(izin: Izin) -> Callable[..., Any]:
     - Peran dibaca dari DB setiap request, bukan dari klaim token, supaya perubahan peran langsung berlaku.
     """
     from app.routers.auth import get_current_user
-    from app.database import get_db
 
     def secured_dependency(
-        request: Request,
         user: Optional[Any] = Depends(get_current_user),
-        db: Session = Depends(get_db),
     ) -> Optional[Any]:
         if not settings.auth_enabled:
             return None
@@ -176,24 +172,6 @@ def perlu_izin(izin: Izin) -> Callable[..., Any]:
         allowed_perms = HAK_AKSES_PERAN.get(role_enum, set()) if role_enum else set()
 
         if izin not in allowed_perms:
-            # Jika request mengakses dokumen non-publik, dahulukan penolakan izin KB_BACA_NONPUBLIK (P07)
-            doc_id = request.path_params.get("document_id") or request.path_params.get("id")
-            if doc_id and db is not None:
-                try:
-                    from app.models.document import Document
-                    from app.models.enums import KlasifikasiAkses
-                    doc_obj = db.query(Document).filter(Document.id == int(doc_id)).first()
-                    if doc_obj:
-                        acc_class = getattr(doc_obj, "access_classification", None)
-                        if acc_class == KlasifikasiAkses.non_publik or (isinstance(acc_class, str) and acc_class == "non_publik"):
-                            if not boleh_baca_nonpublik(user):
-                                raise HTTPException(
-                                    status_code=status.HTTP_403_FORBIDDEN,
-                                    detail={"code": "akses_ditolak", "izin": "KB_BACA_NONPUBLIK"},
-                                )
-                except (ValueError, TypeError):
-                    pass
-
             izin_str = izin.value if hasattr(izin, "value") else str(izin)
             role_str = str(role) if role is not None else ""
             raise HTTPException(

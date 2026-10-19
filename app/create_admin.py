@@ -1,5 +1,14 @@
+"""
+Usang: gunakan scripts/create_user.py --role admin_sistem untuk manajemen akun pengguna modern.
+Skrip ini dipertahankan demi kompatibilitas alur reset admin lama.
+"""
 import os
 import sys
+from pathlib import Path
+
+# Tambahkan direktori root ke sys.path bila dijalankan langsung
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import bcrypt
 from app.config import settings
 from app.database import SessionLocal
@@ -7,15 +16,16 @@ from app.models.user import User
 
 
 def reset_admin_user():
+    print("Usang: gunakan scripts/create_user.py --role admin_sistem")
     db = SessionLocal()
     try:
         raw_password = os.getenv("ADMIN_PASSWORD")
         if not raw_password:
             if settings.app_env == "development":
-                print("⚠️  Peringatan: ADMIN_PASSWORD tidak diset, menggunakan default 'admin123' untuk lingkungan development.")
+                print("Peringatan: ADMIN_PASSWORD tidak diset, menggunakan default untuk lingkungan development.")
                 raw_password = "admin123"
             else:
-                print("❌ Kesalahan: ADMIN_PASSWORD wajib diset pada lingkungan non-development.", file=sys.stderr)
+                print("Kesalahan: ADMIN_PASSWORD wajib diset pada lingkungan non-development.", file=sys.stderr)
                 sys.exit(1)
 
         # Cari user admin, jika ada update password-nya
@@ -30,24 +40,24 @@ def reset_admin_user():
 
         if admin:
             admin.hashed_password = hashed_pw
-            print("🔄 Password akun admin berhasil di-reset ulang!")
+            admin.role = "admin_sistem"
+            print("Akun admin berhasil di-reset ulang!")
         else:
             new_admin = User(
                 username="admin",
                 hashed_password=hashed_pw,
-                role="admin",
+                role="admin_sistem",
                 is_active=True
             )
             db.add(new_admin)
-            print("✅ Akun admin baru berhasil dibuat!")
+            print("Akun admin baru berhasil dibuat!")
 
         db.commit()
         print("   Username: admin")
-        print(f"   Password: {raw_password}")
 
     except Exception as e:
         db.rollback()
-        print(f"❌ Terjadi kesalahan: {e}", file=sys.stderr)
+        print(f"Terjadi kesalahan: {e}", file=sys.stderr)
     finally:
         db.close()
 
