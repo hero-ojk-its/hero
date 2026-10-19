@@ -7,6 +7,7 @@ import jwt
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.permissions import HAK_AKSES_PERAN, Izin, PeranPengguna, perlu_izin
 from app.database import get_db
 from app.models.user import User
 from app.services.audit_service import record_audit, LOGIN
@@ -58,10 +59,25 @@ def get_current_user(
 
 
 def get_current_admin(
-    current_user: Optional[User] = Depends(get_current_user),
+    current_user: Optional[User] = Depends(perlu_izin(Izin.AUDIT_BACA)),
 ) -> Optional[User]:
+    return current_user
+
+
+CurrentUser = Annotated[Optional[User], Depends(get_current_user)]
+CurrentAdmin = Annotated[Optional[User], Depends(get_current_admin)]
+
+
+@router.get("/me", summary="Profil dan Hak Akses Pengguna Aktif")
+def get_current_user_profile(
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    """
+    Mengembalikan profil pengguna aktif dan daftar izin yang dimiliki berdasarkan peran.
+    Bila mode autentikasi dinonaktifkan (AUTH_ENABLED=false), mengembalikan {'auth_enabled': False}.
+    """
     if not settings.auth_enabled:
-        return None
+        return {"auth_enabled": False}
 
     if not current_user:
         raise HTTPException(
@@ -70,17 +86,23 @@ def get_current_admin(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Hanya untuk admin",
-        )
+    role_val = current_user.role
+    role_enum = None
+    if isinstance(role_val, PeranPengguna):
+        role_enum = role_val
+    elif isinstance(role_val, str) and role_val in PeranPengguna._value2member_map_:
+        role_enum = PeranPengguna(role_val)
 
-    return current_user
+    allowed_perms = HAK_AKSES_PERAN.get(role_enum, set()) if role_enum else set()
 
-
-CurrentUser = Annotated[Optional[User], Depends(get_current_user)]
-CurrentAdmin = Annotated[Optional[User], Depends(get_current_admin)]
+    return {
+        "auth_enabled": True,
+        "username": current_user.username,
+        "nama_lengkap": current_user.nama_lengkap,
+        "unit_kerja": current_user.unit_kerja,
+        "role": current_user.role,
+        "izin": sorted(list(p.value for p in allowed_perms)),
+    }
 
 
 @router.post("/login", summary="Login Dapatkan Token")

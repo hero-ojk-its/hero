@@ -12,7 +12,6 @@ from typing import Optional, List, Dict, Any, Tuple
 from sqlalchemy import func, or_, and_, desc, literal_column, case
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.models.document import Document
 from app.models.category import Category
 from app.models.enums import (
@@ -117,7 +116,7 @@ class SearchService:
 
         return paths_map
 
-    def search(self, params: SearchParams) -> Tuple[int, List[Dict[str, Any]]]:
+    def search(self, params: SearchParams, user: Optional[Any] = None) -> Tuple[int, List[Dict[str, Any]]]:
         """
         Mengeksekusi pencarian dokumen berdasarkan SearchParams.
         Mengembalikan tuple (total_count, items).
@@ -281,7 +280,8 @@ class SearchService:
         # 12. Query Data dengan pagination
         # Buat kolom rank dan highlight jika q ada
         select_cols = [Document]
-        is_protect_non_public = settings.protect_non_public_when_auth_disabled and not settings.auth_enabled
+        from app.core.permissions import boleh_baca_nonpublik
+        is_protect_non_public = not boleh_baca_nonpublik(user)
 
         if has_text_query and tsquery_expr is not None:
             if rank_expr is None:

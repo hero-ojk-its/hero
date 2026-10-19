@@ -5,6 +5,31 @@
     "version": "0.10.0"
   },
   "paths": {
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Profil dan Hak Akses Pengguna Aktif",
+        "description": "Mengembalikan profil pengguna aktif dan daftar izin yang dimiliki berdasarkan peran.\nBila mode autentikasi dinonaktifkan (AUTH_ENABLED=false), mengembalikan {'auth_enabled': False}.",
+        "operationId": "get_current_user_profile_api_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "tags": [
@@ -196,7 +221,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -259,7 +289,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
       }
     },
     "/api/v1/categories/{category_id}": {
@@ -270,6 +305,11 @@
         "summary": "Detail Kategori dan Jalur Hierarki",
         "description": "Mengembalikan detail satu kategori beserta jalur root->leaf dan jumlah dokumen.",
         "operationId": "get_category_detail_api_v1_categories__category_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "category_id",
@@ -360,6 +400,11 @@
         "summary": "Riwayat job ingest",
         "description": "Mengembalikan riwayat JobIngest dengan pagination dan filter opsional.",
         "operationId": "list_jobs_api_v1_ingest_jobs_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "skip",
@@ -460,6 +505,11 @@
         "summary": "Detail job ingest",
         "description": "[US-14] Mengembalikan detail lengkap job ingest termasuk daftar dokumen dan kegagalan/duplikat.",
         "operationId": "get_job_detail_api_v1_ingest_jobs__job_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -503,6 +553,11 @@
         "summary": "Daftar kegagalan ingest",
         "description": "[US-23 / S-04] Mengambil daftar log kegagalan dan antrian retry.",
         "operationId": "list_failures_api_v1_ingest_failures_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -623,6 +678,11 @@
         "summary": "Detail satu kegagalan ingest",
         "description": "Mengambil detail satu baris kegagalan ingest.",
         "operationId": "get_failure_detail_api_v1_ingest_failures__failure_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "failure_id",
@@ -840,6 +900,11 @@
         "summary": "Screening dedup sebelum upload (hemat bandwidth scraper)",
         "description": "Endpoint ringan untuk pengecekan duplikasi sebelum upload penuh.",
         "operationId": "check_duplicate_api_v1_ingest_check_duplicate_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "file_hash",
@@ -917,7 +982,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
       }
     },
     "/api/v1/documents/": {
@@ -928,6 +998,11 @@
         "summary": "Daftar & pencarian dokumen regulasi",
         "description": "Mengembalikan daftar dokumen regulasi dengan pagination dan pencarian full-text / multi-filter.",
         "operationId": "list_documents_api_v1_documents__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "q",
@@ -1345,6 +1420,11 @@
         "summary": "Antrean dokumen yang memerlukan koreksi metadata manual",
         "description": "Mengembalikan dokumen berstatus `perlu_koreksi`, ditambah dokumen berstatus `terindeks`\nyang memiliki field hasil ekstraksi dengan confidence di bawah threshold dan belum dikoreksi manual.",
         "operationId": "get_documents_needing_review_api_v1_documents_needs_review_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "skip",
@@ -2839,6 +2919,11 @@
         "summary": "Menampilkan daftar semua situs/folder sumber",
         "description": "[US-12, US-16] Menampilkan daftar semua sumber dokumen.\nMendukung filter opsional `is_active` dan `source_type`.",
         "operationId": "list_scraping_sources_api_v1_scraping_sources__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "is_active",
@@ -2920,7 +3005,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
       }
     },
     "/api/v1/scraping-sources/{source_id}": {
@@ -2931,6 +3021,11 @@
         "summary": "Detail satu situs/folder sumber",
         "description": "Mendapatkan detail satu situs/folder sumber berdasarkan ID.",
         "operationId": "get_scraping_source_api_v1_scraping_sources__source_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "source_id",
@@ -3203,6 +3298,11 @@
         "summary": "Daftar berkas yang terindeks pada sumber",
         "description": "[US-16] Mengambil daftar berkas pada sumber beserta status sinkronisasi terakhir.",
         "operationId": "list_source_files_api_v1_scraping_sources__source_id__files_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "source_id",
@@ -3300,7 +3400,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
       }
     },
     "/api/v1/scans/": {
@@ -3982,7 +4087,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
       }
     },
     "/api/v1/naming/preview": {
@@ -4024,7 +4134,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
       }
     },
     "/api/v1/ml/health": {
@@ -4510,6 +4625,188 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Daftar akun pengguna sistem",
+        "description": "Mengembalikan daftar seluruh akun pengguna sistem HERO.\nKata sandi (hash) tidak pernah disertakan dalam respons.",
+        "operationId": "list_users_api_v1_users__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "role",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/PeranPengguna"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter berdasarkan peran",
+              "title": "Role"
+            },
+            "description": "Filter berdasarkan peran"
+          },
+          {
+            "name": "is_active",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter status aktif",
+              "title": "Is Active"
+            },
+            "description": "Filter status aktif"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserResponse"
+                  },
+                  "title": "Response List Users Api V1 Users  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Buat akun pengguna baru",
+        "description": "Membuat akun pengguna baru dengan peran tertentu.\nPassword minimal 12 karakter di-hash menggunakan bcrypt.",
+        "operationId": "create_user_api_v1_users__post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserCreateIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{user_id}": {
+      "patch": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Perbarui data atau peran akun pengguna",
+        "description": "Memperbarui profil, peran, status aktif, atau password akun pengguna.\nTidak ada endpoint DELETE — akun cukup dinonaktifkan (is_active=False).\n\nAturan perlindungan:\n- 409 'admin_terakhir': Ditolak bila perubahan menyebabkan tidak ada Admin Sistem aktif.\n- 409 'ubah_diri_sendiri': Ditolak bila Admin Sistem menonaktifkan atau menurunkan peran akun sendiri.",
+        "operationId": "update_user_api_v1_users__user_id__patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserUpdateIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
               }
             }
           },
@@ -7846,6 +8143,17 @@
         "title": "PeranDokumen",
         "description": "Peran dokumen dalam basis pengetahuan / kajian"
       },
+      "PeranPengguna": {
+        "type": "string",
+        "enum": [
+          "analis",
+          "admin_kb",
+          "admin_sistem",
+          "pilot_user"
+        ],
+        "title": "PeranPengguna",
+        "description": "Peran pengguna sistem HERO sesuai dokumen 08 §PERAN."
+      },
       "PullProgress": {
         "properties": {
           "job_id": {
@@ -9522,6 +9830,190 @@
         },
         "type": "object",
         "title": "UpdateMetadataIn"
+      },
+      "UserCreateIn": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 3,
+            "title": "Username",
+            "description": "Username unik login"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "title": "Password",
+            "description": "Password minimal 12 karakter"
+          },
+          "role": {
+            "$ref": "#/components/schemas/PeranPengguna",
+            "description": "Peran akses pengguna"
+          },
+          "nama_lengkap": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nama Lengkap",
+            "description": "Nama lengkap pengguna"
+          },
+          "unit_kerja": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Kerja",
+            "description": "Unit kerja / divisi"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password",
+          "role"
+        ],
+        "title": "UserCreateIn"
+      },
+      "UserResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "nama_lengkap": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nama Lengkap"
+          },
+          "unit_kerja": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Kerja"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "username",
+          "role",
+          "is_active"
+        ],
+        "title": "UserResponse"
+      },
+      "UserUpdateIn": {
+        "properties": {
+          "role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PeranPengguna"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Peran akses baru"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active",
+            "description": "Status aktif pengguna"
+          },
+          "nama_lengkap": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nama Lengkap",
+            "description": "Nama lengkap pengguna"
+          },
+          "unit_kerja": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Kerja",
+            "description": "Unit kerja / divisi"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 12
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password",
+            "description": "Password baru minimal 12 karakter"
+          }
+        },
+        "type": "object",
+        "title": "UserUpdateIn"
       },
       "ValidationError": {
         "properties": {

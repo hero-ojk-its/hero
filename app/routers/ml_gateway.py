@@ -23,7 +23,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.document import Document
 from app.models.enums import JenisAnalisa, KlasifikasiAkses, ModeAnalisa, StatusPemrosesan
-from app.routers.auth import get_current_user
+from app.core.permissions import perlu_izin, Izin
 from app.services.analysis_result_service import (
     compute_params_hash,
     get_cached_result,
@@ -46,13 +46,15 @@ async def get_ml_client() -> AsyncIterator[httpx.AsyncClient]:
         yield client
 
 
-def allowed_document_ids(db: Session) -> set[int]:
+def allowed_document_ids(db: Session, user: Optional[Any] = None) -> set[int]:
     """
     Himpunan ID dokumen yang diizinkan untuk diakses melalui layanan analisa:
     - is_active = true
     - processing_status in {terindeks, perlu_koreksi} (SYNCABLE)
-    - jika protect_non_public_when_auth_disabled and not auth_enabled: hanya access_classification = publik
+    - disaring sesuai hak akses dokumen non-publik
     """
+    from app.core.permissions import boleh_baca_nonpublik
+
     query = (
         db.query(Document.id)
         .filter(
@@ -63,18 +65,20 @@ def allowed_document_ids(db: Session) -> set[int]:
             ]),
         )
     )
-    if settings.protect_non_public_when_auth_disabled and not settings.auth_enabled:
+    if not boleh_baca_nonpublik(user):
         query = query.filter(Document.access_classification == KlasifikasiAkses.publik)
     return {row[0] for row in query.all()}
 
 
-def check_document_access(db: Session, document_id: int) -> Document:
+def check_document_access(db: Session, document_id: int, user: Optional[Any] = None) -> Document:
     """
     Pemeriksaan status dan akses sebuah dokumen sebelum permintaan diteruskan ke ML:
     - Tidak ditemukan -> 404
     - Nonaktif -> 404 dokumen_nonaktif
-    - Non-publik saat login nonaktif -> 403
+    - Non-publik saat pengguna tidak berhak -> 403
     """
+    from app.core.permissions import check_non_public_access
+
     doc = db.query(Document).filter(Document.id == document_id).first()
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dokumen tidak ditemukan")
@@ -83,12 +87,7 @@ def check_document_access(db: Session, document_id: int) -> Document:
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "dokumen_nonaktif", "message": "Dokumen tidak aktif / telah dinonaktifkan."},
         )
-    if settings.protect_non_public_when_auth_disabled and not settings.auth_enabled:
-        if doc.access_classification != KlasifikasiAkses.publik:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.",
-            )
+    check_non_public_access(doc, user)
     return doc
 
 
@@ -264,7 +263,7 @@ async def forward_ml_request(
 @router.get("/health", summary="Kesiapan Layanan Analisa ML")
 async def get_ml_health(
     client: httpx.AsyncClient = Depends(get_ml_client),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.KB_BACA)),
 ):
     """Mengecek status kesiapan layanan analisa (indeks vektor, korpus, mode AI)."""
     status_code, data = await forward_ml_request(client, "GET", "/health")
@@ -279,7 +278,7 @@ async def get_ml_dokumen(
     limit: int = Query(50, ge=1, le=500),
     db: Session = Depends(get_db),
     client: httpx.AsyncClient = Depends(get_ml_client),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.KB_BACA)),
 ):
     """Dokumen backend yang siap dianalisa, disaring sesuai hak akses."""
     params: dict[str, Any] = {"limit": limit}
@@ -290,7 +289,7 @@ async def get_ml_dokumen(
     if status_code >= 400:
         return JSONResponse(status_code=status_code, content=data)
 
-    allowed_ids = allowed_document_ids(db)
+    allowed_ids = allowed_document_ids(db, user=current_user)
     filtered_data, discarded = saring_rujukan(data, allowed_ids)
     if isinstance(filtered_data, dict):
         filtered_data["disaring_backend"] = discarded
@@ -305,11 +304,11 @@ async def get_ml_analisa(
     segar: bool = Query(False, description="Paksa hitung ulang tanpa cache"),
     db: Session = Depends(get_db),
     client: httpx.AsyncClient = Depends(get_ml_client),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.ANALISA_JALANKAN)),
 ):
     """Ringkasan terstruktur dan poin kunci berbasis pasal."""
-    doc = check_document_access(db, document_id)
-    allowed_ids = allowed_document_ids(db)
+    doc = check_document_access(db, document_id, user=current_user)
+    allowed_ids = allowed_document_ids(db, user=current_user)
 
     req_mode = ModeAnalisa.ai if mode == "ai" else ModeAnalisa.deterministik
     params_hash = compute_params_hash(JenisAnalisa.analisa)
@@ -645,16 +644,16 @@ async def get_ml_analisa_klausul(
     k: int = Query(5, ge=1, le=20),
     db: Session = Depends(get_db),
     client: httpx.AsyncClient = Depends(get_ml_client),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.ANALISA_JALANKAN)),
 ):
     """Pasal yang relevan dengan kebutuhan pengguna dalam dokumen."""
-    check_document_access(db, document_id)
+    check_document_access(db, document_id, user=current_user)
     params = {"kebutuhan": kebutuhan, "k": k}
     status_code, data = await forward_ml_request(client, "GET", f"/analisa/{document_id}/klausul", params=params)
     if status_code >= 400:
         return JSONResponse(status_code=status_code, content=data)
 
-    allowed_ids = allowed_document_ids(db)
+    allowed_ids = allowed_document_ids(db, user=current_user)
     filtered_data, discarded = saring_rujukan(data, allowed_ids)
     if isinstance(filtered_data, dict):
         filtered_data["disaring_backend"] = discarded
@@ -669,14 +668,14 @@ async def post_ml_harmonisasi(
     body: Optional[list[int]] = Body(None),
     db: Session = Depends(get_db),
     client: httpx.AsyncClient = Depends(get_ml_client),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.ANALISA_JALANKAN)),
 ):
     """
     Analisa harmonisasi draft terhadap korpus dokumen regulasi.
     Body opsional berisi daftar document_id pembatas korpus (null = seluruh korpus yang diizinkan).
     """
-    doc = check_document_access(db, document_id)
-    allowed_ids = allowed_document_ids(db)
+    doc = check_document_access(db, document_id, user=current_user)
+    allowed_ids = allowed_document_ids(db, user=current_user)
 
     if body is None:
         forward_body = sorted(list(allowed_ids - {document_id}))
@@ -1044,7 +1043,7 @@ async def get_ml_cari(
     k: int = Query(10, ge=1, le=50),
     db: Session = Depends(get_db),
     client: httpx.AsyncClient = Depends(get_ml_client),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.KB_BACA)),
 ):
     """Pencarian pasal semantik/leksikal dengan penyesuaian metode default."""
     chosen_method = metode or settings.ml_default_search_method
@@ -1054,7 +1053,7 @@ async def get_ml_cari(
     if status_code >= 400:
         return JSONResponse(status_code=status_code, content=data)
 
-    allowed_ids = allowed_document_ids(db)
+    allowed_ids = allowed_document_ids(db, user=current_user)
     filtered_data, discarded = saring_rujukan(data, allowed_ids)
     if isinstance(filtered_data, dict):
         filtered_data["disaring_backend"] = discarded
@@ -1069,10 +1068,12 @@ async def get_ml_pasal_mirip(
     hanya_publik: Optional[bool] = Query(None),
     db: Session = Depends(get_db),
     client: httpx.AsyncClient = Depends(get_ml_client),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.KB_BACA)),
 ):
     """Pencarian pasal termirip di korpus backend untuk sepotong teks."""
-    if settings.protect_non_public_when_auth_disabled and not settings.auth_enabled:
+    from app.core.permissions import boleh_baca_nonpublik
+
+    if not boleh_baca_nonpublik(current_user):
         effective_hanya_publik = True
     else:
         effective_hanya_publik = hanya_publik
@@ -1087,7 +1088,7 @@ async def get_ml_pasal_mirip(
     if status_code >= 400:
         return JSONResponse(status_code=status_code, content=data)
 
-    allowed_ids = allowed_document_ids(db)
+    allowed_ids = allowed_document_ids(db, user=current_user)
     filtered_data, discarded = saring_rujukan(data, allowed_ids)
     if isinstance(filtered_data, dict):
         filtered_data["disaring_backend"] = discarded
