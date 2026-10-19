@@ -36,8 +36,9 @@ from app.services.folder_connector import _is_hidden, _is_temp_file
 from app.services.naming_service import validate_naming_format, validate_naming_separator
 from app.services.source_runner import SourceRunner
 from app.crawlers.url_utils import guard_url, BlockedUrlError
+from app.core.permissions import perlu_izin, Izin
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(perlu_izin(Izin.SUMBER_KELOLA))])
 
 
 def _get_allowed_source_roots() -> List[Path]:

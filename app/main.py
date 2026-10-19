@@ -23,6 +23,7 @@ from app.routers.dashboard import router as dashboard_router
 from app.routers.scans import router as scans_router
 from app.routers.naming import router as naming_router
 from app.routers.ml_gateway import router as ml_gateway_router
+from app.routers.users import router as users_router
 
 logger = logging.getLogger("hero")
 
@@ -212,6 +213,7 @@ app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["Dashboar
 app.include_router(scans_router)  
 app.include_router(naming_router)  
 app.include_router(ml_gateway_router, prefix="/api/v1/ml", tags=["Analisa (ML)"])
+app.include_router(users_router)
 
 
 @app.get("/", tags=["Health"])

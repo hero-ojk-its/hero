@@ -1927,3 +1927,168 @@ Endpoint ini digunakan oleh worker/lapisan data (`hero bridge`) untuk mengirimka
   - `replace_all`: Jika `true`, relasi lama di database yang tidak tercantum dalam daftar kiriman baru akan dihapus bersih.
   - `documents_status_changed`: Jumlah dokumen di Knowledge Base yang status keberlakuannya otomatis diperbarui.
 
+---
+
+## 16. PERAN & HAK AKSES (US-01)
+
+Sistem otorisasi HERO Backend menggunakan kontrol akses berbasis peran (RBAC) yang terpusat pada matriks hak akses `HAK_AKSES_PERAN`.
+
+> **Catatan Mode Autentikasi:**
+> Selama konfigurasi lingkungan `AUTH_ENABLED=false` (default pengujian dan staging), seluruh endpoint terbuka tanpa pengecekan peran (kompatibel penuh dengan perilaku awal).
+> Ketika `AUTH_ENABLED=true` diaktifkan, seluruh endpoint yang dilindungi mewajibkan header `Authorization: Bearer <token_jwt>` dan memvalidasi izin pengguna.
+
+### 16.1 Matriks Hak Akses Peran
+
+| Izin | Analis | Admin KB | Admin Sistem | Pilot User | Deskripsi & Cakupan Fitur |
+|---|:---:|:---:|:---:|:---:|---|
+| `KB_BACA` | ✅ | ✅ | — | — | Cari dan lihat dokumen KB, detail pasal, kategori, summary dashboard, penamaan berkas, job ingest, status ML |
+| `KB_BACA_NONPUBLIK` | ✅ | ✅ | — | — | Buka/unduh teks dan PDF dokumen berkategori non-publik |
+| `DOKUMEN_UNGGAH` | ✅ | — | — | — | Unggah dokumen manual PDF (`POST /api/v1/ingest/upload-pdf`) |
+| `METADATA_KOREKSI` | ✅ | — | — | — | Koreksi metadata dokumen manual dan akses antrean `needs-review` |
+| `KEGAGALAN_KELOLA` | ✅ | — | — | — | Monitoring kegagalan ingest dan pemicu pemrosesan ulang (retry) |
+| `ANALISA_JALANKAN` | ✅ | — | — | — | Eksekusi analisa pasal, pencarian klausul, harmonisasi regulasi, banding hasil, riwayat eksekusi |
+| `ANALISA_EKSPOR` | ✅ | — | — | — | Ekspor hasil analisa ke format DOCX, CSV, atau JSON |
+| `MODE_ATUR` | ✅ | — | ✅ | — | Konfigurasi mode pemrosesan sistem |
+| `SUMBER_KELOLA` | — | ✅ | — | — | Manajemen situs sumber scraping, folder lokal, dan sesi pemindaian/penarikan |
+| `KB_KELOLA` | — | ✅ | — | — | Pembuatan kategori KB, penempatan folder (`kb/`), dan aktivasi/deaktivasi dokumen |
+| `STATUS_UBAH` | — | ✅ | — | — | Pembaruan manual status keberlakuan dokumen (`PUT /documents/{id}/status`) |
+| `AUDIT_BACA` | — | — | ✅ | — | Membaca jejak audit aktivitas sistem (`GET /api/v1/audit-logs/`) |
+| `PENGGUNA_KELOLA` | — | — | ✅ | — | Manajemen akun pengguna (`GET`, `POST`, `PATCH /api/v1/users/`) |
+| `TANGGAPAN_TINJAU` | ✅ | — | — | ✅ | Peninjauan tanggapan draft regulasi (Fase 4) |
+
+### 16.2 Format Respons Galat Otorisasi (401 & 403)
+
+1. **401 Unauthorized:**
+   - Tanpa header `Authorization` atau token kedaluwarsa:
+     ```json
+     {
+       "detail": "Otentikasi diperlukan"
+     }
+     ```
+   - Akun pengguna berstatus nonaktif (`is_active: false`):
+     ```json
+     {
+       "detail": "Akun pengguna tidak aktif"
+     }
+     ```
+
+2. **403 Forbidden (`akses_ditolak`):**
+   - Pengguna aktif tetapi perannya tidak memiliki izin fitur yang diminta:
+     ```json
+     {
+       "detail": {
+         "code": "akses_ditolak",
+         "izin": "AUDIT_BACA",
+         "peran": "analis"
+       }
+     }
+     ```
+   - Dokumen non-publik diakses saat `AUTH_ENABLED=true` oleh pengguna tanpa izin `KB_BACA_NONPUBLIK`:
+     ```json
+     {
+       "detail": {
+         "code": "akses_ditolak",
+         "izin": "KB_BACA_NONPUBLIK"
+       }
+     }
+     ```
+   - Dokumen non-publik diakses saat `AUTH_ENABLED=false`:
+     ```json
+     {
+       "detail": "Dokumen non-publik hanya dapat dibuka setelah login diaktifkan."
+     }
+     ```
+
+### 16.3 Profil Pengguna & Hak Akses Aktif (`/api/v1/auth/me`)
+
+Endpoint ini digunakan antarmuka pengguna (frontend) untuk merender navigasi dan menu sesuai hak akses peran pengguna yang sedang login.
+
+- **Method & Path:** `GET /api/v1/auth/me`
+- **Header:** `Authorization: Bearer <token_jwt>` (Wajib bila auth aktif)
+- **Respons saat `AUTH_ENABLED=true` (200 OK):**
+  ```json
+  {
+    "auth_enabled": true,
+    "username": "budi_analis",
+    "nama_lengkap": "Budi Santoso",
+    "unit_kerja": "Biro Hukum & Kepatuhan",
+    "role": "analis",
+    "izin": [
+      "ANALISA_EKSPOR",
+      "ANALISA_JALANKAN",
+      "DOKUMEN_UNGGAH",
+      "KB_BACA",
+      "KB_BACA_NONPUBLIK",
+      "KEGAGALAN_KELOLA",
+      "METADATA_KOREKSI",
+      "MODE_ATUR",
+      "TANGGAPAN_TINJAU"
+    ]
+  }
+  ```
+- **Respons saat `AUTH_ENABLED=false` (200 OK):**
+  ```json
+  {
+    "auth_enabled": false
+  }
+  ```
+
+### 16.4 Manajemen Akun Pengguna (`/api/v1/users`)
+
+Seluruh endpoint di bawah prefix `/api/v1/users` dilindungi oleh izin `PENGGUNA_KELOLA` (khusus Admin Sistem).
+
+#### A. Daftar Pengguna
+- **Method & Path:** `GET /api/v1/users/`
+- **Query Parameter (Opsional):**
+  - `role`: Filter peran pengguna (`analis` | `admin_kb` | `admin_sistem` | `pilot_user`)
+  - `is_active`: Filter status aktif (`true` | `false`)
+- **Respons (200 OK):**
+  ```json
+  [
+    {
+      "id": 1,
+      "username": "admin_hero",
+      "nama_lengkap": "Administrator Sistem",
+      "unit_kerja": "Divisi TI",
+      "role": "admin_sistem",
+      "is_active": true,
+      "created_at": "2026-10-19T08:00:00Z"
+    }
+  ]
+  ```
+  *(Catatan: Hash password tidak pernah disertakan dalam respons).*
+
+#### B. Buat Pengguna Baru
+- **Method & Path:** `POST /api/v1/users/`
+- **Body JSON:**
+  ```json
+  {
+    "username": "siti_adminkb",
+    "password": "PasswordAman123!",
+    "role": "admin_kb",
+    "nama_lengkap": "Siti Rahmawati",
+    "unit_kerja": "Pustaka Regulasi"
+  }
+  ```
+- **Validasi & Proteksi:**
+  - Password minimal 12 karakter (di-hash dengan bcrypt, `[:72]`).
+  - Username harus unik (mengembalikan `409 Conflict` dengan kode `username_terdaftar` bila sudah ada).
+- **Respons (201 Created):** Objek data pengguna baru tanpa hash password.
+
+#### C. Pembaruan Akun Pengguna
+- **Method & Path:** `PATCH /api/v1/users/{id}`
+- **Body JSON (Field bersifat opsional):**
+  ```json
+  {
+    "role": "analis",
+    "is_active": false,
+    "nama_lengkap": "Siti Rahmawati S.H.",
+    "unit_kerja": "Biro Analisis Hukum",
+    "password": "PasswordBaru456!"
+  }
+  ```
+- **Aturan Proteksi Integritas:**
+  1. **409 `admin_terakhir`:** Ditolak bila perubahan akan menyebabkan tidak ada lagi Admin Sistem aktif di sistem.
+  2. **409 `ubah_diri_sendiri`:** Admin Sistem dilarang menonaktifkan atau menurunkan peran akun miliknya sendiri demi mencegah penguncian akses tak terpulihkan.
+
+

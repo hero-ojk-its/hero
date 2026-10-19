@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.category import Category
 from app.models.document import Document
-from app.routers.auth import get_current_user
+from app.core.permissions import perlu_izin, Izin
 from app.services.category_service import CategoryService
 
 router = APIRouter()
@@ -31,13 +31,19 @@ class CategoryDetailResponse(BaseModel):
 
 
 @router.get("/", summary="Daftar Kategori Datar")
-def list_categories(db: Session = Depends(get_db)):
+def list_categories(
+    db: Session = Depends(get_db),
+    _user=Depends(perlu_izin(Izin.KB_BACA)),
+):
     """Mengembalikan daftar datar seluruh kategori."""
     return db.query(Category).order_by(Category.id).all()
 
 
 @router.get("/tree", summary="Pohon Hierarki Kategori KB")
-def get_category_tree(db: Session = Depends(get_db)):
+def get_category_tree(
+    db: Session = Depends(get_db),
+    _user=Depends(perlu_izin(Izin.KB_BACA)),
+):
     """
     Mengembalikan seluruh hierarki kategori berbentuk pohon bersarang
     dengan document_count (langsung) dan total_document_count (termasuk turunan).
@@ -47,7 +53,11 @@ def get_category_tree(db: Session = Depends(get_db)):
 
 
 @router.get("/{category_id}", response_model=CategoryDetailResponse, summary="Detail Kategori dan Jalur Hierarki")
-def get_category_detail(category_id: int, db: Session = Depends(get_db)):
+def get_category_detail(
+    category_id: int,
+    db: Session = Depends(get_db),
+    _user=Depends(perlu_izin(Izin.KB_BACA)),
+):
     """Mengembalikan detail satu kategori beserta jalur root->leaf dan jumlah dokumen."""
     cat = db.query(Category).filter(Category.id == category_id).first()
     if not cat:
@@ -79,7 +89,7 @@ def create_category(
     body: CategoryCreateRequest,
     request: Request,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.KB_KELOLA)),
 ):
     """
     Membuat kategori baru di root atau di bawah kategori induk.

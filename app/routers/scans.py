@@ -31,8 +31,13 @@ from app.schemas.scan import (
     ScanSelectionResponse,
     ScanPullRequest,
 )
+from app.core.permissions import perlu_izin, Izin
 
-router = APIRouter(prefix="/api/v1/scans", tags=["Scans"])
+router = APIRouter(
+    prefix="/api/v1/scans",
+    tags=["Scans"],
+    dependencies=[Depends(perlu_izin(Izin.SUMBER_KELOLA))],
+)
 
 
 def _build_session_response(session: ScanSession, db: Session, request: Optional[Request] = None) -> ScanSessionResponse:
