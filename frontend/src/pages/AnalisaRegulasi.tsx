@@ -71,6 +71,7 @@ export default function AnalisaRegulasi() {
   const [uploadedDocumentId, setUploadedDocumentId] = useState<number | null>(null);
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef<boolean>(true);
+  const isExplicitCancelRef = useRef<boolean>(false);
 
   // 5. State Polling Kesiapan Dokumen
   const [isPollingActive, setIsPollingActive] = useState<boolean>(false);
@@ -102,17 +103,23 @@ export default function AnalisaRegulasi() {
     },
   });
 
-  // Hentikan dan bersihkan polling serta request in-flight saat komponen dilepas (unmount)
+  // Simpan referensi polling terbaru ke dalam ref via effect agar fungsi stop() selalu mutakhir tanpa memicu peringatan render ref
+  const documentPollingRef = useRef(documentPolling);
+  useEffect(() => {
+    documentPollingRef.current = documentPolling;
+  }, [documentPolling]);
+
+  // Hentikan dan bersihkan polling serta request in-flight hanya saat komponen dilepas (unmount sejati)
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
-      documentPolling.stop();
+      documentPollingRef.current.stop();
       if (uploadAbortControllerRef.current) {
-        uploadAbortControllerRef.current.abort();
+        uploadAbortControllerRef.current.abort('Komponen AnalisaRegulasi dilepas (unmount).');
       }
     };
-  }, [documentPolling]);
+  }, []);
 
   // Pengecekan Kesiapan Layanan ML Lapisan Data saat inisialisasi
   const checkHealthStatus = useCallback(async () => {
@@ -220,6 +227,7 @@ export default function AnalisaRegulasi() {
     setIsUploading(true);
     setUploadProgress(null);
     setPollingTimeoutOccurred(false);
+    isExplicitCancelRef.current = false;
 
     if (uploadAbortControllerRef.current) {
       uploadAbortControllerRef.current.abort();
@@ -255,6 +263,7 @@ export default function AnalisaRegulasi() {
       setUploadedDocumentId(docId);
       setIsUploading(false);
       setUploadProgress(null);
+      uploadAbortControllerRef.current = null;
 
       // Mulai polling status pemrosesan dokumen di backend
       setIsPollingActive(true);
@@ -268,6 +277,10 @@ export default function AnalisaRegulasi() {
       if (isAborted) {
         setIsUploading(false);
         setUploadProgress(null);
+        // Tampilkan pesan jika pembatalan terjadi di luar aksi klik sengaja pengguna
+        if (!isExplicitCancelRef.current) {
+          setUploadError('Permintaan unggah berkas terputus atau dibatalkan.');
+        }
         return;
       }
       setIsUploading(false);
@@ -282,7 +295,9 @@ export default function AnalisaRegulasi() {
     documentPolling.stop();
     setIsPollingActive(false);
     if (uploadAbortControllerRef.current) {
+      isExplicitCancelRef.current = true;
       uploadAbortControllerRef.current.abort();
+      uploadAbortControllerRef.current = null;
     }
     const effectiveMode = (mlHealth && mlHealth.mode_ai === false) ? 'deterministik' : mode;
     setSearchParams({
@@ -297,6 +312,7 @@ export default function AnalisaRegulasi() {
     documentPolling.stop();
     setIsPollingActive(false);
     if (uploadAbortControllerRef.current) {
+      isExplicitCancelRef.current = true;
       uploadAbortControllerRef.current.abort();
       uploadAbortControllerRef.current = null;
     }
@@ -430,8 +446,10 @@ export default function AnalisaRegulasi() {
                 <button
                   type="button"
                   onClick={() => {
+                    isExplicitCancelRef.current = true;
                     if (uploadAbortControllerRef.current) {
                       uploadAbortControllerRef.current.abort();
+                      uploadAbortControllerRef.current = null;
                     }
                     setIsUploading(false);
                     setUploadProgress(null);
