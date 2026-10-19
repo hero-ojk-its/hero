@@ -67,10 +67,12 @@ Berdasarkan keputusan **MoM 22 Sep 2026**, otentikasi login ditunda untuk memper
 - **`AUTH_ENABLED=false` (Default):** Seluruh endpoint terbuka tanpa memerlukan JWT bearer token. `get_current_user` mengembalikan `None` (pengguna anonim / sistem).
 - **`AUTH_ENABLED=true`:** Proteksi JWT aktif. Endpoint yang memerlukan otentikasi akan menolak request tanpa token dengan status HTTP 401.
 
-Untuk membuat/mereset akun admin:
-```bash
-python -m app.create_admin
+Untuk membuat akun Admin Sistem pertama (sebelum `AUTH_ENABLED=true` diaktifkan):
+```powershell
+$env:HERO_NEW_USER_PASSWORD = "<isi_password_minimal_12_karakter>"
+python scripts/create_user.py --username admin --role admin_sistem --nama "Administrator Sistem" --unit "IT Governance"
 ```
+*(Atau di Linux/Bash: `HERO_NEW_USER_PASSWORD="<isi_password_minimal_12_karakter>" python scripts/create_user.py --username admin --role admin_sistem`).*
 
 ---
 

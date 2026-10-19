@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.audit_log import AuditLog
-from app.routers.auth import get_current_admin
+from app.core.permissions import perlu_izin, Izin
 
 router = APIRouter()
 
@@ -17,7 +17,7 @@ def get_audit_logs(
     target_resource: Optional[str] = Query(None, description="Filter berdasarkan target resource (prefix match, misal: document:12)"),
     mode: Optional[Literal["deterministik", "ai"]] = Query(None, description="Filter berdasarkan mode analisa (detail->>'mode_dipakai')"),
     db: Session = Depends(get_db),
-    admin_user = Depends(get_current_admin),
+    admin_user=Depends(perlu_izin(Izin.AUDIT_BACA)),
 ):
     query = db.query(AuditLog)
     if action:

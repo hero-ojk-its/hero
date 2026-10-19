@@ -31,8 +31,13 @@ from app.services.naming_service import (
     extract_year,
     normalize_regulation_type,
 )
+from app.core.permissions import perlu_izin, Izin
 
-router = APIRouter(prefix="/api/v1/naming", tags=["Naming"])
+router = APIRouter(
+    prefix="/api/v1/naming",
+    tags=["Naming"],
+    dependencies=[Depends(perlu_izin(Izin.KB_BACA))],
+)
 
 DEFAULT_SAMPLE_TITLE = "Penyelenggaraan Bursa Mineral dan Komoditas Strategis"
 DEFAULT_SAMPLE_REG_NUMBER = "16/POJK.04/2026"
