@@ -1,4 +1,4 @@
-1/**
+/**
  * Client API HERO untuk komunikasi dengan Backend FastAPI.
  */
 
@@ -230,6 +230,135 @@ export async function apiJson<T>(
     method,
     headers,
     body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
+  });
+}
+
+export interface UploadProgressEvent {
+  loaded: number;
+  total: number;
+  percent: number | null;
+}
+
+export interface UploadOptions {
+  timeout?: number;
+  signal?: AbortSignal;
+  headers?: Record<string, string>;
+  onProgress?: (progress: UploadProgressEvent) => void;
+}
+
+/**
+ * Klien upload berbasis XMLHttpRequest untuk mendukung pelaporan progress byte riil.
+ */
+export function apiUpload<T>(
+  endpoint: string,
+  formData: FormData,
+  options: UploadOptions = {}
+): Promise<T> {
+  const { timeout = 120000, signal, headers: customHeaders, onProgress } = options;
+
+  const url = endpoint.startsWith('http://') || endpoint.startsWith('https://')
+    ? endpoint
+    : `${API_BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+
+  return new Promise<T>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException(signal.reason || 'Upload dibatalkan', 'AbortError'));
+      return;
+    }
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url, true);
+    xhr.timeout = timeout;
+
+    // Header default
+    xhr.setRequestHeader('Accept', 'application/json');
+
+    const token = getAuthToken();
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+
+    if (customHeaders) {
+      for (const [key, val] of Object.entries(customHeaders)) {
+        if (key.toLowerCase() !== 'content-type') {
+          xhr.setRequestHeader(key, val);
+        }
+      }
+    }
+
+    const onAbort = () => {
+      xhr.abort();
+      reject(new DOMException(signal?.reason || 'Upload dibatalkan', 'AbortError'));
+    };
+
+    if (signal) {
+      signal.addEventListener('abort', onAbort);
+    }
+
+    const cleanup = () => {
+      if (signal) {
+        signal.removeEventListener('abort', onAbort);
+      }
+    };
+
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (evt: ProgressEvent) => {
+        const percent = evt.lengthComputable && evt.total > 0
+          ? Math.round((evt.loaded / evt.total) * 100)
+          : null;
+        onProgress({
+          loaded: evt.loaded,
+          total: evt.total,
+          percent,
+        });
+      };
+    }
+
+    xhr.onload = () => {
+      cleanup();
+      const status = xhr.status;
+      const contentType = xhr.getResponseHeader('content-type') || '';
+      let responseData: unknown = null;
+
+      if (contentType.includes('application/json')) {
+        try {
+          responseData = JSON.parse(xhr.responseText);
+        } catch {
+          responseData = xhr.responseText;
+        }
+      } else {
+        responseData = xhr.responseText;
+      }
+
+      if (status >= 200 && status < 300) {
+        resolve(responseData as T);
+      } else {
+        let errorDetail: unknown = null;
+        if (responseData && typeof responseData === 'object' && 'detail' in (responseData as Record<string, unknown>)) {
+          errorDetail = (responseData as Record<string, unknown>).detail;
+        } else {
+          errorDetail = responseData || xhr.statusText || `Galat HTTP ${status}`;
+        }
+        reject(new ApiError(status, errorDetail));
+      }
+    };
+
+    xhr.onerror = () => {
+      cleanup();
+      reject(new ApiError(0, 'Gagal terhubung ke peladen backend saat mengunggah berkas.'));
+    };
+
+    xhr.ontimeout = () => {
+      cleanup();
+      reject(new ApiError(0, `Permintaan unggah ke ${url} melebihi batas waktu (${timeout} ms)`));
+    };
+
+    xhr.onabort = () => {
+      cleanup();
+      reject(new DOMException('Upload dibatalkan', 'AbortError'));
+    };
+
+    xhr.send(formData);
   });
 }
 

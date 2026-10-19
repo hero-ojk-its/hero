@@ -23,7 +23,8 @@ import {
 import type { 
   DocumentStatusResponse, 
   DraftUploadMetadata,
-  MlHealthResponse
+  MlHealthResponse,
+  UploadProgressEvent
 } from '../lib/analisaApi';
 import { usePolling } from '../lib/usePolling';
 import { ErrorState } from '../components/ErrorState';
@@ -65,8 +66,11 @@ export default function AnalisaRegulasi() {
   const [mlHealth, setMlHealth] = useState<MlHealthResponse | null>(null);
   const [mlHealthLoading, setMlHealthLoading] = useState<boolean>(true);
   const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgressEvent | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadedDocumentId, setUploadedDocumentId] = useState<number | null>(null);
+  const uploadAbortControllerRef = useRef<AbortController | null>(null);
+  const isMountedRef = useRef<boolean>(true);
 
   // 5. State Polling Kesiapan Dokumen
   const [isPollingActive, setIsPollingActive] = useState<boolean>(false);
@@ -98,10 +102,15 @@ export default function AnalisaRegulasi() {
     },
   });
 
-  // Hentikan dan bersihkan polling saat komponen dilepas (unmount)
+  // Hentikan dan bersihkan polling serta request in-flight saat komponen dilepas (unmount)
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
       documentPolling.stop();
+      if (uploadAbortControllerRef.current) {
+        uploadAbortControllerRef.current.abort();
+      }
     };
   }, [documentPolling]);
 
@@ -209,7 +218,14 @@ export default function AnalisaRegulasi() {
 
     setUploadError(null);
     setIsUploading(true);
+    setUploadProgress(null);
     setPollingTimeoutOccurred(false);
+
+    if (uploadAbortControllerRef.current) {
+      uploadAbortControllerRef.current.abort();
+    }
+    const uploadCtrl = new AbortController();
+    uploadAbortControllerRef.current = uploadCtrl;
 
     try {
       const metadata: DraftUploadMetadata = {
@@ -221,17 +237,41 @@ export default function AnalisaRegulasi() {
         access_classification: accessClassification,
       };
 
-      // Unggah via API client (access_classification='publik' | 'non_publik', document_role='draft_kajian')
-      const result = await uploadDraftPdf(selectedFile, metadata);
+      // Unggah via API client dengan pemantauan progress byte riil
+      const result = await uploadDraftPdf(
+        selectedFile,
+        metadata,
+        uploadCtrl.signal,
+        (progress) => {
+          if (isMountedRef.current) {
+            setUploadProgress(progress);
+          }
+        }
+      );
+
+      if (!isMountedRef.current) return;
 
       const docId = result.documentId;
       setUploadedDocumentId(docId);
       setIsUploading(false);
+      setUploadProgress(null);
 
       // Mulai polling status pemrosesan dokumen di backend
       setIsPollingActive(true);
     } catch (err: unknown) {
+      if (!isMountedRef.current) {
+        return;
+      }
+      const isAborted =
+        (err instanceof DOMException && err.name === 'AbortError') ||
+        (err instanceof Error && err.name === 'AbortError');
+      if (isAborted) {
+        setIsUploading(false);
+        setUploadProgress(null);
+        return;
+      }
       setIsUploading(false);
+      setUploadProgress(null);
       const msg = err instanceof Error ? err.message : 'Terjadi kegagalan saat mengunggah berkas draf.';
       setUploadError(msg);
     }
@@ -241,6 +281,9 @@ export default function AnalisaRegulasi() {
   const handleOpenWorkspace = (docId: number, mode: 'deterministik' | 'ai' = selectedMode) => {
     documentPolling.stop();
     setIsPollingActive(false);
+    if (uploadAbortControllerRef.current) {
+      uploadAbortControllerRef.current.abort();
+    }
     const effectiveMode = (mlHealth && mlHealth.mode_ai === false) ? 'deterministik' : mode;
     setSearchParams({
       documentId: String(docId),
@@ -253,6 +296,12 @@ export default function AnalisaRegulasi() {
     setSearchParams({});
     documentPolling.stop();
     setIsPollingActive(false);
+    if (uploadAbortControllerRef.current) {
+      uploadAbortControllerRef.current.abort();
+      uploadAbortControllerRef.current = null;
+    }
+    setIsUploading(false);
+    setUploadProgress(null);
     setUploadedDocumentId(null);
     setPollingTimeoutOccurred(false);
     checkHealthStatus();
@@ -330,64 +379,160 @@ export default function AnalisaRegulasi() {
               </div>
               <div>
                 <h3 className="text-sm font-bold text-gray-900">
-                  {isUploading 
-                    ? 'Mengunggah Berkas Draf Regulasi...' 
-                    : 'Memproses Ekstraksi & Penelaahan Draf...'}
+                  {isUploading
+                    ? 'Mengunggah Berkas Draf Regulasi ke Peladen...'
+                    : 'Memproses Ekstraksi Naskah di Peladen...'}
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Dokumen ID: #{uploadedDocumentId || '-'} • Klasifikasi: Non-Publik (Draf Kajian)
+                  {isUploading && selectedFile
+                    ? `${selectedFile.name} • ${(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • Klasifikasi: ${accessClassification === 'non_publik' ? 'Non-Publik (Draf Kajian)' : 'Publik'}`
+                    : `Dokumen ID: #${uploadedDocumentId || '-'} • Klasifikasi: ${accessClassification === 'non_publik' ? 'Non-Publik (Draf Kajian)' : 'Publik'}`}
                 </p>
               </div>
             </div>
 
-            {uploadedDocumentId && (
+            {uploadedDocumentId && !isUploading && (
               <span className="px-2.5 py-1 rounded-md bg-gray-100 text-gray-700 text-xs font-mono font-bold">
                 Status: {documentPolling.data?.processing_status || 'diproses'}
               </span>
             )}
           </div>
 
-          {/* Stepper Status Progress */}
+          {/* Progress Bar Upload Aktual (Aktif hanya selama fase upload HTTP) */}
+          {isUploading && (
+            <div className="space-y-1.5 p-3 rounded-lg bg-red-50/40 border border-red-100">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-gray-700">Kemajuan Unggah Berkas</span>
+                <span className="font-mono text-red-700 font-bold">
+                  {uploadProgress?.percent !== null && uploadProgress?.percent !== undefined
+                    ? `${uploadProgress.percent}%`
+                    : 'Mengirim aliran berkas...'}
+                </span>
+              </div>
+              <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden relative">
+                {uploadProgress?.percent !== null && uploadProgress?.percent !== undefined ? (
+                  <div
+                    style={{ width: `${uploadProgress.percent}%` }}
+                    className="h-full bg-red-700 rounded-full transition-all duration-150"
+                  />
+                ) : (
+                  <div className="h-full bg-red-700 rounded-full animate-pulse w-full" />
+                )}
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-gray-500">
+                <span>
+                  {uploadProgress
+                    ? `${(uploadProgress.loaded / (1024 * 1024)).toFixed(2)} MB terkirim ${
+                        uploadProgress.total > 0 ? `dari ${(uploadProgress.total / (1024 * 1024)).toFixed(2)} MB` : ''
+                      }`
+                    : 'Menghubungkan ke peladen...'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (uploadAbortControllerRef.current) {
+                      uploadAbortControllerRef.current.abort();
+                    }
+                    setIsUploading(false);
+                    setUploadProgress(null);
+                  }}
+                  className="text-red-700 hover:text-red-900 font-semibold cursor-pointer underline text-[11px]"
+                >
+                  Batalkan Unggah
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Stepper Status Progress Tiga Tahap */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            {/* Tahap 1: Unggah PDF */}
             <div className={`p-3 rounded-lg border flex items-center gap-2.5 ${
               uploadedDocumentId 
                 ? 'border-emerald-200 bg-emerald-50/50 text-emerald-800' 
-                : 'border-red-200 bg-red-50/40 text-red-800 font-semibold'
-            }`}>
-              <CheckCircle2 size={16} className={uploadedDocumentId ? 'text-emerald-600' : 'text-red-700 animate-pulse'} />
-              <span>1. Unggah PDF Non-Publik</span>
-            </div>
-
-            <div className={`p-3 rounded-lg border flex items-center gap-2.5 ${
-              documentPolling.data?.processing_status === 'terindeks' || documentPolling.data?.processing_status === 'perlu_koreksi'
-                ? 'border-emerald-200 bg-emerald-50/50 text-emerald-800'
-                : uploadedDocumentId
+                : isUploading
                 ? 'border-red-200 bg-red-50/40 text-red-800 font-semibold'
                 : 'border-gray-200 bg-gray-50 text-gray-400'
             }`}>
-              <Clock size={16} className={uploadedDocumentId ? 'text-red-700 animate-spin' : 'text-gray-400'} />
-              <span>2. Ekstraksi Teks &amp; Pasal Backend</span>
+              <CheckCircle2 size={16} className={uploadedDocumentId ? 'text-emerald-600' : isUploading ? 'text-red-700 animate-pulse' : 'text-gray-400'} />
+              <div>
+                <span className="block font-semibold">1. Unggah PDF</span>
+                <span className="text-[11px] opacity-80 block">
+                  {uploadedDocumentId ? 'Berkas berhasil disimpan' : isUploading ? 'Sedang mengirim berkas...' : 'Menunggu berkas'}
+                </span>
+              </div>
             </div>
 
+            {/* Tahap 2: Ekstraksi Naskah Backend */}
             <div className={`p-3 rounded-lg border flex items-center gap-2.5 ${
-              documentPolling.data?.processing_status === 'terindeks'
+              documentPolling.data?.processing_status === 'terindeks' || documentPolling.data?.processing_status === 'perlu_koreksi'
+                ? 'border-emerald-200 bg-emerald-50/50 text-emerald-800'
+                : uploadedDocumentId && isPollingActive
+                ? 'border-red-200 bg-red-50/40 text-red-800 font-semibold'
+                : 'border-gray-200 bg-gray-50 text-gray-400'
+            }`}>
+              <Clock size={16} className={
+                documentPolling.data?.processing_status === 'terindeks' || documentPolling.data?.processing_status === 'perlu_koreksi'
+                  ? 'text-emerald-600'
+                  : uploadedDocumentId
+                  ? 'text-red-700 animate-spin'
+                  : 'text-gray-400'
+              } />
+              <div>
+                <span className="block font-semibold">2. Ekstraksi Naskah</span>
+                <span className="text-[11px] opacity-80 block">
+                  {documentPolling.data?.processing_status === 'terindeks' || documentPolling.data?.processing_status === 'perlu_koreksi'
+                    ? 'Ekstraksi naskah selesai'
+                    : documentPolling.data?.processing_status === 'diproses'
+                    ? 'Worker sedang mengekstrak...'
+                    : uploadedDocumentId
+                    ? 'Menunggu antrean ekstraksi...'
+                    : 'Menunggu unggahan'}
+                </span>
+              </div>
+            </div>
+
+            {/* Tahap 3: Kesiapan Analisis ML */}
+            <div className={`p-3 rounded-lg border flex items-center gap-2.5 ${
+              documentPolling.data && isDocumentReadyForAnalysis(documentPolling.data)
                 ? 'border-emerald-200 bg-emerald-50/50 text-emerald-800'
                 : 'border-gray-200 bg-gray-50 text-gray-400'
             }`}>
-              <Sparkles size={16} className="text-gray-400" />
-              <span>3. Kesiapan Analisis ML</span>
+              <Sparkles size={16} className={
+                documentPolling.data && isDocumentReadyForAnalysis(documentPolling.data)
+                  ? 'text-emerald-600'
+                  : 'text-gray-400'
+              } />
+              <div>
+                <span className="block font-semibold">3. Kesiapan Analisis</span>
+                <span className="text-[11px] opacity-80 block">
+                  {documentPolling.data && isDocumentReadyForAnalysis(documentPolling.data)
+                    ? 'Siap membuka workspace'
+                    : 'Menunggu ekstraksi pasal'}
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Detail Ekstraksi Terkini */}
-          {documentPolling.data && (
+          {/* Detail Ekstraksi Terkini Berdasarkan processing_status Backend */}
+          {documentPolling.data && isPollingActive && (
             <div className="p-3 bg-gray-50 border border-gray-100 rounded-lg text-xs text-gray-600 flex flex-wrap items-center justify-between gap-2">
               <span>
-                Pasal terdeteksi: <strong>{documentPolling.data.articles?.length || 0} pasal</strong> • 
-                Teks lengkap: <strong>{documentPolling.data.full_text_length || 0} karakter</strong>
+                {documentPolling.data.processing_status === 'diterima' && (
+                  <span>Naskah tersimpan di peladen (status: diterima). Menunggu giliran worker ekstraksi...</span>
+                )}
+                {documentPolling.data.processing_status === 'diproses' && (
+                  <span>Peladen sedang memproses ekstraksi teks, pasal, dan OCR...</span>
+                )}
+                {(documentPolling.data.processing_status === 'terindeks' || documentPolling.data.processing_status === 'perlu_koreksi') && (
+                  <span>
+                    Ekstraksi tuntas: <strong>{documentPolling.data.articles?.length || 0} pasal</strong> terdeteksi •
+                    Teks lengkap: <strong>{documentPolling.data.full_text_length || 0} karakter</strong>
+                  </span>
+                )}
               </span>
               <span className="font-mono text-[11px] text-gray-500">
-                Memperbarui setiap 2 detik...
+                Memperbarui status setiap 2 detik...
               </span>
             </div>
           )}

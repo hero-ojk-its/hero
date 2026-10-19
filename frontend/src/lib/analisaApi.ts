@@ -13,8 +13,8 @@
 
 import { apiFetch, apiFetchBlob, API_BASE_URL, buildQueryString } from './api';
 import type { DocumentsResponse, DocumentItem, DocumentBlob } from './api';
-import { uploadManualPdf } from './ingestApi';
-import type { IngestUploadResponse } from './ingestApi';
+import { uploadManualPdf, type IngestUploadResponse, type UploadProgressEvent } from './ingestApi';
+export type { UploadProgressEvent };
 
 // ============================================================================
 // 1. Konfigurasi URL Layanan ML
@@ -270,7 +270,8 @@ export async function checkMlHealth(signal?: AbortSignal): Promise<MlHealthRespo
 export async function uploadDraftPdf(
   file: File,
   metadata?: DraftUploadMetadata,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onProgress?: (progress: UploadProgressEvent) => void
 ): Promise<UploadDraftResult> {
   const formData = new FormData();
   formData.append('files', file);
@@ -293,7 +294,7 @@ export async function uploadDraftPdf(
     formData.append('release_date', metadata.release_date.trim());
   }
 
-  const uploadRes = await uploadManualPdf(formData, signal);
+  const uploadRes = await uploadManualPdf(formData, signal, onProgress);
 
   if (!uploadRes.details || uploadRes.details.length === 0) {
     throw new Error('Respons backend tidak memuat rincian item unggahan (details kosong).');

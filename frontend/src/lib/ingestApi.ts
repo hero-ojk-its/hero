@@ -1,4 +1,5 @@
-import { apiFetch, apiJson, apiFetchBlob, buildQueryString, type DocumentBlob, type DocumentItem } from './api';
+import { apiFetch, apiJson, apiFetchBlob, apiUpload, type UploadProgressEvent, buildQueryString, type DocumentBlob, type DocumentItem } from './api';
+export type { UploadProgressEvent };
 import type { components } from './openapi';
 
 // Re-export core schema types directly from openapi
@@ -275,17 +276,18 @@ export async function checkDuplicate(
 
 /**
  * Mengunggah berkas PDF secara manual via POST /api/v1/ingest/upload-pdf (multipart/form-data)
+ * Menggunakan apiUpload (XHR) agar event kemajuan byte unggah aktual dapat dipantau secara riil.
  * Timeout diatur 120 detik (120.000 ms) sesuai spesifikasi.
  */
 export async function uploadManualPdf(
   formData: FormData,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onProgress?: (progress: UploadProgressEvent) => void
 ): Promise<IngestUploadResponse> {
-  return apiFetch<IngestUploadResponse>('/api/v1/ingest/upload-pdf', {
-    method: 'POST',
-    body: formData,
+  return apiUpload<IngestUploadResponse>('/api/v1/ingest/upload-pdf', formData, {
     timeout: 120000,
     signal,
+    onProgress,
   });
 }
 
