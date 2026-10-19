@@ -17,7 +17,6 @@ import {
   Building2, 
   ShieldAlert, 
   Paperclip,
-  Sparkles,
   Clock
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -53,12 +52,12 @@ function GarudaEmblem() {
   );
 }
 
-// 4 Tahap Pipeline Analisis Mesin HERO
+// 4 Tahap Analisis Mesin HERO
 const PIPELINE_STEPS = [
-  { id: 1, title: 'Inisialisasi & Validasi', desc: 'Membaca struktur naskah PDF dan memverifikasi integritas dokumen...' },
-  { id: 2, title: 'Ekstraksi BAB & Pasal', desc: 'Memetakan kerangka regulasi dan mengelompokkan pasal...' },
-  { id: 3, title: 'Analisis Norma & Kewajiban', desc: 'Mengekstraksi klausul normatif, sanksi administratif, dan dasar hukum...' },
-  { id: 4, title: 'Kompilasi Intisari', desc: 'Menghasilkan ringkasan eksekutif dan indikator kepatuhan regulasi...' }
+  { id: 1, title: 'Kesiapan Dokumen', desc: 'Memeriksa kesiapan dokumen dan izin akses...' },
+  { id: 2, title: 'Struktur Regulasi', desc: 'Memuat naskah dan susunan pasal dari pangkalan data...' },
+  { id: 3, title: 'Analisis Regulasi', desc: 'Menjalankan penelaahan norma, kewajiban, dan sanksi...' },
+  { id: 4, title: 'Kompilasi Intisari', desc: 'Menyusun ringkasan eksekutif dan indikator kepatuhan regulasi...' }
 ];
 
 export interface AnalisaState2WorkspaceProps {
@@ -94,14 +93,15 @@ export default function AnalisaState2Workspace({
   const [pdfError, setPdfError] = useState<string | null>(null);
   const pdfBlobUrlRef = useRef<string | null>(null);
 
-  // State Animasi Progress Pipeline
+  // State Status Loading Analisis
   const [pipelineStep, setPipelineStep] = useState<number>(1);
-  const [pipelineProgress, setPipelineProgress] = useState<number>(15);
+  const [loadingStatusText, setLoadingStatusText] = useState<string>('Memeriksa kesiapan dokumen...');
+  const [retryCount, setRetryCount] = useState<number>(0);
   const [showProcessingBanner, setShowProcessingBanner] = useState<boolean>(true);
-  const pipelineTimerRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const retryStartTimeRef = useRef<number | null>(null);
+  const retryCountRef = useRef<number>(0);
   const isMountedRef = useRef<boolean>(true);
   const loadAnalysisRef = useRef<(forceFresh?: boolean, isRetryAttempt?: boolean) => Promise<void>>(null);
 
@@ -143,12 +143,6 @@ export default function AnalisaState2Workspace({
   const [activeTab, setActiveTab] = useState<'ringkasan' | 'poin_utama' | 'dasar_hukum' | 'info_tambahan'>('ringkasan');
   const [kategoriFilter, setKategoriFilter] = useState<string>('Semua');
 
-  // Bersihkan timer pipeline saat unmount
-  const clearPipelineTimers = useCallback(() => {
-    pipelineTimerRef.current.forEach(timer => clearTimeout(timer));
-    pipelineTimerRef.current = [];
-  }, []);
-
   // Bersihkan timer retry otomatis saat unmount atau dibatalkan
   const clearRetryTimer = useCallback(() => {
     if (retryTimerRef.current) {
@@ -172,19 +166,10 @@ export default function AnalisaState2Workspace({
       isMountedRef.current = false;
       clearRetryTimer();
       abortAnalysisRequest();
-      clearPipelineTimers();
     };
-  }, [clearRetryTimer, abortAnalysisRequest, clearPipelineTimers]);
+  }, [clearRetryTimer, abortAnalysisRequest]);
 
-  // Lewati animasi dan langsung tampilkan hasil
-  const handleSkipLoading = () => {
-    clearPipelineTimers();
-    setPipelineStep(4);
-    setPipelineProgress(100);
-    setLoading(false);
-  };
-
-  // Muat analisis (eksplisit demo atau panggilan API nyata dengan retry otomatis untuk 404 sementara)
+  // Muat analisis (panggilan API nyata dengan retry otomatis untuk 404 sementara)
   const loadAnalysis = useCallback(async (forceFresh: boolean = false, isRetryAttempt: boolean = false) => {
     clearRetryTimer();
     abortAnalysisRequest();
@@ -194,39 +179,15 @@ export default function AnalisaState2Workspace({
 
     if (!isRetryAttempt) {
       retryStartTimeRef.current = Date.now();
-      clearPipelineTimers();
+      retryCountRef.current = 0;
+      setRetryCount(0);
       setLoading(true);
       setIsRefreshing(forceFresh);
       setErrorStatus(null);
       setErrorMessage(null);
       setShowProcessingBanner(true);
-
-      // Inisialisasi pipeline progress visual
       setPipelineStep(1);
-      setPipelineProgress(20);
-
-      const t1 = setTimeout(() => {
-        if (!controller.signal.aborted) {
-          setPipelineStep(2);
-          setPipelineProgress(48);
-        }
-      }, 500);
-
-      const t2 = setTimeout(() => {
-        if (!controller.signal.aborted) {
-          setPipelineStep(3);
-          setPipelineProgress(76);
-        }
-      }, 1100);
-
-      const t3 = setTimeout(() => {
-        if (!controller.signal.aborted) {
-          setPipelineStep(4);
-          setPipelineProgress(94);
-        }
-      }, 1700);
-
-      pipelineTimerRef.current = [t1, t2, t3];
+      setLoadingStatusText('Memeriksa kesiapan dokumen dan layanan analisis...');
     }
 
     // Pemanggilan API Nyata ke Backend ML & Dokumen Status
@@ -248,6 +209,14 @@ export default function AnalisaState2Workspace({
 
       if (controller.signal.aborted || !isMountedRef.current) return;
 
+      // 2. Transisi status visual ke pemuatan struktur & analisis
+      setPipelineStep(2);
+      setLoadingStatusText(
+        requestedMode === 'ai'
+          ? 'Memuat struktur regulasi dan mengambil hasil analisis AI...'
+          : 'Memuat struktur regulasi dan mengambil hasil analisis deterministik...'
+      );
+
       const [mlRes, statusRes] = await Promise.allSettled([
         getMlAnalisa(documentId, requestedMode, forceFresh, controller.signal),
         getDocumentStatus(documentId, controller.signal),
@@ -265,10 +234,13 @@ export default function AnalisaState2Workspace({
 
       if (mlRes.status === 'fulfilled') {
         retryStartTimeRef.current = null;
+        retryCountRef.current = 0;
+        setRetryCount(0);
         setData(mlRes.value);
         setErrorStatus(null);
         setErrorMessage(null);
-        setPipelineProgress(100);
+        setPipelineStep(4);
+        setLoadingStatusText('Analisis berhasil diselesaikan.');
         setLoading(false);
         setIsRefreshing(false);
       } else {
@@ -293,6 +265,13 @@ export default function AnalisaState2Workspace({
 
             if (isExtracted && elapsed < MAX_RETRY_MS) {
               // Kondisi 404 sementara: dokumen sudah selesai diekstraksi tetapi ML masih proses/sinkron
+              retryCountRef.current += 1;
+              const nextAttempt = retryCountRef.current;
+              setRetryCount(nextAttempt);
+              setPipelineStep(3);
+              setLoadingStatusText(
+                `Dokumen sedang disinkronkan ke layanan analisis, mencoba kembali secara berkala (percobaan #${nextAttempt})...`
+              );
               setErrorMessage('Draft sedang diproses layanan analisa, coba lagi sebentar');
               setLoading(true);
               setErrorStatus(null);
@@ -309,7 +288,6 @@ export default function AnalisaState2Workspace({
               setData(null);
               setErrorStatus(404);
               setErrorMessage('Batas waktu sinkronisasi analisis tercapai (5 menit). Silakan coba lagi.');
-              setPipelineProgress(100);
               setLoading(false);
               setIsRefreshing(false);
               return;
@@ -323,7 +301,6 @@ export default function AnalisaState2Workspace({
               } else {
                 setErrorMessage('Dokumen regulasi tidak ditemukan di peladen.');
               }
-              setPipelineProgress(100);
               setLoading(false);
               setIsRefreshing(false);
               return;
@@ -371,7 +348,6 @@ export default function AnalisaState2Workspace({
           setErrorStatus(0);
           setErrorMessage('Terjadi galat tak dikenal saat memuat data analisis.');
         }
-        setPipelineProgress(100);
         setLoading(false);
         setIsRefreshing(false);
       }
@@ -381,11 +357,10 @@ export default function AnalisaState2Workspace({
       setData(null);
       setErrorStatus(0);
       setErrorMessage(err instanceof Error ? err.message : 'Terjadi galat teknis saat memuat analisis.');
-      setPipelineProgress(100);
       setLoading(false);
       setIsRefreshing(false);
     }
-  }, [abortAnalysisRequest, clearPipelineTimers, clearRetryTimer, documentId, mode]);
+  }, [abortAnalysisRequest, clearRetryTimer, documentId, mode]);
 
   useEffect(() => {
     loadAnalysisRef.current = loadAnalysis;
@@ -408,9 +383,8 @@ export default function AnalisaState2Workspace({
       isCancelled = true;
       clearRetryTimer();
       abortAnalysisRequest();
-      clearPipelineTimers();
     };
-  }, [loadAnalysis, clearRetryTimer, abortAnalysisRequest, clearPipelineTimers]);
+  }, [loadAnalysis, clearRetryTimer, abortAnalysisRequest]);
 
   // Pemuatan Berkas PDF Asli secara aman via apiFetchBlob
   const fetchPdf = useCallback((signal?: AbortSignal) => {
@@ -842,7 +816,7 @@ export default function AnalisaState2Workspace({
                     Sistem HERO Sedang Memproses Analisis Regulasi
                   </h3>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
-                    Tahap {pipelineStep} dari 4 ({pipelineProgress}%)
+                    Tahap {pipelineStep} dari 4
                   </span>
                 </div>
                 <p className="text-xs text-gray-600 mt-0.5">
@@ -850,32 +824,38 @@ export default function AnalisaState2Workspace({
                 </p>
               </div>
             </div>
-
-            <button
-              type="button"
-              onClick={handleSkipLoading}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-200 rounded-lg transition self-end sm:self-auto cursor-pointer shadow-2xs"
-            >
-              <Sparkles size={13} className="text-amber-600" />
-              <span>Lewati Animasi</span>
-            </button>
           </div>
 
-          {/* Progress Bar Track */}
+          {/* Indeterminate Animated Moving Shimmer Track */}
           <div className="space-y-1.5">
-            <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden p-0.5 border border-gray-200/60">
+            <style>{`
+              @keyframes heroIndeterminateSlider {
+                0% {
+                  transform: translateX(-100%);
+                }
+                50% {
+                  transform: translateX(100%);
+                }
+                100% {
+                  transform: translateX(320%);
+                }
+              }
+              .animate-hero-indeterminate {
+                animation: heroIndeterminateSlider 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+              }
+            `}</style>
+            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden border border-gray-200/60 relative">
               <div 
-                style={{ width: `${pipelineProgress}%` }}
-                className="h-full bg-gradient-to-r from-red-800 via-red-600 to-red-700 rounded-full transition-all duration-500 ease-out relative"
-              >
-                <div className="absolute inset-0 bg-white/30 animate-pulse rounded-full" />
-              </div>
+                className="h-full bg-gradient-to-r from-red-800 via-red-500 to-red-700 rounded-full w-1/3 animate-hero-indeterminate"
+              />
             </div>
-            <div className="flex items-center justify-between text-[11px] text-gray-400 font-mono">
-              <span className={errorMessage ? 'text-amber-700 font-semibold animate-pulse' : ''}>
-                {errorMessage || 'Mengekstraksi naskah regulasi dan memvalidasi norma hukum...'}
+            <div className="flex items-center justify-between text-[11px] font-mono">
+              <span className={retryCount > 0 ? 'text-amber-700 font-semibold animate-pulse' : 'text-gray-500'}>
+                {loadingStatusText}
               </span>
-              <span className="font-semibold text-gray-700">{pipelineProgress}%</span>
+              <span className="text-gray-500 font-medium">
+                {retryCount > 0 ? `Percobaan Sinkronisasi #${retryCount}` : 'Sedang diproses...'}
+              </span>
             </div>
           </div>
 
