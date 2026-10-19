@@ -95,6 +95,31 @@ def test_v2_analysis_of_a_real_pdf(catalog):
     assert any("Pasal 3" in r for s in a.ringkasan for r in s["rujukan"])
 
 
+def test_metrik_memuat_hitungan_yang_dibaca_layar_analisa(catalog):
+    """Layar Analisa membaca ``metrik.jumlah_halaman`` untuk penyebut halaman; tanpa itu ia
+    menebak "total halaman = halaman tertinggi yang dikutip". Semua angka harus turunan
+    dari data nyata, bukan taksiran."""
+    doc_id = catalog.execute("SELECT doc_id FROM documents").fetchone()[0]
+    a = analyse_document(catalog, doc_id)
+    m = a.metrik
+    for kunci in ("jumlah_pasal", "jumlah_bab", "jumlah_halaman", "jumlah_kewajiban", "jumlah_larangan"):
+        assert kunci in m, kunci
+    assert m["jumlah_pasal"] == a.identitas["jumlah_pasal"] > 0
+    assert m["jumlah_kewajiban"] == sum(1 for p in a.poin if p.kategori == "Kewajiban") > 0
+    assert m["jumlah_larangan"] == sum(1 for p in a.poin if p.kategori == "Larangan") > 0
+    row = catalog.execute("SELECT page_count FROM documents WHERE doc_id = ?", (doc_id,)).fetchone()
+    assert m["jumlah_halaman"] == (row[0] or None)
+    assert m["jumlah_halaman"] is None or m["jumlah_halaman"] >= max(
+        (p.halaman or 0) for p in a.poin), "halaman total tak boleh lebih kecil dari halaman yang dikutip"
+
+
+def test_versi_mesin_naik_saat_bentuk_keluaran_berubah(catalog):
+    from hero.analysis.structured import VERSION
+
+    doc_id = catalog.execute("SELECT doc_id FROM documents").fetchone()[0]
+    assert analyse_document(catalog, doc_id).versi == VERSION and VERSION != "v2.0"
+
+
 # ----------------------------------------------------------------- AI guard rails
 class FakeClient:
     def __init__(self, payload=None, stop_reason="end_turn"):

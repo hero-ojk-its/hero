@@ -18,9 +18,10 @@ ketiga (mode AI-Assisted) terpenuhi sebagai *mekanisme* tetapi **belum dibuktika
 Ringkasan dan Key Takeaways dihasilkan untuk **114 dokumen** (target 10) dalam **≤ 11,5 detik per dokumen**
 (batas 5 menit), dan **99,7%** poin kunci menyebut pasal asalnya. Per 13 Okt, **server (VPS) sudah menjalankan
 mesin ini**: backend termigrasi ke kontrak pasal terbaru, **149 dokumen terindeks** (2 menunggu koreksi manusia, 0 menggantung) dan layanan analisa
-berstatus **siap** dengan pencarian kata kunci + LSA atas **207 ribu potongan teks**. Yang masih kurang:
-**layar Analisa di aplikasi belum tersambung** ke mesin ini, dan **halaman PDF per pasal belum terisi di
-backend** untuk dokumen yang diekstraksi sebelum kontrak baru aktif (perlu ekstraksi ulang bertahap).
+berstatus **siap** dengan pencarian kata kunci + LSA atas **207 ribu potongan teks**. Per 19 Okt, **layar Analisa sudah dibangun tim Frontend** dan alur ujung-ke-ujung terbukti di lingkungan uji
+(unggah → ekstraksi → cermin → analisa → cache → riwayat → ekspor DOCX/CSV/JSON). Yang masih kurang adalah
+**penyambungan di server**: backend VPS belum dimigrasi ke versi terbaru dan `ML_SERVICE_URL` belum diisi,
+serta **halaman PDF per pasal belum terisi di backend** untuk dokumen yang diekstraksi sebelum kontrak baru aktif.
 
 ---
 
@@ -172,7 +173,8 @@ Catatan: tes backend sempat gagal 12 kasus **hanya** di mesin pengembang karena 
 
 | Hal | Dampak ke klien | Pemilik |
 |---|---|---|
-| **Layar Analisa & Harmonisasi di aplikasi masih placeholder** (±35–50 baris, tanpa pemanggilan API) | Mesin bisa didemokan lewat API, bukan lewat layar | Frontend |
+| **Penyambungan di server (VPS):** backend baru belum di-deploy (6+ migrasi) dan `ML_SERVICE_URL` belum diisi | Layar Analisa di staging belum mendapat jawaban dari mesin; di lingkungan uji sudah terbukti | Backend + Infra |
+| Layar Harmonisasi masih placeholder | Fitur 3.4 memang jadwal Fase 3 | Frontend |
 | **Halaman PDF belum tersimpan** untuk 735 pasal yang sudah ada di backend (0 yang punya `page`) | Rujukan "pasal + halaman" belum lengkap untuk dokumen lama; perlu ekstraksi ulang bertahap (25 dokumen berpasal) | Data + Backend |
 | **Backend VPS baru memuat 151 dari ±2.100 dokumen katalog** (149 terindeks, 2 `perlu_koreksi`). Cara sisanya masuk (pindai backend, unggah massal) belum diputuskan | Knowledge Base staging belum mencerminkan seluruh korpus | Backend + PO |
 | 48 POJK/PADK terindeks tanpa pasal (rata-rata ±5.000 karakter vs 84–164 ribu) | Kemungkinan sampul/abstrak yang ikut tertarik; perlu disaring di sumber | Backend + Data |
@@ -189,10 +191,10 @@ Catatan: tes backend sempat gagal 12 kasus **hanya** di mesin pengembang karena 
 ## 7. Jawaban singkat untuk pertanyaan yang mungkin muncul
 
 - **"Apakah sudah bisa dipakai?"** Mesin analisa ya (lewat API, 114 dokumen, berujukan pasal). Aplikasi utuh belum:
-  layar Analisa belum tersambung dan staging belum berisi dokumen.
+  layar Analisa sudah ada dan terbukti bekerja di lingkungan uji, tetapi belum disambungkan di server staging.
 - **"Apakah hasilnya benar?"** Terlacak dan terukur, tetapi kebenaran substansi ringkasan baru bisa dinyatakan
   setelah telaah SME. Sistem memberi rekomendasi, bukan keputusan.
 - **"Apakah data kami keluar dari server?"** Tidak. Mode Deterministik berjalan offline; AI hanya opsional,
   dimatikan, dan menolak dokumen berklasifikasi internal.
 - **"Seberapa cepat dan berapa pengguna?"** Terukur di §4, dengan peringatan bahwa server produksi jauh lebih kecil.
-- **"Apa risiko terbesar?"** Bukan kode, melainkan: layar Analisa belum tersambung, isi OneDrive tertutup, dan hanya ±151 dari ±2.100 dokumen yang sudah masuk ke backend server.
+- **"Apa risiko terbesar?"** Bukan kode, melainkan: layar Analisa belum tersambung, isi OneDrive tertutup, penyambungan layar Analisa di server, dan hanya ±151 dari ±2.100 dokumen yang sudah masuk ke backend server.

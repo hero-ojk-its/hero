@@ -97,13 +97,25 @@ class BackendClient:
         return self._json("GET", "/health", retries=1)
 
     def ping_internal(self) -> bool:
-        """Apakah kunci API internal diterima? Klaim 0 dokumen tidak mengubah apa pun."""
+        """Apakah kunci API internal diterima? **Tanpa mengubah apa pun di backend.**
+
+        Versi awal memakai ``POST /internal/extraction/claim?limit=1`` dengan dokumen
+        "klaim 0 dokumen tidak mengubah apa pun" — keliru: backend mewajibkan
+        ``limit ≥ 1``, jadi setiap ``hero bridge status`` benar-benar mengklaim satu
+        dokumen, menaikkan ``extraction_attempts`` (batas 3), dan membiarkannya
+        ``diproses`` selama 30 menit. Ditemukan pada uji ujung-ke-ujung 19 Okt 2026.
+
+        Sekarang yang dipakai adalah rute baca yang dilindungi kunci yang sama,
+        untuk dokumen yang pasti tidak ada: kunci benar → 404, kunci salah → 401.
+        """
         try:
-            self._json("POST", "/api/v1/internal/extraction/claim", params={"limit": 1}, retries=1)
-            return True
+            self._json("GET", "/api/v1/internal/documents/0/pdf", retries=1)
+            return True                      # tak terjadi di praktik; tetap berarti diterima
         except BackendError as exc:
-            if exc.status == 401:
+            if exc.status in (401, 403):
                 return False
+            if exc.status == 404:
+                return True
             raise
 
     # -- alur pindai (mode push) ----------------------------------------

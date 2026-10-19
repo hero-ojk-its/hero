@@ -31,7 +31,7 @@ from collections import Counter
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-VERSION = "v2.0"
+VERSION = "v2.1"
 
 # Lower-case only, matched case-sensitively: Indonesian legislative drafting
 # writes obligations in lower case ("wajib menyampaikan") and defined terms in
@@ -461,8 +461,17 @@ def analyse(doc: sqlite3.Row, text: sqlite3.Row | None, articles: list[dict[str,
     a = AnalysisV2(doc_id=doc["doc_id"], versi=VERSION, identitas=ident, kerangka=kerangka,
                    subjek_diatur=subjects, poin=points, sanksi=sank,
                    dasar_hukum=md.get("legal_basis") or [], lampiran=lamp, ringkasan=ringkasan)
+    jumlah_halaman = doc["page_count"] if "page_count" in doc.keys() else None
     a.metrik = {"waktu_ms": round((time.perf_counter() - started) * 1000, 2),
-                "jumlah_poin": len(points), "kata_ringkasan": len(a.ringkasan_teks().split())}
+                "jumlah_poin": len(points), "kata_ringkasan": len(a.ringkasan_teks().split()),
+                # Dipakai layar Analisa (penyebut halaman, kartu ringkas). Semuanya turunan
+                # dari data yang sudah terbaca — tidak ada angka yang ditaksir. Tanpa
+                # jumlah_halaman layar menebak "total halaman = halaman tertinggi yang dikutip".
+                "jumlah_pasal": ident["jumlah_pasal"],
+                "jumlah_bab": sum(1 for k in kerangka if k.get("bab")),
+                "jumlah_halaman": int(jumlah_halaman) if jumlah_halaman else None,
+                "jumlah_kewajiban": sum(1 for p in points if p.kategori == "Kewajiban"),
+                "jumlah_larangan": sum(1 for p in points if p.kategori == "Larangan")}
     return a
 
 

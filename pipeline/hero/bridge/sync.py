@@ -19,6 +19,7 @@ buku besar jembatan menjaga kedua identitasnya tetap tersambung.
 """
 from __future__ import annotations
 
+import re
 import logging
 import time
 from dataclasses import dataclass, field
@@ -109,6 +110,27 @@ def _iso(value: Any) -> str | None:
     return str(value)[:10] or None
 
 
+_BAB = re.compile(r"^\s*BAB\s+([IVXLCDM]+|\d+[A-Z]?)\b\s*(?:[—–\-:.]\s*)?(.*)$", re.IGNORECASE)
+
+
+def _daftar_bab(labels: list[str | None]) -> list[dict[str, str]]:
+    """Label bab per pasal ("BAB II — Ketentuan Umum") → daftar bab berurutan tanpa duplikat.
+
+    Label yang tidak berpola BAB (mis. "Penjelasan") dilewati, bukan ditebak."""
+    out: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for lab in labels:
+        m = _BAB.match(lab or "")
+        if not m:
+            continue
+        nomor = m.group(1).upper()
+        if nomor in seen:
+            continue
+        seen.add(nomor)
+        out.append({"number": nomor, "title": m.group(2).strip()})
+    return out
+
+
 def _halaman(value) -> int | None:
     """Halaman 1-indexed dari backend, atau None bila tidak masuk akal."""
     try:
@@ -154,6 +176,7 @@ def _record(row: dict[str, Any], doc_id: str,
         original_filename=row.get("original_filename") or row.get("standardized_filename")
         or f"dokumen-{row['id']}.pdf",
         stored_path=row.get("file_path_pdf"),
+        page_count=int(local_md.get("page_count") or 0),
         category=row.get("bidang"),
         size_bytes=int(row.get("file_size_bytes") or 0),
         is_scanned=(row.get("extraction_method") or "") == "ocr",
@@ -266,6 +289,11 @@ def mirror(settings: Settings, *, dsn: str | None = None, limit: int | None = No
                 cat.save_text(doc_id, text, structure={
                     "has_structure": bool(rows), "article_count": len(rows),
                     "bab_count": len({r["bab"] for r in rows if r["bab"]}),
+                    # Daftar BAB dibutuhkan penyusun kerangka (analysis.framework). Tanpa
+                    # ini kerangka kosong untuk SEMUA dokumen yang lewat jalur produksi
+                    # (backend → cermin → analisa), walau pasalnya lengkap — terlihat pada
+                    # uji ujung-ke-ujung 19 Okt 2026.
+                    "babs": _daftar_bab([r["bab"] for r in rows]),
                     "sections": [], "sumber": "cermin-backend"})
                 rep.dokumen += 1
                 rep.pasal += len(rows)
