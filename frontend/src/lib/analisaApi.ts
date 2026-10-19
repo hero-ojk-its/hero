@@ -487,4 +487,67 @@ export function isDocumentProcessingFailed(doc: DocumentStatusResponse): boolean
   return doc.processing_status === 'gagal' || doc.processing_status === 'ditolak';
 }
 
+// ============================================================================
+// 10. Helper Parsing & Normalisasi Referensi Pasal (US-37 / FR-ANL-06)
+// ============================================================================
+
+export interface ParsedPasalRef {
+  /** Nomor pasal ternormalisasi (huruf kapital), misal "5", "5A", "12B". Null jika tidak dikenali */
+  pasalNum: string | null;
+  /** Nomor ayat jika tercantum dalam referensi, misal "2" dari "Pasal 3 ayat (2)" */
+  ayatNum: string | null;
+  /** Pengenal DOM canonical, misal "pasal-5a". Null jika nomor pasal tidak valid */
+  canonicalId: string | null;
+  /** String mentah rujukan asal */
+  raw: string;
+}
+
+/**
+ * Mem-parsing string rujukan pasal hukum secara presisi.
+ * Mendukung format:
+ * - "Pasal 5" -> { pasalNum: "5", ayatNum: null, canonicalId: "pasal-5" }
+ * - "Pasal 5A" / "Pasal 5a" -> { pasalNum: "5A", ayatNum: null, canonicalId: "pasal-5a" }
+ * - "Pasal 12B" -> { pasalNum: "12B", ayatNum: null, canonicalId: "pasal-12b" }
+ * - "Pasal 3 ayat (2)" / "Pasal 3 ayat 2" -> { pasalNum: "3", ayatNum: "2", canonicalId: "pasal-3" }
+ * - Format non-standar / "Teks dokumen (pasal tidak terbaca)" -> { pasalNum: null, ayatNum: null, canonicalId: null }
+ */
+export function parsePasalRef(str: string): ParsedPasalRef {
+  if (!str || typeof str !== 'string') {
+    return { pasalNum: null, ayatNum: null, canonicalId: null, raw: '' };
+  }
+  const trimmed = str.trim();
+
+  // Pola 1: "Pasal 5", "Pasal 5A", "Pasal 5-A", "Pasal 5 A" (di mana A adalah huruf tunggal, bukan awal kata seperti 'ayat')
+  // diikuti opsional "ayat (2)" atau "ayat 2"
+  const match = trimmed.match(/Pasal\s+([0-9]+)(?:[\s-]*([A-Za-z])(?![A-Za-z]))?(?:\s+ayat\s*\(?([0-9]+)\)?)?/i);
+  if (match) {
+    const baseNum = match[1].replace(/^0+(?=\d)/, '');
+    const letter = match[2] ? match[2].toUpperCase() : '';
+    const num = baseNum + letter;
+    const ayat = match[3] || null;
+    return {
+      pasalNum: num,
+      ayatNum: ayat,
+      canonicalId: `pasal-${num.toLowerCase()}`,
+      raw: trimmed
+    };
+  }
+
+  // Pola 2: String numerik langsung dengan sufiks huruf opsional, misal "5", "5A", "05", "12B", "5 A", "5-A"
+  const numOnlyMatch = trimmed.match(/^([0-9]+)(?:[\s-]*([A-Za-z])(?![A-Za-z]))?$/);
+  if (numOnlyMatch) {
+    const baseNum = numOnlyMatch[1].replace(/^0+(?=\d)/, '');
+    const letter = numOnlyMatch[2] ? numOnlyMatch[2].toUpperCase() : '';
+    const num = baseNum + letter;
+    return {
+      pasalNum: num,
+      ayatNum: null,
+      canonicalId: `pasal-${num.toLowerCase()}`,
+      raw: trimmed
+    };
+  }
+
+  return { pasalNum: null, ayatNum: null, canonicalId: null, raw: trimmed };
+}
+
 export type { DocumentsResponse, DocumentItem, DocumentBlob };

@@ -17,7 +17,9 @@ import {
   Building2, 
   ShieldAlert, 
   Paperclip,
-  Clock
+  Clock,
+  Info,
+  X
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -25,7 +27,8 @@ import {
   getDocumentStatus,
   checkMlHealth,
   isDocumentReadyForAnalysis,
-  exportDocumentAnalysis
+  exportDocumentAnalysis,
+  parsePasalRef
 } from '../../lib/analisaApi';
 import { ApiError, API_BASE_URL, apiFetchBlob } from '../../lib/api';
 import type {
@@ -132,12 +135,46 @@ export default function AnalisaState2Workspace({
   const [viewMode, setViewMode] = useState<'salinan' | 'pdf'>('salinan');
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const maxPageFromPoints = (data?.poin_utama || []).reduce((max, p) => (p.halaman && p.halaman > max ? p.halaman : max), 1);
+  const [pdfTargetPage, setPdfTargetPage] = useState<number | null>(null);
+
+  // Evaluasi totalPages dari metadata metrik, artikel backend, dan poin ML yang valid
+  const maxPageFromData = useMemo(() => {
+    let max = 1;
+    for (const a of articles) {
+      if (typeof a.page === 'number' && a.page > max) max = a.page;
+    }
+    if (data?.poin_utama) {
+      for (const p of data.poin_utama) {
+        if (typeof p.halaman === 'number' && p.halaman > max) max = p.halaman;
+      }
+    }
+    return max;
+  }, [articles, data]);
+
   const totalPages = typeof data?.metrik?.jumlah_halaman === 'number' && data.metrik.jumlah_halaman > 0
     ? data.metrik.jumlah_halaman
-    : Math.max(maxPageFromPoints, 1);
+    : maxPageFromData;
   const naskahContainerRef = useRef<HTMLDivElement>(null);
-  const [highlightedPasalId, setHighlightedPasalId] = useState<string | null>('pasal-1');
+  const [highlightedPasalId, setHighlightedPasalId] = useState<string | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Feedback Navigasi Rujukan Pasal (US-37)
+  const [navFeedback, setNavFeedback] = useState<{
+    type: 'success' | 'warning' | 'info';
+    message: string;
+  } | null>(null);
+  const navFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showNavFeedback = useCallback((type: 'success' | 'warning' | 'info', message: string) => {
+    if (navFeedbackTimerRef.current) {
+      clearTimeout(navFeedbackTimerRef.current);
+    }
+    setNavFeedback({ type, message });
+    navFeedbackTimerRef.current = setTimeout(() => {
+      setNavFeedback(null);
+      navFeedbackTimerRef.current = null;
+    }, 4500);
+  }, []);
 
   // State Workspace Panel 3: Hasil Analisis Tabs
   const [activeTab, setActiveTab] = useState<'ringkasan' | 'poin_utama' | 'dasar_hukum' | 'info_tambahan'>('ringkasan');
@@ -159,13 +196,21 @@ export default function AnalisaState2Workspace({
     }
   }, []);
 
-  // Pastikan ref isMounted dibersihkan saat unmount
+  // Pastikan ref isMounted dan timer dibersihkan saat unmount
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       clearRetryTimer();
       abortAnalysisRequest();
+      if (navFeedbackTimerRef.current) {
+        clearTimeout(navFeedbackTimerRef.current);
+        navFeedbackTimerRef.current = null;
+      }
+      if (highlightTimerRef.current) {
+        clearTimeout(highlightTimerRef.current);
+        highlightTimerRef.current = null;
+      }
     };
   }, [clearRetryTimer, abortAnalysisRequest]);
 
@@ -463,32 +508,63 @@ export default function AnalisaState2Workspace({
     }));
   };
 
-  // Handler Klik Pasal pada Panel 1 atau Panel 3
-  const handleJumpToPasal = (pasalStr: string) => {
-    setSelectedPasal(pasalStr);
-
-    if (viewMode !== 'salinan') {
-      setViewMode('salinan');
+  // Handler Klik Rujukan Pasal (US-37 / FR-ANL-06)
+  const handleJumpToPasal = useCallback((pasalStr: string) => {
+    if (!pasalStr || typeof pasalStr !== 'string') {
+      showNavFeedback('warning', 'Rujukan pasal tidak valid atau kosong.');
+      return;
     }
 
-    const match = pasalStr.match(/Pasal\s+(\d+)/i);
-    const pasalNum = match ? match[1] : '1';
-    const targetElementId = `pasal-${pasalNum}`;
+    const trimmed = pasalStr.trim();
+    setSelectedPasal(trimmed);
 
-    setHighlightedPasalId(targetElementId);
+    const parsed = parsePasalRef(trimmed);
 
-    setTimeout(() => {
-      const el = document.getElementById(targetElementId);
-      if (el && naskahContainerRef.current) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        const estPage = Math.min(totalPages, Math.max(1, Math.ceil(parseInt(pasalNum, 10) / 2)));
-        setCurrentPage(estPage);
+    // Jika referensi tidak dapat dikenali nomor pasalnya (e.g. "Teks dokumen (pasal tidak terbaca)")
+    // JANGAN PERNAH fallback ke Pasal 1!
+    if (!parsed.pasalNum) {
+      showNavFeedback('warning', `Rujukan "${trimmed}" tidak dapat ditelusuri ke nomor pasal tertentu.`);
+      return;
+    }
+
+    // 1. Dapatkan nomor halaman fisik asli dari metadata yang valid (tanpa komputasi spekulatif)
+    let targetPage: number | null = null;
+
+    // Cari dari data artikel tersimpan di backend
+    const matchingArticle = articles.find(a => {
+      const aParsed = parsePasalRef(a.article_number);
+      return aParsed.pasalNum === parsed.pasalNum;
+    });
+
+    if (matchingArticle && typeof matchingArticle.page === 'number' && matchingArticle.page > 0) {
+      targetPage = matchingArticle.page;
+    }
+
+    // Jika tidak ada di artikel backend, cari dari poin_utama analisis ML
+    if (!targetPage && data?.poin_utama) {
+      const matchingPoint = data.poin_utama.find(p => {
+        const pRef = p.ref || p.pasal;
+        if (!pRef) return false;
+        const pParsed = parsePasalRef(pRef);
+        return pParsed.pasalNum === parsed.pasalNum;
+      });
+      if (matchingPoint && typeof matchingPoint.halaman === 'number' && matchingPoint.halaman > 0) {
+        targetPage = matchingPoint.halaman;
       }
-    }, 50);
+    }
 
-    if (data?.kerangka) {
+    // Validasi nilai halaman terhadap totalPages jika totalPages valid
+    if (targetPage !== null) {
+      if (targetPage < 1) targetPage = 1;
+      if (totalPages > 0 && targetPage > totalPages) {
+        targetPage = totalPages;
+      }
+    }
+
+    // 2. Expand Bab terkait pada accordion panel kiri secara presisi (tanpa match parsial)
+    if (data?.kerangka && parsed.pasalNum) {
       for (const item of data.kerangka) {
-        if (item.pasal?.some(p => p.toLowerCase().includes(`pasal ${pasalNum}`))) {
+        if (item.pasal?.some(p => parsePasalRef(p).pasalNum === parsed.pasalNum)) {
           if (item.bab) {
             setExpandedBabs(prev => ({ ...prev, [item.bab]: true }));
           }
@@ -497,10 +573,67 @@ export default function AnalisaState2Workspace({
       }
     }
 
-    setTimeout(() => {
-      setHighlightedPasalId(null);
-    }, 3000);
-  };
+    // 3. Eksekusi navigasi sesuai mode tampilan aktif
+    if (viewMode === 'pdf') {
+      // Dalam mode PDF, JANGAN otomatis memaksa berpindah ke salinan teks!
+      if (targetPage !== null) {
+        setCurrentPage(targetPage);
+        setPdfTargetPage(targetPage);
+        showNavFeedback('success', `Menavigasi naskah PDF ke Halaman ${targetPage} (${trimmed})`);
+      } else {
+        showNavFeedback(
+          'info',
+          `Nomor halaman fisik PDF untuk ${trimmed} belum tercatat pada metadata dokumen. Anda dapat beralih ke tab "Salinan Resmi" untuk membaca pasal ini.`
+        );
+      }
+    } else {
+      // Dalam mode salinan resmi, cari elemen DOM dan scroll secara halus
+      const targetElementId = parsed.canonicalId;
+      if (!targetElementId) {
+        showNavFeedback('warning', `Pengenal elemen untuk "${trimmed}" tidak dapat dibuat.`);
+        return;
+      }
+
+      setHighlightedPasalId(targetElementId);
+
+      setTimeout(() => {
+        const el = document.getElementById(targetElementId);
+        if (el && naskahContainerRef.current) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          if (targetPage !== null) {
+            setCurrentPage(targetPage);
+          }
+          showNavFeedback(
+            'success',
+            `Menampilkan ${trimmed}${targetPage ? ` (Halaman ${targetPage})` : ''}`
+          );
+        } else {
+          // Tangani kondisi bila elemen DOM target tidak ditemukan di salinan
+          const hasKerangka = Array.isArray(data?.kerangka) && data.kerangka.length > 0;
+          const hasArticles = articles.length > 0;
+          if (!hasKerangka && !hasArticles) {
+            showNavFeedback(
+              'warning',
+              `Struktur pasal salinan resmi belum tersedia untuk draf ini. Silakan buka tab "PDF Asli"${targetPage ? ` (Pasal berada di sekitar Hal. ${targetPage})` : ''}.`
+            );
+          } else {
+            showNavFeedback(
+              'warning',
+              `Teks ${trimmed} tidak ditemukan dalam naskah salinan resmi dokumen ini.`
+            );
+          }
+        }
+      }, 60);
+
+      if (highlightTimerRef.current) {
+        clearTimeout(highlightTimerRef.current);
+      }
+      highlightTimerRef.current = setTimeout(() => {
+        setHighlightedPasalId(null);
+        highlightTimerRef.current = null;
+      }, 3500);
+    }
+  }, [articles, data, showNavFeedback, totalPages, viewMode]);
 
   // Navigasi ke Harmonisasi
   const handleGoToHarmonisasi = () => {
@@ -609,8 +742,33 @@ export default function AnalisaState2Workspace({
   const handleZoomIn = () => setZoomLevel(prev => Math.min(150, prev + 15));
   const handleZoomOut = () => setZoomLevel(prev => Math.max(75, prev - 15));
 
+  // Susunan Kerangka Bab & Pasal (Gunakan data.kerangka ML jika tersedia, fallback ke articles database)
+  const kerangkaToDisplay = useMemo(() => {
+    if (data?.kerangka && data.kerangka.length > 0) {
+      return data.kerangka;
+    }
+    if (articles.length > 0) {
+      // Kelompokkan articles dari backend berdasarkan chapter_title
+      const babMap = new Map<string, string[]>();
+      for (const art of articles) {
+        const chapter = art.chapter_title?.trim() || 'BAB I';
+        const pasalList = babMap.get(chapter) || [];
+        if (!pasalList.includes(art.article_number)) {
+          pasalList.push(art.article_number);
+        }
+        babMap.set(chapter, pasalList);
+      }
+      return Array.from(babMap.entries()).map(([chapter, pasalList]) => ({
+        bab: chapter,
+        judul: '',
+        pasal: pasalList
+      }));
+    }
+    return [];
+  }, [articles, data?.kerangka]);
+
   // Filter Struktur Dokumen berdasarkan pencarian
-  const filteredKerangka = (data?.kerangka || []).map(bab => ({
+  const filteredKerangka = kerangkaToDisplay.map(bab => ({
     ...bab,
     pasal: (bab.pasal || []).filter(p => 
       !structureSearch.trim() || p.toLowerCase().includes(structureSearch.toLowerCase().trim())
@@ -1013,7 +1171,12 @@ export default function AnalisaState2Workspace({
                     {isExpanded && item.pasal && item.pasal.length > 0 && (
                       <div className="py-1 px-1.5 space-y-0.5 bg-white border-t border-gray-100">
                         {item.pasal.map((pasalText, pIdx) => {
-                          const isSelected = selectedPasal === pasalText || pasalText.includes(selectedPasal);
+                          const selParsed = parsePasalRef(selectedPasal);
+                          const curParsed = parsePasalRef(pasalText);
+                          const isSelected = Boolean(
+                            (selParsed.pasalNum && curParsed.pasalNum && selParsed.pasalNum === curParsed.pasalNum) ||
+                            selectedPasal.toLowerCase() === pasalText.toLowerCase()
+                          );
 
                           return (
                             <button
@@ -1084,7 +1247,8 @@ export default function AnalisaState2Workspace({
                   onClick={(e) => {
                     if (pdfBlobUrl) {
                       e.preventDefault();
-                      window.open(pdfBlobUrl, '_blank');
+                      const targetUrl = pdfTargetPage ? `${pdfBlobUrl}#page=${pdfTargetPage}` : pdfBlobUrl;
+                      window.open(targetUrl, '_blank');
                     }
                   }}
                   className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-600 hover:text-red-700 transition cursor-pointer"
@@ -1110,6 +1274,32 @@ export default function AnalisaState2Workspace({
                 </span>
               </div>
             </div>
+
+            {/* Banner Notifikasi Navigasi Rujukan Pasal (US-37) */}
+            {navFeedback && (
+              <div className={`px-3.5 py-2 border-b flex items-center justify-between text-xs transition-all shrink-0 ${
+                navFeedback.type === 'success'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-100'
+                  : navFeedback.type === 'warning'
+                  ? 'bg-amber-50 text-amber-800 border-amber-200'
+                  : 'bg-blue-50 text-blue-800 border-blue-100'
+              }`}>
+                <div className="flex items-center gap-2">
+                  {navFeedback.type === 'success' && <Check size={14} className="text-emerald-600 shrink-0" />}
+                  {navFeedback.type === 'warning' && <AlertCircle size={14} className="text-amber-600 shrink-0" />}
+                  {navFeedback.type === 'info' && <Info size={14} className="text-blue-600 shrink-0" />}
+                  <span className="font-medium">{navFeedback.message}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setNavFeedback(null)}
+                  className="text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer ml-2"
+                  title="Tutup pemberitahuan"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            )}
 
             {/* Konten Naskah: PDF Asli atau Salinan Formal OJK */}
             {viewMode === 'pdf' ? (
@@ -1141,7 +1331,8 @@ export default function AnalisaState2Workspace({
                   </div>
                 ) : pdfBlobUrl ? (
                   <iframe
-                    src={pdfBlobUrl}
+                    key={pdfTargetPage ? `pdf-p-${pdfTargetPage}` : 'pdf-initial'}
+                    src={pdfBlobUrl ? (pdfTargetPage ? `${pdfBlobUrl}#page=${pdfTargetPage}` : pdfBlobUrl) : ''}
                     className="w-full h-full border-0 rounded bg-white shadow-2xs"
                     title={`Naskah PDF Asli #${documentId}`}
                   />
@@ -1207,22 +1398,21 @@ export default function AnalisaState2Workspace({
                             </h3>
                           </div>
                           {(bab.pasal || []).map((pasalStr) => {
-                            const match = pasalStr.match(/Pasal\s+(\d+)/i);
-                            const pasalNum = match ? match[1] : '';
-                            const targetId = pasalNum ? `pasal-${pasalNum}` : undefined;
+                            const parsed = parsePasalRef(pasalStr);
+                            const targetId = parsed.canonicalId || undefined;
                             const points = (data.poin_utama || []).filter(p => {
-                              if (p.pasal && p.pasal.toLowerCase().includes(pasalStr.toLowerCase())) return true;
-                              if (p.ref && p.ref.toLowerCase().includes(pasalStr.toLowerCase())) return true;
-                              return false;
+                              const pRef = p.ref || p.pasal;
+                              if (!pRef) return false;
+                              const pParsed = parsePasalRef(pRef);
+                              return Boolean(parsed.pasalNum && pParsed.pasalNum === parsed.pasalNum);
                             });
                             const isHighlighted = targetId ? highlightedPasalId === targetId : false;
 
-                            // Cari teks lengkap artikel dari hasil ekstraksi backend
+                            // Cari teks lengkap artikel dari hasil ekstraksi backend secara presisi
                             const matchingArticle = articles.find(a => {
-                              if (!pasalNum) return false;
-                              const aMatch = a.article_number.match(/Pasal\s+(\d+)/i) || a.article_number.match(/^(\d+)$/);
-                              const aNum = aMatch ? aMatch[1] : a.article_number;
-                              return aNum === pasalNum;
+                              if (!parsed.pasalNum) return false;
+                              const aParsed = parsePasalRef(a.article_number);
+                              return aParsed.pasalNum === parsed.pasalNum;
                             });
                             const fullArticleText = matchingArticle?.content_text;
 
@@ -1237,7 +1427,14 @@ export default function AnalisaState2Workspace({
                                 }`}
                               >
                                 <div className="flex items-center justify-between mb-2.5 pb-2 border-b border-gray-100">
-                                  <span className="font-bold text-[0.95em] text-gray-900">{pasalStr}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-[0.95em] text-gray-900">{pasalStr}</span>
+                                    {matchingArticle?.page && (
+                                      <span className="text-[0.75em] font-mono px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                                        Hal. {matchingArticle.page}
+                                      </span>
+                                    )}
+                                  </div>
                                   {points[0]?.kategori && (
                                     <span className="text-[0.75em] font-medium px-2 py-0.5 rounded bg-gray-100 text-gray-600">
                                       {points[0].kategori}
@@ -1289,6 +1486,68 @@ export default function AnalisaState2Workspace({
                         </div>
                       );
                     })
+                  ) : articles.length > 0 ? (
+                    <div className="space-y-4 pt-2">
+                      <div className="p-3 bg-amber-50/60 border border-amber-200/80 rounded-lg text-xs text-amber-800">
+                        Kerangka bab dari ML belum diekstrak; menampilkan daftar naskah pasal dari ekstraksi peladen ({articles.length} pasal).
+                      </div>
+                      {articles.map((art) => {
+                        const parsed = parsePasalRef(art.article_number);
+                        const targetId = parsed.canonicalId || undefined;
+                        const isHighlighted = targetId ? highlightedPasalId === targetId : false;
+                        const points = (data.poin_utama || []).filter(p => {
+                          const pRef = p.ref || p.pasal;
+                          if (!pRef) return false;
+                          const pParsed = parsePasalRef(pRef);
+                          return Boolean(parsed.pasalNum && pParsed.pasalNum === parsed.pasalNum);
+                        });
+                        return (
+                          <div
+                            key={art.id}
+                            id={targetId}
+                            className={`rounded-xl border p-4 transition-all duration-200 ${
+                              isHighlighted
+                                ? 'border-red-600 bg-red-50/40 ring-2 ring-red-200 shadow-sm'
+                                : 'border-gray-200 bg-white hover:border-gray-300 shadow-2xs'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-2.5 pb-2 border-b border-gray-100">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-[0.95em] text-gray-900">{art.article_number}</span>
+                                {art.page && (
+                                  <span className="text-[0.75em] font-mono px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                                    Hal. {art.page}
+                                  </span>
+                                )}
+                              </div>
+                              {points[0]?.kategori && (
+                                <span className="text-[0.75em] font-medium px-2 py-0.5 rounded bg-gray-100 text-gray-600">
+                                  {points[0].kategori}
+                                </span>
+                              )}
+                            </div>
+                            <div className="space-y-3 text-left">
+                              <p className="text-gray-800 leading-relaxed text-[0.92em] whitespace-pre-line font-serif">
+                                {art.content_text}
+                              </p>
+                              {points.length > 0 && (
+                                <div className="pt-2.5 border-t border-gray-100 space-y-1.5">
+                                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
+                                    Intisari &amp; Norma Terdeteksi ({points.length} klausul)
+                                  </span>
+                                  {points.map((pt, pIdx) => (
+                                    <div key={pIdx} className="bg-red-50/50 p-2 rounded-lg border border-red-100/70 text-xs">
+                                      <span className="font-semibold text-red-800">[{pt.kategori}]</span>{' '}
+                                      <span className="text-gray-700">{pt.parafrase || pt.teks}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   ) : (
                     <div className="text-center py-8 text-gray-500 text-xs">
                       Struktur bab dan pasal untuk draf ini belum tersedia. Silakan gunakan tab PDF Asli untuk membaca naskah lengkap.
@@ -1379,36 +1638,127 @@ export default function AnalisaState2Workspace({
               {/* TAB 1: RINGKASAN */}
               {activeTab === 'ringkasan' && (
                 <div className="space-y-4">
-                  <div className="bg-red-50/40 border border-red-100 rounded-xl p-4 space-y-2">
-                    <span className="text-[11px] font-bold text-red-800 uppercase tracking-wider block">
-                      RINGKASAN EKSEKUTIF
-                    </span>
-                    <p className="text-xs text-gray-700 leading-relaxed">
-                      {data.ringkasan_teks || (data.ringkasan && data.ringkasan[0]?.kalimat) || '-'}
-                    </p>
+                  {/* RINGKASAN EKSEKUTIF */}
+                  <div className="bg-red-50/40 border border-red-100 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between pb-1 border-b border-red-100/60">
+                      <span className="text-[11px] font-bold text-red-800 uppercase tracking-wider block">
+                        RINGKASAN EKSEKUTIF
+                      </span>
+                      {mode === 'ai' && data.mode_dipakai === 'ai' ? (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-200">
+                          AI-Assisted
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-200">
+                          Deterministik
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Narasi Ringkasan AI (Jika mode AI aktif dan ringkasan_ai tersedia) */}
+                    {mode === 'ai' && data.mode_dipakai === 'ai' && data.ringkasan_ai && (
+                      <div className="bg-white/90 rounded-lg p-3 border border-red-200/70 space-y-1 shadow-2xs">
+                        <span className="text-[10px] font-bold text-red-900 uppercase tracking-wider block">
+                          Narasi Ringkasan AI
+                        </span>
+                        <p className="text-xs text-gray-800 leading-relaxed font-serif">
+                          {data.ringkasan_ai}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Butir-butir Ringkasan Kalimat Berdasarkan data.ringkasan */}
+                    {Array.isArray(data.ringkasan) && data.ringkasan.length > 0 ? (
+                      <div className="space-y-2.5 pt-0.5">
+                        {data.ringkasan.map((sentence, sIdx) => {
+                          const validRefs = Array.isArray(sentence.rujukan)
+                            ? sentence.rujukan.filter((r): r is string => typeof r === 'string' && r.trim() !== '' && r.trim() !== '-')
+                            : [];
+                          const hasRefs = validRefs.length > 0;
+                          return (
+                            <div key={sIdx} className="space-y-1.5 text-xs bg-white/70 p-2.5 rounded-lg border border-red-100/70">
+                              <p className="text-gray-800 leading-relaxed">{sentence.kalimat}</p>
+                              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                <span className="text-[10px] font-medium text-gray-500">Rujukan:</span>
+                                {hasRefs ? (
+                                  validRefs.map((refStr, rIdx) => {
+                                    const parsed = parsePasalRef(refStr);
+                                    const isRecognized = parsed.pasalNum !== null;
+                                    return (
+                                      <button
+                                        key={rIdx}
+                                        type="button"
+                                        onClick={() => handleJumpToPasal(refStr)}
+                                        className={`inline-flex items-center gap-1 font-mono text-[11px] font-semibold px-2 py-0.5 rounded transition ${
+                                          isRecognized
+                                            ? 'text-red-700 bg-red-50 hover:bg-red-100 hover:text-red-900 border border-red-200 cursor-pointer'
+                                            : 'text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 cursor-pointer'
+                                        }`}
+                                        title={isRecognized ? `Lompat ke ${refStr}` : `Telusuri rujukan "${refStr}"`}
+                                      >
+                                        <ExternalLink size={10} />
+                                        <span>{refStr}</span>
+                                      </button>
+                                    );
+                                  })
+                                ) : (
+                                  <span className="text-[10px] text-gray-400 italic font-mono">
+                                    Rujukan pasal tidak tersedia
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      /* Fallback teks lama ketika array data.ringkasan tidak tersedia */
+                      <div className="space-y-2">
+                        <p className="text-xs text-gray-700 leading-relaxed">
+                          {data.ringkasan_teks || '-'}
+                        </p>
+                        <span className="text-[10px] text-gray-400 italic block font-mono">
+                          Rujukan pasal per kalimat tidak tersedia untuk dokumen ini.
+                        </span>
+                      </div>
+                    )}
                   </div>
 
+                  {/* POIN KUNCI / KEY TAKEAWAYS */}
                   <div>
                     <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider mb-2.5">
                       POIN KUNCI
                     </h4>
                     <div className="space-y-3">
                       {(data.poin_utama || []).slice(0, 4).map((p, idx) => {
-                        const targetRef = p.ref || p.pasal;
+                        const rawRef = p.ref || p.pasal;
+                        const targetRef = typeof rawRef === 'string' && rawRef.trim() !== '' && rawRef.trim() !== '-' ? rawRef.trim() : null;
+                        const parsed = targetRef ? parsePasalRef(targetRef) : null;
+                        const isRecognized = parsed && parsed.pasalNum !== null;
                         return (
                           <div key={p.id || idx} className="flex items-start gap-2 text-xs">
                             <span className="w-1.5 h-1.5 rounded-full bg-red-700 mt-1.5 shrink-0" />
                             <div className="space-y-1 flex-1">
                               <p className="text-gray-800 leading-relaxed">{p.teks}</p>
-                              {targetRef && (
+                              {targetRef ? (
                                 <button
                                   type="button"
                                   onClick={() => handleJumpToPasal(targetRef)}
-                                  className="inline-flex items-center gap-1 text-red-700 hover:underline font-mono text-[11px] font-semibold cursor-pointer"
+                                  className={`inline-flex items-center gap-1 font-mono text-[11px] font-semibold cursor-pointer transition ${
+                                    isRecognized
+                                      ? 'text-red-700 hover:underline'
+                                      : 'text-amber-700 hover:underline'
+                                  }`}
+                                  title={`Lompat ke ${targetRef}`}
                                 >
                                   <ExternalLink size={10} />
                                   <span>{targetRef}</span>
+                                  {p.halaman ? <span className="text-gray-400 font-normal">(Hal. {p.halaman})</span> : null}
                                 </button>
+                              ) : (
+                                <span className="text-[10px] text-gray-400 italic font-mono">
+                                  Rujukan pasal tidak tersedia
+                                </span>
                               )}
                             </div>
                           </div>
@@ -1454,8 +1804,11 @@ export default function AnalisaState2Workspace({
                     {(data.poin_utama || [])
                       .filter(p => kategoriFilter === 'Semua' || p.kategori.toLowerCase() === kategoriFilter.toLowerCase())
                       .map((p, idx) => {
-                        const targetRef = p.ref || p.pasal;
+                        const rawRef = p.ref || p.pasal;
+                        const targetRef = typeof rawRef === 'string' && rawRef.trim() !== '' && rawRef.trim() !== '-' ? rawRef.trim() : null;
                         const urgencyLabel = p.urgensi || (p.prioritas !== undefined ? `Prioritas ${p.prioritas}` : undefined);
+                        const parsed = targetRef ? parsePasalRef(targetRef) : null;
+                        const isRecognized = parsed && parsed.pasalNum !== null;
                         return (
                           <div key={p.id || idx} className="p-3 rounded-lg border border-gray-100 bg-gray-50/60 hover:bg-white hover:border-gray-200 transition space-y-1.5">
                             <div className="flex items-center justify-between text-[11px]">
@@ -1475,18 +1828,32 @@ export default function AnalisaState2Workspace({
                                   </span>
                                 )}
                               </div>
-                              {targetRef && (
+                              {targetRef ? (
                                 <button
                                   type="button"
                                   onClick={() => handleJumpToPasal(targetRef)}
-                                  className="inline-flex items-center gap-1 text-red-700 hover:underline font-mono text-[11px] font-semibold cursor-pointer"
+                                  className={`inline-flex items-center gap-1 font-mono text-[11px] font-semibold cursor-pointer transition ${
+                                    isRecognized
+                                      ? 'text-red-700 hover:underline'
+                                      : 'text-amber-700 hover:underline'
+                                  }`}
+                                  title={`Lompat ke ${targetRef}`}
                                 >
                                   <ExternalLink size={10} />
                                   <span>{targetRef} {p.halaman ? `(Hal. ${p.halaman})` : ''}</span>
                                 </button>
+                              ) : (
+                                <span className="text-[10px] text-gray-400 italic font-mono">
+                                  Rujukan pasal tidak tersedia
+                                </span>
                               )}
                             </div>
                             <p className="text-xs text-gray-800 leading-relaxed">{p.teks}</p>
+                            {p.parafrase && mode === 'ai' && p.parafrase !== p.teks && (
+                              <p className="text-xs text-red-900/80 bg-red-50/50 p-2 rounded border border-red-100/60 font-serif italic">
+                                Parafrase AI: {p.parafrase}
+                              </p>
+                            )}
                           </div>
                         );
                       })}
