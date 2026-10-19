@@ -33,6 +33,11 @@ from app.schemas.article import (
     UpdateDocumentActiveIn,
     UpdateDocumentActiveResponse,
 )
+from app.core.permissions import (
+    perlu_izin,
+    Izin,
+    check_non_public_access,
+)
 from app.routers.auth import get_current_user
 from app.services.audit_service import (
     record_audit,
@@ -176,6 +181,7 @@ def list_documents(
     skip: int = Query(0, ge=0, description="Offset pagination"),
     limit: int = Query(20, ge=1, description="Batas dokumen per halaman (maks 100)"),
     db: Session = Depends(get_db),
+    current_user=Depends(perlu_izin(Izin.KB_BACA)),
 ):
     """
     Mengembalikan daftar dokumen regulasi dengan pagination dan pencarian full-text / multi-filter.
@@ -214,7 +220,7 @@ def list_documents(
 
     search_svc = SearchService(db)
     try:
-        total, items = search_svc.search(params)
+        total, items = search_svc.search(params, user=current_user)
     except ValueError as ve:
         raise HTTPException(status_code=422, detail=str(ve))
 
@@ -252,7 +258,7 @@ def place_pending_documents(
     limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.KB_KELOLA)),
 ):
     """
     Menjalankan penempatan berkas untuk dokumen-dokumen yang belum ditempatkan di kb/.
@@ -302,6 +308,7 @@ def get_documents_needing_review(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
+    _user=Depends(perlu_izin(Izin.METADATA_KOREKSI)),
 ):
     """
     Mengembalikan dokumen berstatus `perlu_koreksi`, ditambah dokumen berstatus `terindeks`
@@ -502,7 +509,7 @@ def _format_single_document_response(doc: Document, db: Session, current_user: O
 def get_document(
     document_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.KB_BACA)),
 ):
     """Mengembalikan detail lengkap dokumen beserta pasal level teratas, rujukan hukum, dan status penempatan KB."""
     doc = db.query(Document).filter(Document.id == document_id).first()
@@ -526,7 +533,7 @@ def get_document_pdf(
     download: bool = Query(False, description="Jika true, set Content-Disposition ke attachment"),
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.KB_BACA)),
 ):
     """
     Mengembalikan berkas PDF asli dari penyimpanan.
@@ -536,12 +543,7 @@ def get_document_pdf(
     if not doc:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
 
-    if settings.protect_non_public_when_auth_disabled and not settings.auth_enabled:
-        if doc.access_classification == KlasifikasiAkses.non_publik:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.",
-            )
+    check_non_public_access(doc, current_user)
 
     if not doc.file_path_pdf or not storage.exists(doc.file_path_pdf):
         logger.error("Berkas PDF asli tidak ditemukan di penyimpanan untuk dokumen id=%s, path=%s", doc.id, doc.file_path_pdf)
@@ -595,7 +597,7 @@ def get_document_text(
     offset: int = Query(0, ge=0, description="Offset karakter teks"),
     limit: int = Query(20000, ge=1, le=100000, description="Batas karakter yang diambil"),
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.KB_BACA)),
 ):
     """
     Mengembalikan potongan teks mentah hasil ekstraksi dokumen lengkap.
@@ -604,12 +606,7 @@ def get_document_text(
     if not doc:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
 
-    if settings.protect_non_public_when_auth_disabled and not settings.auth_enabled:
-        if doc.access_classification == KlasifikasiAkses.non_publik:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.",
-            )
+    check_non_public_access(doc, current_user)
 
     full_text = doc.full_text or ""
     total_len = len(full_text)
@@ -634,7 +631,7 @@ def patch_document_metadata(
     request: Request,
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.METADATA_KOREKSI)),
 ):
     """
     Melakukan koreksi metadata dokumen manual (US-21).
@@ -942,7 +939,7 @@ def place_document(
     force: bool = Query(False, description="Paksa tempatkan ulang meski sudah di bawah kb/"),
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.KB_KELOLA)),
 ):
     """
     Memicu proses penamaan baku dan pemindahan dokumen ke folder kategori KB.
@@ -999,7 +996,7 @@ def update_document_status(
     payload: UpdateDocumentStatusIn,
     request: Request,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.STATUS_UBAH)),
 ) -> UpdateDocumentStatusResponse:
     """
     Langkah:
@@ -1116,7 +1113,7 @@ def update_document_active(
     payload: UpdateDocumentActiveIn,
     request: Request,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.KB_KELOLA)),
 ) -> UpdateDocumentActiveResponse:
     """
     Mengaktifkan atau menonaktifkan dokumen regulasi secara administratif (US-30 / FR-KB-08).
@@ -1238,12 +1235,7 @@ def get_document_version(
     if not doc:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
 
-    if settings.protect_non_public_when_auth_disabled and not settings.auth_enabled:
-        if doc.access_classification == KlasifikasiAkses.non_publik:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.",
-            )
+    check_non_public_access(doc, current_user)
 
     return get_versioning_details(db, doc, current_user=current_user)
 
@@ -1260,7 +1252,7 @@ def get_document_version(
 def get_document_analysis_comparison(
     document_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.ANALISA_JALANKAN)),
 ):
     """
     Mengembalikan hasil analisa deterministik dan hasil AI yang tersimpan secara terpisah
@@ -1276,17 +1268,12 @@ def get_document_analysis_comparison(
             detail={"code": "dokumen_nonaktif", "message": "Dokumen tidak aktif / telah dinonaktifkan."},
         )
 
-    if settings.protect_non_public_when_auth_disabled and not settings.auth_enabled:
-        if doc.access_classification == KlasifikasiAkses.non_publik:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.",
-            )
+    check_non_public_access(doc, current_user)
 
     from app.routers.ml_gateway import allowed_document_ids, saring_rujukan
     from app.services.analysis_result_service import get_analysis_comparison
 
-    allowed_ids = allowed_document_ids(db)
+    allowed_ids = allowed_document_ids(db, user=current_user)
     return get_analysis_comparison(db, doc, allowed_ids, saring_rujukan)
 
 
@@ -1306,7 +1293,7 @@ def get_document_analysis_runs(
     skip: int = Query(0, ge=0, description="Offset pagination"),
     limit: int = Query(20, ge=1, le=100, description="Batas jumlah per halaman"),
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.ANALISA_JALANKAN)),
 ):
     """
     Mengembalikan riwayat eksekusi analisa dan harmonisasi (append-only) untuk suatu dokumen.
@@ -1320,12 +1307,7 @@ def get_document_analysis_runs(
             detail={"code": "dokumen_nonaktif", "message": "Dokumen tidak aktif / telah dinonaktifkan."},
         )
 
-    if settings.protect_non_public_when_auth_disabled and not settings.auth_enabled:
-        if doc.access_classification == KlasifikasiAkses.non_publik:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.",
-            )
+    check_non_public_access(doc, current_user)
 
     from app.services.analysis_run_service import get_analysis_runs_list
 
@@ -1345,7 +1327,7 @@ def get_document_analysis_run_detail(
     document_id: int,
     run_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.ANALISA_JALANKAN)),
 ):
     """
     Mengembalikan detail satu eksekusi analisa beserta output mentah (diresolusi melalui result_hash bila cache),
@@ -1360,17 +1342,12 @@ def get_document_analysis_run_detail(
             detail={"code": "dokumen_nonaktif", "message": "Dokumen tidak aktif / telah dinonaktifkan."},
         )
 
-    if settings.protect_non_public_when_auth_disabled and not settings.auth_enabled:
-        if doc.access_classification == KlasifikasiAkses.non_publik:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.",
-            )
+    check_non_public_access(doc, current_user)
 
     from app.routers.ml_gateway import allowed_document_ids, saring_rujukan
     from app.services.analysis_run_service import get_analysis_run_detail
 
-    allowed_ids = allowed_document_ids(db)
+    allowed_ids = allowed_document_ids(db, user=current_user)
     return get_analysis_run_detail(
         db=db,
         doc=doc,
@@ -1403,7 +1380,7 @@ def export_document_analysis(
     mode: Literal["deterministik", "ai"] = Query("deterministik", description="Mode analisa (dipakai bila run_id kosong)"),
     run_id: Optional[int] = Query(None, description="ID eksekusi tertentu dari riwayat analisa"),
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.ANALISA_EKSPOR)),
 ):
     """
     Mengekspor hasil analisa regulasi (summary, Key Takeaways, rujukan pasal, metadata)
@@ -1418,18 +1395,13 @@ def export_document_analysis(
             detail={"code": "dokumen_nonaktif", "message": "Dokumen tidak aktif / telah dinonaktifkan."},
         )
 
-    if settings.protect_non_public_when_auth_disabled and not settings.auth_enabled:
-        if doc.access_classification == KlasifikasiAkses.non_publik:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.",
-            )
+    check_non_public_access(doc, current_user)
 
     from app.routers.ml_gateway import allowed_document_ids, saring_rujukan
     from app.services.analysis_export_service import export_analysis
     from app.services.audit_service import EXPORT_ANALYSIS
 
-    allowed_ids = allowed_document_ids(db)
+    allowed_ids = allowed_document_ids(db, user=current_user)
     content_bytes, media_type, headers, basi, actual_mode = export_analysis(
         db=db,
         doc=doc,

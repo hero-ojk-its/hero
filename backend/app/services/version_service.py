@@ -9,7 +9,6 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Un
 
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.models.document import Document
 from app.models.document_relation import DocumentRelation
 from app.models.enums import JenisRelasi, KlasifikasiAkses, StatusKeberlakuan
@@ -55,12 +54,13 @@ def parse_identity_key_sort(key: str) -> Tuple[int, int, str]:
 def is_doc_accessible(doc: Document, user: Optional[Any] = None) -> bool:
     """
     Memeriksa apakah dokumen boleh diakses oleh pengguna.
-    Dalam mode lindung, dokumen non-publik tidak boleh diakses oleh user publik/anonim.
+    Dalam mode lindung, dokumen non-publik tidak boleh diakses bila pengguna tidak memiliki izin.
     """
-    if settings.protect_non_public_when_auth_disabled and not settings.auth_enabled:
-        if doc.access_classification == KlasifikasiAkses.non_publik:
-            if not user or not getattr(user, "is_active", False):
-                return False
+    from app.core.permissions import boleh_baca_nonpublik
+
+    if doc.access_classification == KlasifikasiAkses.non_publik:
+        if not boleh_baca_nonpublik(user):
+            return False
     return True
 
 

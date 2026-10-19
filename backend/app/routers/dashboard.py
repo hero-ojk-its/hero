@@ -25,11 +25,16 @@ from app.models.enums import (
     StatusPindai,
 )
 
+from app.core.permissions import perlu_izin, Izin
+
 router = APIRouter()
 
 
 @router.get("/summary", summary="Ringkasan statistik Knowledge Base & Ingest")
-def get_dashboard_summary(db: Session = Depends(get_db)) -> Dict[str, Any]:
+def get_dashboard_summary(
+    db: Session = Depends(get_db),
+    _user=Depends(perlu_izin(Izin.KB_BACA)),
+) -> Dict[str, Any]:
     """
     Mengembalikan ringkasan statistik metrik Knowledge Base, status keberlakuan,
     pipeline ingest, dan sumber scraping dengan query agregat SQL yang efisien.

@@ -22,7 +22,7 @@ from app.models.enums import (
 )
 from app.models.job_ingest import JobIngest
 from app.models.ingest_failure import IngestFailure
-from app.routers.auth import get_current_user
+from app.core.permissions import perlu_izin, Izin
 from app.schemas.ingest import (
     DuplicateCheckResponse,
     IngestStatusResponse,
@@ -157,7 +157,7 @@ def upload_pdf(
     ),
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.DOKUMEN_UNGGAH)),
 ):
     """
     [US-15, US-20c] Endpoint sinkron untuk upload PDF regulasi / draft kajian.
@@ -353,6 +353,7 @@ def list_jobs(
     job_type: Optional[JenisJobIngest] = None,
     source_id: Optional[int] = None,
     db: Session = Depends(get_db),
+    _user=Depends(perlu_izin(Izin.KB_BACA)),
 ):
     """Mengembalikan riwayat JobIngest dengan pagination dan filter opsional."""
     query = db.query(JobIngest)
@@ -413,6 +414,7 @@ def list_jobs(
 def get_job_detail(
     job_id: int,
     db: Session = Depends(get_db),
+    _user=Depends(perlu_izin(Izin.KB_BACA)),
 ):
     """
     [US-14] Mengembalikan detail lengkap job ingest termasuk daftar dokumen dan kegagalan/duplikat.
@@ -513,6 +515,7 @@ def list_failures(
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage_service),
+    _user=Depends(perlu_izin(Izin.KEGAGALAN_KELOLA)),
 ):
     """
     [US-23 / S-04] Mengambil daftar log kegagalan dan antrian retry.
@@ -536,6 +539,7 @@ def list_failures(
 def get_failure_detail(
     failure_id: int,
     db: Session = Depends(get_db),
+    _user=Depends(perlu_izin(Izin.KEGAGALAN_KELOLA)),
 ):
     """Mengambil detail satu baris kegagalan ingest."""
     failure = db.query(IngestFailure).filter(IngestFailure.id == failure_id).first()
@@ -554,7 +558,7 @@ def update_failure_status(
     request: Request,
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.KEGAGALAN_KELOLA)),
 ):
     """
     Mengubah status tindak lanjut kegagalan (hanya 'belum_ditangani' atau 'diabaikan').
@@ -589,7 +593,7 @@ def retry_failure(
     body: Optional[FailureRetryRequest] = None,
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.KEGAGALAN_KELOLA)),
 ):
     """
     Memproses ulang dokumen dari karantina.
@@ -637,7 +641,7 @@ def batch_retry_failures(
     request: Request,
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(perlu_izin(Izin.KEGAGALAN_KELOLA)),
 ):
     """
     Memproses ulang beberapa kegagalan sekaligus (satu per satu, kegagalan satu tidak membatalkan yang lain).
@@ -721,6 +725,7 @@ def check_duplicate(
     file_hash: Optional[str] = None,
     file_size: Optional[int] = None,
     db: Session = Depends(get_db),
+    _user=Depends(perlu_izin(Izin.KB_BACA)),
 ):
     """
     Endpoint ringan untuk pengecekan duplikasi sebelum upload penuh.
@@ -796,7 +801,10 @@ def check_duplicate(
     response_model=IngestStatusResponse,
     summary="Status ingest pipeline",
 )
-def ingest_status(db: Session = Depends(get_db)):
+def ingest_status(
+    db: Session = Depends(get_db),
+    _user=Depends(perlu_izin(Izin.KB_BACA)),
+):
     """Cek ringkasan dokumen dan job di pipeline ingest."""
     total_docs = db.query(Document).count()
     berlaku_docs = db.query(Document).filter(Document.status_keberlakuan == StatusKeberlakuan.berlaku).count()
