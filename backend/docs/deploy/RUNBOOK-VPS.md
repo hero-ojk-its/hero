@@ -153,11 +153,41 @@ Contoh respons sehat (HTTP 200):
 - `protect_non_public`: `true` menandakan proteksi NDA aktif untuk dokumen non-publik.
 
 ### 5.3 Jalankan Smoke Test Jarak Jauh (Dari Laptop Developer)
+Gunakan skrip read-only Fase 2 untuk memastikan semua komponen berjalan tanpa mengubah data di server:
 ```bash
-python scripts/smoke_test.py https://api.hero-regulasi.id
+# Bila AUTH_ENABLED=false (default):
+python scripts/smoke_fase2.py --base-url https://api.hero-regulasi.id
+
+# Bila AUTH_ENABLED=true (gunakan token JWT pengguna, misal peran Analis atau Admin Sistem):
+# PowerShell:
+$env:HERO_SMOKE_TOKEN = "<isi_token_jwt_anda>"
+python scripts/smoke_fase2.py --base-url https://api.hero-regulasi.id
+
+# Linux / macOS (Bash):
+HERO_SMOKE_TOKEN="<isi_token_jwt_anda>" python scripts/smoke_fase2.py --base-url https://api.hero-regulasi.id
 ```
 
-### 5.4 Memeriksa Log Layanan
+> **Arti S01 GAGAL (`VPS belum di-deploy versi terbaru: <rev VPS> ≠ <rev diharapkan>`):**
+> Kode atau migrasi skema database pada instance VPS target masih berada pada revisi Alembic lama, belum diperbarui ke revisi head git lokal. Lakukan `git pull` dan `alembic upgrade head` (atau jalankan restart container backend) pada VPS sebelum mengulangi uji smoke.
+
+### 5.4 Uji Fallback ML Mati (#83)
+Prosedur verifikasi ketahanan sistem ketika layanan ekstraksi/analisa ML tidak tersedia:
+1. Jalankan `smoke_fase2.py` saat layanan ML hidup, supaya hasil analisa tersimpan di database dan cache.
+2. Hentikan layanan ML pada worker/bridge:
+   ```bash
+   hero bridge serve --stop   # atau hentikan proses layanan ML
+   ```
+3. Jalankan lagi smoke test:
+   ```bash
+   python scripts/smoke_fase2.py --base-url https://api.hero-regulasi.id
+   ```
+   Pastikan cek **S06** tetap berstatus **OK** dengan keterangan `"jalur ML mati"` dan `cache.basi=true` (menggunakan cache riwayat sebelumnya).
+4. Nyalakan kembali layanan ML:
+   ```bash
+   hero bridge serve
+   ```
+
+### 5.5 Memeriksa Log Layanan
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f --tail=100 backend
 docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f --tail=100 caddy
