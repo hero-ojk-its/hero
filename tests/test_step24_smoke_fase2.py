@@ -3,6 +3,7 @@ tests/test_step24_smoke_fase2.py
 Pengujian smoke test Fase 2 (Q01–Q09) sesuai spesifikasi Langkah 24.
 """
 from datetime import date, datetime, timezone
+from pathlib import Path
 import sys
 from typing import List
 import httpx
@@ -18,8 +19,10 @@ from app.models.enums import KlasifikasiAkses, PeranDokumen, StatusKeberlakuan, 
 from app.routers.ml_gateway import get_ml_client
 from app.services.storage_service import StorageService
 from scripts.smoke_fase2 import (
+    Hasil,
     get_local_alembic_head,
     main as smoke_main,
+    print_report,
     run_checks,
 )
 from tests.conftest import make_pdf
@@ -339,7 +342,7 @@ def test_q07_script_is_strictly_read_only(
         client.get = original_get
         client.post = original_post
         client.put = original_put
-        client.patch = tracking_patch
+        client.patch = original_patch
         client.delete = original_delete
 
     assert len(observed_methods) > 0
@@ -355,8 +358,6 @@ def test_q07_script_is_strictly_read_only(
 # ==============================================================================
 def test_q08_hero_smoke_token_attached_and_redacted(
     client: TestClient,
-    db_session: Session,
-    test_storage: StorageService,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
 ):
@@ -388,9 +389,12 @@ def test_q08_hero_smoke_token_attached_and_redacted(
         for h in captured_headers
     )
 
-    # Simulasikan pemanggilan main() dengan argumen --help / eksekusi
-    monkeypatch.setattr(sys, "argv", ["smoke_fase2.py", "--expect-revision", "test_rev"])
-    # Jalankan smoke_main yang akan menangkap exception koneksi ke default URL
+    # Simulasikan pemanggilan main() ke port yang tertutup agar tidak memanggil server lokal nyata
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["smoke_fase2.py", "--base-url", "http://127.0.0.1:9", "--expect-revision", "test_rev"],
+    )
     smoke_main()
     captured = capsys.readouterr()
 
@@ -404,5 +408,72 @@ def test_q08_hero_smoke_token_attached_and_redacted(
 # ==============================================================================
 def test_q09_alembic_head_default():
     """Q09: Head Alembic default -> get_local_alembic_head sama dengan revisi head Alembic saat ini."""
+    from alembic.script import ScriptDirectory
+    alembic_dir = str(Path(__file__).resolve().parent.parent / "alembic")
+    script = ScriptDirectory(alembic_dir)
+    heads = script.get_heads()
+    assert len(heads) > 0
+
     head_rev = get_local_alembic_head()
-    assert head_rev == "f2a3b4c5d6e7"
+    assert head_rev != ""
+    assert head_rev == heads[0]
+
+
+# ==============================================================================
+# Q10: Dokumen terindeks berada di luar 20 hasil default
+# ==============================================================================
+def test_q10_indexed_doc_outside_first_20_results(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """Q10: Buat 25 dokumen diterima dan 1 dokumen terindeks paling awal -> S04 OK dan memilih dokumen terindeks."""
+    # Dokumen terindeks dibuat paling awal (rilis tahun 2020)
+    doc_indexed = _seed_smoke_doc(
+        db_session,
+        test_storage,
+        title="Dokumen Terindeks Awal",
+        reg_num="10/INDEX/2020",
+        processing_status=StatusPemrosesan.terindeks,
+    )
+    doc_indexed.release_date = date(2020, 1, 1)
+    db_session.commit()
+
+    # 25 dokumen diterima dibuat rilis tahun 2026 sehingga berada di urutan atas default
+    for i in range(1, 26):
+        _seed_smoke_doc(
+            db_session,
+            test_storage,
+            title=f"Dokumen Diterima {i}",
+            reg_num=f"10/DITERIMA/{i:02d}/2026",
+            processing_status=StatusPemrosesan.diterima,
+        )
+
+    handler = _create_ml_success_handler()
+    app.dependency_overrides[get_ml_client] = lambda: httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    )
+
+    hasil = run_checks(client, doc_id=None)
+    by_name = {h.nama: h for h in hasil}
+
+    assert by_name["S04"].status == "OK"
+    assert by_name["S04"].keterangan == f"doc_id={doc_indexed.id}"
+
+
+# ==============================================================================
+# Q11: Peringatan bila uji inti dilewati (S04 LEWATI)
+# ==============================================================================
+def test_q11_warning_when_core_checks_skipped(capsys: pytest.CaptureFixture):
+    """Q11: Tidak ada dokumen uji -> output (capsys) memuat baris PERINGATAN uji inti dilewati."""
+    mock_hasil = [
+        Hasil("S01", "OK", "rev=test"),
+        Hasil("S02", "OK", "auth_enabled=False"),
+        Hasil("S03", "LEWATI", "ML tidak siap"),
+        Hasil("S04", "LEWATI", "Tidak ada dokumen"),
+        Hasil("S05", "LEWATI", "Tidak ada dokumen uji"),
+    ]
+
+    print_report(mock_hasil)
+    captured = capsys.readouterr()
+
+    assert "RINGKASAN: 2 OK, 0 GAGAL, 3 LEWATI" in captured.out
+    assert "PERINGATAN: cek analisa/riwayat/ekspor (S05–S13) tidak dijalankan karena tidak ada dokumen uji. Pakai --doc-id atau pastikan ada dokumen publik terindeks." in captured.out

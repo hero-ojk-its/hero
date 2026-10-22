@@ -155,20 +155,27 @@ def run_checks(
     # S04: Pilih dokumen uji
     if doc_id is None:
         try:
-            resp = client.get("/api/v1/documents/?limit=20")
+            resp = client.get("/api/v1/documents/?access_classification=publik&processing_status=terindeks&limit=5")
+            items = []
             if resp.status_code == 200:
                 items = resp.json().get("items", [])
-                for item in items:
-                    p_status = item.get("processing_status")
-                    acc_class = item.get("access_classification")
-                    is_act = item.get("is_active", True)
-                    if (
-                        p_status in ("terindeks", "perlu_koreksi")
-                        and acc_class == "publik"
-                        and is_act is not False
-                    ):
-                        doc_id = item.get("id")
-                        break
+
+            if not items:
+                resp = client.get("/api/v1/documents/?access_classification=publik&processing_status=perlu_koreksi&limit=5")
+                if resp.status_code == 200:
+                    items = resp.json().get("items", [])
+
+            for item in items:
+                p_status = item.get("processing_status")
+                acc_class = item.get("access_classification")
+                is_act = item.get("is_active", True)
+                if (
+                    p_status in ("terindeks", "perlu_koreksi")
+                    and acc_class == "publik"
+                    and is_act is not False
+                ):
+                    doc_id = item.get("id")
+                    break
         except Exception:
             pass
 
@@ -395,25 +402,13 @@ def run_checks(
     # S15: Penjaga non-publik
     nonpub_id = None
     try:
-        resp = client.get("/api/v1/documents/?limit=50")
+        resp = client.get("/api/v1/documents/?access_classification=non_publik&limit=1")
         if resp.status_code == 200:
             items = resp.json().get("items", [])
-            for item in items:
-                if item.get("access_classification") == "non_publik":
-                    nonpub_id = item.get("id")
-                    break
+            if items:
+                nonpub_id = items[0].get("id")
     except Exception:
         pass
-
-    if nonpub_id is None:
-        try:
-            resp2 = client.get("/api/v1/documents/?access_classification=non_publik&limit=1")
-            if resp2.status_code == 200:
-                items2 = resp2.json().get("items", [])
-                if items2:
-                    nonpub_id = items2[0].get("id")
-        except Exception:
-            pass
 
     if nonpub_id is None:
         hasil_list.append(Hasil("S15", "LEWATI", "Tidak ada dokumen non-publik"))
@@ -446,6 +441,10 @@ def print_report(hasil_list: List[Hasil]) -> None:
     gagal_cnt = sum(1 for h in hasil_list if h.status == "GAGAL")
     lewati_cnt = sum(1 for h in hasil_list if h.status == "LEWATI")
     print(f"RINGKASAN: {ok_cnt} OK, {gagal_cnt} GAGAL, {lewati_cnt} LEWATI")
+
+    s04_item = next((h for h in hasil_list if h.nama == "S04"), None)
+    if s04_item and s04_item.status == "LEWATI":
+        print("PERINGATAN: cek analisa/riwayat/ekspor (S05–S13) tidak dijalankan karena tidak ada dokumen uji. Pakai --doc-id atau pastikan ada dokumen publik terindeks.")
 
 
 def main() -> int:

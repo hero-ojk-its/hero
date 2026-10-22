@@ -50,7 +50,7 @@ Prosedur pengujian ketahanan backend saat worker ML mati/tidak dapat dihubungi:
 
 ---
 
-## 4. Tabel Kasus Uji (Q01–Q09)
+## 4. Tabel Kasus Uji (Q01–Q11)
 
 | # | Kasus | Skenario Uji | Ekspektasi | Status |
 |---|---|---|---|---|
@@ -62,7 +62,9 @@ Prosedur pengujian ketahanan backend saat worker ML mati/tidak dapat dihubungi:
 | **Q06** | Ada dokumen non-publik, auth mati | Dokumen `access_classification=non_publik` di DB | S15 OK (ditolak 403 saat auth mati) | **PASSED** |
 | **Q07** | Skrip hanya membaca | Tracking HTTP method di TestClient | 100% request adalah GET, tidak ada POST/PUT/PATCH/DELETE | **PASSED** |
 | **Q08** | `HERO_SMOKE_TOKEN` di-set | Variabel lingkungan dipasang token rahasia | Token terkirim via header Authorization, tidak bocor ke output | **PASSED** |
-| **Q09** | Head Alembic default | Pemanggilan tanpa `--expect-revision` | Membaca head lokal dari `ScriptDirectory` (`f2a3b4c5d6e7`) | **PASSED** |
+| **Q09** | Head Alembic default | Pemanggilan tanpa `--expect-revision` | Membaca head lokal dinamis dari `ScriptDirectory` | **PASSED** |
+| **Q10** | Dokumen di luar 20 hasil default | 25 dokumen diterima + 1 terindeks awal | S04 OK dan memilih dokumen terindeks via query filter | **PASSED** |
+| **Q11** | Peringatan uji inti dilewati | S04 berstatus LEWATI | Output (capsys) memuat baris peringatan S05–S13 tidak diuji | **PASSED** |
 
 ---
 
@@ -95,5 +97,6 @@ S14    | GET /api/v1/audit-logs               | LEWATI   | Belum ada entri audit
 S15    | Penjaga non-publik                   | OK       | doc_id=64 ditolak 403 saat auth mati
 ================================================================================
 RINGKASAN: 3 OK, 0 GAGAL, 12 LEWATI
+PERINGATAN: cek analisa/riwayat/ekspor (S05–S13) tidak dijalankan karena tidak ada dokumen uji. Pakai --doc-id atau pastikan ada dokumen publik terindeks.
 exit=0
 ```
