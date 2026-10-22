@@ -1,4 +1,6 @@
 """
+PERINGATAN: skrip ini MENGUBAH DATA (unggah PDF, koreksi metadata, sumber scraping). Jangan dijalankan di VPS staging/produksi; gunakan scripts/smoke_fase2.py.
+
 scripts/smoke_test.py
 Smoke test otomatis untuk memvalidasi ketersediaan dan fungsionalitas server HERO Backend yang sedang berjalan.
 Mendukung pengujian lengkap Langkah 0–5:
@@ -55,6 +57,8 @@ def make_minimal_pdf(content_str: str) -> bytes:
 
 
 def run_smoke_test(base_url: str = "http://127.0.0.1:8000") -> int:
+    print("=" * 80)
+    print("PERINGATAN: skrip ini MENGUBAH DATA (unggah PDF, koreksi metadata, sumber scraping). Jangan dijalankan di VPS staging/produksi; gunakan scripts/smoke_fase2.py.")
     print("=" * 80)
     print(f"               HERO BACKEND SMOKE TEST - {base_url}")
     print("=" * 80)
