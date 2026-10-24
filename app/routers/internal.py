@@ -1113,10 +1113,21 @@ def sync_document_relations(
 
 
 class InvalidateAnalysisCacheIn(BaseModel):
-    versi_mesin: Optional[str] = None
+    versi_mesin: Optional[str] = Field(default=None, max_length=50)
     kind: Optional[str] = None
     document_ids: Optional[List[int]] = None
-    alasan: Optional[str] = None
+    alasan: Optional[str] = Field(default=None, max_length=200)
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v):
+        if v is not None:
+            valid_kinds = [k.value for k in JenisAnalisa]
+            if v not in valid_kinds:
+                raise ValueError(
+                    f"kind '{v}' tidak dikenal. Nilai yang sah: {', '.join(valid_kinds)}"
+                )
+        return v
 
     @field_validator("document_ids")
     @classmethod
@@ -1145,11 +1156,7 @@ def invalidate_analysis_cache(
     base_query = db.query(AnalysisResult)
 
     if payload.kind:
-        try:
-            kind_enum = JenisAnalisa(payload.kind)
-            base_query = base_query.filter(AnalysisResult.kind == kind_enum)
-        except ValueError:
-            base_query = base_query.filter(AnalysisResult.kind == payload.kind)
+        base_query = base_query.filter(AnalysisResult.kind == JenisAnalisa(payload.kind))
 
     if payload.document_ids is not None:
         base_query = base_query.filter(AnalysisResult.document_id.in_(payload.document_ids))
@@ -1163,8 +1170,6 @@ def invalidate_analysis_cache(
         )
 
     already_stale_count = base_query.filter(AnalysisResult.usang_sejak.isnot(None)).count()
-    to_mark = base_query.filter(AnalysisResult.usang_sejak.is_(None)).all()
-    ditandai_count = len(to_mark)
 
     alasan = payload.alasan
     if not alasan:
@@ -1174,9 +1179,10 @@ def invalidate_analysis_cache(
             alasan = "ditandai lapisan data"
 
     now_utc = datetime.now(timezone.utc)
-    for r in to_mark:
-        r.usang_sejak = now_utc
-        r.alasan_usang = alasan
+    ditandai_count = base_query.filter(AnalysisResult.usang_sejak.is_(None)).update(
+        {AnalysisResult.usang_sejak: now_utc, AnalysisResult.alasan_usang: alasan},
+        synchronize_session=False,
+    )
 
     db.commit()
 

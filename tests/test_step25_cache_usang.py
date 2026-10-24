@@ -1,7 +1,7 @@
 """
 tests/test_step25_cache_usang.py
 Pengujian Invalidasi Cache Analisa setelah Pembaruan Mesin ML (Langkah 25).
-Kasus Uji: V01 - V13.
+Kasus Uji: V01 - V17.
 """
 from datetime import date, datetime, timezone
 import io
@@ -541,3 +541,137 @@ def test_v13_audit_log_analysis_cache_invalidated(
     assert audit.detail.get("ditandai") == ditandai_count
     assert audit.detail.get("versi_mesin") == "v2.1"
     assert audit.detail.get("alasan") == "mesin v2.1: uji audit"
+
+
+def test_v14_alasan_too_long_returns_422_and_no_rows_changed(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """
+    V14: alasan 201 karakter -> 422; tidak ada baris yang berubah.
+    """
+    doc = _seed_test_doc(db_session, test_storage, title="Dokumen V14", reg_num="14/V14/2026")
+    params_hash = compute_params_hash(JenisAnalisa.analisa)
+    row = save_analysis_result(
+        db=db_session,
+        document_id=doc.id,
+        kind=JenisAnalisa.analisa,
+        mode=ModeAnalisa.deterministik,
+        params_hash=params_hash,
+        source_fingerprint=get_document_fingerprint(doc),
+        raw_result={"versi": "v2.0"},
+        ml_version="v2.0",
+    )
+    row_id = row.id
+
+    long_alasan = "a" * 201
+    resp = client.post(
+        "/api/v1/internal/analysis-cache/invalidate",
+        json={"alasan": long_alasan},
+        headers=_headers(),
+    )
+    assert resp.status_code == 422
+
+    db_session.expire_all()
+    refreshed_row = db_session.query(AnalysisResult).filter(AnalysisResult.id == row_id).first()
+    assert refreshed_row.usang_sejak is None
+    assert refreshed_row.alasan_usang is None
+
+
+def test_v15_versi_mesin_too_long_returns_422(
+    client: TestClient, db_session: Session
+):
+    """
+    V15: versi_mesin 51 karakter -> 422.
+    """
+    long_versi = "v" * 51
+    resp = client.post(
+        "/api/v1/internal/analysis-cache/invalidate",
+        json={"versi_mesin": long_versi},
+        headers=_headers(),
+    )
+    assert resp.status_code == 422
+
+
+def test_v16_invalid_kind_returns_422_with_valid_values(
+    client: TestClient, db_session: Session
+):
+    """
+    V16: kind="xyz" -> 422; pesan memuat salah satu nilai JenisAnalisa yang sah.
+    """
+    resp = client.post(
+        "/api/v1/internal/analysis-cache/invalidate",
+        json={"kind": "xyz"},
+        headers=_headers(),
+    )
+    assert resp.status_code == 422
+    error_text = resp.text
+    # Pesan memuat salah satu nilai JenisAnalisa yang sah (analisa / harmonisasi)
+    assert any(k.value in error_text for k in JenisAnalisa)
+
+
+def test_v17_bulk_update_multiple_documents_preserves_result(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """
+    V17: 3 dokumen tersimpan, invalidate tanpa filter -> ditandai=3;
+    ketiga baris punya usang_sejak dan alasan_usang yang sama, dan kolom result tidak berubah.
+    """
+    docs = [
+        _seed_test_doc(db_session, test_storage, title=f"Dokumen V17_{i}", reg_num=f"17_{i}/V17/2026")
+        for i in range(1, 4)
+    ]
+    params_hash = compute_params_hash(JenisAnalisa.analisa)
+    saved_rows = []
+    for i, doc in enumerate(docs, 1):
+        raw = {
+            "dokumen": f"v17_{i}",
+            "poin": [f"poin_{i}_a", f"poin_{i}_b"],
+            "metadata": {"angka": i, "status": "asli"},
+        }
+        r = save_analysis_result(
+            db=db_session,
+            document_id=doc.id,
+            kind=JenisAnalisa.analisa,
+            mode=ModeAnalisa.deterministik,
+            params_hash=params_hash,
+            source_fingerprint=get_document_fingerprint(doc),
+            raw_result=raw,
+            ml_version="v2.0",
+        )
+        saved_rows.append(r)
+
+    # Catat kolom result sebelum invalidate
+    orig_results = {r.id: dict(r.result) for r in saved_rows}
+
+    # Invalidate tanpa filter
+    resp = client.post(
+        "/api/v1/internal/analysis-cache/invalidate",
+        json={},
+        headers=_headers(),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ditandai"] == 3
+
+    # Periksa baris di database
+    db_session.expire_all()
+    updated_rows = (
+        db_session.query(AnalysisResult)
+        .filter(AnalysisResult.id.in_(orig_results.keys()))
+        .all()
+    )
+    assert len(updated_rows) == 3
+
+    usang_sejak_set = {r.usang_sejak for r in updated_rows}
+    alasan_usang_set = {r.alasan_usang for r in updated_rows}
+
+    # Ketiga baris punya usang_sejak dan alasan_usang yang sama
+    assert len(usang_sejak_set) == 1
+    assert None not in usang_sejak_set
+    assert len(alasan_usang_set) == 1
+    assert alasan_usang_set == {"ditandai lapisan data"}
+
+    # Kolom result tidak berubah (bandingkan dengan nilai sebelum invalidate)
+    for r in updated_rows:
+        assert r.result == orig_results[r.id]
+
