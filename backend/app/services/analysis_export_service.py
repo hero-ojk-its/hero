@@ -95,6 +95,7 @@ def export_to_docx(
     basi: bool,
     exported_by: Optional[str],
     dianalisa_oleh: Optional[str] = None,
+    pesan_basi: Optional[list[str]] = None,
 ) -> bytes:
     """Membangun dokumen DOCX hasil analisa sesuai spesifikasi US-40."""
     document = docx.Document()
@@ -186,7 +187,13 @@ def export_to_docx(
         row.cells[0].paragraphs[0].runs[0].bold = True
         row.cells[1].text = str(val)
 
-    if basi:
+    if pesan_basi:
+        for msg in pesan_basi:
+            p_basi = document.add_paragraph()
+            run_basi = p_basi.add_run(msg)
+            run_basi.bold = True
+            run_basi.font.color.rgb = RGBColor(200, 100, 0)
+    elif basi:
         p_basi = document.add_paragraph()
         run_basi = p_basi.add_run("Dokumen telah berubah sejak analisa ini dibuat — jalankan analisa ulang.")
         run_basi.bold = True
@@ -387,6 +394,7 @@ def export_analysis(
     created_at = None
     source_fingerprint = None
     created_by_user_id = None
+    usang_sejak = None
 
     if run_id is not None:
         # Sumber 1: Dari riwayat eksekusi analysis_runs
@@ -471,6 +479,7 @@ def export_analysis(
         created_at = res_row.created_at
         source_fingerprint = res_row.source_fingerprint
         created_by_user_id = res_row.created_by
+        usang_sejak = res_row.usang_sejak
 
     # Saring rujukan dinamis
     filtered_result, discarded = saring_rujukan_fn(raw_result, allowed_ids)
@@ -479,7 +488,15 @@ def export_analysis(
 
     # Evaluasi status basi
     curr_fingerprint = get_document_fingerprint(doc)
-    basi = bool(source_fingerprint and source_fingerprint != curr_fingerprint)
+    is_fingerprint_basi = bool(source_fingerprint and source_fingerprint != curr_fingerprint)
+    is_usang = bool(usang_sejak is not None)
+    basi = is_fingerprint_basi or is_usang
+
+    pesan_basi: list[str] = []
+    if is_fingerprint_basi:
+        pesan_basi.append("Dokumen telah berubah sejak analisa ini dibuat — jalankan analisa ulang.")
+    if is_usang:
+        pesan_basi.append("Mesin analisa telah diperbarui sejak hasil ini dibuat — jalankan analisa ulang.")
 
     # Identifikasi username pembuat (Dianalisa Oleh) dan pengekspor (Diekspor Oleh)
     exported_by = None
@@ -509,6 +526,7 @@ def export_analysis(
             basi=basi,
             exported_by=exported_by,
             dianalisa_oleh=dianalisa_oleh,
+            pesan_basi=pesan_basi,
         )
         media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         ext = "docx"
@@ -525,6 +543,8 @@ def export_analysis(
             "mode_dipakai": actual_mode,
             "run_id": run_id,
             "basi": basi,
+            "pesan_basi": pesan_basi,
+            "catatan_basi": " ".join(pesan_basi) if pesan_basi else None,
             "dibuat": created_at.isoformat() if created_at else None,
             "diekspor": datetime.now(timezone.utc).isoformat(),
             "hasil": filtered_result,
