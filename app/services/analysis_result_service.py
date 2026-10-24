@@ -66,7 +66,10 @@ def get_cached_result(
         )
     )
     if expected_fingerprint is not None:
-        query = query.filter(AnalysisResult.source_fingerprint == expected_fingerprint)
+        query = query.filter(
+            AnalysisResult.source_fingerprint == expected_fingerprint,
+            AnalysisResult.usang_sejak.is_(None),
+        )
 
     return query.order_by(AnalysisResult.created_at.desc()).first()
 
@@ -106,6 +109,8 @@ def save_analysis_result(
         existing.duration_ms = duration_ms
         existing.created_at = now_utc
         existing.created_by = user_id
+        existing.usang_sejak = None
+        existing.alasan_usang = None
         db.commit()
         db.refresh(existing)
         logger.info(
@@ -127,6 +132,8 @@ def save_analysis_result(
             duration_ms=duration_ms,
             created_at=now_utc,
             created_by=user_id,
+            usang_sejak=None,
+            alasan_usang=None,
         )
         db.add(new_row)
         db.commit()
@@ -180,7 +187,7 @@ def get_analysis_comparison(
     def _format_entry(row: Optional[AnalysisResult]) -> Optional[dict]:
         if not row:
             return None
-        is_basi = row.source_fingerprint != curr_fingerprint
+        is_basi = (row.source_fingerprint != curr_fingerprint) or (row.usang_sejak is not None)
         filtered_res, discarded = saring_func(row.result, allowed_ids)
         if isinstance(filtered_res, dict):
             filtered_res["disaring_backend"] = discarded
