@@ -988,3 +988,81 @@ def test_karakter_kontrol_lain_tidak_diubah_hanya_nul():
     assert mapping.bersihkan_teks("a\x0cb\tc\nd") == "a\x0cb\tc\nd"
     assert mapping.bersihkan_teks("\x00\x00") == ""
     assert mapping.bersihkan_teks(None) == "" and mapping.bersihkan_teks("") == ""
+
+
+# ---------------------------------------------------------------------------
+# hero bridge status tidak boleh mengklaim dokumen (uji ujung-ke-ujung 19 Okt 2026)
+# ---------------------------------------------------------------------------
+def test_ping_internal_tidak_pernah_mengklaim_dokumen():
+    """Versi awal memanggil POST .../extraction/claim?limit=1 — itu mengklaim satu
+    dokumen sungguhan, memakai satu dari 3 percobaannya, dan membuatnya 'diproses'."""
+    c, s = _client([_Resp(404, {"detail": "Dokumen tidak ditemukan"})])
+    assert c.ping_internal() is True
+    metode, url, _ = s.calls[0]
+    assert metode == "GET", "pemeriksaan kunci harus read-only"
+    assert "claim" not in url and "/extraction" not in url
+    assert all(call[0] == "GET" for call in s.calls)
+
+
+def test_ping_internal_membedakan_kunci_benar_dan_salah():
+    assert _client([_Resp(404, {"detail": "x"})])[0].ping_internal() is True
+    assert _client([_Resp(401, {"detail": "kunci salah"})])[0].ping_internal() is False
+    assert _client([_Resp(403, {"detail": "ditolak"})])[0].ping_internal() is False
+
+
+def test_ping_internal_tidak_menelan_galat_yang_bukan_soal_kunci():
+    from hero.bridge.client import BackendError
+
+    with pytest.raises(BackendError):
+        _client([_Resp(500, {"detail": "meledak"})])[0].ping_internal()
+
+
+# ---------------------------------------------------------------------------
+# Cermin korpus → kerangka BAB & jumlah halaman (uji ujung-ke-ujung 19 Okt 2026)
+#
+# Dokumen yang lewat jalur produksi (backend → cermin → analisa) punya pasal lengkap
+# tetapi kerangka BAB kosong, karena cermin hanya menyimpan bab_count, bukan daftar bab.
+# ---------------------------------------------------------------------------
+def test_daftar_bab_dibangun_berurutan_tanpa_duplikat_dan_tanpa_menebak():
+    from hero.bridge.sync import _daftar_bab
+
+    labels = ["BAB I — Ketentuan Umum", "BAB I — Ketentuan Umum", None, "Penjelasan",
+              "BAB II — Komitmen Pemegang Saham Dan Rups", "BAB IX - Rencana Bisnis", "BAB 3A: Lain"]
+    assert _daftar_bab(labels) == [
+        {"number": "I", "title": "Ketentuan Umum"},
+        {"number": "II", "title": "Komitmen Pemegang Saham Dan Rups"},
+        {"number": "IX", "title": "Rencana Bisnis"},
+        {"number": "3A", "title": "Lain"}]
+    assert _daftar_bab([None, "", "Lampiran"]) == []
+
+
+def test_bab_hasil_cermin_menghasilkan_kerangka_yang_tidak_kosong():
+    """Kontrak antara cermin dan penyusun kerangka: label yang disimpan cermin harus
+    dikenali ``analysis.structured.framework``."""
+    from hero.analysis.structured import framework
+    from hero.bridge.sync import _daftar_bab
+
+    rows = [{"number": "1", "bab": "BAB I — Ketentuan Umum"}, {"number": "2", "bab": "BAB I — Ketentuan Umum"},
+            {"number": "3", "bab": "BAB II — Kewajiban Pelaporan"}]
+    k = framework({"babs": _daftar_bab([r["bab"] for r in rows])}, rows)
+    assert [x["bab"] for x in k] == ["BAB I", "BAB II"]
+    assert k[0]["pasal"] == "Pasal 1–2" and k[1]["pasal"] == "Pasal 3"
+    assert framework({"babs": []}, rows) == [], "tanpa daftar bab kerangka kosong — gejala aslinya"
+
+
+def test_jumlah_halaman_dari_catatan_ekstraksi_masuk_ke_katalog():
+    from hero.bridge.sync import _record
+
+    row = {"id": 5, "title": "t", "file_hash": "h", "regulation_type": "POJK",
+           "regulation_number": "1/POJK.04/2026", "regulation_year": 2026}
+    assert _record(row, "be-5", {"page_count": 345}).page_count == 345
+    assert _record(row, "be-5", None).page_count == 0, "tak diketahui → 0, bukan tebakan"
+
+
+def test_worker_mencatat_jumlah_halaman_untuk_cermin(tmp_settings, tmp_path, regulation_pdf):
+    pdf = regulation_pdf(tmp_path / "pojk.pdf")
+    be = FakeBackend(pdf)
+    w, st = _worker(tmp_settings, be, tmp_path)
+    w.process_one({"document_id": 17, "file_hash": "h", "attempt": 1})
+    assert st.all_metadata()[17]["page_count"] >= 1
+    st.close()

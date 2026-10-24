@@ -150,7 +150,7 @@ class ExtractionWorker:
 
             # Dasar hukum, penerbit, tahun, status dari teks: tidak ada
             # tempatnya di skema backend, tapi graf relasi memerlukannya.
-            self.state.record_metadata(doc_id, md.to_dict())
+            self.state.record_metadata(doc_id, {**md.to_dict(), "page_count": result.page_count})
 
             sent, vectors = self._push_articles(doc_id, item, struct)
             detail = []
