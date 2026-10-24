@@ -2866,6 +2866,71 @@
         }
       }
     },
+    "/api/v1/internal/analysis-cache/invalidate": {
+      "post": {
+        "tags": [
+          "Internal"
+        ],
+        "summary": "[Internal] Tandai cache analisa lama sebagai usang (Langkah 25)",
+        "description": "Menandai baris cache analisa yang sesuai kriteria sebagai usang (usang_sejak diisi).\nDipanggil oleh alur deploy mesin analisa (Fathir) saat versi ML diperbarui.",
+        "operationId": "invalidate_analysis_cache_api_v1_internal_analysis_cache_invalidate_post",
+        "parameters": [
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/InvalidateAnalysisCacheIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/scraping-sources/": {
       "post": {
         "tags": [
@@ -7498,6 +7563,59 @@
         "type": "object",
         "title": "InternalCandidatesBatchIn",
         "description": "Batch hasil pemindaian yang di-push oleh crawler eksternal."
+      },
+      "InvalidateAnalysisCacheIn": {
+        "properties": {
+          "versi_mesin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Versi Mesin"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "document_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Ids"
+          },
+          "alasan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alasan"
+          }
+        },
+        "type": "object",
+        "title": "InvalidateAnalysisCacheIn"
       },
       "JenisJobIngest": {
         "type": "string",

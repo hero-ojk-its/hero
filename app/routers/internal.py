@@ -14,7 +14,7 @@ import urllib.parse
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, status
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field, ConfigDict, AliasChoices
+from pydantic import BaseModel, Field, ConfigDict, AliasChoices, field_validator
 from sqlalchemy import or_, and_, select, delete, func, literal_column
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
@@ -25,6 +25,7 @@ from app.models.document import Document
 from app.models.article import Article
 from app.models.ingest_failure import IngestFailure
 from app.models.job_ingest import JobIngest
+from app.models.analysis_result import AnalysisResult
 from app.models.enums import (
     StatusPemrosesan,
     MetodeEkstraksi,
@@ -32,6 +33,7 @@ from app.models.enums import (
     StatusTindakLanjut,
     JenisJobIngest,
     StatusJobIngest,
+    JenisAnalisa,
 )
 from app.schemas.article import BulkArticleIn, BulkArticleResponse
 from app.schemas.scan import InternalCandidatesBatchIn
@@ -41,6 +43,7 @@ from app.services.audit_service import (
     EXTRACTION_FAILED,
     EXTRACTION_REQUEUED,
     PLACE_DOCUMENT_FAILED,
+    ANALYSIS_CACHE_INVALIDATED,
 )
 from app.services.storage_service import StorageService, get_storage_service
 from app.services.category_service import CategoryService
@@ -1107,4 +1110,96 @@ def sync_document_relations(
         replace_all=payload.replace_all,
     )
     return result
+
+
+class InvalidateAnalysisCacheIn(BaseModel):
+    versi_mesin: Optional[str] = None
+    kind: Optional[str] = None
+    document_ids: Optional[List[int]] = None
+    alasan: Optional[str] = None
+
+    @field_validator("document_ids")
+    @classmethod
+    def validate_document_ids(cls, v):
+        if v is not None and len(v) == 0:
+            raise ValueError("document_ids tidak boleh berupa array kosong")
+        return v
+
+
+@router.post(
+    "/analysis-cache/invalidate",
+    summary="[Internal] Tandai cache analisa lama sebagai usang (Langkah 25)",
+    dependencies=[Depends(verify_internal_api_key)],
+)
+def invalidate_analysis_cache(
+    payload: Optional[InvalidateAnalysisCacheIn] = Body(default=None),
+    db: Session = Depends(get_db),
+):
+    """
+    Menandai baris cache analisa yang sesuai kriteria sebagai usang (usang_sejak diisi).
+    Dipanggil oleh alur deploy mesin analisa (Fathir) saat versi ML diperbarui.
+    """
+    if payload is None:
+        payload = InvalidateAnalysisCacheIn()
+
+    base_query = db.query(AnalysisResult)
+
+    if payload.kind:
+        try:
+            kind_enum = JenisAnalisa(payload.kind)
+            base_query = base_query.filter(AnalysisResult.kind == kind_enum)
+        except ValueError:
+            base_query = base_query.filter(AnalysisResult.kind == payload.kind)
+
+    if payload.document_ids is not None:
+        base_query = base_query.filter(AnalysisResult.document_id.in_(payload.document_ids))
+
+    if payload.versi_mesin:
+        base_query = base_query.filter(
+            or_(
+                AnalysisResult.ml_version != payload.versi_mesin,
+                AnalysisResult.ml_version.is_(None),
+            )
+        )
+
+    already_stale_count = base_query.filter(AnalysisResult.usang_sejak.isnot(None)).count()
+    to_mark = base_query.filter(AnalysisResult.usang_sejak.is_(None)).all()
+    ditandai_count = len(to_mark)
+
+    alasan = payload.alasan
+    if not alasan:
+        if payload.versi_mesin:
+            alasan = f"mesin {payload.versi_mesin}"
+        else:
+            alasan = "ditandai lapisan data"
+
+    now_utc = datetime.now(timezone.utc)
+    for r in to_mark:
+        r.usang_sejak = now_utc
+        r.alasan_usang = alasan
+
+    db.commit()
+
+    record_audit(
+        db,
+        action=ANALYSIS_CACHE_INVALIDATED,
+        user_id=None,
+        target_resource="analysis_results",
+        detail={
+            "versi_mesin": payload.versi_mesin,
+            "kind": payload.kind,
+            "document_ids": payload.document_ids,
+            "alasan": alasan,
+            "ditandai": ditandai_count,
+            "sudah_usang_sebelumnya": already_stale_count,
+        },
+        commit=True,
+    )
+
+    return {
+        "ditandai": ditandai_count,
+        "sudah_usang_sebelumnya": already_stale_count,
+        "versi_mesin": payload.versi_mesin,
+        "kind": payload.kind,
+    }
 

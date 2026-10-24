@@ -79,6 +79,17 @@ class AnalysisResult(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
+    usang_sejak = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+        comment="Waktu ditandai usang; NULL = masih valid",
+    )
+    alasan_usang = Column(
+        String(200),
+        nullable=True,
+        comment="Alasan cache ditandai usang, misal versi mesin",
+    )
 
     __table_args__ = (
         UniqueConstraint(
