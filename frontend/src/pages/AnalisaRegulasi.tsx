@@ -702,13 +702,13 @@ export default function AnalisaRegulasi() {
             {/* Nomor Regulasi */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-gray-700">
-                Nomor Regulasi (Draf / Rujukan)
+                Nomor / Kode Draf Regulasi (Opsional)
               </label>
               <input
                 type="text"
                 value={regulationNumber}
                 onChange={(e) => setRegulationNumber(e.target.value)}
-                placeholder="Contoh: POJK No. 11/POJK.03/2024"
+                placeholder="Contoh: RPOJK-Siber-2024 (kosongkan jika belum ada)"
                 className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700 transition"
               />
             </div>
