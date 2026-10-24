@@ -38,7 +38,9 @@
 12. [Tabel Referensi Enum & Label Bahasa Indonesia](#12-tabel-referensi-enum--label-bahasa-indonesia)
 13. [Daftar Kode Galat HTTP & Penanganan di UI](#13-daftar-kode-galat-http--penanganan-di-ui)
 14. [Catatan & Pertanyaan untuk Frontend](#14-catatan--pertanyaan-untuk-frontend)
-15. [Layanan Sinkronisasi Relasi Internal (Lapisan Data)](#15-layanan-sinkronisasi-relasi-internal-lapisan-data)
+15. [Layanan Internal Lapisan Data](#15-layanan-internal-lapisan-data)
+   - [15.1 Sinkronisasi Relasi Antar Regulasi](#151-sinkronisasi-relasi-antar-regulasi)
+   - [15.2 Menandai Cache Analisa Usang](#152-menandai-cache-analisa-usang)
 
 ---
 
@@ -1880,13 +1882,13 @@ Field respons/parameter: `job_status`
 
 ---
 
-## 15. LAYANAN SINKRONISASI RELASI INTERNAL (LAPISAN DATA)
+## 15. LAYANAN INTERNAL LAPISAN DATA
 
-Endpoint ini digunakan oleh worker/lapisan data (`hero bridge`) untuk mengirimkan relasi hukum antar peraturan (`mengubah`, `mencabut`) serta status keberlakuan node hasil inferensi.
+Bagian ini mendokumentasikan antarmuka endpoint internal khusus integrasi service-to-service antara lapisan data / worker (Fathir) dan HERO Backend. Seluruh endpoint internal dilindungi oleh header autentikasi `X-Internal-API-Key`.
 
 ### 15.1 Sinkronisasi Relasi Antar Regulasi
 - **Method & Path:** `POST /api/v1/internal/relations`
-- **Header Keamanan:** `X-Internal-API-Key: <INTERNAL_API_KEY>` (Wajib). Mengembalikan `401 Unauthorized` jika kunci tidak valid atau tidak disertakan.
+- **Header Keamanan:** `X-Internal-API-Key: <kunci>` (Wajib). Mengembalikan `401 Unauthorized` jika kunci tidak valid atau tidak disertakan.
 - **Batasan Payload:** Maksimal 5.000 relasi per satu kali panggilan batch.
 - **Body JSON:**
 ```json
@@ -1926,6 +1928,56 @@ Endpoint ini digunakan oleh worker/lapisan data (`hero bridge`) untuk mengirimka
   - `sebagian`: Boolean atau integer 0/1 (`0` = penuh, `1` = sebagian).
   - `replace_all`: Jika `true`, relasi lama di database yang tidak tercantum dalam daftar kiriman baru akan dihapus bersih.
   - `documents_status_changed`: Jumlah dokumen di Knowledge Base yang status keberlakuannya otomatis diperbarui.
+
+### 15.2 Menandai Cache Analisa Usang
+
+Endpoint ini digunakan oleh lapisan data untuk menandai cache hasil analisa lama sebagai usang ketika mesin analisa ML (aturan/model) diperbarui dan di-deploy ulang.
+
+- **Kapan Dipanggil:** **Setiap kali mesin analisa diperbarui dan di-deploy** oleh worker / alur CI/CD lapisan data.
+- **Method & Path:** `POST /api/v1/internal/analysis-cache/invalidate`
+- **Header Keamanan:** `X-Internal-API-Key: <kunci>` (Wajib, gunakan nilai `INTERNAL_API_KEY` dari environment). Mengembalikan `401 Unauthorized` jika kunci salah atau tidak disertakan.
+- **Header Tambahan:** `Content-Type: application/json`
+- **Body JSON (seluruh field opsional):**
+```json
+{
+  "versi_mesin": "v2.1",
+  "kind": "analisa",
+  "document_ids": [12, 15],
+  "alasan": "mesin v2.1: kerangka BAB & metrik"
+}
+```
+- **Aturan Pemfilteran:**
+  - Hanya baris dengan `usang_sejak IS NULL` yang akan ditandai (bersifat idempoten).
+  - Bila `versi_mesin` diisi, hanya baris yang `ml_version IS DISTINCT FROM versi_mesin` yang ditandai. Baris yang sudah dihitung dengan versi mesin baru tidak ikut ditandai.
+  - Bila `versi_mesin` kosong/null, menandai semua baris yang lolos filter lainnya.
+  - `kind` (`analisa` atau `harmonisasi`) dan `document_ids` dapat digunakan untuk mempersempit cakupan invalidasi. `document_ids: []` akan mengembalikan `422 Unprocessable Entity`.
+  - Nilai default `alasan`: `"mesin {versi_mesin}"` bila `versi_mesin` disertakan, atau `"ditandai lapisan data"`.
+- **Contoh Permintaan (`curl`):**
+```bash
+curl -X POST "http://localhost:8000/api/v1/internal/analysis-cache/invalidate" \
+  -H "X-Internal-API-Key: <kunci>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "versi_mesin": "v2.1",
+    "kind": "analisa",
+    "document_ids": [12, 15],
+    "alasan": "mesin v2.1: kerangka BAB & metrik"
+  }'
+```
+- **Respons (200 OK):**
+```json
+{
+  "ditandai": 2,
+  "sudah_usang_sebelumnya": 0,
+  "versi_mesin": "v2.1",
+  "kind": "analisa"
+}
+```
+- **Arti Respons:**
+  - `ditandai`: Jumlah baris cache yang baru saja berhasil ditandai usang pada pemanggilan ini.
+  - `sudah_usang_sebelumnya`: Jumlah baris dalam kriteria filter yang sudah berstatus usang sebelum panggilan ini dieksekusi.
+  - `versi_mesin`: Versi mesin analisa target yang dikirimkan pada permintaan.
+  - `kind`: Kategori jenis analisa yang difilter, atau `null` jika mencakup semua jenis.
 
 ---
 
