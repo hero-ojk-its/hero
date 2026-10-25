@@ -34,6 +34,7 @@ import {
 import { ApiError, API_BASE_URL, apiFetchBlob } from '../../lib/api';
 import { PanelErrorBoundary } from '../PanelErrorBoundary';
 import { DraftLabel } from '../DraftLabel';
+import RingkasanAiPanel from './RingkasanAiPanel';
 import type {
   MlAnalisaResponse,
   DocumentArticleSummary,
@@ -1687,16 +1688,14 @@ export default function AnalisaState2Workspace({
                       )}
                     </div>
 
-                    {/* Narasi Ringkasan AI (Jika mode AI aktif dan ringkasan_ai tersedia) */}
-                    {mode === 'ai' && data.mode_dipakai === 'ai' && data.ringkasan_ai && (
-                      <div className="bg-white/90 rounded-lg p-3 border border-red-200/70 space-y-1 shadow-2xs">
-                        <span className="text-[10px] font-bold text-red-900 uppercase tracking-wider block">
-                          Narasi Ringkasan AI
-                        </span>
-                        <p className="text-xs text-gray-800 leading-relaxed font-serif">
-                          {data.ringkasan_ai}
-                        </p>
-                      </div>
+                    {/* Narasi Ringkasan AI per kalimat, atau alasan bila AI diminta tetapi tidak dipakai */}
+                    {mode === 'ai' && (
+                      <RingkasanAiPanel
+                        ai={data.ai}
+                        ringkasanAi={data.ringkasan_ai}
+                        modeDipakai={data.mode_dipakai}
+                        onJumpToPasal={handleJumpToPasal}
+                      />
                     )}
 
                     {/* Butir-butir Ringkasan Kalimat Berdasarkan data.ringkasan */}
