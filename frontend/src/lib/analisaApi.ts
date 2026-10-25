@@ -80,7 +80,8 @@ export interface MlAnalisaPoint {
   urgensi?: string;
   subjek?: string | null;
   terpotong?: boolean;
-  parafrase?: string;
+  /** Hanya ada bila mode AI berhasil; null untuk poin yang tidak diparafrase AI */
+  parafrase?: string | null;
 }
 
 export interface MlAnalisaSummarySentence {
@@ -116,11 +117,26 @@ export interface MlAnalisaIdentity {
   jumlah_pasal?: number;
 }
 
+/** Satu kalimat narasi AI (pipeline AiResult.ringkasan): menunjuk id fakta dan pasal asalnya */
+export interface MlAnalisaAiSentence {
+  kalimat: string;
+  fakta?: string[];
+  rujukan?: string[];
+}
+
+/** Bentuk AiResult.to_dict() di pipeline/hero/analysis/ai.py */
 export interface MlAnalisaAiDetails {
-  status?: string;
-  ringkasan?: string;
-  alasan?: string;
+  /** 'ai' bila narasi AI terverifikasi dipakai; 'deterministik' bila AI tidak dipakai (lihat alasan) */
+  status?: 'ai' | 'deterministik' | string;
+  alasan?: string | null;
+  /** Pipeline mengirim list kalimat; string diterima untuk data lama */
+  ringkasan?: string | MlAnalisaAiSentence[];
+  /** id fakta (mis. "F1") -> parafrase */
   poin_kunci?: Record<string, string>;
+  model?: string | null;
+  pelanggaran?: string[];
+  usage?: Record<string, unknown>;
+  dari_cache?: boolean;
 }
 
 export interface MlAnalisaMetrics {
@@ -163,7 +179,8 @@ export interface MlAnalisaResponse {
   mode_diminta?: 'deterministik' | 'ai';
   mode_dipakai?: 'deterministik' | 'ai';
   ai?: MlAnalisaAiDetails | null;
-  ringkasan_ai?: string;
+  /** Ada bila mode_dipakai = 'ai'. Pipeline mengirim list kalimat; string diterima untuk data lama */
+  ringkasan_ai?: string | MlAnalisaAiSentence[];
   catatan?: string;
   cache?: MlAnalisaCache;
   disaring_backend?: boolean;
@@ -658,6 +675,39 @@ export function normalisasiKerangka(
       }
       return bab;
     });
+}
+
+// ============================================================================
+// 12. Normalisasi Narasi Ringkasan AI
+// ============================================================================
+
+export type MlAnalisaAiSentenceNormal = Required<MlAnalisaAiSentence>;
+
+function daftarTeks(nilai: unknown): string[] {
+  return Array.isArray(nilai)
+    ? nilai.filter((x): x is string => typeof x === 'string' && x.trim() !== '')
+    : [];
+}
+
+/**
+ * Menyeragamkan `ringkasan_ai` / `ai.ringkasan` menjadi daftar kalimat.
+ * Menerima list {kalimat, fakta, rujukan} (bentuk pipeline), list string, atau satu string (data lama).
+ * Item tanpa kalimat dibuang.
+ */
+export function normalisasiRingkasanAi(nilai: unknown): MlAnalisaAiSentenceNormal[] {
+  const dariTeks = (teks: string): MlAnalisaAiSentenceNormal[] =>
+    teks.trim() ? [{ kalimat: teks.trim(), fakta: [], rujukan: [] }] : [];
+
+  if (typeof nilai === 'string') return dariTeks(nilai);
+  if (!Array.isArray(nilai)) return [];
+
+  return nilai.flatMap((item): MlAnalisaAiSentenceNormal[] => {
+    if (typeof item === 'string') return dariTeks(item);
+    if (!item || typeof item !== 'object') return [];
+    const obj = item as Record<string, unknown>;
+    if (typeof obj.kalimat !== 'string' || obj.kalimat.trim() === '') return [];
+    return [{ kalimat: obj.kalimat.trim(), fakta: daftarTeks(obj.fakta), rujukan: daftarTeks(obj.rujukan) }];
+  });
 }
 
 export type { DocumentsResponse, DocumentItem, DocumentBlob };

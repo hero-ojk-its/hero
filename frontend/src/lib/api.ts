@@ -34,6 +34,9 @@ export class ApiError extends Error {
         formattedMessage = obj.message;
       } else if (typeof obj.detail === 'string') {
         formattedMessage = obj.detail;
+      } else if (typeof obj.code === 'string' && obj.code.trim() !== '') {
+        // Galat berkode tanpa pesan, mis. {"code": "akses_ditolak", "izin": "KB_BACA_NONPUBLIK"}
+        formattedMessage = `${obj.code.replace(/_/g, ' ')} (HTTP ${status})`;
       } else {
         formattedMessage = JSON.stringify(detail);
       }
