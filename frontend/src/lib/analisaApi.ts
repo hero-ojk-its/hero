@@ -31,6 +31,13 @@ export const ML_API_BASE_URL: string = rawMlUrl
   ? rawMlUrl.replace(/\/+$/, '')
   : `${API_BASE_URL}/api/v1/ml`;
 
+/**
+ * Batas waktu request analisa & ekspor (ms).
+ * Backend menunggu layanan ML hingga 120 detik (ml_timeout_seconds) sebelum membalas 504,
+ * jadi frontend diberi sedikit lebih lama agar pesan 504 dari backend sempat diterima.
+ */
+export const ANALISA_TIMEOUT_MS = 130000;
+
 // ============================================================================
 // 2. Tipe Data Kontrak ML Health (GET /api/v1/ml/health)
 // ============================================================================
@@ -85,7 +92,10 @@ export interface MlAnalisaSummarySentence {
 export interface MlAnalisaFrameworkChapter {
   bab: string;
   judul: string;
+  /** Daftar pasal ternormalisasi oleh normalisasiKerangka, mis. ["Pasal 1", "Pasal 2"] */
   pasal: string[];
+  /** Nilai `pasal` asli dari layanan ML bila berupa string (mis. rentang "Pasal 1–5") */
+  pasal_sumber?: string;
 }
 
 export interface MlAnalisaIdentity {
@@ -365,13 +375,19 @@ export async function getMlAnalisa(
     headers['Pragma'] = 'no-cache';
   }
 
-  return apiFetch<MlAnalisaResponse>(
+  const res = await apiFetch<MlAnalisaResponse>(
     `${ML_API_BASE_URL}/analisa/${documentId}?${query.toString()}`,
     {
       headers: Object.keys(headers).length > 0 ? headers : undefined,
       signal,
+      timeout: ANALISA_TIMEOUT_MS,
     }
   );
+
+  if (res && typeof res === 'object' && res.kerangka !== undefined && res.kerangka !== null) {
+    return { ...res, kerangka: normalisasiKerangka(res.kerangka) };
+  }
+  return res;
 }
 
 /**
@@ -464,7 +480,10 @@ export async function exportDocumentAnalysis(
   }
 
   const qs = buildQueryString(queryParams);
-  return apiFetchBlob(`/api/v1/documents/${documentId}/analisa/ekspor${qs}`, { signal: abortSignal });
+  return apiFetchBlob(`/api/v1/documents/${documentId}/analisa/ekspor${qs}`, {
+    signal: abortSignal,
+    timeout: ANALISA_TIMEOUT_MS,
+  });
 }
 
 // ============================================================================
@@ -548,6 +567,97 @@ export function parsePasalRef(str: string): ParsedPasalRef {
   }
 
   return { pasalNum: null, ayatNum: null, canonicalId: null, raw: trimmed };
+}
+
+// ============================================================================
+// 11. Normalisasi Kerangka Bab & Pasal dari Layanan ML
+// ============================================================================
+
+/** Rentang pasal, mis. "Pasal 1–5", "Pasal 1-5", "Pasal 1 s.d. 5", "Pasal 1 sampai dengan Pasal 5" */
+const RENTANG_PASAL = /^Pasal\s+(\d+)\s*(?:[-–—]|s\.?\s*d\.?|sampai(?:\s+dengan)?)\s*(?:Pasal\s+)?(\d+)$/i;
+
+/** Rentang lebih lebar dari ini dianggap tidak wajar dan tidak dipecah */
+const MAKS_LEBAR_RENTANG = 1000;
+
+/**
+ * Memecah satu entri pasal kerangka menjadi daftar pasal.
+ * - "Pasal 1–5" -> pasal dari `articles` yang nomornya 1..5 (termasuk sisipan seperti 5A);
+ *   bila `articles` kosong atau tidak ada yang cocok, dipecah per nomor: Pasal 1, Pasal 2, ... Pasal 5
+ * - Nomor polos "3" -> "Pasal 3"
+ * - Selain itu dikembalikan apa adanya
+ */
+function pecahRentangPasal(teks: string, articles?: DocumentArticleSummary[]): string[] {
+  const trimmed = teks.trim();
+  if (!trimmed) return [];
+
+  const match = trimmed.match(RENTANG_PASAL);
+  if (!match) {
+    return [/^\d+[A-Za-z]?$/.test(trimmed) ? `Pasal ${trimmed.toUpperCase()}` : trimmed];
+  }
+
+  const awal = Number(match[1]);
+  const akhir = Number(match[2]);
+  if (akhir < awal || akhir - awal > MAKS_LEBAR_RENTANG) {
+    return [trimmed];
+  }
+
+  if (articles && articles.length > 0) {
+    const dariArticles: string[] = [];
+    for (const a of articles) {
+      const pasalNum = parsePasalRef(a.article_number).pasalNum;
+      if (!pasalNum) continue;
+      const nomor = parseInt(pasalNum, 10);
+      const label = `Pasal ${pasalNum}`;
+      if (nomor >= awal && nomor <= akhir && !dariArticles.includes(label)) {
+        dariArticles.push(label);
+      }
+    }
+    if (dariArticles.length > 0) return dariArticles;
+  }
+
+  return Array.from({ length: akhir - awal + 1 }, (_, i) => `Pasal ${awal + i}`);
+}
+
+/**
+ * Menyeragamkan `kerangka[].pasal` menjadi string[].
+ *
+ * Layanan ML (pipeline/hero/analysis/structured.py `framework`) mengirim `pasal` sebagai satu string
+ * rentang, mis. "Pasal 1–5" atau "Pasal 3", dan gateway backend meneruskannya apa adanya.
+ * Fixture tes ekspor backend memakai string[] nomor polos (["1", "2"]). Keduanya diterima.
+ *
+ * Aman dipanggil ulang dengan `articles` setelah status dokumen dimuat: rentang dipecah ulang dari
+ * `pasal_sumber` sehingga pasal sisipan (mis. 5A) ikut tercantum.
+ */
+export function normalisasiKerangka(
+  kerangka: unknown,
+  articles?: DocumentArticleSummary[]
+): MlAnalisaFrameworkChapter[] {
+  if (!Array.isArray(kerangka)) return [];
+
+  return kerangka
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+    .map((item) => {
+      const sumber = typeof item.pasal_sumber === 'string' ? item.pasal_sumber : item.pasal;
+
+      let pasal: string[] = [];
+      if (typeof sumber === 'string') {
+        pasal = pecahRentangPasal(sumber, articles);
+      } else if (Array.isArray(sumber)) {
+        pasal = sumber
+          .filter((p): p is string | number => typeof p === 'string' || typeof p === 'number')
+          .flatMap((p) => pecahRentangPasal(String(p), articles));
+      }
+
+      const bab: MlAnalisaFrameworkChapter = {
+        bab: typeof item.bab === 'string' ? item.bab : String(item.bab ?? ''),
+        judul: typeof item.judul === 'string' ? item.judul : '',
+        pasal,
+      };
+      if (typeof sumber === 'string') {
+        bab.pasal_sumber = sumber;
+      }
+      return bab;
+    });
 }
 
 export type { DocumentsResponse, DocumentItem, DocumentBlob };
