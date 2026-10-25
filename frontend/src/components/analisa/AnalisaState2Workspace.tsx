@@ -2028,11 +2028,30 @@ export default function AnalisaState2Workspace({
       {/* 5. STICKY BOTTOM BAR */}
       <div className="bg-white border border-gray-200 rounded-xl px-5 py-3 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-2 text-xs text-gray-700">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-          <span>
-            Analisis selesai. {displayJumlahPasal} pasal dan {displayJumlahBab} bab terindeks lengkap secara {data?.mode_dipakai || mode}.
-          </span>
-          {data && <DraftLabel />}
+          {loading ? (
+            <>
+              <span className="w-2 h-2 rounded-full bg-gray-400 shrink-0" />
+              <span>Menganalisis dokumen...</span>
+            </>
+          ) : errorStatus !== null || errorMessage ? (
+            <>
+              <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+              <span>Analisis gagal</span>
+            </>
+          ) : data ? (
+            <>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+              <span>
+                Analisis selesai. {displayJumlahPasal} pasal dan {displayJumlahBab} bab terindeks lengkap secara {data.mode_dipakai || mode}.
+              </span>
+              <DraftLabel />
+            </>
+          ) : (
+            <>
+              <span className="w-2 h-2 rounded-full bg-gray-300 shrink-0" />
+              <span>Menunggu hasil analisis</span>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
