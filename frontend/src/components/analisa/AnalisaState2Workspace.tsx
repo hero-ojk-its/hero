@@ -33,6 +33,7 @@ import {
 } from '../../lib/analisaApi';
 import { ApiError, API_BASE_URL, apiFetchBlob } from '../../lib/api';
 import { PanelErrorBoundary } from '../PanelErrorBoundary';
+import { DraftLabel } from '../DraftLabel';
 import type {
   MlAnalisaResponse,
   DocumentArticleSummary,
@@ -1066,6 +1067,7 @@ export default function AnalisaState2Workspace({
             <span>
               <strong>Analisis Berhasil:</strong> Seluruh tahap ekstraksi dan identifikasi norma telah tuntas. {displayJumlahPasal} pasal dan {displayJumlahBab} bab siap ditelaah pada 3 panel workspace.
             </span>
+            <DraftLabel />
           </div>
           <button
             type="button"
@@ -1468,9 +1470,12 @@ export default function AnalisaState2Workspace({
                                     </p>
                                     {points.length > 0 && (
                                       <div className="pt-2.5 border-t border-gray-100 space-y-1.5">
-                                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
-                                          Intisari &amp; Norma Terdeteksi ({points.length} klausul)
-                                        </span>
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
+                                            Intisari &amp; Norma Terdeteksi ({points.length} klausul)
+                                          </span>
+                                          <DraftLabel ukuran="kecil" />
+                                        </div>
                                         {points.map((pt, pIdx) => (
                                           <div key={pIdx} className="bg-red-50/50 p-2 rounded-lg border border-red-100/70 text-xs">
                                             <span className="font-semibold text-red-800">[{pt.kategori}]</span>{' '}
@@ -1482,6 +1487,7 @@ export default function AnalisaState2Workspace({
                                   </div>
                                 ) : points.length > 0 ? (
                                   <div className="space-y-2 text-left text-gray-700">
+                                    <DraftLabel ukuran="kecil" />
                                     {points.map((pt, pIdx) => (
                                       <div key={pIdx} className="space-y-1">
                                         <p className="text-gray-800 leading-relaxed text-[0.92em]">
@@ -1552,9 +1558,12 @@ export default function AnalisaState2Workspace({
                               </p>
                               {points.length > 0 && (
                                 <div className="pt-2.5 border-t border-gray-100 space-y-1.5">
-                                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
-                                    Intisari &amp; Norma Terdeteksi ({points.length} klausul)
-                                  </span>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
+                                      Intisari &amp; Norma Terdeteksi ({points.length} klausul)
+                                    </span>
+                                    <DraftLabel ukuran="kecil" />
+                                  </div>
                                   {points.map((pt, pIdx) => (
                                     <div key={pIdx} className="bg-red-50/50 p-2 rounded-lg border border-red-100/70 text-xs">
                                       <span className="font-semibold text-red-800">[{pt.kategori}]</span>{' '}
@@ -1600,10 +1609,7 @@ export default function AnalisaState2Workspace({
                 HASIL ANALISIS
               </h3>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-semibold">
-                  <AlertCircle size={12} className="text-amber-600 shrink-0" />
-                  <span>Draft / Rekomendasi</span>
-                </span>
+                <DraftLabel />
                 <div className="flex items-center gap-1 text-emerald-700 font-bold text-xs shrink-0">
                   <Check size={14} className="text-emerald-600" />
                   <span>Selesai</span>
@@ -1985,6 +1991,9 @@ export default function AnalisaState2Workspace({
 
             {/* Catatan Disclaimer */}
             <div className="p-3 border-t border-gray-100 bg-gray-50/50 text-[10px] text-gray-500 leading-tight">
+              {typeof data.catatan === 'string' && data.catatan.trim() !== '' && (
+                <p className="mb-1.5 font-semibold text-amber-800">{data.catatan}</p>
+              )}
               Catatan: Hasil analisis ini merupakan bahan telaah otomatis berbasis sistem dan tetap memerlukan verifikasi oleh pejabat/analis berwenang.
             </div>
           </div>
@@ -1999,6 +2008,7 @@ export default function AnalisaState2Workspace({
           <span>
             Analisis selesai. {displayJumlahPasal} pasal dan {displayJumlahBab} bab terindeks lengkap secara {data?.mode_dipakai || mode}.
           </span>
+          {data && <DraftLabel />}
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
@@ -2051,7 +2061,7 @@ export default function AnalisaState2Workspace({
                     <div>
                       <div className="text-xs font-semibold text-gray-800 group-hover:text-blue-900 flex items-center gap-1.5">
                         <span>Word (.docx)</span>
-                        <span className="text-[9px] font-bold px-1.5 py-0.2 bg-blue-100 text-blue-800 rounded">Rekomendasi</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 bg-blue-100 text-blue-800 rounded">Disarankan</span>
                       </div>
                       <p className="text-[10px] text-gray-500 mt-0.5 leading-snug">Naskah resmi, intisari eksekutif, tabel poin utama & pasal rujukan</p>
                     </div>
