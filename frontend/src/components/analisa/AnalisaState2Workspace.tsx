@@ -28,9 +28,11 @@ import {
   checkMlHealth,
   isDocumentReadyForAnalysis,
   exportDocumentAnalysis,
-  parsePasalRef
+  parsePasalRef,
+  normalisasiKerangka
 } from '../../lib/analisaApi';
 import { ApiError, API_BASE_URL, apiFetchBlob } from '../../lib/api';
+import { PanelErrorBoundary } from '../PanelErrorBoundary';
 import type {
   MlAnalisaResponse,
   DocumentArticleSummary,
@@ -281,7 +283,14 @@ export default function AnalisaState2Workspace({
         retryStartTimeRef.current = null;
         retryCountRef.current = 0;
         setRetryCount(0);
-        setData(mlRes.value);
+        // Pecah ulang rentang pasal kerangka memakai daftar pasal backend agar pasal sisipan (mis. 5A) ikut
+        const hasil = mlRes.value;
+        const statusArticles = statusDoc?.articles;
+        setData(
+          hasil.kerangka && Array.isArray(statusArticles) && statusArticles.length > 0
+            ? { ...hasil, kerangka: normalisasiKerangka(hasil.kerangka, statusArticles) }
+            : hasil
+        );
         setErrorStatus(null);
         setErrorMessage(null);
         setPipelineStep(4);
@@ -1113,6 +1122,11 @@ export default function AnalisaState2Workspace({
           {/* =================================================================== */}
           {/* PANEL KIRI: STRUKTUR DOKUMEN (Col-span 3) */}
           {/* =================================================================== */}
+          <PanelErrorBoundary
+            nama="Struktur Dokumen"
+            className="col-span-12 lg:col-span-3 bg-white rounded-xl border border-gray-200 shadow-2xs h-[720px] p-4"
+            onCobaLagi={() => loadAnalysis(false, false)}
+          >
           <div className="col-span-12 lg:col-span-3 bg-white rounded-xl border border-gray-200 flex flex-col shadow-2xs overflow-hidden h-[720px]">
             {/* Header Panel Kiri */}
             <div className="p-4 border-b border-gray-100 shrink-0">
@@ -1201,10 +1215,16 @@ export default function AnalisaState2Workspace({
               })}
             </div>
           </div>
+          </PanelErrorBoundary>
 
           {/* =================================================================== */}
           {/* PANEL TENGAH: NASKAH REGULASI / SALINAN RESMI & PDF (Col-span 5) */}
           {/* =================================================================== */}
+          <PanelErrorBoundary
+            nama="Naskah Regulasi"
+            className="col-span-12 lg:col-span-5 bg-white rounded-xl border border-gray-200 shadow-2xs h-[720px] p-4"
+            onCobaLagi={() => loadAnalysis(false, false)}
+          >
           <div className="col-span-12 lg:col-span-5 bg-white rounded-xl border border-gray-200 flex flex-col shadow-2xs overflow-hidden h-[720px]">
             {/* Header Panel Tengah */}
             <div className="p-3.5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-white">
@@ -1563,10 +1583,16 @@ export default function AnalisaState2Workspace({
               </div>
             )}
           </div>
+          </PanelErrorBoundary>
 
           {/* =================================================================== */}
           {/* PANEL KANAN: HASIL ANALISIS (Col-span 4) */}
           {/* =================================================================== */}
+          <PanelErrorBoundary
+            nama="Hasil Analisis"
+            className="col-span-12 lg:col-span-4 bg-white rounded-xl border border-gray-200 shadow-2xs h-[720px] p-4"
+            onCobaLagi={() => loadAnalysis(false, false)}
+          >
           <div className="col-span-12 lg:col-span-4 bg-white rounded-xl border border-gray-200 flex flex-col shadow-2xs overflow-hidden h-[720px]">
             {/* Header Panel Kanan */}
             <div className="p-3.5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2 shrink-0">
@@ -1962,6 +1988,7 @@ export default function AnalisaState2Workspace({
               Catatan: Hasil analisis ini merupakan bahan telaah otomatis berbasis sistem dan tetap memerlukan verifikasi oleh pejabat/analis berwenang.
             </div>
           </div>
+          </PanelErrorBoundary>
         </div>
       )}
 
