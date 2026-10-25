@@ -31,6 +31,13 @@ export const ML_API_BASE_URL: string = rawMlUrl
   ? rawMlUrl.replace(/\/+$/, '')
   : `${API_BASE_URL}/api/v1/ml`;
 
+/**
+ * Batas waktu request analisa & ekspor (ms).
+ * Backend menunggu layanan ML hingga 120 detik (ml_timeout_seconds) sebelum membalas 504,
+ * jadi frontend diberi sedikit lebih lama agar pesan 504 dari backend sempat diterima.
+ */
+export const ANALISA_TIMEOUT_MS = 130000;
+
 // ============================================================================
 // 2. Tipe Data Kontrak ML Health (GET /api/v1/ml/health)
 // ============================================================================
@@ -370,6 +377,7 @@ export async function getMlAnalisa(
     {
       headers: Object.keys(headers).length > 0 ? headers : undefined,
       signal,
+      timeout: ANALISA_TIMEOUT_MS,
     }
   );
 }
@@ -464,7 +472,10 @@ export async function exportDocumentAnalysis(
   }
 
   const qs = buildQueryString(queryParams);
-  return apiFetchBlob(`/api/v1/documents/${documentId}/analisa/ekspor${qs}`, { signal: abortSignal });
+  return apiFetchBlob(`/api/v1/documents/${documentId}/analisa/ekspor${qs}`, {
+    signal: abortSignal,
+    timeout: ANALISA_TIMEOUT_MS,
+  });
 }
 
 // ============================================================================
