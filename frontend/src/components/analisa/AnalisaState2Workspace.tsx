@@ -42,21 +42,9 @@ import type {
   AnalysisExportFormat
 } from '../../lib/analisaApi';
 
-// Garuda Pancasila SVG Emblem untuk Naskah Resmi OJK
-function GarudaEmblem() {
-  return (
-    <div className="flex justify-center mb-4">
-      <svg width="56" height="56" viewBox="0 0 100 100" fill="none" className="text-gray-800">
-        <circle cx="50" cy="50" r="46" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 2" />
-        <path d="M50 15 L54 28 L68 28 L57 37 L61 50 L50 42 L39 50 L43 37 L32 28 L46 28 Z" fill="currentColor" opacity="0.85" />
-        <path d="M30 46 C35 60 65 60 70 46 C66 72 34 72 30 46 Z" fill="currentColor" opacity="0.75" />
-        <rect x="42" y="52" width="16" height="18" rx="2" fill="white" stroke="currentColor" strokeWidth="1.5" />
-        <path d="M46 61 L54 61 M50 56 L50 66" stroke="currentColor" strokeWidth="1.5" />
-        <path d="M25 76 Q50 82 75 76 Q50 86 25 76" fill="currentColor" />
-        <text x="50" y="81" fontSize="3.8" textAnchor="middle" fill="white" fontWeight="bold" letterSpacing="0.8">BHINNEKA TUNGGAL IKA</text>
-      </svg>
-    </div>
-  );
+/** Backend memotong content_text pasal menjadi 300 karakter + "..." (routers/documents.py) */
+function isTeksTerpotong(teks: string | null | undefined): boolean {
+  return typeof teks === 'string' && teks.trimEnd().endsWith('...');
 }
 
 // 4 Tahap Analisis Mesin HERO
@@ -594,7 +582,7 @@ export default function AnalisaState2Workspace({
       } else {
         showNavFeedback(
           'info',
-          `Nomor halaman fisik PDF untuk ${trimmed} belum tercatat pada metadata dokumen. Anda dapat beralih ke tab "Salinan Resmi" untuk membaca pasal ini.`
+          `Nomor halaman fisik PDF untuk ${trimmed} belum tercatat pada metadata dokumen. Anda dapat beralih ke tab "Naskah" untuk membaca pasal ini.`
         );
       }
     } else {
@@ -625,12 +613,12 @@ export default function AnalisaState2Workspace({
           if (!hasKerangka && !hasArticles) {
             showNavFeedback(
               'warning',
-              `Struktur pasal salinan resmi belum tersedia untuk draf ini. Silakan buka tab "PDF Asli"${targetPage ? ` (Pasal berada di sekitar Hal. ${targetPage})` : ''}.`
+              `Struktur pasal naskah belum tersedia untuk draf ini. Silakan buka tab "PDF Asli"${targetPage ? ` (Pasal berada di sekitar Hal. ${targetPage})` : ''}.`
             );
           } else {
             showNavFeedback(
               'warning',
-              `Teks ${trimmed} tidak ditemukan dalam naskah salinan resmi dokumen ini.`
+              `Teks ${trimmed} tidak ditemukan dalam naskah hasil ekstraksi dokumen ini.`
             );
           }
         }
@@ -850,6 +838,26 @@ export default function AnalisaState2Workspace({
   // 4. Judul Regulasi: identitas.tentang
   const judulRegulasi = data?.identitas?.tentang?.trim() || null;
   const displayJudulRegulasi = judulRegulasi || data?.identitas?.nomor?.trim() || '-';
+
+  // 4b. Identitas header naskah: bentuk pipeline (jenis, nomor, tahun, tentang, penerbit),
+  //     nama field lama (doc_type, number, year, title, issuer) sebagai cadangan
+  const teksIdentitas = (...nilai: unknown[]): string | null => {
+    for (const v of nilai) {
+      if (typeof v === 'number' && !isNaN(v)) return String(v);
+      if (typeof v === 'string' && v.trim() !== '') return v.trim();
+    }
+    return null;
+  };
+  const naskahJenis = teksIdentitas(data?.identitas?.jenis, data?.identitas?.doc_type);
+  const naskahNomor = teksIdentitas(data?.identitas?.nomor, data?.identitas?.number);
+  const naskahTahun = teksIdentitas(data?.identitas?.tahun, data?.identitas?.year);
+  const naskahTentang = teksIdentitas(data?.identitas?.tentang, data?.identitas?.title);
+  const naskahPenerbit = teksIdentitas(data?.identitas?.penerbit, data?.identitas?.issuer);
+  // Nomor kadang sudah memuat tahun (mis. "36 Tahun 2024"), jangan diulang
+  const nomorMemuatTahun = Boolean(naskahNomor && /\bTahun\s+\d{4}\b/i.test(naskahNomor));
+  const judulNaskah = naskahJenis || naskahNomor || naskahTahun
+    ? `${naskahJenis ?? '-'} Nomor ${naskahNomor ?? '-'}${nomorMemuatTahun ? '' : ` Tahun ${naskahTahun ?? '-'}`}`
+    : null;
 
   // 5. Tanggal Terbit: identitas.tanggal_terbit
   const tanggalTerbit = data?.identitas?.tanggal_terbit?.trim() || null;
@@ -1221,7 +1229,7 @@ export default function AnalisaState2Workspace({
           </PanelErrorBoundary>
 
           {/* =================================================================== */}
-          {/* PANEL TENGAH: NASKAH REGULASI / SALINAN RESMI & PDF (Col-span 5) */}
+          {/* PANEL TENGAH: NASKAH REGULASI (HASIL EKSTRAKSI) & PDF (Col-span 5) */}
           {/* =================================================================== */}
           <PanelErrorBoundary
             nama="Naskah Regulasi"
@@ -1246,7 +1254,7 @@ export default function AnalisaState2Workspace({
                         : 'text-gray-500 hover:text-gray-900'
                     }`}
                   >
-                    Salinan Resmi
+                    Naskah
                   </button>
                   <button
                     type="button"
@@ -1324,7 +1332,7 @@ export default function AnalisaState2Workspace({
               </div>
             )}
 
-            {/* Konten Naskah: PDF Asli atau Salinan Formal OJK */}
+            {/* Konten Naskah: PDF Asli atau naskah hasil ekstraksi */}
             {viewMode === 'pdf' ? (
               <div className="flex-1 bg-gray-100 flex flex-col items-center justify-center p-2 relative overflow-hidden">
                 {pdfLoading ? (
@@ -1374,24 +1382,31 @@ export default function AnalisaState2Workspace({
                   style={{ fontSize: `${(zoomLevel / 100) * 12.5}px` }}
                   className="max-w-[560px] mx-auto space-y-6 text-gray-800 leading-relaxed transition-all"
                 >
-                  {/* Header Salinan Resmi OJK */}
+                  {/* Header Naskah Hasil Ekstraksi (bukan salinan resmi) */}
                   <div className="text-center space-y-2 pb-5 border-b border-gray-200">
-                    <GarudaEmblem />
                     <p className="text-[0.85em] font-mono tracking-widest uppercase text-gray-500 font-bold">
-                      SALINAN RESMI
+                      NASKAH HASIL EKSTRAKSI (BUKAN SALINAN RESMI)
                     </p>
-                    <h2 className="text-[1.05em] font-bold uppercase tracking-wider text-gray-900">
-                      {data.identitas?.penerbit || 'OTORITAS JASA KEUANGAN'}
-                    </h2>
-                    <p className="text-[0.95em] font-semibold text-gray-800">
-                      {data.identitas?.nomor || (data.identitas?.number ? `${data.identitas.doc_type || 'Peraturan'} Nomor ${data.identitas.number}` : `DRAF REGULASI #${documentId}`)}
-                    </p>
-                    <p className="text-[0.85em] font-bold text-gray-600 tracking-wider">
-                      TENTANG
-                    </p>
-                    <h1 className="text-[1.05em] font-extrabold uppercase tracking-wide text-gray-900 max-w-md mx-auto">
-                      {data.identitas?.title || 'DRAF REGULASI KAJIAN'}
-                    </h1>
+                    {naskahPenerbit && (
+                      <h2 className="text-[1.05em] font-bold uppercase tracking-wider text-gray-900">
+                        {naskahPenerbit}
+                      </h2>
+                    )}
+                    {judulNaskah && (
+                      <p className="text-[0.95em] font-semibold text-gray-800">
+                        {judulNaskah}
+                      </p>
+                    )}
+                    {naskahTentang && (
+                      <>
+                        <p className="text-[0.85em] font-bold text-gray-600 tracking-wider">
+                          TENTANG
+                        </p>
+                        <h1 className="text-[1.05em] font-extrabold uppercase tracking-wide text-gray-900 max-w-md mx-auto">
+                          {naskahTentang}
+                        </h1>
+                      </>
+                    )}
                   </div>
 
                   {/* Dasar Hukum Terkait (Konsiderans Mengingat) */}
@@ -1469,6 +1484,11 @@ export default function AnalisaState2Workspace({
                                     <p className="text-gray-800 leading-relaxed text-[0.92em] whitespace-pre-line font-serif">
                                       {fullArticleText}
                                     </p>
+                                    {isTeksTerpotong(fullArticleText) && (
+                                      <p className="text-[0.75em] italic text-amber-700">
+                                        Teks dipotong, buka tab PDF Asli untuk teks lengkap.
+                                      </p>
+                                    )}
                                     {points.length > 0 && (
                                       <div className="pt-2.5 border-t border-gray-100 space-y-1.5">
                                         <div className="flex items-center justify-between gap-2">
@@ -1557,6 +1577,11 @@ export default function AnalisaState2Workspace({
                               <p className="text-gray-800 leading-relaxed text-[0.92em] whitespace-pre-line font-serif">
                                 {art.content_text}
                               </p>
+                              {isTeksTerpotong(art.content_text) && (
+                                <p className="text-[0.75em] italic text-amber-700">
+                                  Teks dipotong, buka tab PDF Asli untuk teks lengkap.
+                                </p>
+                              )}
                               {points.length > 0 && (
                                 <div className="pt-2.5 border-t border-gray-100 space-y-1.5">
                                   <div className="flex items-center justify-between gap-2">
@@ -1584,9 +1609,9 @@ export default function AnalisaState2Workspace({
                     </div>
                   )}
 
-                  {/* Footer Dokumen Salinan */}
+                  {/* Footer Naskah */}
                   <div className="pt-6 border-t border-gray-200 flex justify-between items-center text-[0.75em] text-gray-400 font-mono">
-                    <span>Salinan Dokumen — Harmonisasi HERO #{documentId}</span>
+                    <span>Naskah hasil ekstraksi — HERO #{documentId}</span>
                     <span>Halaman {currentPage} dari {totalPages}</span>
                   </div>
                 </div>
