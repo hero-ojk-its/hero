@@ -1,0 +1,14 @@
+[Unit]
+Description=Jadwal pengawas deploy HERO (server lokal)
+
+[Timer]
+# Tiap 5 menit: cukup cepat terasa otomatis, cukup jarang untuk tidak membebani
+# registri. Pemeriksaannya murah (satu permintaan HEAD + satu git ls-remote);
+# unduhan hanya terjadi bila memang ada versi baru.
+OnBootSec=3min
+OnUnitActiveSec=5min
+RandomizedDelaySec=60
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target
