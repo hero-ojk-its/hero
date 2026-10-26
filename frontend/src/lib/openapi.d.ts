@@ -4,6 +4,27 @@
  */
 
 export interface paths {
+    "/api/v1/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Profil dan Hak Akses Pengguna Aktif
+         * @description Mengembalikan profil pengguna aktif dan daftar izin yang dimiliki berdasarkan peran.
+         *     Bila mode autentikasi dinonaktifkan (AUTH_ENABLED=false), mengembalikan {'auth_enabled': False}.
+         */
+        get: operations["get_current_user_profile_api_v1_auth_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -808,6 +829,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/internal/analysis-cache/invalidate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * [Internal] Tandai cache analisa lama sebagai usang (Langkah 25)
+         * @description Menandai baris cache analisa yang sesuai kriteria sebagai usang (usang_sejak diisi).
+         *     Dipanggil oleh alur deploy mesin analisa (Fathir) saat versi ML diperbarui.
+         */
+        post: operations["invalidate_analysis_cache_api_v1_internal_analysis_cache_invalidate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/scraping-sources/": {
         parameters: {
             query?: never;
@@ -1275,6 +1317,57 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Daftar akun pengguna sistem
+         * @description Mengembalikan daftar seluruh akun pengguna sistem HERO.
+         *     Kata sandi (hash) tidak pernah disertakan dalam respons.
+         */
+        get: operations["list_users_api_v1_users__get"];
+        put?: never;
+        /**
+         * Buat akun pengguna baru
+         * @description Membuat akun pengguna baru dengan peran tertentu.
+         *     Password minimal 12 karakter di-hash menggunakan bcrypt.
+         */
+        post: operations["create_user_api_v1_users__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Perbarui data atau peran akun pengguna
+         * @description Memperbarui profil, peran, status aktif, atau password akun pengguna.
+         *     Tidak ada endpoint DELETE — akun cukup dinonaktifkan (is_active=False).
+         *
+         *     Aturan perlindungan:
+         *     - 409 'admin_terakhir': Ditolak bila perubahan menyebabkan tidak ada Admin Sistem aktif.
+         *     - 409 'ubah_diri_sendiri': Ditolak bila Admin Sistem menonaktifkan atau menurunkan peran akun sendiri.
+         */
+        patch: operations["update_user_api_v1_users__user_id__patch"];
         trace?: never;
     };
     "/": {
@@ -2185,6 +2278,17 @@ export interface components {
             /** Error */
             error?: string | null;
         };
+        /** InvalidateAnalysisCacheIn */
+        InvalidateAnalysisCacheIn: {
+            /** Versi Mesin */
+            versi_mesin?: string | null;
+            /** Kind */
+            kind?: string | null;
+            /** Document Ids */
+            document_ids?: number[] | null;
+            /** Alasan */
+            alasan?: string | null;
+        };
         /**
          * JenisJobIngest
          * @description Tipe sumber pekerjaan ingest
@@ -2431,6 +2535,12 @@ export interface components {
          * @enum {string}
          */
         PeranDokumen: "corpus_eksisting" | "draft_kajian";
+        /**
+         * PeranPengguna
+         * @description Peran pengguna sistem HERO sesuai dokumen 08 §PERAN.
+         * @enum {string}
+         */
+        PeranPengguna: "analis" | "admin_kb" | "admin_sistem" | "pilot_user";
         /**
          * PullProgress
          * @description Progres penarikan dokumen dari job terkait.
@@ -3035,6 +3145,73 @@ export interface components {
             /** Attachment Label */
             attachment_label?: string | null;
         };
+        /** UserCreateIn */
+        UserCreateIn: {
+            /**
+             * Username
+             * @description Username unik login
+             */
+            username: string;
+            /**
+             * Password
+             * @description Password minimal 12 karakter
+             */
+            password: string;
+            /** @description Peran akses pengguna */
+            role: components["schemas"]["PeranPengguna"];
+            /**
+             * Nama Lengkap
+             * @description Nama lengkap pengguna
+             */
+            nama_lengkap?: string | null;
+            /**
+             * Unit Kerja
+             * @description Unit kerja / divisi
+             */
+            unit_kerja?: string | null;
+        };
+        /** UserResponse */
+        UserResponse: {
+            /** Id */
+            id: number;
+            /** Username */
+            username: string;
+            /** Nama Lengkap */
+            nama_lengkap?: string | null;
+            /** Unit Kerja */
+            unit_kerja?: string | null;
+            /** Role */
+            role: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Created At */
+            created_at?: string | null;
+        };
+        /** UserUpdateIn */
+        UserUpdateIn: {
+            /** @description Peran akses baru */
+            role?: components["schemas"]["PeranPengguna"] | null;
+            /**
+             * Is Active
+             * @description Status aktif pengguna
+             */
+            is_active?: boolean | null;
+            /**
+             * Nama Lengkap
+             * @description Nama lengkap pengguna
+             */
+            nama_lengkap?: string | null;
+            /**
+             * Unit Kerja
+             * @description Unit kerja / divisi
+             */
+            unit_kerja?: string | null;
+            /**
+             * Password
+             * @description Password baru minimal 12 karakter
+             */
+            password?: string | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -3076,6 +3253,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get_current_user_profile_api_v1_auth_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     login_api_v1_auth_login_post: {
         parameters: {
             query?: never;
@@ -4558,6 +4755,41 @@ export interface operations {
             };
         };
     };
+    invalidate_analysis_cache_api_v1_internal_analysis_cache_invalidate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Internal-API-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["InvalidateAnalysisCacheIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_scraping_sources_api_v1_scraping_sources__get: {
         parameters: {
             query?: {
@@ -5476,6 +5708,108 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_users_api_v1_users__get: {
+        parameters: {
+            query?: {
+                /** @description Filter berdasarkan peran */
+                role?: components["schemas"]["PeranPengguna"] | null;
+                /** @description Filter status aktif */
+                is_active?: boolean | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_user_api_v1_users__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_user_api_v1_users__user_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
                 };
             };
             /** @description Validation Error */
