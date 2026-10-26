@@ -106,12 +106,17 @@ membuat cadangan database, dan melatih migrasi pada salinan data, **tanpa mengga
 Periksa lognya. Bila bersih, **nyalakan deploy otomatis**:
 
 ```bash
-gh variable set DEPLOY_VPS_ENABLED --body true
+gh variable set DEPLOY_VPS_ENABLED --body true    # membangun image di GitHub
+gh variable set DEPLOY_VPS_SSH     --body true    # mendorong ke VPS lewat SSH
 ```
 
-Mulai saat itu, setiap merge ke `main` yang lolos CI men-deploy sendiri. **Mematikan seketika**
-(tombol darurat): `gh variable set DEPLOY_VPS_ENABLED --body false`. Selama variabel ini belum `true`,
-merge PR ke `main` tidak men-deploy apa pun (menjalankan manual lewat *Run workflow* tetap bisa).
+Dua saklar, keduanya default mati: `DEPLOY_VPS_ENABLED` menjalankan workflow dan **membangun** image;
+`DEPLOY_VPS_SSH` menambahkan **dorongan SSH** ke VPS. Dipisah karena server di balik NAT (lihat
+`deploy/lokal/`) hanya memerlukan image-nya dan tidak punya SSH masuk.
+
+Mulai saat keduanya `true`, setiap merge ke `main` yang lolos CI men-deploy sendiri. **Mematikan
+seketika** (tombol darurat): set salah satunya ke `false`. Selama `DEPLOY_VPS_SSH` belum `true`,
+tidak ada yang didorong ke VPS, sekalipun dijalankan manual lewat *Run workflow*.
 
 ---
 

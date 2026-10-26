@@ -19,7 +19,10 @@
 #    /health dan mengembalikan image lama bila gagal (lihat deploy/vps/README.md).
 #
 # Rahasia (Environment `vps-production`): VPS_HOST, VPS_USER, VPS_SSH_KEY, VPS_KNOWN_HOSTS.
-# Saklar: variabel repo DEPLOY_VPS_ENABLED=true mengaktifkan deploy otomatis (default mati).
+# Dua saklar (Settings → Secrets and variables → Actions → Variables), keduanya default MATI:
+#   DEPLOY_VPS_ENABLED=true  → workflow berjalan; backend DIBANGUN dan didorong ke GHCR
+#                              (cukup untuk server lokal yang menarik image sendiri)
+#   DEPLOY_VPS_SSH=true      → tambahan: mendorong ke VPS lewat SSH (butuh 4 secret di bawah)
 # Persiapan satu kali: deploy/vps/README.md.
 
 name: Deploy VPS
@@ -153,8 +156,12 @@ jobs:
           cache-to: type=gha,mode=max
 
   deploy-backend:
-    name: Deploy backend ke VPS
+    name: Deploy backend ke VPS (SSH)
     needs: [tentukan, bangun-backend]
+    # Jalur SSH hanya untuk server yang bisa dihubungi dari internet (VPS). Server lokal
+    # di balik NAT tidak memakainya — ia menarik image `:main` sendiri — jadi saklarnya
+    # terpisah: DEPLOY_VPS_ENABLED=true saja sudah cukup untuk membangun image.
+    if: vars.DEPLOY_VPS_SSH == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: vps-production
@@ -201,9 +208,9 @@ jobs:
 
   # ----------------------------------------------------------------- pipeline
   deploy-pipeline:
-    name: Deploy lapisan data ke VPS
+    name: Deploy lapisan data ke VPS (SSH)
     needs: tentukan
-    if: needs.tentukan.outputs.komponen == 'pipeline'
+    if: needs.tentukan.outputs.komponen == 'pipeline' && vars.DEPLOY_VPS_SSH == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: vps-production

@@ -64,17 +64,30 @@ Tidak perlu Anda hapus.
 
 ## 1. Salin skrip pemasangan ke server
 
+**Syarat:** PR yang memuat folder `deploy/lokal/` sudah di-merge ke `main` (PR #149). Sampai itu
+terjadi, folder ini hanya ada di branch `feat/deploy-server-lokal`, dan `main` tidak
+memilikinya — `git clone` biasa tidak akan menemukan `install-server.sh`.
+
 Di server (repo publik, tanpa kredensial):
 
 ```bash
 sudo apt-get update && sudo apt-get install -y git
+
+# Setelah PR di-merge (disarankan):
 git clone --depth 1 https://github.com/hero-ojk-its/hero.git /tmp/hero-src
+
+# SEBELUM di-merge (sementara): ambil branch-nya
+git clone --depth 1 --branch feat/deploy-server-lokal https://github.com/hero-ojk-its/hero.git /tmp/hero-src
 ```
 
 ## 2. Jalankan pemasang
 
 ```bash
+# Setelah PR di-merge:
 sudo bash /tmp/hero-src/deploy/lokal/install-server.sh
+
+# Sebelum di-merge, beri tahu pemasang branch mana yang dipakai (ia juga mengklon repo ke /opt/hero/src):
+sudo REPO_BRANCH=feat/deploy-server-lokal bash /tmp/hero-src/deploy/lokal/install-server.sh
 ```
 
 Yang dipasang: paket sistem + Tesseract, Docker Engine resmi, user `hero` (kata sandi dikunci),
@@ -146,9 +159,19 @@ Harus `"status": "ok"` dan `"migrations_up_to_date": true`.
 > visibilitas menjadi **public** (image tidak memuat rahasia; rahasia ada di `.env.prod`).
 > Alternatif: simpan PAT `read:packages` di `/opt/hero/ci/ghcr-token` (mode 600).
 >
-> **Bila paketnya belum ada sama sekali:** image baru dibangun setelah PR deploy di-merge dan
-> Backend CI berjalan di `main`. Jalankan *Actions → Deploy VPS → Run workflow* sekali untuk
-> membangunnya.
+> **Bila paketnya belum ada sama sekali** (kasus pertama kali): image `ghcr.io/hero-ojk-its/hero-backend:main`
+> hanya dibangun oleh workflow *Deploy VPS*, dan itu baru ada di `main` setelah PR di-merge. Dari komputer
+> yang sudah login `gh` (bukan server):
+>
+> ```bash
+> gh variable set DEPLOY_VPS_ENABLED --body true      # hanya membangun image; JANGAN set DEPLOY_VPS_SSH
+> gh workflow run "Deploy VPS" -f komponen=backend    # membangun sekarang, tanpa menunggu merge berikutnya
+> gh run watch                                        # tunggu selesai (±3–6 menit)
+> ```
+>
+> Setelah itu ubah paketnya menjadi publik (lihat di atas). Selanjutnya setiap merge ke `main` yang
+> lolos Backend CI membangun image baru otomatis. `DEPLOY_VPS_SSH` sengaja dibiarkan mati: itu
+> jalur dorong SSH ke VPS, yang tidak ada gunanya (dan akan gagal) untuk server di balik NAT.
 
 ## 6. Akses dari internet (Cloudflare Tunnel)
 
