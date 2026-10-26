@@ -45,7 +45,7 @@ die() { log "GAGAL: $*"; exit 1; }
 
 REGISTRY_LOGGED_IN=0
 ENV_TMP=""
-# shellcheck disable=SC2329  # dipanggil tak langsung lewat trap
+# shellcheck disable=SC2317,SC2329  # dipanggil tak langsung lewat trap (nama kode beda antar versi)
 cleanup() {
   if [ "$REGISTRY_LOGGED_IN" = 1 ]; then docker logout ghcr.io >/dev/null 2>&1 || true; fi
   if [ -n "$ENV_TMP" ]; then rm -f "$ENV_TMP"; fi
