@@ -2,5 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "cd frontend && npm ci",
   "buildCommand": "cd frontend && VITE_BASE=/ npm run build",
-  "outputDirectory": "frontend/dist"
+  "outputDirectory": "frontend/dist",
+  "git": {
+    "deploymentEnabled": {
+      "gh-pages": false
+    }
+  }
 }
