@@ -5,6 +5,10 @@
 #
 # Frontend TIDAK ada di sini: Vercel dan GitHub Pages sudah deploy sendiri.
 #
+# Server LOKAL (di balik NAT) tidak memakai jalur SSH di bawah — GitHub tidak dapat
+# menghubunginya. Yang dipakai hanya job "bangun image": server lokal memeriksa sendiri
+# tag `:main` di GHCR secara berkala. Lihat deploy/lokal/README.md.
+#
 # Pengaman:
 #  - hanya jalan bila CI-nya SUKSES dan itu push ke main (bukan PR, bukan fork);
 #  - environment `vps-production`: tambahkan Required reviewers di Settings → Environments
@@ -120,7 +124,15 @@ jobs:
       - id: meta
         env:
           SHA: ${{ needs.tentukan.outputs.sha }}
-        run: echo "image=${IMAGE_REPO}:${SHA:0:12}" >>"$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          # Dua tag: yang tetap (per commit) untuk ketertelusuran dan pemulihan, dan
+          # tag bergerak `main` yang diawasi server lokal di balik NAT — ia memeriksa
+          # digest tag ini secara berkala karena GitHub tidak bisa menghubunginya.
+          {
+            echo "image=${IMAGE_REPO}:${SHA:0:12}"
+            echo "tags=${IMAGE_REPO}:${SHA:0:12},${IMAGE_REPO}:main"
+          } >>"$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -131,7 +143,7 @@ jobs:
         with:
           context: backend
           push: true
-          tags: ${{ steps.meta.outputs.image }}
+          tags: ${{ steps.meta.outputs.tags }}
           # Mengaitkan paket GHCR dengan repo ini: tanpa label ini token job di VPS bisa saja
           # tak berhak menarik image-nya (paket baru tampil "tidak terhubung" ke repo).
           labels: |

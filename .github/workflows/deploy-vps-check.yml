@@ -1,15 +1,15 @@
-# Menjaga mesin deploy ke VPS tetap benar: skrip bash (shellcheck), workflow (actionlint),
+# Menjaga mesin deploy tetap benar (VPS maupun server lokal): skrip bash (shellcheck), workflow (actionlint),
 # dan uji logika dengan docker/curl/systemctl palsu (urutan langkah, pemulihan, penolakan
 # perintah berbahaya). TIDAK menyentuh server — deploy sungguhan ada di deploy-vps.yml.
 
-name: Deploy VPS (cek)
+name: Deploy (cek)
 
 on:
   pull_request:
-    paths: ['deploy/vps/**', '.github/workflows/deploy-vps.yml', '.github/workflows/deploy-vps-check.yml']
+    paths: ['deploy/**', '.github/workflows/deploy-vps.yml', '.github/workflows/deploy-vps-check.yml']
   push:
     branches: [main]
-    paths: ['deploy/vps/**', '.github/workflows/deploy-vps.yml', '.github/workflows/deploy-vps-check.yml']
+    paths: ['deploy/**', '.github/workflows/deploy-vps.yml', '.github/workflows/deploy-vps-check.yml']
   workflow_dispatch:
 
 permissions:
@@ -30,11 +30,33 @@ jobs:
       # yang sama dengan kode lain (SC2317 vs SC2329), sehingga hasil lokal != hasil CI.
       - name: shellcheck (v0.11.0)
         run: |
-          docker run --rm -v "$PWD/deploy/vps:/mnt:ro" koalaman/shellcheck:v0.11.0 \
-            -x -S style /mnt/ci-entry.sh /mnt/deploy-backend.sh /mnt/deploy-pipeline.sh /mnt/tests/test_deploy.sh
+          docker run --rm -v "$PWD/deploy:/mnt:ro" koalaman/shellcheck:v0.11.0 \
+            -x -S style \
+            /mnt/vps/ci-entry.sh /mnt/vps/deploy-backend.sh /mnt/vps/deploy-pipeline.sh \
+            /mnt/vps/tests/test_deploy.sh \
+            /mnt/lokal/watch-deploy.sh /mnt/lokal/install-server.sh /mnt/lokal/tests/test_watch.sh
       - name: actionlint
         uses: docker://rhysd/actionlint:latest
         with:
           args: -color=false .github/workflows/deploy-vps.yml .github/workflows/deploy-vps-check.yml
-      - name: Uji logika skrip deploy
+      - name: Uji logika skrip deploy (VPS)
         run: bash deploy/vps/tests/test_deploy.sh
+      - name: Uji logika pengawas deploy (server lokal)
+        run: bash deploy/lokal/tests/test_watch.sh
+      - name: Validasi docker compose server lokal
+        run: |
+          set -euo pipefail
+          # Dirakit seperti di server agar interpolasi ${…} dan env_file benar-benar teruji.
+          T="$(mktemp -d)"
+          mkdir -p "$T/backend" "$T/sources" "$T/src/backend/init_db"
+          cp deploy/lokal/docker-compose.lokal.yml "$T/docker-compose.yml"
+          cp backend/init_db/*.sql "$T/src/backend/init_db/"
+          echo 'POSTGRES_PASSWORD=uji' >"$T/.env"
+          echo 'APP_ENV=production'   >"$T/backend/.env.prod"
+          ( cd "$T" && docker compose config >/dev/null )
+          # Tanpa kata sandi harus GAGAL — penjaga agar produksi tak jalan tanpa rahasia.
+          rm "$T/.env"
+          if ( cd "$T" && docker compose config >/dev/null 2>&1 ); then
+            echo "compose seharusnya menolak tanpa POSTGRES_PASSWORD" >&2; exit 1
+          fi
+          rm -rf "$T"

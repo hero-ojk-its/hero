@@ -257,6 +257,24 @@ for kasus in jalan_keluar absolut tautan luar_daftar campuran; do
 done
 
 
+# Arsip buatan `git archive` (dipakai pengawas server lokal) menyertakan entri direktori
+# induk "pipeline/". Versi awal daftar putih menolaknya, sehingga deploy lapisan data di
+# server lokal tidak akan pernah berhasil.
+buat_lingkungan; buat_kode_lama
+rm -rf "$T/repo" && mkdir -p "$T/repo"
+( cd "$T/repo" && git init -q . && mkdir -p pipeline/hero/analysis pipeline/hero/bridge \
+  && : >pipeline/hero/__init__.py && echo "" >pipeline/hero/cli.py \
+  && : >pipeline/hero/bridge/__init__.py && : >pipeline/hero/bridge/client.py \
+  && : >pipeline/hero/analysis/__init__.py && echo 'VERSION = "v-git"' >pipeline/hero/analysis/structured.py \
+  && echo "DARI_GIT" >pipeline/hero/penanda.txt && echo "[project]" >pipeline/pyproject.toml \
+  && git add -A && git -c user.email=t@t -c user.name=t commit -qm x ) >/dev/null 2>&1
+git -C "$T/repo" archive HEAD pipeline/hero pipeline/pyproject.toml | gzip >"$T/kode.tgz"
+cek "arsip git memuat entri direktori 'pipeline/'" 'tar tzf "$T/kode.tgz" | grep -qx "pipeline/"'
+OUT="$("$VPS_DIR/deploy-pipeline.sh" <"$T/kode.tgz" 2>&1)"; KODE=$?
+cek "arsip dari git archive DITERIMA (bukan ditolak daftar putih)" '[ $KODE -eq 0 ]'
+cek "kode dari git terpasang"                       '[ "$(cat "$HERO_HOME/hero/penanda.txt")" = "DARI_GIT" ]'
+bersihkan
+
 buat_lingkungan; buat_kode_lama; buat_arsip "VERSI_BARU"
 OUT="$(FAKE_PIP_FAIL=1 "$VPS_DIR/deploy-pipeline.sh" <"$T/kode.tgz" 2>&1)"; KODE=$?
 cek "pip install gagal: deploy gagal dan kode lama dipulihkan" '[ $KODE -ne 0 ] && [ "$(cat "$HERO_HOME/hero/penanda.txt")" = "VERSI_LAMA" ]'

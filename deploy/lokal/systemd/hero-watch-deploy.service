@@ -1,0 +1,15 @@
+[Unit]
+Description=HERO — periksa versi baru di GitHub lalu deploy (server lokal, tarik)
+Documentation=file:///opt/hero/src/deploy/lokal/README.md
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+# Berjalan sebagai root: mengganti kontainer, membaca .env.prod, dan menulis /opt/hero.
+# Skrip yang dijalankan milik root dan tidak dapat ditulis oleh user layanan.
+ExecStart=/opt/hero/ci/watch-deploy.sh all
+TimeoutStartSec=1800
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6

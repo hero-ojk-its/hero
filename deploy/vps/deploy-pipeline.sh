@@ -39,8 +39,11 @@ cat >"$STAGE/kode.tgz"
 [ -s "$STAGE/kode.tgz" ] || die "arsip kosong"
 tar tzf "$STAGE/kode.tgz" >"$STAGE/daftar.txt" 2>/dev/null || die "arsip rusak"
 # Daftar putih: apa pun di luar ini ditolak, termasuk path absolut dan '..'.
-if grep -vE '^pipeline/(hero(/[^[:cntrl:]]*)?|pyproject\.toml)$' "$STAGE/daftar.txt" | grep -q .; then
-  grep -vE '^pipeline/(hero(/[^[:cntrl:]]*)?|pyproject\.toml)$' "$STAGE/daftar.txt" | head -3 >&2
+# `pipeline/` sendiri ikut diizinkan karena `git archive` menuliskan entri direktori
+# induk (ditemukan saat menyambungkan pengawas deploy server lokal); entri direktori
+# tidak membawa isi apa pun.
+if grep -vE '^pipeline/$|^pipeline/(hero(/[^[:cntrl:]]*)?|pyproject\.toml)$' "$STAGE/daftar.txt" | grep -q .; then
+  grep -vE '^pipeline/$|^pipeline/(hero(/[^[:cntrl:]]*)?|pyproject\.toml)$' "$STAGE/daftar.txt" | head -3 >&2
   die "arsip memuat path di luar pipeline/hero dan pipeline/pyproject.toml"
 fi
 if grep -qE '(^|/)\.\.(/|$)|^/' "$STAGE/daftar.txt"; then die "arsip memuat path berbahaya"; fi
