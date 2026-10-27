@@ -157,7 +157,20 @@ Harus `"status": "ok"` dan `"migrations_up_to_date": true`.
 > **Bila gagal "digest tidak terbaca":** paket GHCR masih privat. Buka
 > `github.com/orgs/hero-ojk-its/packages` → `hero-backend` → *Package settings* → ubah
 > visibilitas menjadi **public** (image tidak memuat rahasia; rahasia ada di `.env.prod`).
-> Alternatif: simpan PAT `read:packages` di `/opt/hero/ci/ghcr-token` (mode 600).
+>
+> **Alternatif bila paket tidak bisa dijadikan public:** buat PAT (classic) dengan scope
+> `read:packages` saja, lalu simpan satu baris `username-github:PAT` di
+> `/opt/hero/ci/ghcr-token` (mode 600, dibaca sebagai `root`):
+>
+> ```bash
+> sudo sh -c 'printf "USERNAME-GITHUB:ghp_xxx\n" > /opt/hero/ci/ghcr-token'
+> sudo chmod 600 /opt/hero/ci/ghcr-token
+> ```
+>
+> `watch-deploy.sh` memakainya untuk menukar token (Basic auth di `/token`, lalu Bearer ke
+> endpoint manifest) sebelum memeriksa digest, dan meneruskan bagian PAT-nya lewat stdin ke
+> `deploy-backend.sh` sebelum `docker pull`. Perpanjang/cabut PAT secara berkala — ini satu
+> rahasia tambahan yang harus Anda jaga di server.
 >
 > **Bila paketnya belum ada sama sekali** (kasus pertama kali): image `ghcr.io/hero-ojk-its/hero-backend:main`
 > hanya dibangun oleh workflow *Deploy VPS*, dan itu baru ada di `main` setelah PR di-merge. Dari komputer
