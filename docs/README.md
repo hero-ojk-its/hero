@@ -36,6 +36,7 @@
 | **19** | **[MoM Weekly Update #4](19-mom-weekly-update-04.md)** | PM | Final | — |
 | **20** | **[MoM Weekly Update #5](20-mom-weekly-update-05.md)** | PM | Final | Link rekaman |
 | **21** | **[MoM Weekly Update #6](21-mom-weekly-update-06.md)** | PM | Final | Link rekaman |
+| **22** | **[MoM Weekly Update #7](22-mom-weekly-update-07.md)** | PM | Final | Link rekaman |
 
 ### Template Operasional
 
