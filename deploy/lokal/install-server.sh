@@ -116,7 +116,7 @@ rm -rf "$HERO_HOME/hero"
 cp -r "$SRC/pipeline/hero" "$HERO_HOME/hero"
 cp "$SRC/pipeline/pyproject.toml" "$HERO_HOME/pyproject.toml"
 chown -R "$HERO_USER:$HERO_USER" "$HERO_HOME/hero" "$HERO_HOME/pyproject.toml"
-( cd "$HERO_HOME" && sudo -u "$HERO_USER" -H "$HERO_HOME/.venv/bin/pip" install -q -e "${HERO_HOME}[api,vector]" )
+( cd "$HERO_HOME" && sudo -u "$HERO_USER" -H "$HERO_HOME/.venv/bin/pip" install -q -e "${HERO_HOME}[api,vector,pg]" )
 for f in sources.yaml kategori.yaml harmonisasi.yaml ground_truth.yaml eval_queries.yaml; do
   [ -f "$HERO_HOME/config/$f" ] || { [ -f "$SRC/pipeline/config/$f" ] && \
     install -m 644 -o "$HERO_USER" -g "$HERO_USER" "$SRC/pipeline/config/$f" "$HERO_HOME/config/$f"; }
