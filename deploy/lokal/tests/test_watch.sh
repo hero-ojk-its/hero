@@ -51,6 +51,10 @@ EOF
   cat >"$CI_DIR/deploy-backend.sh" <<'EOF'
 #!/usr/bin/env bash
 echo "deploy-backend $*" >>"$CALLS"
+if [ ! -t 0 ]; then
+  STDIN="$(cat)"
+  echo "deploy-backend stdin=$STDIN" >>"$CALLS"
+fi
 exit "${FAKE_DEPLOY_BE_FAIL:-0}"
 EOF
   cat >"$CI_DIR/deploy-pipeline.sh" <<'EOF'
@@ -102,6 +106,15 @@ bersih
 buat; export FAKE_DIGEST=""
 OUT="$(W backend)"; K=$?
 cek "digest kosong: tidak dianggap versi baru"    '[ $K -eq 0 ] && ! grep -q "deploy-backend " "$CALLS"'
+bersih
+
+buat; export FAKE_DIGEST="$D1"
+printf 'user-github:pat-rahasia\n' >"$TOKEN_FILE"; chmod 600 "$TOKEN_FILE"
+OUT="$(W backend)"; K=$?
+cek "TOKEN_FILE: tetap men-deploy (paket privat)"      '[ $K -eq 0 ] && grep -q "deploy-backend " "$CALLS"'
+cek "TOKEN_FILE: hanya bagian PAT diteruskan lewat stdin, bukan usernya" \
+  'grep -q "deploy-backend stdin=pat-rahasia" "$CALLS" && ! grep -q "stdin=user-github" "$CALLS"'
+cek "TOKEN_FILE: /token ditukar dengan Basic auth (-u)" 'grep -qE "curl .*-u user-github:pat-rahasia" "$CALLS"'
 bersih
 
 echo "pipeline (git)"

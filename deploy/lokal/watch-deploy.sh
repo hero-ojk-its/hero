@@ -40,22 +40,24 @@ mkdir -p "$STATE_DIR"
 
 # --------------------------------------------------------------- backend (GHCR)
 # Digest dibaca lewat HTTP API registri, bukan `docker pull`: memeriksa tiap beberapa
-# menit tidak boleh berarti mengunduh 750 MB tiap kali. Paket publik → tanpa kredensial;
-# bila paketnya privat, taruh PAT read:packages di $TOKEN_FILE (mode 600).
+# menit tidak boleh berarti mengunduh 750 MB tiap kali. Paket publik → token anonim.
+# Paket privat → isi $TOKEN_FILE (mode 600) dengan "username-github:PAT-read-packages"
+# (satu baris, titik dua di tengah); baris itu dipakai sebagai Basic auth saat MENUKAR
+# token di /token — bukan dikirim langsung ke endpoint manifest, karena registri v2
+# hanya menerima Bearer di sana.
 digest_jauh() {
-  local path="${IMAGE_REPO#ghcr.io/}" token hdr
+  local path="${IMAGE_REPO#ghcr.io/}" t
   if [ -r "$TOKEN_FILE" ]; then
-    token="$(printf '%s' "$(cat "$TOKEN_FILE")" | base64 | tr -d '\n')"
-    hdr="Authorization: Basic $token"
+    t="$(curl -fsS -m 20 -u "$(cat "$TOKEN_FILE")" \
+         "https://ghcr.io/token?scope=repository:${path}:pull&service=ghcr.io" \
+         | python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))' 2>/dev/null)" || t=""
   else
-    local t
     t="$(curl -fsS -m 20 "https://ghcr.io/token?scope=repository:${path}:pull&service=ghcr.io" \
          | python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))' 2>/dev/null)" || t=""
-    [ -n "$t" ] || return 1
-    hdr="Authorization: Bearer $t"
   fi
+  [ -n "$t" ] || return 1
   curl -fsS -m 25 -I \
-    -H "$hdr" \
+    -H "Authorization: Bearer $t" \
     -H 'Accept: application/vnd.oci.image.index.v1+json' \
     -H 'Accept: application/vnd.oci.image.manifest.v1+json' \
     -H 'Accept: application/vnd.docker.distribution.manifest.list.v2+json' \
@@ -65,7 +67,7 @@ digest_jauh() {
 }
 
 periksa_backend() {
-  local state="$STATE_DIR/backend-digest" jauh lokal
+  local state="$STATE_DIR/backend-digest" jauh lokal deploy_ok
   jauh="$(digest_jauh || true)"
   if [ -z "$jauh" ]; then
     log "backend: digest tidak terbaca dari registri — dilewati (jaringan? paket privat tanpa token?)"
@@ -79,8 +81,17 @@ periksa_backend() {
   log "backend: versi baru ${jauh:0:19}… (terpasang: ${lokal:0:19}${lokal:+…})"
   if [ "$LAPOR_SAJA" = 1 ]; then log "LAPOR_SAJA: tidak men-deploy"; return 0; fi
   # Dideploy menurut digest, bukan tag: tag `main` bisa bergeser di tengah deploy,
-  # dan digest menjamin yang diuji sama dengan yang dijalankan.
-  if "$CI_DIR/deploy-backend.sh" "${IMAGE_REPO}@${jauh}" </dev/null; then
+  # dan digest menjamin yang diuji sama dengan yang dijalankan. Bila paket privat
+  # (TOKEN_FILE terisi, "username:PAT"), bagian PAT-nya saja diteruskan lewat stdin —
+  # deploy-backend.sh membacanya di baris pertama dan login ke ghcr.io sebelum menarik.
+  if [ -r "$TOKEN_FILE" ]; then
+    deploy_ok=0
+    cut -d: -f2- "$TOKEN_FILE" | "$CI_DIR/deploy-backend.sh" "${IMAGE_REPO}@${jauh}" && deploy_ok=1 || deploy_ok=0
+  else
+    deploy_ok=0
+    "$CI_DIR/deploy-backend.sh" "${IMAGE_REPO}@${jauh}" </dev/null && deploy_ok=1 || deploy_ok=0
+  fi
+  if [ "$deploy_ok" = 1 ]; then
     printf '%s\n' "$jauh" >"$state"
     log "backend: deploy selesai"
   else
