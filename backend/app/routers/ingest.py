@@ -509,6 +509,8 @@ def get_job_detail(
 def list_failures(
     job_id: Optional[int] = None,
     failure_type: Optional[JenisKegagalan] = None,
+    reason_code: Optional[List[str]] = Query(None, description="Filter berdasarkan satu atau lebih reason_code"),
+    source_id: Optional[int] = Query(None, description="Filter berdasarkan sumber scraping"),
     follow_up_status: Optional[str] = Query("belum_ditangani", description="belum_ditangani | diproses_ulang | diabaikan | all"),
     include_duplicates: bool = Query(False, description="Tampilkan juga duplikat (default: false)"),
     skip: int = Query(0, ge=0),
@@ -524,6 +526,8 @@ def list_failures(
     total, items = svc.list_failures(
         job_id=job_id,
         failure_type=failure_type,
+        reason_codes=reason_code,
+        source_id=source_id,
         follow_up_status=follow_up_status,
         include_duplicates=include_duplicates,
         skip=skip,
