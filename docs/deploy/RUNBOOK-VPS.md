@@ -153,10 +153,16 @@ Contoh respons sehat (HTTP 200):
 - `protect_non_public`: `true` menandakan proteksi NDA aktif untuk dokumen non-publik.
 
 ### 5.3 Jalankan Smoke Test Jarak Jauh (Dari Laptop Developer)
-Gunakan skrip read-only Fase 2 untuk memastikan semua komponen berjalan tanpa mengubah data di server:
+Gunakan skrip smoke test Fase 2 untuk memvalidasi seluruh fungsionalitas backend (S01–S22):
 ```bash
-# Bila AUTH_ENABLED=false (default):
+# Pengujian standar (bila AUTH_ENABLED=false):
 python scripts/smoke_fase2.py --base-url https://api.hero-regulasi.id
+
+# Menonaktifkan pengujian harmonisasi per pasal (S22):
+python scripts/smoke_fase2.py --base-url https://api.hero-regulasi.id --tanpa-harmonisasi
+
+# Menentukan dokumen uji spesifik (doc_id untuk analisa dan draft_id untuk harmonisasi):
+python scripts/smoke_fase2.py --base-url https://api.hero-regulasi.id --doc-id 12 --draft-id 15
 
 # Bila AUTH_ENABLED=true (gunakan token JWT pengguna, misal peran Analis atau Admin Sistem):
 # PowerShell:
@@ -167,8 +173,82 @@ python scripts/smoke_fase2.py --base-url https://api.hero-regulasi.id
 HERO_SMOKE_TOKEN="<isi_token_jwt_anda>" python scripts/smoke_fase2.py --base-url https://api.hero-regulasi.id
 ```
 
-> **Arti S01 GAGAL (`VPS belum di-deploy versi terbaru: <rev VPS> ≠ <rev diharapkan>`):**
-> Kode atau migrasi skema database pada instance VPS target masih berada pada revisi Alembic lama, belum diperbarui ke revisi head git lokal. Lakukan `git pull` dan `alembic upgrade head` (atau jalankan restart container backend) pada VPS sebelum mengulangi uji smoke.
+#### Catatan Efek Samping dan Metode HTTP
+- **S22 (`POST /api/v1/ml/harmonisasi/{id}`)** adalah **satu-satunya** permintaan non-GET dalam smoke test. Permintaan ini hanya menghitung temuan harmonisasi per pasal draft terhadap korpus regulasi yang diizinkan, dengan efek samping berupa penyimpanan cache/riwayat eksekusi dan pencatatan audit log (`RUN_HARMONIZATION`) yang serupa dengan S06.
+- Pengecualian ini dapat dinonaktifkan sepenuhnya menggunakan flag `--tanpa-harmonisasi` (S22 akan otomatis berstatus `LEWATI "dinonaktifkan"` tanpa melakukan request POST apapun).
+- Selain S22, seluruh pengujian (S01–S21) sepenuhnya bersifat **hanya-baca (read-only)** menggunakan metode `HTTP GET`.
+
+#### Daftar Pengujian Smoke Test (S01–S22)
+| Kode | Endpoint / Cek | Keterangan & Tujuan |
+|---|---|---|
+| **S01** | `GET /health` | Memeriksa status service, DB, dan sinkronisasi revisi Alembic target. |
+| **S02** | `GET /api/v1/auth/me` | Memeriksa ketersediaan konfigurasi autentikasi pengguna. |
+| **S03** | `GET /api/v1/ml/health` | Memeriksa status kesiapan layanan ML gateway. |
+| **S04** | Pilih dokumen uji | Auto-detect dokumen publik aktif berstatus `terindeks` atau `perlu_koreksi`. |
+| **S05** | `GET /documents/{id}/versi` | Memeriksa struktur relasi versi dokumen (induk, diubah, dicabut). |
+| **S06** | `GET /ml/analisa/{id}` (panggilan 1) | Eksekusi analisa pertama (menguji respons ML atau fallback cache/riwayat). |
+| **S07** | `GET /ml/analisa/{id}` (panggilan 2) | Memeriksa mekanisme cache hit (`cache.hit=true`). |
+| **S08** | `GET /documents/{id}/analisa/banding` | Memeriksa ketersediaan analisa deterministik komparasi regulasi. |
+| **S09** | `GET /documents/{id}/analisa/riwayat` | Memeriksa pencatatan riwayat eksekusi analisa append-only. |
+| **S10** | `GET .../riwayat/{run_id}` | Memeriksa detail run analisa beserta parameter reproduksibilitas. |
+| **S11** | `GET .../ekspor?format=json` | Memvalidasi fungsi ekspor analisa dalam format JSON. |
+| **S12** | `GET .../ekspor?format=csv` | Memvalidasi file CSV ekspor analisa (UTF-8 with BOM). |
+| **S13** | `GET .../ekspor?format=docx` | Memvalidasi dokumen Word DOCX hasil ekspor analisa. |
+| **S14** | `GET /api/v1/audit-logs` | Memverifikasi pencatatan audit trail aksi `RUN_ANALYSIS`. |
+| **S15** | Penjaga non-publik | Memastikan dokumen `non_publik` dilindungi HTTP 403 saat auth nonaktif. |
+| **S16** | `GET /api/v1/dashboard/summary` | Memastikan enum status keberlakuan memuat `belum_berlaku` (Langkah 26). |
+| **S17** | `GET /api/v1/dashboard/corong` | Memvalidasi invarian corong scan dan dokumen per sumber (Langkah 27). |
+| **S18** | `GET /dashboard/corong?format=csv` | Memvalidasi ekspor CSV corong ber-BOM, baris `TOTAL`, dan `filename*=`. |
+| **S19** | `GET /ingest/failures (filter)` | Memvalidasi filter `reason_code=pdf_rusak&pdf_terenkripsi` (Langkah 26). |
+| **S20** | `GET /api/v1/categories/tree` | Memastikan tiap node memuat `jumlah_dokumen` & `classification_rule` (Langkah 28). |
+| **S21** | Kategori 'Tanpa Tahun' | Memeriksa akumulasi dokumen salah kamar pada folder "Tanpa Tahun". |
+| **S22** | Harmonisasi per pasal | Memvalidasi hasil `POST /ml/harmonisasi/{id}` dan keabsahan hyperlink dokumen pembanding. |
+
+#### Arti Peringatan (`PERINGATAN`) dan Perintah Tindak Lanjut
+1. **`PERINGATAN: cek analisa/riwayat/ekspor (S05–S13) tidak dijalankan karena tidak ada dokumen uji...`**
+   - **Penyebab**: Belum ada dokumen publik aktif terindeks di database.
+   - **Tindak Lanjut**: Unggah minimal satu dokumen melalui dashboard/API, atau jalankan dengan parameter `--doc-id N`.
+2. **`PERINGATAN: N dokumen di 'Tanpa Tahun' — jalankan scripts/relokasi_kategori.py (dry-run dulu).`**
+   - **Penyebab**: Terdapat dokumen yang terklasifikasi ke kategori "Tanpa Tahun" akibat penempatan historis sebelum perbaikan nomor/tahun.
+   - **Tindak Lanjut**:
+     ```bash
+     docker compose exec backend python scripts/relokasi_kategori.py          # dry-run
+     docker compose exec backend python scripts/relokasi_kategori.py --apply  # eksekusi relokasi
+     ```
+3. **`PERINGATAN: N hasil scan belum ditarik ke KB — Pak Faris meminta semua hasil scan masuk KB (Weekly #7).`**
+   - **Penyebab**: Terdapat kandidat regulasi hasil crawling yang masih berstatus `belum_ditarik`.
+   - **Tindak Lanjut**: Tarik kandidat dokumen scan ke Knowledge Base via antarmuka Frontend atau API `POST /api/v1/scan/{session_id}/pull`.
+4. **`PERINGATAN: N dokumen belum diperiksa proteksi PDF — jalankan scripts/backfill_pdf_info.py --apply.`**
+   - **Penyebab**: Dokumen lama belum memiliki atribut `pdf_terproteksi` (Langkah 27).
+   - **Tindak Lanjut**:
+     ```bash
+     docker compose exec backend python scripts/backfill_pdf_info.py --apply
+     ```
+
+#### Urutan Pasca-Deploy Fase 2
+Setelah kode baru dideploy ke server VPS, jalankan langkah pemeliharaan dan verifikasi berikut secara berurutan:
+1. **Cek Kesehatan Backend**:
+   Pastikan endpoint `/health` mengembalikan HTTP 200 dengan status `ok`, `migrations_up_to_date: true`, dan `alembic_revision` sama dengan revisi head (`c5d6e7f8a9b0`).
+2. **Backfill Proteksi PDF**:
+   Jalankan inspeksi proteksi PDF untuk dokumen yang belum diperiksa:
+   ```bash
+   docker compose exec backend python scripts/backfill_pdf_info.py --apply
+   ```
+3. **Relokasi Kategori Dokumen**:
+   Pindahkan dokumen yang salah kamar (mis. "Tanpa Tahun") ke kategori segmen yang sesuai:
+   ```bash
+   # Langkah a: periksa kandidat dokumen
+   docker compose exec backend python scripts/relokasi_kategori.py
+   # Langkah b: terapkan perubahan
+   docker compose exec backend python scripts/relokasi_kategori.py --apply
+   ```
+4. **Eksekusi Smoke Test Fase 2**:
+   Jalankan smoke test dari mesin pengembang dengan target **0 GAGAL**:
+   ```bash
+   python scripts/smoke_fase2.py --base-url https://api.hero-regulasi.id
+   ```
+5. **Tindak Lanjuti Peringatan**:
+   Periksa output setelah baris `RINGKASAN`, lalu jalankan tindak lanjut perbaikan jika ada baris `PERINGATAN` yang muncul.
 
 ### 5.4 Uji Fallback ML Mati (#83)
 Prosedur verifikasi ketahanan sistem ketika layanan ekstraksi/analisa ML tidak tersedia:
