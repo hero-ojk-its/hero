@@ -226,3 +226,4 @@ Urutan eksekusi saat deploy branch ini ke server Staging:
    `docker compose exec backend python scripts/backfill_pdf_info.py --apply`
 4. Lakukan restart service backend/worker agar menggunakan logika validasi dan ekstraksi terbaru:
    `docker compose restart backend worker`
+
