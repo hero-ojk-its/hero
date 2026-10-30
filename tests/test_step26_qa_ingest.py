@@ -2,7 +2,7 @@
 tests/test_step26_qa_ingest.py
 Pengujian Langkah 26: Validasi PDF rusak/terenkripsi, ekstraksi teks kosong, status belum_berlaku,
 judul placeholder, audit IP mask saat auth mati, dan recompute status.
-Kasus R01 s.d. R19.
+Kasus R01 s.d. R22.
 """
 from datetime import date, timedelta
 import io
@@ -16,10 +16,12 @@ from app.models.audit_log import AuditLog
 from app.models.document import Document
 from app.models.document_relation import DocumentRelation
 from app.models.enums import (
+    JenisJobIngest,
     JenisKegagalan,
     JenisRelasi,
     KlasifikasiAkses,
     PeranDokumen,
+    StatusJobIngest,
     StatusKeberlakuan,
     StatusPemrosesan,
     StatusTindakLanjut,
@@ -604,3 +606,272 @@ def test_r19_dashboard_summary_has_belum_berlaku(client: TestClient):
     assert "belum_berlaku" in by_sk
     assert isinstance(by_sk["belum_berlaku"], int)
     assert by_sk["belum_berlaku"] >= 0
+
+
+# ============================================================================
+# R20: Worker Error Berulang Menandai Dokumen Gagal
+# ============================================================================
+
+def test_r20_worker_error_repeated_keeps_status_gagal(client: TestClient, db_session: Session, test_storage):
+    """R20: Worker ocr_gagal, requeue, klaim (status diproses), worker ocr_gagal lagi
+    -> status gagal; tetap satu kegagalan terbuka; pesan memuat kedua laporan;
+       2 entri audit EXTRACTION_FAILED (yang kedua berulang=true).
+    """
+    pdf_bytes = make_pdf("Dokumen Awal R20")
+    rel_path = test_storage.save_pdf(pdf_bytes, filename_hint="test20.pdf", subdir="pdf/_inbox")
+
+    doc = Document(
+        title="Dokumen R20",
+        access_classification=KlasifikasiAkses.publik,
+        document_role=PeranDokumen.corpus_eksisting,
+        status_keberlakuan=StatusKeberlakuan.tidak_diketahui,
+        processing_status=StatusPemrosesan.diproses,
+        file_path_pdf=rel_path,
+        file_hash="hash20",
+        file_size_bytes=len(pdf_bytes),
+    )
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    # 1. Worker lapor ocr_gagal pertama
+    r1 = client.patch(
+        f"/api/v1/internal/documents/{doc.id}/extraction",
+        headers={"X-Internal-API-Key": settings.internal_api_key},
+        json={
+            "error": {
+                "code": "ocr_gagal",
+                "message": "Laporan pertama: OCR timeout",
+            }
+        },
+    )
+    assert r1.status_code == 200
+    res1 = r1.json()
+    assert res1["status"] == "gagal_dicatat"
+    failure_id_1 = res1["failure_id"]
+
+    db_session.refresh(doc)
+    assert doc.processing_status == StatusPemrosesan.gagal
+
+    # 2. Requeue dokumen ke diterima
+    r_req = client.post(
+        f"/api/v1/internal/extraction/requeue/{doc.id}",
+        headers={"X-Internal-API-Key": settings.internal_api_key},
+    )
+    assert r_req.status_code == 200
+    db_session.refresh(doc)
+    assert doc.processing_status == StatusPemrosesan.diterima
+
+    # 3. Worker klaim dokumen (status menjadi diproses)
+    r_claim = client.post(
+        "/api/v1/internal/extraction/claim?limit=10",
+        headers={"X-Internal-API-Key": settings.internal_api_key},
+    )
+    assert r_claim.status_code == 200
+    db_session.refresh(doc)
+    assert doc.processing_status == StatusPemrosesan.diproses
+
+    # 4. Worker lapor ocr_gagal lagi
+    r2 = client.patch(
+        f"/api/v1/internal/documents/{doc.id}/extraction",
+        headers={"X-Internal-API-Key": settings.internal_api_key},
+        json={
+            "error": {
+                "code": "ocr_gagal",
+                "message": "Laporan kedua: OCR model OOM",
+            }
+        },
+    )
+    assert r2.status_code == 200
+    res2 = r2.json()
+    assert res2["status"] == "gagal_dicatat"
+    assert res2["failure_id"] == failure_id_1
+
+    db_session.refresh(doc)
+    assert doc.processing_status == StatusPemrosesan.gagal
+
+    # Verifikasi IngestFailure: tetap satu kegagalan terbuka
+    open_failures = (
+        db_session.query(IngestFailure)
+        .filter(
+            IngestFailure.document_id == doc.id,
+            IngestFailure.follow_up_status == StatusTindakLanjut.belum_ditangani,
+        )
+        .all()
+    )
+    assert len(open_failures) == 1
+    assert open_failures[0].id == failure_id_1
+    assert "Laporan pertama: OCR timeout" in open_failures[0].message
+    assert "Laporan kedua: OCR model OOM" in open_failures[0].message
+
+    # Verifikasi jejak audit EXTRACTION_FAILED ada 2 entri
+    audits = (
+        db_session.query(AuditLog)
+        .filter(
+            AuditLog.target_resource == f"document:{doc.id}",
+            AuditLog.action == "EXTRACTION_FAILED",
+        )
+        .order_by(AuditLog.id.asc())
+        .all()
+    )
+    assert len(audits) == 2
+    assert audits[0].detail.get("failure_id") == failure_id_1
+    assert not audits[0].detail.get("berulang")
+    assert audits[1].detail.get("failure_id") == failure_id_1
+    assert audits[1].detail.get("berulang") is True
+
+
+# ============================================================================
+# R21: Kegagalan Terbuka penempatan_gagal Tetap Mempertahankan perlu_koreksi
+# ============================================================================
+
+def test_r21_existing_penempatan_gagal_preserves_perlu_koreksi(client: TestClient, db_session: Session, test_storage):
+    """R21: Ada kegagalan terbuka penempatan_gagal dan dokumen perlu_koreksi;
+    worker lalu melapor error -> status tetap perlu_koreksi (perilaku lama).
+    """
+    pdf_bytes = make_pdf("Dokumen Awal R21")
+    rel_path = test_storage.save_pdf(pdf_bytes, filename_hint="test21.pdf", subdir="pdf/_inbox")
+
+    doc = Document(
+        title="Dokumen R21",
+        access_classification=KlasifikasiAkses.publik,
+        document_role=PeranDokumen.corpus_eksisting,
+        status_keberlakuan=StatusKeberlakuan.tidak_diketahui,
+        processing_status=StatusPemrosesan.perlu_koreksi,
+        file_path_pdf=rel_path,
+        file_hash="hash21",
+        file_size_bytes=len(pdf_bytes),
+    )
+    db_session.add(doc)
+    db_session.flush()
+
+    job = JobIngest(
+        job_type=JenisJobIngest.unggah_manual,
+        status=StatusJobIngest.berjalan,
+    )
+    db_session.add(job)
+    db_session.flush()
+
+    fail = IngestFailure(
+        job_id=job.id,
+        original_filename="test21.pdf",
+        failure_type=JenisKegagalan.kesalahan_internal,
+        reason_code="penempatan_gagal",
+        message="Simulasi disk full saat penempatan",
+        is_retryable=True,
+        file_hash=doc.file_hash,
+        file_size_bytes=doc.file_size_bytes,
+        document_id=doc.id,
+        follow_up_status=StatusTindakLanjut.belum_ditangani,
+    )
+    db_session.add(fail)
+    db_session.commit()
+    db_session.refresh(doc)
+    db_session.refresh(fail)
+
+    # Worker melapor error ekstraksi dengan force=true
+    resp = client.patch(
+        f"/api/v1/internal/documents/{doc.id}/extraction?force=true",
+        headers={"X-Internal-API-Key": settings.internal_api_key},
+        json={
+            "error": {
+                "code": "ekstraksi_gagal",
+                "message": "Worker lapor ekstraksi gagal",
+            }
+        },
+    )
+    assert resp.status_code == 200
+    res = resp.json()
+    assert res["status"] == "gagal_dicatat"
+    assert res["failure_id"] == fail.id
+
+    db_session.refresh(doc)
+    assert doc.processing_status == StatusPemrosesan.perlu_koreksi
+
+    db_session.refresh(fail)
+    assert "Worker lapor ekstraksi gagal" in fail.message
+
+
+# ============================================================================
+# R22: Teks Kosong Berulang Menandai Dokumen Gagal
+# ============================================================================
+
+def test_r22_empty_text_repeated_keeps_status_gagal(client: TestClient, db_session: Session, test_storage):
+    """R22: Teks kosong, requeue, klaim, teks kosong lagi
+    -> status gagal; satu kegagalan terbuka.
+    """
+    pdf_bytes = make_pdf("Dokumen Awal R22")
+    rel_path = test_storage.save_pdf(pdf_bytes, filename_hint="test22.pdf", subdir="pdf/_inbox")
+
+    doc = Document(
+        title="Dokumen R22",
+        access_classification=KlasifikasiAkses.publik,
+        document_role=PeranDokumen.corpus_eksisting,
+        status_keberlakuan=StatusKeberlakuan.tidak_diketahui,
+        processing_status=StatusPemrosesan.diproses,
+        file_path_pdf=rel_path,
+        file_hash="hash22",
+        file_size_bytes=len(pdf_bytes),
+    )
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    # 1. Ekstraksi pertama: teks kosong
+    r1 = client.patch(
+        f"/api/v1/internal/documents/{doc.id}/extraction",
+        headers={"X-Internal-API-Key": settings.internal_api_key},
+        json={"full_text": "", "metode_ekstraksi": "teks_langsung"},
+    )
+    assert r1.status_code == 200
+    res1 = r1.json()
+    assert res1["status"] == "gagal_dicatat"
+    failure_id_1 = res1["failure_id"]
+
+    db_session.refresh(doc)
+    assert doc.processing_status == StatusPemrosesan.gagal
+
+    # 2. Requeue
+    r_req = client.post(
+        f"/api/v1/internal/extraction/requeue/{doc.id}",
+        headers={"X-Internal-API-Key": settings.internal_api_key},
+    )
+    assert r_req.status_code == 200
+    db_session.refresh(doc)
+    assert doc.processing_status == StatusPemrosesan.diterima
+
+    # 3. Klaim
+    r_claim = client.post(
+        "/api/v1/internal/extraction/claim?limit=10",
+        headers={"X-Internal-API-Key": settings.internal_api_key},
+    )
+    assert r_claim.status_code == 200
+    db_session.refresh(doc)
+    assert doc.processing_status == StatusPemrosesan.diproses
+
+    # 4. Ekstraksi kedua: teks kosong lagi
+    r2 = client.patch(
+        f"/api/v1/internal/documents/{doc.id}/extraction",
+        headers={"X-Internal-API-Key": settings.internal_api_key},
+        json={"full_text": "   ", "metode_ekstraksi": "teks_langsung"},
+    )
+    assert r2.status_code == 200
+    res2 = r2.json()
+    assert res2["status"] == "gagal_dicatat"
+    assert res2["failure_id"] == failure_id_1
+
+    db_session.refresh(doc)
+    assert doc.processing_status == StatusPemrosesan.gagal
+
+    # Verifikasi hanya ada 1 kegagalan terbuka
+    open_failures = (
+        db_session.query(IngestFailure)
+        .filter(
+            IngestFailure.document_id == doc.id,
+            IngestFailure.follow_up_status == StatusTindakLanjut.belum_ditangani,
+        )
+        .all()
+    )
+    assert len(open_failures) == 1
+    assert open_failures[0].id == failure_id_1
+

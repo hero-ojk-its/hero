@@ -479,8 +479,22 @@ def _handle_extraction_failure(
         if text_to_append and text_to_append not in old_msg:
             combined = f"{old_msg} | {text_to_append}" if old_msg else text_to_append
             existing_failure.message = combined[:1000]
-        if reason_code in ("teks_kosong", "teks_kosong_ocr"):
+        if existing_failure.reason_code not in ("penempatan_gagal", "simpan_ekstraksi_gagal"):
             doc.processing_status = StatusPemrosesan.gagal
+
+        record_audit(
+            db,
+            action=EXTRACTION_FAILED,
+            target_resource=f"document:{doc.id}",
+            detail={
+                "document_id": doc.id,
+                "reason_code": reason_code,
+                "error": {"code": reason_code, "message": message},
+                "failure_id": existing_failure.id,
+                "berulang": True,
+            },
+            commit=False,
+        )
         db.commit()
         return {
             "status": "gagal_dicatat",
