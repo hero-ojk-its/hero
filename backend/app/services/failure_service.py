@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from fastapi import HTTPException, status
 
+from app.config import settings
+
 from app.models.enums import (
     JenisKegagalan,
     StatusTindakLanjut,
@@ -66,6 +68,18 @@ REASON_CODE_MAP = {
         StatusTindakLanjut.belum_ditangani,
     ),
     "ukuran_melebihi_batas": (
+        JenisKegagalan.format_tidak_didukung,
+        False,
+        False,
+        StatusTindakLanjut.belum_ditangani,
+    ),
+    "pdf_rusak": (
+        JenisKegagalan.format_tidak_didukung,
+        False,
+        False,
+        StatusTindakLanjut.belum_ditangani,
+    ),
+    "pdf_terenkripsi": (
         JenisKegagalan.format_tidak_didukung,
         False,
         False,
@@ -145,7 +159,7 @@ class FailureService:
                 is_valid_pdf = False
                 try:
                     if item.content:
-                        validate_pdf(item.filename, item.content)
+                        validate_pdf(item.filename, item.content, settings.max_upload_bytes)
                         is_valid_pdf = True
                 except Exception:
                     is_valid_pdf = False
