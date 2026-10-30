@@ -709,6 +709,16 @@ def patch_document_metadata(
             after_dict[field] = new_val.isoformat() if isinstance(new_val, (date, datetime)) else (new_val.value if hasattr(new_val, "value") else new_val)
             setattr(doc, field, new_val)
 
+    # Tangani penanda kategori_manual
+    if "category_id" in fields_set:
+        if payload.category_id is not None:
+            doc.kategori_manual = True
+        else:
+            doc.kategori_manual = False
+            doc.category_id = None
+            if "category_id" not in changed_fields:
+                changed_fields.append("category_id")
+
     # Tangani field lampiran khusus
     if "is_attachment" in fields_set:
         new_is_att = bool(payload.is_attachment)
@@ -846,7 +856,7 @@ def patch_document_metadata(
             doc.processing_status = StatusPemrosesan.terindeks
 
     # Placement / Relokasi jika field penamaan/kategori berubah
-    placement_fields = {"title", "regulation_number", "regulation_type", "release_date", "category_id", "document_role", "bidang"}
+    placement_fields = {"title", "regulation_number", "regulation_type", "release_date", "regulation_year", "category_id", "document_role", "bidang"}
     placement_info = None
 
     if any(f in changed_fields for f in placement_fields) and is_suff:

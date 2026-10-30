@@ -343,6 +343,99 @@
             }
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "Categories"
+        ],
+        "summary": "Ubah Kategori (Nama, Induk, Aturan Klasifikasi)",
+        "description": "Memperbarui nama, induk (parent_id), dan/atau classification_rule kategori.\nJika nama atau parent_id berubah, seluruh berkas dokumen terkait dipindahkan.",
+        "operationId": "update_category_api_v1_categories__category_id__patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Category Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Categories"
+        ],
+        "summary": "Hapus Kategori",
+        "description": "Menghapus kategori kosong. Menolak jika masih memiliki subkategori atau dokumen.",
+        "operationId": "delete_category_api_v1_categories__category_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Category Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/ingest/upload-pdf": {
@@ -6309,6 +6402,17 @@
               }
             ],
             "title": "Parent Id"
+          },
+          "classification_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification Rule"
           }
         },
         "type": "object",
@@ -6353,6 +6457,21 @@
           "document_count": {
             "type": "integer",
             "title": "Document Count"
+          },
+          "jumlah_dokumen": {
+            "type": "integer",
+            "title": "Jumlah Dokumen"
+          },
+          "classification_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification Rule"
           }
         },
         "type": "object",
@@ -6361,9 +6480,49 @@
           "name",
           "auto_created",
           "path",
-          "document_count"
+          "document_count",
+          "jumlah_dokumen"
         ],
         "title": "CategoryDetailResponse"
+      },
+      "CategoryUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "classification_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification Rule"
+          }
+        },
+        "type": "object",
+        "title": "CategoryUpdateRequest"
       },
       "DocumentAnalysisComparisonResponse": {
         "properties": {
