@@ -642,3 +642,171 @@ def test_d14_unggah_ulang_pdf_byte_identik_duplicate(client: TestClient, db_sess
     assert body2["duplicate_count"] == 1
     assert body2["details"][0]["status"] == "duplicate"
     assert body2["details"][0]["duplicate_of_document_id"] == first_doc_id
+
+
+# ============================================================================
+# D15: Satu kandidat: teks berbeda total, panjang karakter rasio sekitar 0,7, ambang 80
+# Ekspektasi: terdekat.persen = Jaccard sebenarnya (< 20), bukan 70
+# ============================================================================
+def test_d15_terdekat_angka_kemiripan_sebenarnya_bukan_batas_atas(client: TestClient, db_session: Session):
+    # Target: teks perbankan 1000 karakter
+    teks_target = ("Ketentuan tata kelola kepatuhan bank syariah dan konvensional nasional. " * 15)[:1000]
+    doc_target = create_draft(
+        db_session,
+        title="Target D15",
+        full_text=teks_target,
+        file_path="kb/Draft Kajian/d15_target.pdf",
+    )
+
+    # Kandidat: teks resep masakan berbeda total, panjang 680 karakter (rasio 68% ~ 0,7)
+    # batas = min(1000, 680) / max(1000, 680) * 100 = 68.0%
+    # 68.0 < ambang (80) - margin (10) = 70.0 -> dilewati batas atas
+    # Karena tidak ada kandidat lain yang dihitung, fallback menghitung kemiripan kandidat ini.
+    teks_kandidat = ("Resep membuat rendang daging sapi padang bumbu rempah alami tradisional. " * 15)[:680]
+    cand = create_draft(
+        db_session,
+        title="Kandidat Beda Total D15",
+        full_text=teks_kandidat,
+        file_path="kb/Draft Kajian/d15_cand.pdf",
+    )
+
+    resp = client.get(f"/api/v1/documents/{doc_target.id}/kemiripan-draft?ambang=80")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    assert data["dibandingkan"] == 1
+    assert data["draft_mirip"] == []
+    assert data["terdekat"] is not None
+    assert data["terdekat"]["document_id"] == cand.id
+    # Kemiripan sebenarnya harus jauh lebih kecil dari 20 (bukan ~68 atau ~70)
+    assert data["terdekat"]["persen"] < 20.0
+    assert data["terdekat"]["persen"] != 68.0
+
+
+# ============================================================================
+# D16: Dua kandidat yang sama-sama dilewati batas atas
+# Ekspektasi: terdekat diisi hasil hitung penuh dari kandidat batas tertinggi;
+# fungsi Jaccard dipanggil tepat sekali (spy)
+# ============================================================================
+def test_d16_dua_kandidat_dilewati_hitung_penuh_tertinggi_tepat_sekali(client: TestClient, db_session: Session):
+    # Target: teks panjang 1000 karakter
+    teks_target = ("Kewajiban kepatuhan regulasi sektor jasa keuangan dan investasi pasar modal. " * 15)[:1000]
+    doc_target = create_draft(
+        db_session,
+        title="Target D16",
+        full_text=teks_target,
+        file_path="kb/Draft Kajian/d16_target.pdf",
+    )
+
+    # Kandidat 1: panjang 400 karakter (rasio 40.0% < 70)
+    create_draft(
+        db_session,
+        title="Kandidat Rasio 40 D16",
+        full_text=("Teks singkat resep masakan kuliner khas nusantara daerah pesisir. " * 10)[:400],
+        file_path="kb/Draft Kajian/d16_low.pdf",
+    )
+
+    # Kandidat 2: panjang 550 karakter (rasio 55.0% < 70, lebih tinggi dari kandidat 1)
+    cand_high = create_draft(
+        db_session,
+        title="Kandidat Rasio 55 D16",
+        full_text=("Panduan budidaya tanaman hias hidroponik pekarangan rumah tangga perkotaan. " * 10)[:550],
+        file_path="kb/Draft Kajian/d16_high.pdf",
+    )
+
+    from app.services import kemiripan_service
+
+    real_persen = kemiripan_service.persen_kemiripan
+    call_args_list = []
+
+    def spy_persen(a, b, k=5):
+        call_args_list.append((a, b))
+        return real_persen(a, b, k=k)
+
+    with patch("app.services.kemiripan_service.persen_kemiripan", side_effect=spy_persen):
+        resp = client.get(f"/api/v1/documents/{doc_target.id}/kemiripan-draft?ambang=80")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+
+    # Fungsi Jaccard dipanggil tepat satu kali (hanya untuk kandidat dengan batas tertinggi)
+    assert len(call_args_list) == 1
+    assert data["dibandingkan"] == 2
+    assert data["draft_mirip"] == []
+    assert data["terdekat"] is not None
+    assert data["terdekat"]["document_id"] == cand_high.id
+    assert data["terdekat"]["persen"] < 20.0
+
+
+# ============================================================================
+# D17: Kandidat isi identik + header/nomor halaman berulang sehingga rasio ~0,75, ambang 80
+# Ekspektasi: tidak dilewati; masuk draft_mirip dengan persen >= 80
+# ============================================================================
+def test_d17_margin_batas_atas_loloskan_kandidat_dengan_header_halaman(client: TestClient, db_session: Session):
+    # Dokumen target: teks hukum substansial ~3000 karakter
+    paragraf = [
+        f"Pasal {i} Ketentuan umum pelaksanaan tata kelola perbankan dan integritas sistem pembayaran digital terpadu."
+        for i in range(1, 26)
+    ]
+    teks_substantif = "\n\n".join(paragraf)
+    # Target murni tanpa header halaman
+    doc_target = create_draft(
+        db_session,
+        title="Target Substantif D17",
+        full_text=teks_substantif,
+        file_path="kb/Draft Kajian/d17_target.pdf",
+    )
+
+    # Kandidat: teks substantif yang sama persis, tetapi disisipi header berulang dan nomor halaman:
+    # "Halaman 1 dari 25\n- 1 -\nPage 1 of 25\n"
+    # sehingga panjang karakter bertambah sekitar 35% (rasio min/max ~ 0.74 - 0.75)
+    cand_paragraphs = []
+    for i, p in enumerate(paragraf, start=1):
+        cand_paragraphs.append(f"Halaman {i} dari 25\n- {i} -\nPage {i} of 25\n{p}")
+    teks_kandidat_dengan_header = "\n\n".join(cand_paragraphs)
+
+    cand = create_draft(
+        db_session,
+        title="Kandidat Dengan Header D17",
+        full_text=teks_kandidat_dengan_header,
+        file_path="kb/Draft Kajian/d17_cand.pdf",
+    )
+
+    # Rasio karakter sekitar 0.75 (antara 70% dan 78%)
+    rasio = min(len(teks_substantif), len(teks_kandidat_dengan_header)) / max(len(teks_substantif), len(teks_kandidat_dengan_header)) * 100
+    assert 70.0 <= rasio <= 78.0
+
+    resp = client.get(f"/api/v1/documents/{doc_target.id}/kemiripan-draft?ambang=80")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    assert data["dibandingkan"] == 1
+    # Karena ada margin 10 poin, rasio ~75% tidak dilewati (75 >= 80 - 10 = 70).
+    # Karena header & nomor halaman dibersihkan saat normalisasi, isi substantif identik -> persen >= 80
+    assert len(data["draft_mirip"]) == 1
+    assert data["draft_mirip"][0]["document_id"] == cand.id
+    assert data["draft_mirip"][0]["persen"] >= 80.0
+    assert data["terdekat"]["document_id"] == cand.id
+    assert data["terdekat"]["persen"] >= 80.0
+
+
+# ============================================================================
+# D18: Tanpa kandidat
+# Ekspektasi: terdekat = null
+# ============================================================================
+def test_d18_tanpa_kandidat_terdekat_null(client: TestClient, db_session: Session):
+    doc_target = create_draft(
+        db_session,
+        title="Target Sendirian D18",
+        full_text="Ketentuan hukum regulasi tunggal tanpa ada draft pembanding di database sistem.",
+        file_path="kb/Draft Kajian/d18_target.pdf",
+    )
+
+    resp = client.get(f"/api/v1/documents/{doc_target.id}/kemiripan-draft")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    assert data["dibandingkan"] == 0
+    assert data["draft_mirip"] == []
+    assert data["terdekat"] is None
+    assert data["per_pasal"] is None
+    assert data["catatan"] is None

@@ -16,9 +16,9 @@ from app.models.article import Article
 from app.models.document import Document
 from app.models.enums import KlasifikasiAkses, PeranDokumen
 
-# Pola baris nomor halaman yang berdiri sendiri (misal: "1", "- 1 -", "Halaman 12", "hal. 3", "Page 4")
+# Pola baris nomor halaman yang berdiri sendiri (misal: "1", "- 1 -", "Halaman 12", "Halaman 1 dari 25", "hal. 3", "Page 4")
 PAGE_NUM_PATTERN = re.compile(
-    r"^\s*(?:[-—_~*]+\s*)?(?:halaman|hal\.?|hlm\.?|page)?\s*\d+\s*(?:[-—_~*]+\s*)?$",
+    r"^\s*(?:[-—_~*\[\]()]+\s*)?(?:halaman|hal\.?|hlm\.?|page)?\s*\d+(?:\s*(?:dari|of)\s*\d+)?\s*(?:[-—_~*\[\]()]+\s*)?$",
     re.IGNORECASE,
 )
 
@@ -109,6 +109,12 @@ def batas_atas_cepat(len_a: int, len_b: int) -> float:
     if len_a <= 0 or len_b <= 0:
         return 0.0
     return (min(len_a, len_b) / max(len_a, len_b)) * 100.0
+
+
+# Margin batas atas cepat (10 poin persentase) untuk mengantisipasi perbedaan
+# panjang karakter mentah akibat elemen non-substantif (seperti nomor halaman,
+# header/footer berulang, dan spasi OCR) yang dibersihkan saat normalisasi teks.
+MARGIN_BATAS_ATAS: float = 10.0
 
 
 def banding_pasal(
@@ -258,18 +264,19 @@ def cari_kemiripan_draft(
     draft_mirip_list: list[dict] = []
     terdekat_cand: Optional[int] = None
     terdekat_persen: float = -1.0
+    dihitung_penuh_count: int = 0
+    kandidat_tertinggi_batas: Optional[tuple[float, int, Any]] = None
 
     for cand in candidates:
         cand_id = cand.id
         cand_len = cand.teks_len or 0
 
-        # Evaluasi batas atas cepat sebelum mengambil teks
+        # Evaluasi batas atas cepat sebelum mengambil teks.
+        # Lewati perhitungan penuh hanya bila batas < ambang - MARGIN_BATAS_ATAS.
         batas = batas_atas_cepat(doc_len, cand_len)
-        if batas < ambang:
-            # Lewati perhitungan penuh Jaccard untuk kandidat ini
-            if batas > terdekat_persen:
-                terdekat_persen = round(batas, 1)
-                terdekat_cand = cand_id
+        if batas < ambang - MARGIN_BATAS_ATAS:
+            if kandidat_tertinggi_batas is None or batas > kandidat_tertinggi_batas[0]:
+                kandidat_tertinggi_batas = (batas, cand_id, cand)
             continue
 
         # Ambil full_text kandidat dari DB untuk perhitungan penuh
@@ -279,6 +286,7 @@ def cari_kemiripan_draft(
         cand_text = cand_row[0]
 
         persen = persen_kemiripan(doc_text, cand_text)
+        dihitung_penuh_count += 1
 
         if persen > terdekat_persen:
             terdekat_persen = persen
@@ -299,6 +307,32 @@ def cari_kemiripan_draft(
                 "persen": persen,
                 "status": status_str,
             })
+
+    # Bila tidak ada satu pun kandidat yang dihitung penuh (semuanya dilewati),
+    # hitung penuh untuk satu kandidat dengan batas atas tertinggi sebagai 'terdekat'.
+    if dihitung_penuh_count == 0 and kandidat_tertinggi_batas is not None:
+        batas, best_cand_id, best_cand = kandidat_tertinggi_batas
+        cand_row = db.query(Document.full_text).filter(Document.id == best_cand_id).first()
+        if cand_row and cand_row[0]:
+            cand_text = cand_row[0]
+            persen = persen_kemiripan(doc_text, cand_text)
+            terdekat_persen = persen
+            terdekat_cand = best_cand_id
+            if persen >= ambang:
+                status_str = "identik" if persen >= 99.5 else "sangat_mirip"
+                created_val = best_cand.created_at
+                if isinstance(created_val, datetime):
+                    diunggah_str = created_val.isoformat()
+                else:
+                    diunggah_str = str(created_val) if created_val else None
+
+                draft_mirip_list.append({
+                    "document_id": best_cand_id,
+                    "judul": best_cand.title or "",
+                    "diunggah": diunggah_str,
+                    "persen": persen,
+                    "status": status_str,
+                })
 
     # Urutkan draft mirip menurun berdasarkan persen
     draft_mirip_list.sort(key=lambda x: x["persen"], reverse=True)
