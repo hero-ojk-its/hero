@@ -234,6 +234,12 @@ class Document(Base):
         nullable=True,
         comment="Jumlah halaman PDF"
     )
+    pdf_terproteksi = Column(
+        Boolean,
+        nullable=True,
+        index=True,
+        comment="PDF memiliki proteksi kata sandi pemilik / diproteksi",
+    )
     duplicate_of_id = Column(
         Integer,
         ForeignKey("documents.id", ondelete="SET NULL"),

@@ -712,7 +712,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "deactivated_at": null,
       "deactivated_reason": null,
       "identity_key": null,
-      "page_count": null,
+      "page_count": 1,
       "duplicate_of_id": null,
       "effective_date": null,
       "is_attachment": false,
@@ -789,7 +789,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "deactivated_at": null,
       "deactivated_reason": null,
       "identity_key": null,
-      "page_count": null,
+      "page_count": 1,
       "duplicate_of_id": null,
       "effective_date": null,
       "is_attachment": false,
@@ -897,7 +897,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
   "deactivated_at": null,
   "deactivated_reason": null,
   "identity_key": null,
-  "page_count": null,
+  "page_count": 1,
   "duplicate_of_id": null,
   "articles": [
     {
@@ -1279,7 +1279,7 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
   "deactivated_at": null,
   "deactivated_reason": null,
   "identity_key": null,
-  "page_count": null,
+  "page_count": 1,
   "duplicate_of_id": null,
   "articles": [
     {
@@ -1324,7 +1324,7 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
 
 ### 9.2 Daftar Antrean Gagal (Ingest Failures)
 - **Method & Path:** `GET /api/v1/ingest/failures`
-- **Query Params:** `job_id`, `failure_type`, `follow_up_status` (`belum_ditangani`, `diproses_ulang`, `diabaikan`, `all`), `include_duplicates` (`false`), `skip` (`0`), `limit` (`50`).
+- **Query Params:** `job_id`, `failure_type`, `reason_code` (opsional, dapat diulang, misal `?reason_code=teks_kosong&reason_code=teks_kosong_ocr`), `source_id` (opsional, filter sumber scraping via job atau scan candidate), `follow_up_status` (`belum_ditangani`, `diproses_ulang`, `diabaikan`, `all`), `include_duplicates` (`false`), `skip` (`0`), `limit` (`50`).
 - **Daftar Kode Alasan Kegagalan (`reason_code`):**
   - `format_tidak_didukung`: Berkas bukan format PDF yang valid.
   - `pdf_rusak`: Berkas PDF rusak, corrupt, stream terputus, atau tidak memiliki halaman valid (`FileRejectCode.pdf_rusak`).
@@ -1638,6 +1638,66 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
 }
 ```
 <!-- /AUTO:dashboard_summary_response -->
+
+### 10.2 Statistik Corong (`/api/v1/dashboard/corong`)
+- **Method & Path:** `GET /api/v1/dashboard/corong`
+- **Izin:** `KB_BACA` (perlu otentikasi)
+- **Query Params:**
+  - `source_id` (opsional, integer): ID sumber spesifik. Bila diisi, hanya sumber tersebut yang muncul di `sumber[]`.
+  - `format` (opsional, string, default `json`): `json` atau `csv`.
+
+#### A. Definisi Tiap Metrik Corong
+1. **`scan` per sumber:** kandidat dari seluruh sesi scan milik sumber tersebut, unik per `url_hash` (menggunakan baris terbaru per `url_hash`):
+   - `ditemukan`: jumlah unik kandidat.
+   - `sudah_ada_di_kb`: `match_status = sudah_ada` dan tidak ditarik.
+   - `ditarik`: `pull_outcome ∈ {success, downloaded, berhasil, diunduh}` dan `document_id` terisi.
+   - `duplikat`: `pull_outcome ∈ {duplicate, duplikat}`.
+   - `gagal_unduh`: `pull_outcome ∈ {failed, gagal}`.
+   - `belum_ditarik`: sisa kandidat yang belum ditarik.
+   - **Invarian:** `ditemukan = sudah_ada_di_kb + ditarik + duplikat + gagal_unduh + belum_ditarik`.
+2. **`dokumen` per sumber:** dokumen **aktif** (`is_active = true`) yang berasal dari sumber tersebut (`documents.job_id → ingest_jobs.source_id`, atau `id` muncul sebagai `document_id`/`match_document_id` pada kandidat scan sumber itu). Dihitung unik per dokumen:
+   - `tersimpan_di_kb`: path `file_path_pdf` berawalan `kb/`.
+   - `menunggu_ekstraksi`: `processing_status` bernilai `diterima` atau `diproses`.
+   - `terbaca`: `processing_status` bernilai `terindeks` atau `perlu_koreksi`, dirinci menurut metode ekstraksi (`terbaca_teks_langsung` vs `terbaca_ocr`; metode kosong dihitung teks langsung). `perlu_koreksi` adalah bagian dari `terbaca`.
+   - `gagal_baca`: `processing_status` bernilai `gagal`.
+   - `lainnya`: status lain (misalnya `ditolak`).
+   - **Invarian:** `di_kb = menunggu_ekstraksi + terbaca + gagal_baca + lainnya`.
+   - `terpecah_pasal`: memiliki ≥ 1 baris di tabel `articles`.
+   - `tervektor`: memiliki ≥ 1 baris `articles` dengan `embedding IS NOT NULL`.
+3. **`pdf`:**
+   - `terproteksi`: `pdf_terproteksi = true` (PDF dilindungi proteksi kata sandi pemilik / copy-protected).
+   - `terproteksi_terbaca`: bagian dokumen terproteksi yang berhasil `terbaca`.
+   - `hasil_pindai_ocr`: sama dengan `terbaca_ocr`.
+   - `ocr_gagal`: kegagalan dengan `reason_code` bernilai `teks_kosong_ocr` atau `ocr_gagal`.
+   - `belum_diperiksa`: `pdf_terproteksi IS NULL` (dokumen warisan sebelum langkah ini dijalankan).
+4. **`gagal_per_alasan`:** jumlah `ingest_failures` yang terkait dengan sumber (lewat `job.source_id` atau `scan_candidates.failure_id`), `follow_up_status ≠ diabaikan`, dikelompokkan per `reason_code`. Duplikat tidak dihitung di sini (sudah masuk di `scan.duplikat`).
+5. **`unggah_manual`:** dokumen dan kegagalan yang job-nya **tanpa** `source_id`, tanpa blok `scan`.
+6. **`persen_terbaca`:** `terbaca / di_kb × 100`, dibulatkan 1 desimal; bernilai `0.0` jika `di_kb = 0`.
+7. **`total`:** penjumlahan seluruh sumber ditambah unggah manual. Dokumen yang terkait ke dua sumber **hanya dihitung sekali** di `total.dokumen` (dihitung ulang secara unik di basis data, bukan sekadar dijumlahkan).
+
+#### B. Contoh Pemanggilan (cURL)
+```bash
+# 1. Mengambil statistik corong lengkap dalam format JSON
+curl -s -H "Authorization: Bearer <token>" \
+  http://localhost:8000/api/v1/dashboard/corong
+
+# 2. Filter satu sumber tertentu
+curl -s -H "Authorization: Bearer <token>" \
+  "http://localhost:8000/api/v1/dashboard/corong?source_id=1"
+
+# 3. Ekspor format CSV dengan BOM UTF-8
+curl -s -O -J -H "Authorization: Bearer <token>" \
+  "http://localhost:8000/api/v1/dashboard/corong?format=csv"
+```
+
+#### C. Drill-Down ke Antrean Kegagalan
+Untuk memeriksa dan menindaklanjuti dokumen yang gagal pada corong tertentu, frontend dapat langsung memfilter antrean kegagalan:
+```bash
+# Contoh: melihat dokumen yang gagal OCR pada sumber ID 1
+curl -s -H "Authorization: Bearer <token>" \
+  "http://localhost:8000/api/v1/ingest/failures?reason_code=teks_kosong_ocr&reason_code=ocr_gagal&source_id=1"
+```
+Setiap entri yang memiliki `document_id` dapat dibuka berkas PDF aslinya melalui `GET /api/v1/documents/{document_id}/pdf`.
 
 ---
 

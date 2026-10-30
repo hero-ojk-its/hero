@@ -34,6 +34,12 @@ class FileFingerprint:
     size_bytes: int
 
 
+@dataclass(frozen=True)
+class PdfInfo:
+    terproteksi: bool
+    jumlah_halaman: int
+
+
 def sanitize_filename(name: str, max_len: int = 150) -> str:
     """
     Sanitasi nama berkas:
@@ -82,13 +88,19 @@ def sanitize_filename(name: str, max_len: int = 150) -> str:
     return collapsed
 
 
-def validate_pdf(filename: str, content: bytes, max_bytes: int) -> None:
+def validate_pdf(filename: str, content: bytes, max_bytes: int) -> PdfInfo:
     """
     Validasi berkas PDF sesuai aturan tetap:
     1. Ekstensi case-insensitive harus .pdf
     2. len(content) == 0 -> berkas_kosong
     3. len(content) > max_bytes -> ukuran_melebihi_batas
     4. b'%PDF-' harus muncul dalam 1024 byte pertama -> format_tidak_didukung
+    5. Buka dengan PdfReader:
+       - enkripsi dengan user password -> pdf_terenkripsi
+       - enkripsi dengan owner password (tanpa user pass) -> diterima, terproteksi=True
+       - gagal buka -> pdf_rusak
+       - tanpa halaman -> pdf_rusak
+    Mengembalikan PdfInfo(terproteksi, jumlah_halaman).
     """
     ext = Path(filename).suffix if filename else ""
     if not ext or ext.lower() != ".pdf":
@@ -121,6 +133,7 @@ def validate_pdf(filename: str, content: bytes, max_bytes: int) -> None:
     # 5. Buka dengan PdfReader untuk memeriksa keutuhan PDF dan proteksi kata sandi
     try:
         reader = PdfReader(io.BytesIO(content), strict=False)
+        terproteksi = False
         if reader.is_encrypted:
             try:
                 decrypted = reader.decrypt("")
@@ -131,11 +144,14 @@ def validate_pdf(filename: str, content: bytes, max_bytes: int) -> None:
                     code=FileRejectCode.pdf_terenkripsi,
                     message="PDF terenkripsi (butuh kata sandi untuk dibuka).",
                 )
-        if len(reader.pages) == 0:
+            terproteksi = True
+        pages_count = len(reader.pages)
+        if pages_count == 0:
             raise FileValidationError(
                 code=FileRejectCode.pdf_rusak,
                 message="PDF tidak memiliki halaman",
             )
+        return PdfInfo(terproteksi=terproteksi, jumlah_halaman=pages_count)
     except FileValidationError:
         raise
     except Exception as exc:
