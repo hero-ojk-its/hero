@@ -295,14 +295,14 @@ def test_q06_non_public_document_auth_disabled(
 def test_q07_script_is_strictly_read_only(
     client: TestClient, db_session: Session, test_storage: StorageService
 ):
-    """Q07: Skrip hanya membaca -> Semua panggilan HTTP dari run_checks adalah metode GET."""
+    """Q07: Skrip hanya membaca -> Semua panggilan HTTP dari run_checks adalah metode GET kecuali pengecualian POST /ml/harmonisasi (S22)."""
     doc = _seed_smoke_doc(db_session, test_storage, title="Doc Q07 ReadOnly", reg_num="07/RO/2026")
     handler = _create_ml_success_handler()
     app.dependency_overrides[get_ml_client] = lambda: httpx.AsyncClient(
         transport=httpx.MockTransport(handler)
     )
 
-    observed_methods: List[str] = []
+    observed_calls: List[tuple[str, str]] = []
 
     original_get = client.get
     original_post = client.post
@@ -311,23 +311,23 @@ def test_q07_script_is_strictly_read_only(
     original_delete = client.delete
 
     def tracking_get(url, *args, **kwargs):
-        observed_methods.append("GET")
+        observed_calls.append(("GET", str(url)))
         return original_get(url, *args, **kwargs)
 
     def tracking_post(url, *args, **kwargs):
-        observed_methods.append("POST")
+        observed_calls.append(("POST", str(url)))
         return original_post(url, *args, **kwargs)
 
     def tracking_put(url, *args, **kwargs):
-        observed_methods.append("PUT")
+        observed_calls.append(("PUT", str(url)))
         return original_put(url, *args, **kwargs)
 
     def tracking_patch(url, *args, **kwargs):
-        observed_methods.append("PATCH")
+        observed_calls.append(("PATCH", str(url)))
         return original_patch(url, *args, **kwargs)
 
     def tracking_delete(url, *args, **kwargs):
-        observed_methods.append("DELETE")
+        observed_calls.append(("DELETE", str(url)))
         return original_delete(url, *args, **kwargs)
 
     client.get = tracking_get
@@ -345,12 +345,15 @@ def test_q07_script_is_strictly_read_only(
         client.patch = original_patch
         client.delete = original_delete
 
-    assert len(observed_methods) > 0
-    assert all(m == "GET" for m in observed_methods)
-    assert "POST" not in observed_methods
-    assert "PUT" not in observed_methods
-    assert "PATCH" not in observed_methods
-    assert "DELETE" not in observed_methods
+    assert len(observed_calls) > 0
+    for method, url in observed_calls:
+        if method == "POST":
+            assert "/ml/harmonisasi/" in url, f"POST tidak diizinkan ke {url}"
+        else:
+            assert method == "GET", f"Metode tidak diizinkan: {method} ke {url}"
+    assert "PUT" not in [m for m, _ in observed_calls]
+    assert "PATCH" not in [m for m, _ in observed_calls]
+    assert "DELETE" not in [m for m, _ in observed_calls]
 
 
 # ==============================================================================
