@@ -4,17 +4,21 @@ Layanan validasi format berkas PDF, sanitasi nama berkas, dan penghitungan finge
 """
 import enum
 import hashlib
+import io
 import os
 import re
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
+from pypdf import PdfReader
 
 
 class FileRejectCode(str, enum.Enum):
     format_tidak_didukung = "format_tidak_didukung"  # ekstensi bukan .pdf ATAU header bukan %PDF-
     berkas_kosong = "berkas_kosong"
     ukuran_melebihi_batas = "ukuran_melebihi_batas"
+    pdf_rusak = "pdf_rusak"
+    pdf_terenkripsi = "pdf_terenkripsi"
 
 
 class FileValidationError(Exception):
@@ -112,6 +116,34 @@ def validate_pdf(filename: str, content: bytes, max_bytes: int) -> None:
         raise FileValidationError(
             code=FileRejectCode.format_tidak_didukung,
             message="Isi berkas bukan PDF yang valid meskipun berekstensi .pdf.",
+        )
+
+    # 5. Buka dengan PdfReader untuk memeriksa keutuhan PDF dan proteksi kata sandi
+    try:
+        reader = PdfReader(io.BytesIO(content), strict=False)
+        if reader.is_encrypted:
+            try:
+                decrypted = reader.decrypt("")
+            except Exception:
+                decrypted = 0
+            if not decrypted:
+                raise FileValidationError(
+                    code=FileRejectCode.pdf_terenkripsi,
+                    message="PDF terenkripsi (butuh kata sandi untuk dibuka).",
+                )
+        if len(reader.pages) == 0:
+            raise FileValidationError(
+                code=FileRejectCode.pdf_rusak,
+                message="PDF tidak memiliki halaman",
+            )
+    except FileValidationError:
+        raise
+    except Exception as exc:
+        err_detail = str(exc).strip()
+        err_msg = f"PDF rusak atau tidak bisa dibuka: {err_detail[:160]}"[:200]
+        raise FileValidationError(
+            code=FileRejectCode.pdf_rusak,
+            message=err_msg,
         )
 
 

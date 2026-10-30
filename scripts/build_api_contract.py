@@ -230,6 +230,7 @@ def generate_enum_tables() -> str:
                 StatusKeberlakuan.diubah: ("Diubah", "Sebagian ketentuan peraturan telah diubah."),
                 StatusKeberlakuan.dicabut: ("Dicabut", "Peraturan telah dicabut seluruhnya oleh regulasi baru."),
                 StatusKeberlakuan.tidak_diketahui: ("Tidak Diketahui", "Status keberlakuan belum dapat dipastikan."),
+                StatusKeberlakuan.belum_berlaku: ("Belum Berlaku", "Peraturan telah disahkan tetapi tanggal berlakunya belum tiba."),
             }
         },
         JenisKegagalan: {

@@ -41,6 +41,9 @@
 15. [Layanan Internal Lapisan Data](#15-layanan-internal-lapisan-data)
    - [15.1 Sinkronisasi Relasi Antar Regulasi](#151-sinkronisasi-relasi-antar-regulasi)
    - [15.2 Menandai Cache Analisa Usang](#152-menandai-cache-analisa-usang)
+   - [15.3 Komputasi Ulang Status Keberlakuan Regulasi](#153-komputasi-ulang-status-keberlakuan-regulasi)
+16. [Peran & Hak Akses (US-01)](#16-peran--hak-akses-us-01)
+   - [16.5 Jejak Audit Aktivitas (GET /api/v1/audit-logs/)](#165-jejak-audit-aktivitas-get-apiv1audit-logs)
 
 ---
 
@@ -1007,7 +1010,11 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
 
 #### A. Tanggal Mulai Berlaku (`effective_date`)
 - **Format:** `YYYY-MM-DD` (ISO Date) atau `null`.
-- **Aturan Status Otomatis (Aturan 5a):** Jika suatu dokumen tidak memiliki relasi pencabutan/pengubahan aktif, berstatus sumber `relasi`, `tanggal_berlaku`, atau belum ditentukan (`null`), dan `effective_date <= hari ini`, maka sistem secara otomatis menetapkan `status_keberlakuan = "berlaku"` dengan `status_source = "tanggal_berlaku"`.
+- **Aturan Status Otomatis (Aturan 5a):**
+  - Jika suatu dokumen tidak memiliki relasi pencabutan/pengubahan aktif, berstatus sumber `relasi`, `tanggal_berlaku`, atau belum ditentukan (`null`):
+    - Bila `effective_date > hari ini` (tanggal berlaku di masa depan): sistem menetapkan `status_keberlakuan = "belum_berlaku"` dengan `status_source = "tanggal_berlaku"` dan `rule = "belum_berlaku"`.
+    - Bila `effective_date <= hari ini`: sistem menetapkan `status_keberlakuan = "berlaku"` dengan `status_source = "tanggal_berlaku"`.
+  - Jika terdapat relasi masuk yang cocok (misalnya dicabut atau diubah oleh regulasi lain), aturan relasi tetap diutamakan (menang atas tanggal berlaku).
 - Dokumen dengan status manual (`status_source = "manual"`) atau berasal dari lapisan data (`status_source = "lapisan_data"`) tidak akan ditimpa oleh aturan ini.
 - `recompute_status` dieksekusi secara otomatis saat `effective_date` diperbarui lewat PATCH extraction worker maupun koreksi metadata pengguna.
 
@@ -1318,6 +1325,14 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
 ### 9.2 Daftar Antrean Gagal (Ingest Failures)
 - **Method & Path:** `GET /api/v1/ingest/failures`
 - **Query Params:** `job_id`, `failure_type`, `follow_up_status` (`belum_ditangani`, `diproses_ulang`, `diabaikan`, `all`), `include_duplicates` (`false`), `skip` (`0`), `limit` (`50`).
+- **Daftar Kode Alasan Kegagalan (`reason_code`):**
+  - `format_tidak_didukung`: Berkas bukan format PDF yang valid.
+  - `pdf_rusak`: Berkas PDF rusak, corrupt, stream terputus, atau tidak memiliki halaman valid (`FileRejectCode.pdf_rusak`).
+  - `pdf_terenkripsi`: Berkas PDF dilindungi kata sandi pengguna / user password (`FileRejectCode.pdf_terenkripsi`).
+  - `teks_kosong`: Ekstraksi teks reguler menghasilkan teks kosong atau hanya spasi (perlu tinjauan manual atau proses ulang OCR).
+  - `teks_kosong_ocr`: Ekstraksi OCR tidak menghasilkan teks (kemungkinan hasil pindai buram).
+  - `ocr_timeout`: Batas waktu eksekusi worker OCR terlampaui.
+  - `duplikat`: Berkas terdeteksi identik/duplikat dengan dokumen yang telah ada.
 - **Respons (200 OK):**
 <!-- AUTO:failures_list_response -->
 ```json
@@ -1505,7 +1520,8 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
       "berlaku": 0,
       "diubah": 0,
       "dicabut": 0,
-      "tidak_diketahui": 2
+      "tidak_diketahui": 2,
+      "belum_berlaku": 0
     },
     "by_processing_status": {
       "diterima": 1,
@@ -1805,6 +1821,7 @@ Field respons/parameter: `status_keberlakuan`
 | `diubah` | **Diubah** | Sebagian ketentuan peraturan telah diubah. |
 | `dicabut` | **Dicabut** | Peraturan telah dicabut seluruhnya oleh regulasi baru. |
 | `tidak_diketahui` | **Tidak Diketahui** | Status keberlakuan belum dapat dipastikan. |
+| `belum_berlaku` | **Belum Berlaku** | Peraturan telah disahkan tetapi tanggal berlakunya belum tiba. |
 
 
 ### 11.10 Kategori Kegagalan Ingest (`JenisKegagalan`)
@@ -1979,6 +1996,29 @@ curl -X POST "http://localhost:8000/api/v1/internal/analysis-cache/invalidate" \
   - `versi_mesin`: Versi mesin analisa target yang dikirimkan pada permintaan.
   - `kind`: Kategori jenis analisa yang difilter, atau `null` jika mencakup semua jenis.
 
+### 15.3 Komputasi Ulang Status Keberlakuan Regulasi
+
+Endpoint ini digunakan oleh lapisan data/infra untuk melakukan evaluasi ulang status keberlakuan dokumen secara massal (misal melalui timer/cron harian) ketika tanggal berlaku suatu regulasi telah tiba.
+
+- **Method & Path:** `POST /api/v1/internal/documents/status/recompute`
+- **Header Keamanan:** `X-Internal-API-Key: <kunci>` (Wajib). Mengembalikan `401 Unauthorized` jika kunci salah atau tidak disertakan.
+- **Tujuan & Perilaku:**
+  - Memeriksa seluruh dokumen Knowledge Base yang memiliki `effective_date IS NOT NULL` dan `status_source` bernilai `tanggal_berlaku` atau `None`.
+  - Menjalankan fungsi `recompute_status()` untuk mengevaluasi status: dokumen yang tanggal berlakunya telah tiba (`effective_date <= hari ini`) otomatis beralih dari `belum_berlaku` menjadi `berlaku`.
+  - Menghasilkan satu entri jejak audit `STATUS_RECOMPUTED` yang memuat jumlah dokumen diperiksa dan diubah.
+- **Contoh Permintaan (`curl`):**
+```bash
+curl -X POST "http://localhost:8000/api/v1/internal/documents/status/recompute" \
+  -H "X-Internal-API-Key: <kunci>"
+```
+- **Respons (200 OK):**
+```json
+{
+  "diperiksa": 120,
+  "berubah": 2
+}
+```
+
 ---
 
 ## 16. PERAN & HAK AKSES (US-01)
@@ -2142,5 +2182,12 @@ Seluruh endpoint di bawah prefix `/api/v1/users` dilindungi oleh izin `PENGGUNA_
 - **Aturan Proteksi Integritas:**
   1. **409 `admin_terakhir`:** Ditolak bila perubahan akan menyebabkan tidak ada lagi Admin Sistem aktif di sistem.
   2. **409 `ubah_diri_sendiri`:** Admin Sistem dilarang menonaktifkan atau menurunkan peran akun miliknya sendiri demi mencegah penguncian akses tak terpulihkan.
+
+### 16.5 Jejak Audit Aktivitas (`GET /api/v1/audit-logs/`)
+
+- **Method & Path:** `GET /api/v1/audit-logs/`
+- **Proteksi Akses:** Endpoint ini hanya dilindungi oleh izin `AUDIT_BACA` (khusus Admin Sistem) saat konfigurasi `AUTH_ENABLED=true`. Bila `AUTH_ENABLED=false` (mode pengujian dan staging), endpoint dapat diakses secara terbuka tanpa autentikasi.
+- **Penyembunyian IP saat Autentikasi Nonaktif:** Selama `AUTH_ENABLED=false`, seluruh entri respons mengembalikan `ip_address: null` demi privasi pada akses terbuka, tanpa mengubah data asli alamat IP yang tersimpan di basis data. Saat `AUTH_ENABLED=true`, nilai alamat IP asli yang tersimpan di database dikembalikan pada setiap entri riwayat audit.
+
 
 

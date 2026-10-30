@@ -347,6 +347,7 @@ def test_n12_extraction_bidang_and_ignored_fields(client: TestClient, db_session
     payload_extract = {
         "title": "Regulasi Pasar Modal",
         "sektor": "Pasar Modal",
+        "full_text": "Teks lengkap regulasi pasar modal.",
     }
     resp_ext = client.patch(
         f"/api/v1/internal/documents/{doc_id}/extraction?force=true",
@@ -366,7 +367,7 @@ def test_n12_extraction_bidang_and_ignored_fields(client: TestClient, db_session
     # 3. Extraction kirim lagi sektor -> IKNB -> harus diabaikan dan masuk ignored_fields
     resp_ext2 = client.patch(
         f"/api/v1/internal/documents/{doc_id}/extraction?force=true",
-        json={"title": "Regulasi Baru", "sektor": "IKNB"},
+        json={"title": "Regulasi Baru", "sektor": "IKNB", "full_text": "Teks lengkap regulasi baru."},
         headers={"X-Internal-API-Key": settings.internal_api_key},
     )
     assert resp_ext2.status_code == 200
