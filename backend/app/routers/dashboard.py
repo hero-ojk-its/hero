@@ -4,8 +4,8 @@ Endpoint ringkasan statistik Knowledge Base dan pipeline ingest (Langkah 5).
 Menggunakan query agregat SQL yang dioptimalkan tanpa N+1.
 """
 from datetime import datetime, timezone
-from typing import Dict, Any
-from fastapi import APIRouter, Depends
+from typing import Dict, Any, Optional
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import func, case, desc, or_, and_
 from sqlalchemy.orm import Session
 
@@ -232,3 +232,24 @@ def get_dashboard_summary(
         },
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@router.get("/corong", summary="Statistik corong per sumber (scan -> unduh -> simpan -> terbaca)")
+def get_dashboard_corong(
+    source_id: Optional[int] = Query(None, description="Filter untuk satu sumber spesifik"),
+    format: str = Query("json", description="Format output: json | csv"),
+    db: Session = Depends(get_db),
+    _user=Depends(perlu_izin(Izin.KB_BACA)),
+):
+    """
+    [Langkah 27] Endpoint statistik corong per sumber: scan -> unduh -> simpan -> terbaca,
+    dengan penanda PDF terproteksi, OCR vs teks langsung, dan drill-down kegagalan.
+    Mendukung format JSON dan CSV (UTF-8 with BOM).
+    """
+    from app.services.corong_service import get_corong_data, generate_corong_csv
+
+    data = get_corong_data(db, source_id=source_id)
+    if format.lower() == "csv":
+        csv_bytes, headers = generate_corong_csv(data)
+        return Response(content=csv_bytes, media_type="text/csv; charset=utf-8", headers=headers)
+    return data

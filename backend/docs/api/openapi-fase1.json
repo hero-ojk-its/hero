@@ -592,6 +592,45 @@
             }
           },
           {
+            "name": "reason_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter berdasarkan satu atau lebih reason_code",
+              "title": "Reason Code"
+            },
+            "description": "Filter berdasarkan satu atau lebih reason_code"
+          },
+          {
+            "name": "source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter berdasarkan sumber scraping",
+              "title": "Source Id"
+            },
+            "description": "Filter berdasarkan sumber scraping"
+          },
+          {
             "name": "follow_up_status",
             "in": "query",
             "required": false,
@@ -3519,6 +3558,73 @@
             "OAuth2PasswordBearer": []
           }
         ]
+      }
+    },
+    "/api/v1/dashboard/corong": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "summary": "Statistik corong per sumber (scan -> unduh -> simpan -> terbaca)",
+        "description": "[Langkah 27] Endpoint statistik corong per sumber: scan -> unduh -> simpan -> terbaca,\ndengan penanda PDF terproteksi, OCR vs teks langsung, dan drill-down kegagalan.\nMendukung format JSON dan CSV (UTF-8 with BOM).",
+        "operationId": "get_dashboard_corong_api_v1_dashboard_corong_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter untuk satu sumber spesifik",
+              "title": "Source Id"
+            },
+            "description": "Filter untuk satu sumber spesifik"
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Format output: json | csv",
+              "default": "json",
+              "title": "Format"
+            },
+            "description": "Format output: json | csv"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/scans/": {
