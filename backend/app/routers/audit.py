@@ -1,6 +1,7 @@
 from typing import Optional, Literal
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
+from app.config import settings
 from app.database import get_db
 from app.models.audit_log import AuditLog
 from app.core.permissions import perlu_izin, Izin
@@ -37,7 +38,7 @@ def get_audit_logs(
             "action": log.action,
             "target_resource": log.target_resource,
             "detail": log.detail,
-            "ip_address": log.ip_address,
+            "ip_address": log.ip_address if settings.auth_enabled else None,
             "timestamp": log.timestamp,
         }
         for log in logs

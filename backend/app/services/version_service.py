@@ -117,15 +117,19 @@ def recompute_status(
         is_attachment = bool(getattr(doc, "is_attachment", False))
 
         if is_attachment:
-            # Dokumen lampiran: hanya menjalankan aturan 5a
+            # Dokumen lampiran: hanya menjalankan aturan tanggal berlaku
             if (
                 doc.status_source in (None, "relasi", "tanggal_berlaku")
                 and doc.effective_date
-                and doc.effective_date <= today
             ):
-                target_status = StatusKeberlakuan.berlaku
-                target_source = "tanggal_berlaku"
-                rule_matched = "tanggal_berlaku"
+                if doc.effective_date <= today:
+                    target_status = StatusKeberlakuan.berlaku
+                    target_source = "tanggal_berlaku"
+                    rule_matched = "tanggal_berlaku"
+                else:
+                    target_status = StatusKeberlakuan.belum_berlaku
+                    target_source = "tanggal_berlaku"
+                    rule_matched = "belum_berlaku"
             else:
                 continue
         else:
@@ -173,13 +177,17 @@ def recompute_status(
                 len(in_rels) == 0
                 and doc.status_source in (None, "relasi", "tanggal_berlaku")
                 and doc.effective_date
-                and doc.effective_date <= today
             ):
                 # 5a. Tidak ada relasi masuk, dan status_source in {None, relasi, tanggal_berlaku},
-                #     dan effective_date terisi dan <= hari ini -> berlaku (tanggal_berlaku)
-                target_status = StatusKeberlakuan.berlaku
-                target_source = "tanggal_berlaku"
-                rule_matched = "tanggal_berlaku"
+                #     dan effective_date terisi
+                if doc.effective_date <= today:
+                    target_status = StatusKeberlakuan.berlaku
+                    target_source = "tanggal_berlaku"
+                    rule_matched = "tanggal_berlaku"
+                else:
+                    target_status = StatusKeberlakuan.belum_berlaku
+                    target_source = "tanggal_berlaku"
+                    rule_matched = "belum_berlaku"
             elif doc.status_source == "relasi":
                 # 6. Tidak ada aturan yang berlaku, tetapi status_source == "relasi" -> kembalikan ke tidak_diketahui, status_source = None
                 target_status = StatusKeberlakuan.tidak_diketahui
