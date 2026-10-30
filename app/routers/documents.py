@@ -624,6 +624,99 @@ def get_document_text(
     }
 
 
+class DraftMiripItem(BaseModel):
+    document_id: int
+    judul: str
+    diunggah: Optional[str] = None
+    persen: float
+    status: str
+
+
+class DraftTerdekatItem(BaseModel):
+    document_id: int
+    persen: float
+
+
+class RingkasPasal(BaseModel):
+    sama: int = 0
+    berubah: int = 0
+    baru: int = 0
+    dihapus: int = 0
+
+
+class RincianPasal(BaseModel):
+    pasal: str
+    status: str
+    persen: Optional[float] = None
+
+
+class PerPasalDetail(BaseModel):
+    dibanding_dengan: int
+    ringkas: RingkasPasal
+    pasal: List[RincianPasal]
+
+
+class DraftKemiripanResponse(BaseModel):
+    document_id: int
+    ambang: float
+    dibandingkan: int
+    draft_mirip: List[DraftMiripItem]
+    terdekat: Optional[DraftTerdekatItem] = None
+    per_pasal: Optional[PerPasalDetail] = None
+    catatan: Optional[str] = None
+
+
+@router.get(
+    "/{document_id}/kemiripan-draft",
+    response_model=DraftKemiripanResponse,
+    summary="Kemiripan draft berulang dan perbandingan per pasal",
+    responses={
+        403: {"description": "Akses dokumen non-publik ditolak / izin tidak memadai"},
+        404: {"description": "Dokumen tidak ditemukan"},
+        409: {"description": "Draft belum selesai diekstraksi"},
+        422: {"description": "Dokumen bukan draft kajian"},
+    },
+)
+def get_draft_similarity(
+    document_id: int,
+    ambang: Optional[float] = Query(None, ge=0.0, le=100.0, description="Ambang batas kemiripan (0-100 persen)"),
+    limit: int = Query(5, ge=1, le=20, description="Batas jumlah draft mirip yang ditampilkan"),
+    db: Session = Depends(get_db),
+    current_user=Depends(perlu_izin(Izin.KB_BACA)),
+):
+    """
+    Menghitung persentase kemiripan teks terhadap draft-draft kajian lain (Jaccard 5-gram shingle)
+    dan membandingkan perbedaan per pasal jika kemiripan melampaui ambang.
+    """
+    from app.services.kemiripan_service import cari_kemiripan_draft
+
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
+
+    check_non_public_access(doc, current_user)
+
+    if doc.document_role != PeranDokumen.draft_kajian:
+        raise HTTPException(
+            status_code=422,
+            detail="Kemiripan draft hanya untuk dokumen draft kajian",
+        )
+
+    if not doc.full_text or not doc.full_text.strip():
+        raise HTTPException(
+            status_code=409,
+            detail="Draft belum selesai diekstraksi",
+        )
+
+    return cari_kemiripan_draft(
+        db=db,
+        doc=doc,
+        user=current_user,
+        ambang=ambang,
+        limit=limit,
+    )
+
+
 @router.patch("/{document_id}/metadata", summary="Koreksi metadata dokumen manual")
 def patch_document_metadata(
     document_id: int,

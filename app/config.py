@@ -71,6 +71,9 @@ class Settings(BaseSettings):
     ml_default_search_method: str = "lsa"
     ml_cache_enabled: bool = True
 
+    # Kemiripan Draft Berulang (Langkah 30)
+    draft_kemiripan_ambang: float = 80.0
+
     @field_validator("category_path_template")
     @classmethod
     def validate_category_path_template(cls, v: str) -> str:
