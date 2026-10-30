@@ -8,7 +8,7 @@ import logging
 from typing import Optional, List, Tuple
 
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, or_, select
 from fastapi import HTTPException, status
 
 from app.config import settings
@@ -278,6 +278,8 @@ class FailureService:
         *,
         job_id: Optional[int] = None,
         failure_type: Optional[JenisKegagalan] = None,
+        reason_codes: Optional[List[str]] = None,
+        source_id: Optional[int] = None,
         follow_up_status: Optional[str] = None,
         include_duplicates: bool = False,
         skip: int = 0,
@@ -285,6 +287,7 @@ class FailureService:
     ) -> Tuple[int, List[IngestFailure]]:
         """
         Mengambil daftar kegagalan dengan filter dan paginasi.
+        Mendukung filter reason_codes (list) dan source_id (via job.source_id atau scan_candidates.failure_id).
         """
         query = self.db.query(IngestFailure)
 
@@ -295,6 +298,30 @@ class FailureService:
             query = query.filter(IngestFailure.failure_type == failure_type)
         elif not include_duplicates:
             query = query.filter(IngestFailure.failure_type != JenisKegagalan.duplikat)
+
+        if reason_codes:
+            query = query.filter(IngestFailure.reason_code.in_(reason_codes))
+
+        if source_id is not None:
+            from app.models.scan_candidate import ScanCandidate
+            from app.models.scan_session import ScanSession
+            from app.models.job_ingest import JobIngest
+
+            cand_fail_subq = (
+                select(ScanCandidate.failure_id)
+                .join(ScanSession, ScanCandidate.scan_id == ScanSession.id)
+                .where(ScanSession.source_id == source_id, ScanCandidate.failure_id.isnot(None))
+            )
+            job_fail_subq = (
+                select(JobIngest.id)
+                .where(JobIngest.source_id == source_id)
+            )
+            query = query.filter(
+                or_(
+                    IngestFailure.job_id.in_(job_fail_subq),
+                    IngestFailure.id.in_(cand_fail_subq),
+                )
+            )
 
         if follow_up_status is not None:
             if follow_up_status != "all":
@@ -430,6 +457,17 @@ class FailureService:
             if is_metadata_sufficient(naming_inp):
                 doc.processing_status = StatusPemrosesan.terindeks
 
+            if (doc.pdf_terproteksi is None or doc.page_count is None) and doc.file_path_pdf:
+                try:
+                    pdf_bytes = self.storage.read_pdf(doc.file_path_pdf)
+                    info = validate_pdf(doc.original_filename or "dokumen.pdf", pdf_bytes, settings.max_upload_bytes)
+                    if doc.pdf_terproteksi is None:
+                        doc.pdf_terproteksi = info.terproteksi
+                    if doc.page_count is None:
+                        doc.page_count = info.jumlah_halaman
+                except Exception:
+                    pass
+
             record_audit(
                 self.db,
                 action=RETRY_FAILURE,
@@ -473,6 +511,17 @@ class FailureService:
             failure.last_retry_at = datetime.now(timezone.utc)
             if actor_user_id is not None:
                 failure.handled_by_user_id = actor_user_id
+
+            if (doc.pdf_terproteksi is None or doc.page_count is None) and doc.file_path_pdf:
+                try:
+                    pdf_bytes = self.storage.read_pdf(doc.file_path_pdf)
+                    info = validate_pdf(doc.original_filename or "dokumen.pdf", pdf_bytes, settings.max_upload_bytes)
+                    if doc.pdf_terproteksi is None:
+                        doc.pdf_terproteksi = info.terproteksi
+                    if doc.page_count is None:
+                        doc.page_count = info.jumlah_halaman
+                except Exception:
+                    pass
 
             record_audit(
                 self.db,
@@ -586,6 +635,7 @@ class FailureService:
             triggered_by="retry",
             source_ref=f"retry:failure:{failure.id}",
             retry_of_failure_id=failure.id,
+            source_id=parent_job.source_id if parent_job else None,
             status=StatusJobIngest.berjalan,
             success_count=0,
             duplicate_count=0,

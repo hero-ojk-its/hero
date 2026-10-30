@@ -221,7 +221,7 @@ class IngestService:
         """
         # 1. Validasi berkas PDF
         try:
-            validate_pdf(item.filename, item.content, self.max_upload_bytes)
+            pdf_info = validate_pdf(item.filename, item.content, self.max_upload_bytes)
         except FileValidationError as val_err:
             result = ItemResult(
                 filename=item.filename,
@@ -392,6 +392,8 @@ class IngestService:
                 is_attachment=is_att,
                 attachment_label=att_label if is_att else None,
                 parent_identity_key=parent_id_key,
+                pdf_terproteksi=pdf_info.terproteksi,
+                page_count=pdf_info.jumlah_halaman,
             )
             self.db.add(doc)
             self.db.flush()
