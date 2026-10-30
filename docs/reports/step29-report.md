@@ -196,3 +196,4 @@ exit=0
 ed0cd28 feat: relokasi kategori otomatis, kelola kategori (ubah nama/pindah/hapus/aturan), audit penempatan lengkap
 e6adea7 feat(backend): Langkah 27 - statistik corong per sumber dan penanda PDF diproteksi
 ```
+
