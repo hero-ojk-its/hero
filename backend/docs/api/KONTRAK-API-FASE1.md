@@ -1209,6 +1209,94 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
 
 ---
 
+### 8.6 Kemiripan Draft Berulang & Perbandingan Per Pasal (Langkah 30)
+- **Method & Path:** `GET /api/v1/documents/{document_id}/kemiripan-draft`
+- **Tujuan:** Mendeteksi draft kajian sebelumnya yang mirip dengan draf yang sedang dikaji, mengukur persentase kemiripan, dan membandingkan perbedaan per pasal antara versi draf terbaru dan draf terdahulu (Weekly #7 Keputusan No. 6).
+- **Parameter Query:**
+  - `ambang` (opsional, float 0–100): Ambang batas kemiripan (persen). Default diambil dari konfigurasi backend (`settings.draft_kemiripan_ambang = 80.0`). Ambang ini dapat diatur sesuai kebutuhan UI/pengguna.
+  - `limit` (opsional, int 1–20, default: 5): Jumlah maksimal draft mirip yang dikembalikan dalam daftar `draft_mirip`.
+- **Hak Akses & Izin:**
+  - Memerlukan izin `KB_BACA` (peran `analis` atau `admin_kb`).
+  - Dokumen target divalidasi dengan `check_non_public_access`. Dokumen non-publik memerlukan otentikasi login aktif (`403 Forbidden`).
+  - Read-only: tidak mengubah basis data dan tidak mencatat entri audit log.
+- **Validasi Dokumen:**
+  - `404 Not Found`: Dokumen tidak ditemukan.
+  - `422 Unprocessable Entity`: Dokumen bukan berperan sebagai `draft_kajian` (`"Kemiripan draft hanya untuk dokumen draft kajian"`).
+  - `409 Conflict`: Dokumen draf belum selesai diekstraksi (`full_text` null atau kosong, `"Draft belum selesai diekstraksi"`).
+- **Cara Perhitungan Kemiripan:**
+  1. **Kandidat Pembanding:** Disaring dari dokumen aktif lain dengan `document_role = draft_kajian` yang memiliki `full_text`, disaring sesuai hak akses pengguna (`allowed_document_ids` / klasifikasi akses publik/non-publik), dan dibatasi maksimal 200 dokumen draf terbaru menurut `created_at`. Dokumen non-publik tidak akan bocor ke pengguna tanpa hak akses.
+  2. **Batas Atas Cepat (Length Pruning):** Dihitung min(|A|,|B|) / max(|A|,|B|) * 100. Bila batas atas teoretis ini kurang dari `ambang`, perhitungan penuh Jaccard shingle dilewati demi efisiensi query dan CPU.
+  3. **Jaccard Shingling (5-gram):** Teks dinormalisasi (huruf kecil, nomor halaman mandiri dibuang, tanda baca dihilangkan, spasi dirapikan). Kata-kata di-hash ke 5-gram `crc32` (atau himpunan kata bila < 5 kata). Kemiripan dihitung:
+     persen = (|A ∩ B| / |A ∪ B|) * 100%
+     dibulatkan ke 1 desimal.
+- **Arti Status Kemiripan:**
+  - `identik`: Persentase kemiripan >= 99.5%.
+  - `sangat_mirip`: Persentase kemiripan >= ambang (default 80.0%).
+- **Perilaku Berkas Byte-Identik (Duplikasi SHA-256):**
+  - Berkas PDF yang byte-nya identik (SHA-256 dan ukuran sama) tetap ditolak pada saat unggah (`duplicate_count = 1`), membawa `duplicate_of_document_id`. Frontend diarahkan membuka analisa draf sebelumnya lewat `duplicate_of_document_id` tersebut.
+  - Endpoint `kemiripan-draft` menangani kasus draf berulang yang teksnya telah mengalami revisi (byte PDF berbeda namun isi substansinya mirip/berkesinambungan).
+- **Kandidat Terdekat & Perbandingan Per Pasal:**
+  - `terdekat`: Selalu memuat kandidat dengan persentase tertinggi (walaupun < ambang) agar UI dapat menginformasikan "paling mirip X%". Bernilai `null` hanya jika tidak ada draf lain sama sekali.
+  - `per_pasal`: Dihitung otomatis terhadap draf `terdekat` apabila persentase kemiripan `terdekat` >= ambang.
+  - Menggunakan tabel `articles` tingkat pasal (`parent_id IS NULL`). Status per pasal:
+    - `sama`: Nomor pasal sama, teks ternormalisasi identik.
+    - `berubah`: Nomor pasal sama, teks berbeda (disertai `persen` kemiripan pasal).
+    - `baru`: Pasal hanya ada di draf baru.
+    - `dihapus`: Pasal hanya ada di draf lama.
+  - Jika salah satu draf belum memiliki ekstraksi pasal di tabel `articles`, field `per_pasal` bernilai `null` disertai `catatan: "perbandingan per pasal belum tersedia (pasal belum dipecah)"`.
+- **Contoh Respons (200 OK):**
+```json
+{
+  "document_id": 210,
+  "ambang": 80.0,
+  "dibandingkan": 37,
+  "draft_mirip": [
+    {
+      "document_id": 198,
+      "judul": "RPOJK Penyelenggaraan Usaha Bank Syariah V1",
+      "diunggah": "2026-10-29T09:12:00Z",
+      "persen": 93.4,
+      "status": "sangat_mirip"
+    }
+  ],
+  "terdekat": {
+    "document_id": 198,
+    "persen": 93.4
+  },
+  "per_pasal": {
+    "dibanding_dengan": 198,
+    "ringkas": {
+      "sama": 30,
+      "berubah": 5,
+      "baru": 2,
+      "dihapus": 1
+    },
+    "pasal": [
+      {
+        "pasal": "Pasal 1",
+        "status": "sama"
+      },
+      {
+        "pasal": "Pasal 2",
+        "status": "berubah",
+        "persen": 71.2
+      },
+      {
+        "pasal": "Pasal 3",
+        "status": "dihapus"
+      },
+      {
+        "pasal": "Pasal 5",
+        "status": "baru"
+      }
+    ]
+  },
+  "catatan": null
+}
+```
+
+---
+
 ## 9. ALUR 8: KURASI & KOREKSI METADATA SERTA ANTREAN PENANGANAN GAGAL
 
 ### 9.1 Koreksi Metadata Dokumen
