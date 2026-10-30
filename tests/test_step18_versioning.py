@@ -62,6 +62,7 @@ def _seed_test_doc(
         is_active=is_active,
         category_id=cat.id if cat else None,
         identity_key=identity_key,
+        full_text=f"Teks lengkap peraturan {title}.",
     )
     db.add(doc)
     db.commit()

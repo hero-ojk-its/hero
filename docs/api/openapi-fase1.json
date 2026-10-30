@@ -2931,6 +2931,54 @@
         }
       }
     },
+    "/api/v1/internal/documents/status/recompute": {
+      "post": {
+        "tags": [
+          "Internal"
+        ],
+        "summary": "[Internal] Hitung ulang status keberlakuan dokumen berdasarkan tanggal berlaku",
+        "description": "Hitung ulang status_keberlakuan untuk dokumen yang:\n- status_source IN ('tanggal_berlaku', None) atau IS NULL\n- effective_date IS NOT NULL\nDipanggil harian oleh timer di server (lapisan data/infra).",
+        "operationId": "recompute_documents_status_api_v1_internal_documents_status_recompute_post",
+        "parameters": [
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/scraping-sources/": {
       "post": {
         "tags": [
@@ -9532,7 +9580,8 @@
           "berlaku",
           "diubah",
           "dicabut",
-          "tidak_diketahui"
+          "tidak_diketahui",
+          "belum_berlaku"
         ],
         "title": "StatusKeberlakuan",
         "description": "Status keberlakuan suatu dokumen regulasi"

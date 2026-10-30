@@ -44,6 +44,7 @@ from app.services.audit_service import (
     EXTRACTION_REQUEUED,
     PLACE_DOCUMENT_FAILED,
     ANALYSIS_CACHE_INVALIDATED,
+    STATUS_RECOMPUTED,
 )
 from app.services.storage_service import StorageService, get_storage_service
 from app.services.category_service import CategoryService
@@ -441,6 +442,105 @@ def get_internal_document_pdf(
     )
 
 
+def _handle_extraction_failure(
+    db: Session,
+    doc: Document,
+    fail_type: JenisKegagalan,
+    reason_code: str,
+    message: str,
+    is_worker_error: bool = False,
+) -> dict:
+    """
+    Mencatat kegagalan ekstraksi (error dari worker atau teks kosong):
+    - Status dokumen diubah menjadi gagal (kecuali jika existing failure penempatan_gagal).
+    - Mencegah duplikasi entri kegagalan terbuka untuk dokumen yang sama.
+    - Mencatat audit log EXTRACTION_FAILED dengan detail.reason_code.
+    """
+    existing_failure = (
+        db.query(IngestFailure)
+        .filter(
+            IngestFailure.document_id == doc.id,
+            IngestFailure.follow_up_status == StatusTindakLanjut.belum_ditangani,
+            IngestFailure.reason_code.in_([
+                reason_code,
+                "teks_kosong",
+                "teks_kosong_ocr",
+                "penempatan_gagal",
+                "simpan_ekstraksi_gagal",
+            ]),
+        )
+        .order_by(IngestFailure.id.desc())
+        .first()
+    )
+
+    if existing_failure:
+        old_msg = existing_failure.message or ""
+        text_to_append = f"laporan worker: {message}" if (is_worker_error and message) else message
+        if text_to_append and text_to_append not in old_msg:
+            combined = f"{old_msg} | {text_to_append}" if old_msg else text_to_append
+            existing_failure.message = combined[:1000]
+        if reason_code in ("teks_kosong", "teks_kosong_ocr"):
+            doc.processing_status = StatusPemrosesan.gagal
+        db.commit()
+        return {
+            "status": "gagal_dicatat",
+            "failure_id": existing_failure.id,
+        }
+
+    doc.processing_status = StatusPemrosesan.gagal
+
+    job_id = doc.job_id
+    if not job_id:
+        default_job = db.query(JobIngest).filter(JobIngest.source_ref == "system:extraction").first()
+        if not default_job:
+            default_job = JobIngest(
+                job_type=JenisJobIngest.unggah_manual,
+                triggered_by="system",
+                source_ref="system:extraction",
+                status=StatusJobIngest.selesai,
+            )
+            db.add(default_job)
+            db.flush()
+        job_id = default_job.id
+
+    failure = IngestFailure(
+        job_id=job_id,
+        original_filename=doc.standardized_filename or doc.title or "dokumen.pdf",
+        source_url=doc.source_url,
+        failure_type=fail_type,
+        reason_code=reason_code,
+        message=message,
+        is_retryable=True,
+        quarantine_path=None,
+        file_hash=doc.file_hash,
+        file_size_bytes=doc.file_size_bytes,
+        document_id=doc.id,
+        ingest_options={},
+        follow_up_status=StatusTindakLanjut.belum_ditangani,
+    )
+    db.add(failure)
+    db.flush()
+
+    record_audit(
+        db,
+        action=EXTRACTION_FAILED,
+        target_resource=f"document:{doc.id}",
+        detail={
+            "document_id": doc.id,
+            "reason_code": reason_code,
+            "error": {"code": reason_code, "message": message},
+            "failure_id": failure.id,
+        },
+        commit=False,
+    )
+
+    db.commit()
+    return {
+        "status": "gagal_dicatat",
+        "failure_id": failure.id,
+    }
+
+
 @router.patch(
     "/documents/{document_id}/extraction",
     summary="[Internal] Kirim hasil ekstraksi metadata dan teks dari Data/ML",
@@ -472,84 +572,20 @@ def patch_extraction_result(
         err_code = payload.error.code.strip()
         err_msg = payload.error.message.strip()
 
-        # Jangan dobel catatan kegagalan jika sudah ada kegagalan penempatan/simpan ekstraksi terbuka
-        existing_failure = (
-            db.query(IngestFailure)
-            .filter(
-                IngestFailure.document_id == doc.id,
-                IngestFailure.follow_up_status == StatusTindakLanjut.belum_ditangani,
-                IngestFailure.reason_code.in_(["penempatan_gagal", "simpan_ekstraksi_gagal"]),
-            )
-            .order_by(IngestFailure.id.desc())
-            .first()
-        )
-
-        if existing_failure:
-            old_msg = existing_failure.message or ""
-            if not (err_msg and err_msg in old_msg):
-                combined = f"{old_msg} | laporan worker: {err_msg}" if old_msg else f"laporan worker: {err_msg}"
-                existing_failure.message = combined[:1000]
-            # Status perlu_koreksi jangan diubah menjadi gagal
-            db.commit()
-            return {
-                "status": "gagal_dicatat",
-                "failure_id": existing_failure.id,
-            }
-
-        doc.processing_status = StatusPemrosesan.gagal
-
-        # Tentukan failure_type enum
         fail_type = JenisKegagalan.ekstraksi_gagal
         if err_code == "ocr_gagal":
             fail_type = JenisKegagalan.ocr_gagal
         elif err_code in JenisKegagalan.__members__:
             fail_type = JenisKegagalan[err_code]
 
-        job_id = doc.job_id
-        if not job_id:
-            default_job = db.query(JobIngest).filter(JobIngest.source_ref == "system:extraction").first()
-            if not default_job:
-                default_job = JobIngest(
-                    job_type=JenisJobIngest.unggah_manual,
-                    triggered_by="system",
-                    source_ref="system:extraction",
-                    status=StatusJobIngest.selesai,
-                )
-                db.add(default_job)
-                db.flush()
-            job_id = default_job.id
-
-        failure = IngestFailure(
-            job_id=job_id,
-            original_filename=doc.standardized_filename or doc.title or "dokumen.pdf",
-            source_url=doc.source_url,
-            failure_type=fail_type,
+        return _handle_extraction_failure(
+            db=db,
+            doc=doc,
+            fail_type=fail_type,
             reason_code=err_code,
             message=err_msg,
-            is_retryable=True,
-            quarantine_path=None,
-            file_hash=doc.file_hash,
-            file_size_bytes=doc.file_size_bytes,
-            document_id=doc.id,
-            ingest_options={},
-            follow_up_status=StatusTindakLanjut.belum_ditangani,
+            is_worker_error=True,
         )
-        db.add(failure)
-        db.flush()
-
-        record_audit(
-            db,
-            action=EXTRACTION_FAILED,
-            target_resource=f"document:{doc.id}",
-            detail={"document_id": doc.id, "error": {"code": err_code, "message": err_msg}, "failure_id": failure.id},
-            commit=False,
-        )
-
-        db.commit()
-        return {
-            "status": "gagal_dicatat",
-            "failure_id": failure.id,
-        }
 
     # 2. Penanganan Sukses
     ignored_fields = []
@@ -598,7 +634,12 @@ def patch_extraction_result(
     else:
         if payload.title and payload.title.strip():
             clean_title = payload.title.strip()
-            if doc.title != clean_title:
+            low_title = clean_title.lower()
+            is_placeholder = (
+                low_title in ("untitled", "untitled document", "tanpa judul", "dokumen", "document")
+                or low_title.startswith("microsoft word - document")
+            )
+            if not is_placeholder and doc.title != clean_title:
                 doc.title = clean_title
                 changed_fields.append("title")
 
@@ -711,6 +752,30 @@ def patch_extraction_result(
                 low_confidence_fields.append(k)
                 if k in ("title", "regulation_number", "regulation_type", "release_date"):
                     metadata_has_low_conf = True
+
+    # Evaluasi teks hasil ekstraksi: bila kosong atau hanya spasi -> gagal
+    doc_text = doc.full_text or ""
+    if not doc_text.strip():
+        is_ocr = (
+            doc.extraction_method == MetodeEkstraksi.ocr
+            or (payload.extraction_method and "ocr" in payload.extraction_method.lower())
+        )
+        if is_ocr:
+            fail_type = JenisKegagalan.ocr_gagal
+            reason_code = "teks_kosong_ocr"
+            err_msg = "OCR tidak menghasilkan teks — periksa manual (kemungkinan hasil pindai buram)."
+        else:
+            fail_type = JenisKegagalan.ekstraksi_gagal
+            reason_code = "teks_kosong"
+            err_msg = "Ekstraksi tidak menghasilkan teks — periksa manual atau proses ulang dengan OCR."
+
+        return _handle_extraction_failure(
+            db=db,
+            doc=doc,
+            fail_type=fail_type,
+            reason_code=reason_code,
+            message=err_msg,
+        )
 
     # Evaluasi status akhir
     has_empty_reg = not doc.regulation_number or not doc.regulation_number.strip()
@@ -1208,4 +1273,52 @@ def invalidate_analysis_cache(
         "versi_mesin": payload.versi_mesin,
         "kind": payload.kind,
     }
+
+
+@router.post(
+    "/documents/status/recompute",
+    summary="[Internal] Hitung ulang status keberlakuan dokumen berdasarkan tanggal berlaku",
+    dependencies=[Depends(verify_internal_api_key)],
+)
+def recompute_documents_status(
+    db: Session = Depends(get_db),
+):
+    """
+    Hitung ulang status_keberlakuan untuk dokumen yang:
+    - status_source IN ('tanggal_berlaku', None) atau IS NULL
+    - effective_date IS NOT NULL
+    Dipanggil harian oleh timer di server (lapisan data/infra).
+    """
+    query = (
+        db.query(Document)
+        .filter(
+            Document.is_active == True,  # noqa: E712
+            Document.effective_date.isnot(None),
+            or_(
+                Document.status_source.is_(None),
+                Document.status_source == "tanggal_berlaku",
+            ),
+        )
+    )
+    docs = query.all()
+    diperiksa = len(docs)
+    berubah = recompute_status(db, documents=docs, commit=False)
+
+    record_audit(
+        db,
+        action=STATUS_RECOMPUTED,
+        target_resource="documents:status",
+        detail={
+            "diperiksa": diperiksa,
+            "berubah": berubah,
+        },
+        commit=False,
+    )
+    db.commit()
+
+    return {
+        "diperiksa": diperiksa,
+        "berubah": berubah,
+    }
+
 
