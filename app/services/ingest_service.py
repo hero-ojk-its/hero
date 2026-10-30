@@ -388,6 +388,7 @@ class IngestService:
                 status_keberlakuan=doc_status_keberlakuan,
                 processing_status=StatusPemrosesan.diterima,
                 category_id=options.category_id,
+                kategori_manual=options.category_id is not None,
                 job_id=job.id,
                 is_attachment=is_att,
                 attachment_label=att_label if is_att else None,
