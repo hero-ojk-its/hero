@@ -1308,7 +1308,7 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
   "placement": {
     "document_id": 1,
     "placed": true,
-    "reason": "ditempatkan",
+    "reason": "relokasi",
     "old_path": "kb/POJK/2026/Penyelenggaraan Usaha Bank Umum_POJK_2026_Perbankan.pdf",
     "new_path": "kb/POJK/2026/Penyelenggaraan Usaha Bank Umum Terkoreksi_POJK_2026_Perbankan.pdf",
     "category_id": 8,
@@ -1698,6 +1698,68 @@ curl -s -H "Authorization: Bearer <token>" \
   "http://localhost:8000/api/v1/ingest/failures?reason_code=teks_kosong_ocr&reason_code=ocr_gagal&source_id=1"
 ```
 Setiap entri yang memiliki `document_id` dapat dibuka berkas PDF aslinya melalui `GET /api/v1/documents/{document_id}/pdf`.
+
+---
+
+### 10.3 Kelola Kategori (`/api/v1/categories`)
+
+Manajemen struktur hierarkis folder kategori Knowledge Base (KB), relokasi otomatis berkas dokumen, serta pembaruan nama, induk, dan aturan klasifikasi.
+
+#### A. Otorisasi
+- **Membaca (`GET /`, `GET /tree`, `GET /{id}`):** Memerlukan izin `KB_BACA` (peran `admin_sistem`, `admin_kb`, `analis`, `pilot_user`).
+- **Mengelola (`POST /`, `PATCH /{id}`, `DELETE /{id}`):** Memerlukan izin `KB_KELOLA` (peran `admin_sistem`, `admin_kb`).
+
+#### B. Aturan Relokasi Otomatis vs Kategori Manual (`kategori_manual`)
+1. **Penanda `kategori_manual`:**
+   - Dokumen baru yang ditarik dari pemindaian web atau diunggah tanpa memilih kategori memiliki `kategori_manual: false`. Jalur kategorinya ditentukan secara otomatis dari metadata (`{jenis}/{tahun}`).
+   - Dokumen yang diunggah dengan opsi `category_id` atau diperbarui lewat `PATCH /api/v1/documents/{id}/metadata` dengan `category_id` terisi otomatis ditandai `kategori_manual: true`.
+2. **Koreksi Metadata:**
+   - Pada dokumen `kategori_manual: true`, perubahan jenis regulasi atau tahun tidak akan memindahkan berkas dokumen dari kategori pilihan pengguna.
+   - Pada dokumen `kategori_manual: false`, perubahan metadata yang mempengaruhi hierarki otomatis memindahkan berkas fisik ke folder kategori baru.
+3. **Kembalikan ke Kategori Otomatis:**
+   - Pengguna dapat mengembalikan dokumen ke penempatan otomatis dengan mengirimkan `PATCH /api/v1/documents/{id}/metadata` dengan nilai `category_id: null`.
+   - Sistem akan menyetel `kategori_manual: false` dan langsung merelokasi berkas ke kategori otomatis yang sesuai dengan metadatanya.
+
+#### C. Efek Pembaruan Kategori (Rename & Pindah Induk) terhadap Berkas Fisik
+1. Mengubah `name` atau `parent_id` melalui `PATCH /api/v1/categories/{id}` akan memicu relokasi fisik seluruh berkas dokumen yang berada di dalam kategori tersebut maupun subkategori turunannya.
+2. Respons endpoint memuat jumlah dokumen yang berhasil dipindah serta daftar dokumen yang gagal:
+   ```json
+   {
+     "kategori": {
+       "id": 15,
+       "name": "2026",
+       "parent_id": 12,
+       "auto_created": false,
+       "path": ["POJK", "2026"],
+       "document_count": 5,
+       "jumlah_dokumen": 5,
+       "classification_rule": null
+     },
+     "dokumen_dipindah": 5,
+     "dokumen_gagal": []
+   }
+   ```
+3. Kegagalan memindahkan satu dokumen (misal berkas sumber hilang di filesystem) tidak membatalkan pembaruan kategori di database; dokumen tersebut dicatat pada array `dokumen_gagal`.
+4. Kategori yang awalnya dibuat otomatis (`auto_created: true`), setelah diubah oleh pengguna akan otomatis berubah status menjadi manual (`auto_created: false`).
+
+#### D. Aturan Penghapusan Kategori (`DELETE /api/v1/categories/{id}`)
+- Kategori hanya dapat dihapus jika kosong (tidak memiliki subkategori turunan dan tidak memiliki dokumen, baik dokumen aktif maupun nonaktif).
+- Jika masih memiliki isi, backend menolak dengan kode HTTP `409 Conflict` dan detail jumlah keterikatan:
+  ```json
+  {
+    "detail": {
+      "subkategori": 2,
+      "dokumen": 0,
+      "message": "Kategori tidak dapat dihapus karena masih memiliki 2 subkategori dan 0 dokumen."
+    }
+  }
+  ```
+- Penghapusan yang berhasil menghasilkan HTTP `204 No Content` dan mencatat jejak audit `DELETE_CATEGORY`.
+
+#### E. Status Aturan Klasifikasi (`classification_rule`)
+- Field `classification_rule` menerima string JSON objek (maksimal 4.000 karakter, harus berupa dictionary/objek JSON valid).
+- Mengirimkan `null` akan menghapus aturan klasifikasi.
+- **Status Operasional:** Saat ini field `classification_rule` **hanya disimpan (persisted)** di database dan belum digunakan secara aktif oleh sistem klasifikasi otomatis. Aturan pemanfaatan dan skemanya akan disepakati bersama PM pada pengembangan lanjutan.
 
 ---
 

@@ -155,6 +155,13 @@ class Document(Base):
         index=True,
         comment="FK ke kategori / folder KB"
     )
+    kategori_manual = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+        comment="Apakah kategori dokumen ditentukan secara manual oleh pengguna",
+    )
     job_id = Column(
         Integer,
         ForeignKey("job_ingest.id", ondelete="SET NULL"),
