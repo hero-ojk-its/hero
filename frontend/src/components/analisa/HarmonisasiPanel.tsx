@@ -230,7 +230,7 @@ export default function HarmonisasiPanel({ state, onMuat, onJumpToPasal }: Harmo
           {disaring > 0 && (
             <p className="flex items-center gap-1.5 text-[10px] text-gray-500 italic">
               <Info size={11} className="shrink-0" />
-              {disaring} temuan disembunyikan karena tidak ada akses
+              {disaring} item disembunyikan karena tidak ada akses
             </p>
           )}
 
