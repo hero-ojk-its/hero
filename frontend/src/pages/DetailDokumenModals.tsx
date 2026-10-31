@@ -10,16 +10,15 @@ import {
 } from 'lucide-react';
 import { 
   updateDocumentMetadata, 
-  updateDocumentStatus, 
-  getCategories, 
-  type UpdateMetadataIn, 
-  type UpdateDocumentStatusIn, 
-  type CategoryDetailResponse, 
-  type StatusKeberlakuan, 
+  updateDocumentStatus,
+  type UpdateMetadataIn,
+  type UpdateDocumentStatusIn,
+  type StatusKeberlakuan,
   type KlasifikasiAkses, 
   type PeranDokumen 
 } from '../lib/ingestApi';
 import { apiFetch, type DocumentItem } from '../lib/api';
+import { getPohonKategori, jalurTeks, ratakanPohon, type KategoriTerindeks } from '../lib/kategoriApi';
 import {
   KLASIFIKASI_AKSES_LABELS,
   PERAN_DOKUMEN_LABELS
@@ -72,26 +71,33 @@ function EditMetadataModalContent({
   );
 
   // Categories & UI States
-  const [categories, setCategories] = useState<CategoryDetailResponse[]>([]);
+  // Opsi kategori berjalur penuh ("POJK / 2023") dari /categories/tree
+  const [categories, setCategories] = useState<KategoriTerindeks[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
-    let mounted = true;
-    getCategories()
-      .then((cats) => {
-        if (!mounted) return;
-        setCategories(cats);
-      })
-      .catch((err) => console.warn('Gagal memuat kategori:', err))
-      .finally(() => {
-        if (mounted) setIsLoadingCategories(false);
-      });
+    const controller = new AbortController();
+    // Ditunda satu tick agar mount ganda StrictMode tidak mengirim request dua kali
+    const timer = setTimeout(() => {
+      getPohonKategori({ signal: controller.signal })
+        .then((nodes) => {
+          if (!controller.signal.aborted) setCategories(ratakanPohon(nodes));
+        })
+        .catch((err: unknown) => {
+          if (controller.signal.aborted || (err instanceof Error && err.name === 'AbortError')) return;
+          console.warn('Gagal memuat kategori:', err);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setIsLoadingCategories(false);
+        });
+    }, 0);
 
     return () => {
-      mounted = false;
+      clearTimeout(timer);
+      controller.abort();
     };
   }, []);
 
@@ -325,14 +331,30 @@ function EditMetadataModalContent({
                   value={categoryId ?? ''}
                   onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : null)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-colors"
+                  aria-describedby={categoryId === null ? 'penjelasan-kategori-otomatis' : undefined}
                 >
-                  <option value="">(Tanpa Kategori)</option>
+                  {/* category_id: null = kembalikan ke kategori otomatis (dikirim hanya bila berbeda dari nilai awal) */}
+                  <option value="">
+                    {document.category_id == null ? '(Belum ada kategori — otomatis)' : 'Kembalikan ke kategori otomatis'}
+                  </option>
+                  {/* Cadangan bila kategori dokumen tidak ada di pohon (mis. baru dihapus) */}
+                  {!isLoadingCategories &&
+                    document.category_id != null &&
+                    !categories.some((c) => c.node.id === document.category_id) && (
+                      <option value={document.category_id}>Kategori #{document.category_id}</option>
+                    )}
                   {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
+                    <option key={cat.node.id} value={cat.node.id}>
+                      {jalurTeks(cat.path)}
                     </option>
                   ))}
                 </select>
+                {categoryId === null && (
+                  <p id="penjelasan-kategori-otomatis" className="text-[11px] text-gray-500 mt-1 leading-snug">
+                    Sistem akan menentukan kategori dari metadata dokumen (jenis &amp; tahun). Bila metadata belum lengkap,
+                    dokumen belum berkategori sampai dilengkapi.
+                  </p>
+                )}
               </div>
 
               {/* Klasifikasi Akses */}
