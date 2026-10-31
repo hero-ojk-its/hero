@@ -158,3 +158,45 @@ export function alasanTambahanGagal(failureType: unknown, reasonCode: unknown): 
   const alasan = labelAlasanGagal(reasonCode);
   return alasan.toLowerCase() === labelJenisKegagalan(failureType).toLowerCase() ? null : alasan;
 }
+
+// ============================================================================
+// Penempatan dokumen saat kategori diubah nama / dipindah (PATCH /categories/{id}.dokumen_gagal[].alasan)
+// ============================================================================
+
+/**
+ * Sumber: placement_service.PlacementResult.reason & category_service.update. "metadata_belum_cukup"
+ * bukan galat: dokumen tetap di kategorinya, hanya berkasnya belum dipindah ke folder KB.
+ */
+export interface AlasanPenempatan {
+  /** Kunci pengelompokan */
+  kode: 'metadata_belum_cukup' | 'gagal';
+  jenis: 'info' | 'gagal';
+  label: string;
+  keterangan: string;
+  /** Pesan dari backend tanpa awalan "gagal:"; null bila tidak ada */
+  pesan: string | null;
+}
+
+const PESAN_PENEMPATAN_MAKS = 200;
+
+export function alasanPenempatan(alasan: unknown): AlasanPenempatan {
+  const teks = typeof alasan === 'string' ? alasan.trim() : '';
+  if (teks === 'metadata_belum_cukup') {
+    return {
+      kode: 'metadata_belum_cukup',
+      jenis: 'info',
+      label: 'Metadata belum lengkap',
+      keterangan: 'Tetap di kategori ini; berkas belum ditempatkan di folder KB karena metadata belum lengkap.',
+      pesan: null,
+    };
+  }
+  // "gagal: <exception>", "gagal_penempatan", atau teks exception mentah
+  const bersih = teks.replace(/^gagal(_penempatan)?\s*:?\s*/i, '').trim();
+  return {
+    kode: 'gagal',
+    jenis: 'gagal',
+    label: 'Gagal memindahkan berkas',
+    keterangan: 'Kategori sudah diperbarui, tetapi berkas dokumen ini belum berhasil dipindahkan ke folder baru.',
+    pesan: bersih === '' ? null : bersih.length > PESAN_PENEMPATAN_MAKS ? `${bersih.slice(0, PESAN_PENEMPATAN_MAKS)}…` : bersih,
+  };
+}
