@@ -183,7 +183,8 @@ export interface MlAnalisaResponse {
   ringkasan_ai?: string | MlAnalisaAiSentence[];
   catatan?: string;
   cache?: MlAnalisaCache;
-  disaring_backend?: boolean;
+  /** Jumlah item yang disaring gateway karena hak akses */
+  disaring_backend?: number;
 }
 
 // ============================================================================

@@ -118,10 +118,19 @@ export interface paths {
         get: operations["get_category_detail_api_v1_categories__category_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Hapus Kategori
+         * @description Menghapus kategori kosong. Menolak jika masih memiliki subkategori atau dokumen.
+         */
+        delete: operations["delete_category_api_v1_categories__category_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Ubah Kategori (Nama, Induk, Aturan Klasifikasi)
+         * @description Memperbarui nama, induk (parent_id), dan/atau classification_rule kategori.
+         *     Jika nama atau parent_id berubah, seluruh berkas dokumen terkait dipindahkan.
+         */
+        patch: operations["update_category_api_v1_categories__category_id__patch"];
         trace?: never;
     };
     "/api/v1/ingest/upload-pdf": {
@@ -423,6 +432,27 @@ export interface paths {
          * @description Mengembalikan potongan teks mentah hasil ekstraksi dokumen lengkap.
          */
         get: operations["get_document_text_api_v1_documents__document_id__text_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/documents/{document_id}/kemiripan-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Kemiripan draft berulang dan perbandingan per pasal
+         * @description Menghitung persentase kemiripan teks terhadap draft-draft kajian lain (Jaccard 5-gram shingle)
+         *     dan membandingkan perbedaan per pasal jika kemiripan melampaui ambang.
+         */
+        get: operations["get_draft_similarity_api_v1_documents__document_id__kemiripan_draft_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -850,6 +880,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/internal/documents/status/recompute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * [Internal] Hitung ulang status keberlakuan dokumen berdasarkan tanggal berlaku
+         * @description Hitung ulang status_keberlakuan untuk dokumen yang:
+         *     - status_source IN ('tanggal_berlaku', None) atau IS NULL
+         *     - effective_date IS NOT NULL
+         *     Dipanggil harian oleh timer di server (lapisan data/infra).
+         */
+        post: operations["recompute_documents_status_api_v1_internal_documents_status_recompute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/scraping-sources/": {
         parameters: {
             query?: never;
@@ -978,6 +1031,28 @@ export interface paths {
          *     pipeline ingest, dan sumber scraping dengan query agregat SQL yang efisien.
          */
         get: operations["get_dashboard_summary_api_v1_dashboard_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dashboard/corong": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Statistik corong per sumber (scan -> unduh -> simpan -> terbaca)
+         * @description [Langkah 27] Endpoint statistik corong per sumber: scan -> unduh -> simpan -> terbaca,
+         *     dengan penanda PDF terproteksi, OCR vs teks langsung, dan drill-down kegagalan.
+         *     Mendukung format JSON dan CSV (UTF-8 with BOM).
+         */
+        get: operations["get_dashboard_corong_api_v1_dashboard_corong_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1865,6 +1940,8 @@ export interface components {
             name: string;
             /** Parent Id */
             parent_id?: number | null;
+            /** Classification Rule */
+            classification_rule?: string | null;
         };
         /** CategoryDetailResponse */
         CategoryDetailResponse: {
@@ -1880,6 +1957,19 @@ export interface components {
             path: string[];
             /** Document Count */
             document_count: number;
+            /** Jumlah Dokumen */
+            jumlah_dokumen: number;
+            /** Classification Rule */
+            classification_rule?: string | null;
+        };
+        /** CategoryUpdateRequest */
+        CategoryUpdateRequest: {
+            /** Name */
+            name?: string | null;
+            /** Parent Id */
+            parent_id?: number | null;
+            /** Classification Rule */
+            classification_rule?: string | null;
         };
         /** DocumentAnalysisComparisonResponse */
         DocumentAnalysisComparisonResponse: {
@@ -1919,6 +2009,41 @@ export interface components {
             mencabut?: components["schemas"]["VersionRelationItem"][];
             /** Catatan */
             catatan: string;
+        };
+        /** DraftKemiripanResponse */
+        DraftKemiripanResponse: {
+            /** Document Id */
+            document_id: number;
+            /** Ambang */
+            ambang: number;
+            /** Dibandingkan */
+            dibandingkan: number;
+            /** Draft Mirip */
+            draft_mirip: components["schemas"]["DraftMiripItem"][];
+            terdekat?: components["schemas"]["DraftTerdekatItem"] | null;
+            per_pasal?: components["schemas"]["PerPasalDetail"] | null;
+            /** Catatan */
+            catatan?: string | null;
+        };
+        /** DraftMiripItem */
+        DraftMiripItem: {
+            /** Document Id */
+            document_id: number;
+            /** Judul */
+            judul: string;
+            /** Diunggah */
+            diunggah?: string | null;
+            /** Persen */
+            persen: number;
+            /** Status */
+            status: string;
+        };
+        /** DraftTerdekatItem */
+        DraftTerdekatItem: {
+            /** Document Id */
+            document_id: number;
+            /** Persen */
+            persen: number;
         };
         /** DuplicateCheckResponse */
         DuplicateCheckResponse: {
@@ -2529,6 +2654,14 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** PerPasalDetail */
+        PerPasalDetail: {
+            /** Dibanding Dengan */
+            dibanding_dengan: number;
+            ringkas: components["schemas"]["RingkasPasal"];
+            /** Pasal */
+            pasal: components["schemas"]["RincianPasal"][];
+        };
         /**
          * PeranDokumen
          * @description Peran dokumen dalam basis pengetahuan / kajian
@@ -2586,6 +2719,38 @@ export interface components {
             asal?: string | null;
             /** Bukti */
             bukti?: string | null;
+        };
+        /** RincianPasal */
+        RincianPasal: {
+            /** Pasal */
+            pasal: string;
+            /** Status */
+            status: string;
+            /** Persen */
+            persen?: number | null;
+        };
+        /** RingkasPasal */
+        RingkasPasal: {
+            /**
+             * Sama
+             * @default 0
+             */
+            sama: number;
+            /**
+             * Berubah
+             * @default 0
+             */
+            berubah: number;
+            /**
+             * Baru
+             * @default 0
+             */
+            baru: number;
+            /**
+             * Dihapus
+             * @default 0
+             */
+            dihapus: number;
         };
         /**
          * ScanCreate
@@ -2974,7 +3139,7 @@ export interface components {
          * @description Status keberlakuan suatu dokumen regulasi
          * @enum {string}
          */
-        StatusKeberlakuan: "berlaku" | "diubah" | "dicabut" | "tidak_diketahui";
+        StatusKeberlakuan: "berlaku" | "diubah" | "dicabut" | "tidak_diketahui" | "belum_berlaku";
         /**
          * StatusPemrosesan
          * @description Status tahapan pemrosesan dokumen dalam pipeline ingest
@@ -3450,6 +3615,70 @@ export interface operations {
             };
         };
     };
+    delete_category_api_v1_categories__category_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_category_api_v1_categories__category_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     upload_pdf_api_v1_ingest_upload_pdf_post: {
         parameters: {
             query?: never;
@@ -3554,6 +3783,10 @@ export interface operations {
             query?: {
                 job_id?: number | null;
                 failure_type?: components["schemas"]["JenisKegagalan"] | null;
+                /** @description Filter berdasarkan satu atau lebih reason_code */
+                reason_code?: string[] | null;
+                /** @description Filter berdasarkan sumber scraping */
+                source_id?: number | null;
                 /** @description belum_ditangani | diproses_ulang | diabaikan | all */
                 follow_up_status?: string | null;
                 /** @description Tampilkan juga duplikat (default: false) */
@@ -4053,6 +4286,61 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    get_draft_similarity_api_v1_documents__document_id__kemiripan_draft_get: {
+        parameters: {
+            query?: {
+                /** @description Ambang batas kemiripan (0-100 persen) */
+                ambang?: number | null;
+                /** @description Batas jumlah draft mirip yang ditampilkan */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftKemiripanResponse"];
+                };
+            };
+            /** @description Akses dokumen non-publik ditolak / izin tidak memadai */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Dokumen tidak ditemukan */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Draft belum selesai diekstraksi */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Dokumen bukan draft kajian */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -4790,6 +5078,37 @@ export interface operations {
             };
         };
     };
+    recompute_documents_status_api_v1_internal_documents_status_recompute_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Internal-API-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_scraping_sources_api_v1_scraping_sources__get: {
         parameters: {
             query?: {
@@ -5099,6 +5418,40 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    get_dashboard_corong_api_v1_dashboard_corong_get: {
+        parameters: {
+            query?: {
+                /** @description Filter untuk satu sumber spesifik */
+                source_id?: number | null;
+                /** @description Format output: json | csv */
+                format?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
