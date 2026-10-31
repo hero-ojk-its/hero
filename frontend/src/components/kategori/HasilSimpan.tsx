@@ -65,11 +65,17 @@ export default function HasilSimpan({ hasil, onTutup }: { hasil: HasilAksiKatego
             <p className="mt-0.5">{alasan.keterangan}</p>
             <ul className="mt-1.5 space-y-0.5">
               {baris.map((b) => (
-                <li key={b.id} className="flex flex-wrap items-baseline gap-x-2">
+                <li key={b.id}>
                   <Link to={`/knowledge/detail/${b.id}`} className="font-semibold underline underline-offset-2 hover:no-underline">
                     Dokumen #{b.id}
                   </Link>
-                  {b.pesan && <span className="text-[11px] opacity-80 break-all">{b.pesan}</span>}
+                  {/* Pesan backend bersifat teknis (mis. "[Errno 13] ..."): disembunyikan di balik elemen lipat */}
+                  {b.pesan && (
+                    <details className="mt-0.5 ml-1" data-detail-teknis>
+                      <summary className="cursor-pointer select-none text-[11px] opacity-70 hover:opacity-100">Detail teknis</summary>
+                      <p className="mt-0.5 text-[11px] font-mono opacity-80 break-all">{b.pesan}</p>
+                    </details>
+                  )}
                 </li>
               ))}
             </ul>
