@@ -12,6 +12,7 @@ import {
   updateDocumentMetadata, 
   updateDocumentStatus,
   type UpdateMetadataIn,
+  type UpdateMetadataResponse,
   type UpdateDocumentStatusIn,
   type StatusKeberlakuan,
   type KlasifikasiAkses, 
@@ -38,7 +39,8 @@ interface EditMetadataModalProps {
   isOpen: boolean;
   onClose: () => void;
   document: DocumentItem;
-  onSuccess: (updated: DocumentItem) => void;
+  /** Dokumen terbaru + changed_fields/placement dari backend */
+  onSuccess: (updated: UpdateMetadataResponse) => void;
 }
 
 export function EditMetadataModal(props: EditMetadataModalProps) {
