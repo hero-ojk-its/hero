@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { availableFolders, mockScrapedDocs } from './mock';
 import { isApiConfigured } from '../../lib/api';
+import { gayaStatusKeberlakuan, labelStatusKeberlakuan } from '../../lib/labelStatus';
 import RealSyncTab from './RealSyncTab';
 
 export default function SyncTab() {
@@ -634,24 +635,10 @@ function MockSyncTab() {
                           </td>
                           <td className={`py-4 px-6 text-sm ${doc.active ? 'text-gray-600' : 'text-gray-400'}`}>{doc.year}</td>
                           <td className="py-4 px-6 text-center">
-                            {doc.regStatus === 'Aktif' && (
-                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${doc.active ? 'bg-white border-green-200 text-green-700' : 'bg-white border-gray-200 text-green-700/50'}`}>
-                                <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${doc.active ? 'bg-green-500' : 'bg-green-500/50'}`}></span>
-                                Aktif
-                              </span>
-                            )}
-                            {doc.regStatus === 'Diubah' && (
-                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${doc.active ? 'bg-white border-yellow-300 text-yellow-700' : 'bg-white border-gray-200 text-yellow-700/50'}`}>
-                                <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${doc.active ? 'bg-yellow-500' : 'bg-yellow-500/50'}`}></span>
-                                Diubah
-                              </span>
-                            )}
-                            {doc.regStatus === 'Dicabut' && (
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-white border-gray-200 text-gray-500">
-                                <span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-gray-400"></span>
-                                Dicabut
-                              </span>
-                            )}
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${gayaStatusKeberlakuan(doc.regStatus).badge} ${doc.active ? '' : 'opacity-50'}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${gayaStatusKeberlakuan(doc.regStatus).titik}`}></span>
+                              {labelStatusKeberlakuan(doc.regStatus)}
+                            </span>
                           </td>
                           <td className="py-4 px-6 text-center">
                             {doc.kbsStatus === 'Baru' && (

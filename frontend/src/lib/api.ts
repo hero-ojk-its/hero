@@ -2,6 +2,8 @@
  * Client API HERO untuk komunikasi dengan Backend FastAPI.
  */
 
+import { labelStatusKeberlakuan } from './labelStatus';
+
 export interface ValidationErrorItem {
   loc?: (string | number)[];
   msg?: string;
@@ -541,7 +543,10 @@ export interface AdaptedRegulasiDoc {
   kategori: string;
   topik: string;
   tahun: number | string;
+  /** Label tampilan status keberlakuan */
   status: string;
+  /** Nilai enum status_keberlakuan dari backend (dasar warna badge) */
+  statusKode?: string;
   sumber: string;
   ukuran?: string;
   sha256?: string;
@@ -600,13 +605,6 @@ export function adaptDocumentToDetail(doc: DocumentItem): AdaptedRegulasiDoc {
     }
   }
 
-  const statusMap: Record<string, string> = {
-    berlaku: 'Aktif',
-    diubah: 'Diubah',
-    dicabut: 'Dicabut',
-    tidak_diketahui: 'Tidak diketahui',
-  };
-
   return {
     id: doc.id,
     judul: doc.title || '-',
@@ -619,7 +617,8 @@ export function adaptDocumentToDetail(doc: DocumentItem): AdaptedRegulasiDoc {
     topik: doc.bidang || '-',
     tahun,
     tanggalPublikasi,
-    status: statusMap[doc.status_keberlakuan] || doc.status_keberlakuan || 'Tidak diketahui',
+    status: labelStatusKeberlakuan(doc.status_keberlakuan),
+    statusKode: doc.status_keberlakuan || 'tidak_diketahui',
     sumber: doc.source_url || '-',
     ukuran: formatFileSize(doc.file_size_bytes),
     sha256: doc.file_hash || undefined,
