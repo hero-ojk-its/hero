@@ -471,6 +471,10 @@ export interface CategoryNode {
   auto_created?: boolean;
   document_count: number;
   total_document_count: number;
+  /** Dokumen aktif langsung di kategori ini (Langkah 28; sama dengan document_count) */
+  jumlah_dokumen?: number;
+  /** Teks JSON objek; disimpan, belum dipakai klasifikasi otomatis (Langkah 28) */
+  classification_rule?: string | null;
   children: CategoryNode[];
 }
 
