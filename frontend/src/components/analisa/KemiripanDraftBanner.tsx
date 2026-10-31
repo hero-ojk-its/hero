@@ -133,9 +133,11 @@ export default function KemiripanDraftBanner({ documentId }: KemiripanDraftBanne
           <Info size={12} className="text-gray-400 shrink-0" />
           <span><strong className="font-semibold text-gray-700">{galat.judul}.</strong> {galat.pesan}</span>
         </span>
-        <button type="button" onClick={cobaLagi} className="inline-flex items-center gap-1 font-semibold text-red-700 hover:underline cursor-pointer shrink-0">
-          <RefreshCw size={11} /> Coba lagi
-        </button>
+        {galat.bisaCobaLagi && (
+          <button type="button" onClick={cobaLagi} className="inline-flex items-center gap-1 font-semibold text-red-700 hover:underline cursor-pointer shrink-0">
+            <RefreshCw size={11} /> Coba lagi
+          </button>
+        )}
       </div>
     );
   }

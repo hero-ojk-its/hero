@@ -63,8 +63,10 @@ export function isSedangDiproses(err: unknown): boolean {
 export interface PesanKemiripan {
   judul: string;
   pesan: string;
-  /** 'netral' untuk keadaan wajar yang bukan galat (mis. dokumen bukan draft kajian) */
+  /** 'netral' untuk keadaan yang bukan gangguan sistem (bukan draft kajian, tanpa akses, tidak ditemukan) */
   jenis: 'netral' | 'galat';
+  /** Tombol "Coba lagi" hanya untuk galat jaringan, timeout, dan 5xx */
+  bisaCobaLagi: boolean;
 }
 
 function kodeGalat(err: ApiError): string | null {
@@ -79,30 +81,35 @@ function kodeGalat(err: ApiError): string | null {
 /** Pesan ramah per status; teks teknis backend tidak diteruskan ke pengguna */
 export function pesanGalatKemiripan(err: unknown): PesanKemiripan {
   if (!(err instanceof ApiError)) {
-    return { judul: 'Kemiripan draft tidak dapat dimuat', pesan: 'Terjadi kesalahan tak terduga.', jenis: 'galat' };
+    return { judul: 'Kemiripan draft tidak dapat dimuat', pesan: 'Terjadi kesalahan tak terduga.', jenis: 'galat', bisaCobaLagi: false };
   }
   switch (err.status) {
     case 401:
-      return { judul: 'Sesi berakhir', pesan: 'Sesi berakhir, silakan masuk lagi.', jenis: 'galat' };
+      return { judul: 'Sesi berakhir', pesan: 'Sesi berakhir, silakan masuk lagi.', jenis: 'galat', bisaCobaLagi: false };
     case 403:
       return kodeGalat(err) === 'akses_ditolak'
-        ? { judul: 'Akses ditolak', pesan: 'Peran Anda tidak memiliki izin melihat kemiripan draft.', jenis: 'galat' }
-        : { judul: 'Akses ditolak', pesan: 'Kemiripan draft non-publik baru bisa dilihat setelah fitur login aktif.', jenis: 'galat' };
+        ? { judul: 'Akses ditolak', pesan: 'Peran Anda tidak memiliki izin melihat kemiripan draft.', jenis: 'netral', bisaCobaLagi: false }
+        : { judul: 'Akses ditolak', pesan: 'Kemiripan draft non-publik baru bisa dilihat setelah fitur login aktif.', jenis: 'netral', bisaCobaLagi: false };
     case 404:
-      return { judul: 'Dokumen tidak ditemukan', pesan: 'Kemiripan draft tidak tersedia karena dokumen tidak ditemukan.', jenis: 'galat' };
+      return { judul: 'Dokumen tidak ditemukan', pesan: 'Kemiripan draft tidak tersedia karena dokumen tidak ditemukan.', jenis: 'netral', bisaCobaLagi: false };
     case 409:
-      return { judul: 'Draft sedang diproses', pesan: 'Teks draft masih diekstrak, kemiripan akan dihitung setelahnya.', jenis: 'netral' };
+      return { judul: 'Draft sedang diproses', pesan: 'Teks draft masih diekstrak, kemiripan akan dihitung setelahnya.', jenis: 'netral', bisaCobaLagi: false };
     case 422:
       // Validasi FastAPI (ambang/limit tidak valid) berbentuk array; selain itu dokumen bukan draft kajian
       return Array.isArray(err.detail)
-        ? { judul: 'Permintaan tidak valid', pesan: 'Parameter kemiripan draft tidak valid.', jenis: 'galat' }
-        : { judul: 'Bukan draft kajian', pesan: 'Kemiripan hanya dihitung untuk dokumen draft kajian.', jenis: 'netral' };
+        ? { judul: 'Permintaan tidak valid', pesan: 'Parameter kemiripan draft tidak valid.', jenis: 'galat', bisaCobaLagi: false }
+        : { judul: 'Bukan draft kajian', pesan: 'Kemiripan hanya dihitung untuk dokumen draft kajian.', jenis: 'netral', bisaCobaLagi: false };
     case 0:
       return /batas waktu/i.test(err.message)
-        ? { judul: 'Waktu habis', pesan: 'Perhitungan kemiripan membutuhkan waktu terlalu lama.', jenis: 'galat' }
-        : { judul: 'Tidak dapat terhubung', pesan: 'Tidak dapat terhubung ke peladen.', jenis: 'galat' };
+        ? { judul: 'Waktu habis', pesan: 'Perhitungan kemiripan membutuhkan waktu terlalu lama.', jenis: 'galat', bisaCobaLagi: true }
+        : { judul: 'Tidak dapat terhubung', pesan: 'Tidak dapat terhubung ke peladen.', jenis: 'galat', bisaCobaLagi: true };
     default:
-      return { judul: 'Kemiripan draft tidak dapat dimuat', pesan: `Terjadi gangguan di peladen (HTTP ${err.status}).`, jenis: 'galat' };
+      return {
+        judul: 'Kemiripan draft tidak dapat dimuat',
+        pesan: `Terjadi gangguan di peladen (HTTP ${err.status}).`,
+        jenis: 'galat',
+        bisaCobaLagi: err.status >= 500,
+      };
   }
 }
 
