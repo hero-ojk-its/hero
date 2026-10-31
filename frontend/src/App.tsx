@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard';
 import IngestDokumen from './pages/IngestDokumen';
 import KnowledgeBase from './pages/KnowledgeBase';
 import DetailDokumen from './pages/DetailDokumen';
+import KelolaKategori from './pages/KelolaKategori';
 import Harmonisasi from './pages/Harmonisasi';
 import AnalisaRegulasi from './pages/AnalisaRegulasi';
 import Settings from './pages/Settings';
@@ -17,6 +18,7 @@ function App() {
           <Route path="ingest" element={<IngestDokumen />} />
           <Route path="knowledge" element={<KnowledgeBase />} />
           <Route path="knowledge/detail/:id" element={<DetailDokumen />} />
+          <Route path="knowledge/kategori" element={<KelolaKategori />} />
           <Route path="analisa" element={<AnalisaRegulasi />} />
           <Route path="harmonisasi" element={<Harmonisasi />} />
           <Route path="settings" element={<Settings />} />

@@ -13,7 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { regulasiData } from '../data/regulasiData';
 import type { RegulasiItem } from '../data/regulasiData';
@@ -199,23 +199,28 @@ export default function KnowledgeBase() {
 
     const controller = new AbortController();
     let isMounted = true;
-    apiFetch<CategoryNode[]>('/api/v1/categories/tree', { signal: controller.signal })
-      .then((data) => {
-        if (isMounted) {
-          setCategoryNodes(data);
-          setCategoryError(false);
-        }
-      })
-      .catch((err: unknown) => {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        if (err instanceof Error && err.name === 'AbortError') return;
-        if (isMounted) {
-          setCategoryError(true);
-        }
-      });
+    // Ditunda satu tick agar mount ganda StrictMode tidak mengirim request dua kali;
+    // no-store agar perubahan dari Kelola Kategori langsung terlihat saat kembali ke halaman ini
+    const timer = setTimeout(() => {
+      apiFetch<CategoryNode[]>('/api/v1/categories/tree', { signal: controller.signal, cache: 'no-store' })
+        .then((data) => {
+          if (isMounted) {
+            setCategoryNodes(data);
+            setCategoryError(false);
+          }
+        })
+        .catch((err: unknown) => {
+          if (err instanceof DOMException && err.name === 'AbortError') return;
+          if (err instanceof Error && err.name === 'AbortError') return;
+          if (isMounted) {
+            setCategoryError(true);
+          }
+        });
+    }, 0);
 
     return () => {
       isMounted = false;
+      clearTimeout(timer);
       controller.abort();
     };
   }, []);
@@ -532,6 +537,14 @@ export default function KnowledgeBase() {
             <span className="bg-amber-50 text-amber-800 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border border-amber-200">
               Data contoh
             </span>
+          )}
+          {isApiConfigured && (
+            <Link
+              to="/knowledge/kategori"
+              className="ml-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 shadow-sm"
+            >
+              <FolderTree className="w-3.5 h-3.5 text-red-700" /> Kelola Kategori
+            </Link>
           )}
         </div>
         <p className="text-gray-500 mt-2 text-sm">Kelola dan temukan regulasi yang tersimpan dalam sistem.</p>
