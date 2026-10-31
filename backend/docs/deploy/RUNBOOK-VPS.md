@@ -273,6 +273,53 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f --tail=1
 docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f --tail=100 caddy
 ```
 
+### 5.6 Penarikan Seluruh Hasil Scan ke KB (`tarik_semua.py`)
+Setelah smoke test Fase 2 (S01–S22) lulus dengan **0 GAGAL**, lakukan penarikan dokumen hasil pemindaian (scraping) ke Knowledge Base (KB) menggunakan skrip `scripts/tarik_semua.py`:
+
+0. Jalankan scan ulang untuk setiap sumber (menu Ingest → Pindai, atau POST /api/v1/scans/) dan tunggu status 'siap_dipilih'. tarik_semua.py hanya memakai sesi scan TERBARU per sumber; sumber tanpa sesi siap akan dilewati (contoh: JDIH di data lokal).
+
+```bash
+# 1. DRY-RUN (Default): Hanya membaca kandidat dan menampilkan proyeksi tarikan (hanya metode GET)
+python scripts/tarik_semua.py --base-url https://<domain-api>
+
+# 2. Uji Penarikan Bertahap (Batas 20 kandidat per sumber)
+python scripts/tarik_semua.py --base-url https://<domain-api> --apply --batas 20
+
+# 3. Penarikan Penuh Seluruh Sumber
+python scripts/tarik_semua.py --base-url https://<domain-api> --apply
+
+# Opsi autentikasi bila AUTH_ENABLED=true:
+# HERO_API_TOKEN="<token_jwt_admin_atau_analis>" python scripts/tarik_semua.py --base-url https://<domain-api> --apply
+```
+
+#### Pemantauan & Tindak Lanjut Pasca Tarikan:
+1. **Pantau Corong Reguler**:
+   Periksa pergerakan status corong via API:
+   ```bash
+   curl -s https://<domain-api>/api/v1/dashboard/corong | jq .
+   ```
+   Pastikan metrik `total.dokumen.di_kb` bertambah dan `total.scan.belum_ditarik` menurun.
+2. **Tindak Lanjut Kandidat Gagal**:
+   Bila muncul baris `PERINGATAN: N kandidat gagal ditarik`:
+   - Telusuri log kegagalan via endpoint antrean kegagalan:
+     ```bash
+     curl -s "https://<domain-api>/api/v1/ingest/failures?source_id=<id>" | jq .
+     ```
+   - Lakukan penarikan ulang hanya untuk kandidat yang sempat gagal:
+     ```bash
+     python scripts/tarik_semua.py --base-url https://<domain-api> --apply --ulang-gagal
+     ```
+
+### 5.7 Menyiapkan KB untuk UAT (Skenario 1.480 + 20)
+Sesuai arahan Weekly #7 Pak Faris dan Test Plan PM:
+- **Konsep Ground Truth**: Seluruh dokumen regulasi yang terdeteksi saat scraping ditarik, diunduh ke penyimpanan lokal, dipecah (ekstraksi pasal), dan masuk vektor database. Kumpulan regulasi ini menjadi *ground truth* corpus pengetahuan sistem HERO.
+- **Skenario UAT 1.480 + 20**:
+  1. Dari total ~1.500 dokumen korpus regulasi yang terdeteksi, lakukan penarikan seluruh dokumen ke KB menggunakan `--apply`. Catatan: angka 'belum_ditarik' di corong menghitung kandidat dari SEMUA sesi scan lama, jadi bisa lebih besar dari angka 'perlu ditarik' di tarik_semua.py yang hanya membaca sesi terbaru.
+  2. Tunggu worker ekstraksi data / ML menyelesaikan pemrosesan OCR, ekstraksi pasal, dan pembuatan embedding vektor. Angka `terbaca` pada corong akan bertahap meningkat hingga seluruh dokumen selesai diproses.
+  3. **Penyisihan 20 Dokumen Uji**:
+     > **Catatan untuk Tim QA (Hamdan & Zaky)**:
+     > Sisihkan **20 dokumen regulasi uji** yang mewakili berbagai variasi (PDF Word, PDF pindaian/scanned, PDF terproteksi, POJK lama vs POJK baru) sesuai rincian pada Test Plan PM untuk pengujian manual skenario UAT. 1.480 dokumen lainnya dibiarkan aktif sebagai korpus acuan dasar.
+
 ---
 
 ## 6. Menyambungkan Frontend (Vercel)
