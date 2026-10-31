@@ -1796,6 +1796,90 @@
         }
       }
     },
+    "/api/v1/documents/{document_id}/kemiripan-draft": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Kemiripan draft berulang dan perbandingan per pasal",
+        "description": "Menghitung persentase kemiripan teks terhadap draft-draft kajian lain (Jaccard 5-gram shingle)\ndan membandingkan perbedaan per pasal jika kemiripan melampaui ambang.",
+        "operationId": "get_draft_similarity_api_v1_documents__document_id__kemiripan_draft_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "ambang",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 100.0,
+                  "minimum": 0.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Ambang batas kemiripan (0-100 persen)",
+              "title": "Ambang"
+            },
+            "description": "Ambang batas kemiripan (0-100 persen)"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "minimum": 1,
+              "description": "Batas jumlah draft mirip yang ditampilkan",
+              "default": 5,
+              "title": "Limit"
+            },
+            "description": "Batas jumlah draft mirip yang ditampilkan"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftKemiripanResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Akses dokumen non-publik ditolak / izin tidak memadai"
+          },
+          "404": {
+            "description": "Dokumen tidak ditemukan"
+          },
+          "409": {
+            "description": "Draft belum selesai diekstraksi"
+          },
+          "422": {
+            "description": "Dokumen bukan draft kajian"
+          }
+        }
+      }
+    },
     "/api/v1/documents/{document_id}/metadata": {
       "patch": {
         "tags": [
@@ -6678,6 +6762,125 @@
         ],
         "title": "DocumentVersionResponse"
       },
+      "DraftKemiripanResponse": {
+        "properties": {
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "ambang": {
+            "type": "number",
+            "title": "Ambang"
+          },
+          "dibandingkan": {
+            "type": "integer",
+            "title": "Dibandingkan"
+          },
+          "draft_mirip": {
+            "items": {
+              "$ref": "#/components/schemas/DraftMiripItem"
+            },
+            "type": "array",
+            "title": "Draft Mirip"
+          },
+          "terdekat": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DraftTerdekatItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "per_pasal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PerPasalDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "catatan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catatan"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "ambang",
+          "dibandingkan",
+          "draft_mirip"
+        ],
+        "title": "DraftKemiripanResponse"
+      },
+      "DraftMiripItem": {
+        "properties": {
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "judul": {
+            "type": "string",
+            "title": "Judul"
+          },
+          "diunggah": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diunggah"
+          },
+          "persen": {
+            "type": "number",
+            "title": "Persen"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "judul",
+          "persen",
+          "status"
+        ],
+        "title": "DraftMiripItem"
+      },
+      "DraftTerdekatItem": {
+        "properties": {
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "persen": {
+            "type": "number",
+            "title": "Persen"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "persen"
+        ],
+        "title": "DraftTerdekatItem"
+      },
       "DuplicateCheckResponse": {
         "properties": {
           "is_duplicate": {
@@ -8567,6 +8770,31 @@
         ],
         "title": "NodeStatusItemIn"
       },
+      "PerPasalDetail": {
+        "properties": {
+          "dibanding_dengan": {
+            "type": "integer",
+            "title": "Dibanding Dengan"
+          },
+          "ringkas": {
+            "$ref": "#/components/schemas/RingkasPasal"
+          },
+          "pasal": {
+            "items": {
+              "$ref": "#/components/schemas/RincianPasal"
+            },
+            "type": "array",
+            "title": "Pasal"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dibanding_dengan",
+          "ringkas",
+          "pasal"
+        ],
+        "title": "PerPasalDetail"
+      },
       "PeranDokumen": {
         "type": "string",
         "enum": [
@@ -8723,6 +8951,61 @@
           "rel"
         ],
         "title": "RelationItemIn"
+      },
+      "RincianPasal": {
+        "properties": {
+          "pasal": {
+            "type": "string",
+            "title": "Pasal"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "persen": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persen"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pasal",
+          "status"
+        ],
+        "title": "RincianPasal"
+      },
+      "RingkasPasal": {
+        "properties": {
+          "sama": {
+            "type": "integer",
+            "title": "Sama",
+            "default": 0
+          },
+          "berubah": {
+            "type": "integer",
+            "title": "Berubah",
+            "default": 0
+          },
+          "baru": {
+            "type": "integer",
+            "title": "Baru",
+            "default": 0
+          },
+          "dihapus": {
+            "type": "integer",
+            "title": "Dihapus",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "RingkasPasal"
       },
       "ScanCreate": {
         "properties": {

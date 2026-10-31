@@ -7,16 +7,13 @@ import json
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Set
-import pytest
 
 from app.models.enums import (
     HasilTarik,
     JenisJobIngest,
     JenisKegagalan,
-    JenisRujukan,
     JenisSumber,
     KlasifikasiAkses,
-    MetodeEkstraksi,
     PeranDokumen,
     StatusJobIngest,
     StatusKandidat,
@@ -48,7 +45,7 @@ VALID_ENUM_VALUES: Dict[str, Set[str]] = {
         | {e.value for e in StatusPemrosesan}
         | {e.value for e in StatusKeberlakuan}
         | {e.value for e in StatusTindakLanjut}
-        | {"ok", "degraded", "error", "sukses", "gagal_dicatat", "requeued", "success", "duplicate", "failed"}  # Status health / status respon aksi / upload item
+        | {"ok", "degraded", "error", "sukses", "gagal_dicatat", "requeued", "success", "duplicate", "failed", "identik", "sangat_mirip", "sama", "berubah", "baru", "dihapus"}  # Status health / status respon aksi / upload item
     ),
 }
 
