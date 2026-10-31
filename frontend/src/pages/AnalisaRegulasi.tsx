@@ -9,8 +9,9 @@ import {
   Clock, 
   ArrowRight, 
   RefreshCw, 
-  X, 
-  Activity
+  X,
+  Activity,
+  Copy
 } from 'lucide-react';
 
 import { 
@@ -26,6 +27,7 @@ import type {
   MlHealthResponse,
   UploadProgressEvent
 } from '../lib/analisaApi';
+import { potongJudul } from '../lib/kemiripanApi';
 import { usePolling } from '../lib/usePolling';
 import { ErrorState } from '../components/ErrorState';
 import AnalisaState2Workspace from '../components/analisa/AnalisaState2Workspace';
@@ -72,6 +74,8 @@ export default function AnalisaRegulasi() {
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef<boolean>(true);
   const isExplicitCancelRef = useRef<boolean>(false);
+  // Hasil unggah berupa duplikat byte-identik: tidak di-polling, tidak pindah otomatis
+  const [duplikat, setDuplikat] = useState<{ documentId: number; judul: string | null } | null>(null);
 
   // 5. State Polling Kesiapan Dokumen
   const [isPollingActive, setIsPollingActive] = useState<boolean>(false);
@@ -211,6 +215,21 @@ export default function AnalisaRegulasi() {
     }
   };
 
+  // Kartu duplikat -> "Unggah berkas lain": kosongkan berkas & isian khusus berkas, pilihan lain dipertahankan
+  const handleUnggahBerkasLain = () => {
+    setDuplikat(null);
+    setSelectedFile(null);
+    setTitle('');
+    setRegulationNumber('');
+    setUploadError(null);
+    setIsUploading(false);
+    setUploadProgress(null);
+    isExplicitCancelRef.current = false;
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   // Handler Submit Unggah Draf
   const handleSubmitUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -224,6 +243,7 @@ export default function AnalisaRegulasi() {
     }
 
     setUploadError(null);
+    setDuplikat(null);
     setIsUploading(true);
     setUploadProgress(null);
     setPollingTimeoutOccurred(false);
@@ -258,6 +278,18 @@ export default function AnalisaRegulasi() {
       );
 
       if (!isMountedRef.current) return;
+
+      // Duplikat byte-identik: tampilkan kartu di State 1, tanpa polling dan tanpa pindah otomatis
+      if (result.isDuplicate) {
+        setIsUploading(false);
+        setUploadProgress(null);
+        uploadAbortControllerRef.current = null;
+        setDuplikat({
+          documentId: result.duplicateOfDocumentId ?? result.documentId,
+          judul: result.duplicateTitle ?? null,
+        });
+        return;
+      }
 
       const docId = result.documentId;
       setUploadedDocumentId(docId);
@@ -320,6 +352,7 @@ export default function AnalisaRegulasi() {
     setUploadProgress(null);
     setUploadedDocumentId(null);
     setPollingTimeoutOccurred(false);
+    setDuplikat(null);
     checkHealthStatus();
   };
 
@@ -329,6 +362,9 @@ export default function AnalisaRegulasi() {
   if (activeDocumentId !== null) {
     return (
       <AnalisaState2Workspace
+        // key: pindah ke draft lain (mis. dari banner kemiripan) me-mount ulang workspace,
+        // sehingga state lama ter-reset dan request/polling dokumen sebelumnya dibatalkan
+        key={activeDocumentId}
         documentId={activeDocumentId}
         mode={activeMode}
         onBackToState1={handleBackToState1}
@@ -384,6 +420,42 @@ export default function AnalisaRegulasi() {
           )}
         </div>
       </div>
+
+      {/* 2b. Hasil unggah duplikat byte-identik */}
+      {duplikat && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 shadow-sm space-y-3" role="status">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <Copy size={18} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-amber-900">Berkas sudah pernah diunggah</h3>
+              <p className="text-xs text-amber-900 mt-0.5 leading-relaxed">
+                {duplikat.judul
+                  ? `Berkas ini identik dengan draft #${duplikat.documentId} '${potongJudul(duplikat.judul)}' yang sudah pernah diunggah, jadi tidak diunggah ulang.`
+                  : `Berkas ini identik dengan draft #${duplikat.documentId} yang sudah pernah diunggah, jadi tidak diunggah ulang.`}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 pl-12">
+            <button
+              type="button"
+              onClick={() => handleOpenWorkspace(duplikat.documentId)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-red-700 hover:bg-red-800 text-white rounded-md text-xs font-semibold cursor-pointer"
+            >
+              <span>Buka hasil draft sebelumnya</span>
+              <ArrowRight size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={handleUnggahBerkasLain}
+              className="px-3.5 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-md text-xs font-semibold cursor-pointer"
+            >
+              Unggah berkas lain
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 3. MODUL PROGRES & POLLING UNGGAH DRAF (Aktif saat proses upload & ekstraksi berlangsung) */}
       {(isUploading || isPollingActive || pollingTimeoutOccurred) && (

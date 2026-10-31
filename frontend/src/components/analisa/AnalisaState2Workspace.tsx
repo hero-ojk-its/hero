@@ -35,6 +35,7 @@ import { PanelErrorBoundary } from '../PanelErrorBoundary';
 import { DraftLabel } from '../DraftLabel';
 import RingkasanAiPanel from './RingkasanAiPanel';
 import HarmonisasiPanel from './HarmonisasiPanel';
+import KemiripanDraftBanner from './KemiripanDraftBanner';
 import type { HarmonisasiPanelState } from './HarmonisasiPanel';
 import { postHarmonisasi, pesanGalatHarmonisasi } from '../../lib/harmonisasiApi';
 import type {
@@ -1033,6 +1034,11 @@ export default function AnalisaState2Workspace({
           </button>
         </div>
       </div>
+
+      {/* 3b. Kemiripan dengan draft lain (independen dari analisa, tidak memblokirnya) */}
+      <PanelErrorBoundary nama="Kemiripan Draft">
+        <KemiripanDraftBanner documentId={documentId} />
+      </PanelErrorBoundary>
 
       {/* 4. PROCESSING PIPELINE BANNER */}
       {loading ? (
