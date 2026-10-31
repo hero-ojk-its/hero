@@ -37,10 +37,9 @@ function kalimatMirip(d: DraftMiripItem): string {
   const nama = namaDraft(d);
   const tanggal = formatTanggalUnggah(d.diunggah);
   const sufiksTanggal = tanggal ? ` (${tanggal})` : '';
-  const persen = formatPersen(d.persen);
   return d.status === 'identik'
-    ? `Identik dengan draft ${nama}${sufiksTanggal}: teks ${persen}% sama`
-    : `Mirip ${persen}% dengan draft ${nama}${sufiksTanggal}`;
+    ? `Identik dengan draft ${nama}${sufiksTanggal}: teks ${formatPersen(d.persen, { potong: true })}% sama`
+    : `Mirip ${formatPersen(d.persen)}% dengan draft ${nama}${sufiksTanggal}`;
 }
 
 export default function KemiripanDraftBanner({ documentId }: KemiripanDraftBannerProps) {

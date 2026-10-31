@@ -113,9 +113,16 @@ export function pesanGalatKemiripan(err: unknown): PesanKemiripan {
 const FORMAT_PERSEN = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 });
 const FORMAT_TANGGAL = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 
-/** Maksimal 1 desimal dengan koma Indonesia, mis. 87,5 */
-export function formatPersen(nilai: number | null | undefined): string {
-  return typeof nilai === 'number' && Number.isFinite(nilai) ? FORMAT_PERSEN.format(nilai) : '-';
+/**
+ * Maksimal 1 desimal dengan koma Indonesia, mis. 87,5.
+ * `potong: true` memotong (floor) alih-alih membulatkan, dipakai untuk status identik
+ * agar 99,95 tampil "99,9" dan "100" hanya muncul bila nilainya memang 100.
+ */
+export function formatPersen(nilai: number | null | undefined, { potong = false }: { potong?: boolean } = {}): string {
+  if (typeof nilai !== 'number' || !Number.isFinite(nilai)) return '-';
+  // Epsilon menahan galat floating-point (mis. 99.9 * 10 = 998.9999…) agar tidak ikut turun
+  const angka = potong ? Math.floor(nilai * 10 + 1e-9) / 10 : nilai;
+  return FORMAT_PERSEN.format(angka);
 }
 
 /** Tanggal Indonesia, mis. "12 Oktober 2026"; null bila kosong atau tidak valid */
