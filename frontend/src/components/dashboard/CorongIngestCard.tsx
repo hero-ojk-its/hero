@@ -1,14 +1,22 @@
-import { useEffect, useState } from 'react';
-import { Filter, Info, Loader2, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ChevronRight, Download, Filter, Info, Loader2, RefreshCw } from 'lucide-react';
 import {
   formatDihitungPada,
   getDashboardCorong,
   persenTerhadap,
   pesanGalatCorong,
+  unduhCorongCsv,
 } from '../../lib/corongApi';
 import type { CorongBlok, CorongScan, DashboardCorongResponse, PesanGalatCorong } from '../../lib/corongApi';
 import { formatKodeTakDikenal, labelAlasanGagal } from '../../lib/labelStatus';
 import { JENIS_SUMBER_LABELS } from '../../pages/ingest/labels';
+import DrilldownKegagalanModal from './DrilldownKegagalanModal';
+
+interface Drilldown {
+  reasonCode: string;
+  sourceId: number | null;
+  cakupan: string;
+}
 
 type Keadaan =
   | { status: 'loading' }
@@ -125,6 +133,39 @@ export default function CorongIngestCard() {
     setPutaran((p) => p + 1);
   };
 
+  const [drilldown, setDrilldown] = useState<Drilldown | null>(null);
+  const tutupDrilldown = useCallback(() => setDrilldown(null), []);
+
+  const [mengunduhCsv, setMengunduhCsv] = useState(false);
+  const [galatCsv, setGalatCsv] = useState<PesanGalatCorong | null>(null);
+  const csvController = useRef<AbortController | null>(null);
+  useEffect(() => () => csvController.current?.abort(), []);
+
+  const unduhCsv = async () => {
+    csvController.current?.abort();
+    const controller = new AbortController();
+    csvController.current = controller;
+    setMengunduhCsv(true);
+    setGalatCsv(null);
+    try {
+      const { blob, namaBerkas } = await unduhCorongCsv({ signal: controller.signal });
+      if (controller.signal.aborted) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = namaBerkas;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (err: unknown) {
+      if (controller.signal.aborted || (err instanceof Error && err.name === 'AbortError')) return;
+      setGalatCsv(pesanGalatCorong(err));
+    } finally {
+      if (!controller.signal.aborted) setMengunduhCsv(false);
+    }
+  };
+
   const data = keadaan.status === 'sukses' ? keadaan.data : null;
   const terpilih = data ? pilihBlok(data, pilihan) : null;
   const dihitung = data ? formatDihitungPada(data.dihitung_pada) : null;
@@ -161,6 +202,17 @@ export default function CorongIngestCard() {
               </select>
             </label>
           )}
+          {data && (
+            <button
+              type="button"
+              onClick={() => void unduhCsv()}
+              disabled={mengunduhCsv}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {mengunduhCsv ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+              {mengunduhCsv ? 'Mengunduh…' : 'Unduh CSV'}
+            </button>
+          )}
           <button
             type="button"
             onClick={muatUlang}
@@ -172,6 +224,13 @@ export default function CorongIngestCard() {
           </button>
         </div>
       </div>
+
+      {galatCsv && (
+        <p className="flex items-center gap-1.5 text-xs text-red-700" data-galat-csv>
+          <Info size={12} className="shrink-0" />
+          Gagal mengunduh CSV: {galatCsv.pesan}
+        </p>
+      )}
 
       {keadaan.status === 'loading' && (
         <div className="flex items-center gap-2 py-8 justify-center text-xs text-gray-500">
@@ -199,13 +258,36 @@ export default function CorongIngestCard() {
           Belum ada data ingest untuk {terpilih.jenis === 'total' ? 'ditampilkan' : terpilih.judul}.
         </p>
       ) : (
-        <ResumeCorong terpilih={terpilih} jumlahSumber={data?.sumber.length ?? 0} />
+        <ResumeCorong
+          terpilih={terpilih}
+          jumlahSumber={data?.sumber.length ?? 0}
+          onPilihAlasan={(reasonCode) =>
+            setDrilldown({ reasonCode, sourceId: terpilih.sourceId, cakupan: terpilih.judul })
+          }
+        />
       ))}
+
+      {drilldown && (
+        <DrilldownKegagalanModal
+          reasonCode={drilldown.reasonCode}
+          sourceId={drilldown.sourceId}
+          cakupan={drilldown.cakupan}
+          onClose={tutupDrilldown}
+        />
+      )}
     </section>
   );
 }
 
-function ResumeCorong({ terpilih, jumlahSumber }: { terpilih: BlokTerpilih; jumlahSumber: number }) {
+interface ResumeCorongProps {
+  terpilih: BlokTerpilih;
+  jumlahSumber: number;
+  onPilihAlasan: (reasonCode: string) => void;
+}
+
+function ResumeCorong({ terpilih, jumlahSumber, onPilihAlasan }: ResumeCorongProps) {
+  // /ingest/failures belum bisa memfilter "unggah manual" (tanpa sumber), jadi tidak bisa ditelusuri
+  const bisaDitelusuri = terpilih.jenis !== 'manual';
   const { blok, scan } = terpilih;
   const d = blok.dokumen;
   const pTerbaca = persenTerhadap(d.terbaca, d.di_kb);
@@ -276,14 +358,37 @@ function ResumeCorong({ terpilih, jumlahSumber }: { terpilih: BlokTerpilih; juml
           {alasan.length === 0 ? (
             <p className="text-xs text-gray-500">Tidak ada kegagalan aktif.</p>
           ) : (
-            <ul className="space-y-1.5">
+            <ul className="space-y-1">
               {alasan.map(([kode, jumlah]) => (
-                <li key={kode} className="flex items-center justify-between gap-2 text-xs" data-alasan={kode}>
-                  <span className="text-gray-700">{labelAlasanGagal(kode)}</span>
-                  <span className="font-bold text-gray-900" data-jumlah>{angka(jumlah)}</span>
+                <li key={kode} data-alasan={kode}>
+                  {bisaDitelusuri ? (
+                    <button
+                      type="button"
+                      onClick={() => onPilihAlasan(kode)}
+                      className="w-full flex items-center justify-between gap-2 px-2 py-1 -mx-2 rounded-md text-xs text-left hover:bg-red-50 transition group"
+                      title="Lihat daftar kegagalan"
+                    >
+                      <span className="text-gray-700 group-hover:text-red-800">{labelAlasanGagal(kode)}</span>
+                      <span className="flex items-center gap-0.5 font-bold text-gray-900 group-hover:text-red-800" data-jumlah>
+                        {angka(jumlah)}
+                        <ChevronRight size={12} className="text-gray-400 group-hover:text-red-700" />
+                      </span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center justify-between gap-2 py-1 text-xs">
+                      <span className="text-gray-700">{labelAlasanGagal(kode)}</span>
+                      <span className="font-bold text-gray-900" data-jumlah>{angka(jumlah)}</span>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
+          )}
+          {!bisaDitelusuri && alasan.length > 0 && (
+            <p className="mt-2 text-[10px] text-gray-500" data-keterangan-manual>
+              Rincian kegagalan unggah manual belum bisa dibuka dari sini karena antrean kegagalan belum
+              bisa disaring untuk unggahan tanpa sumber. Lihat di Antrean Kegagalan.
+            </p>
           )}
         </div>
 
