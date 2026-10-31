@@ -329,6 +329,9 @@ export default function AnalisaRegulasi() {
   if (activeDocumentId !== null) {
     return (
       <AnalisaState2Workspace
+        // key: pindah ke draft lain (mis. dari banner kemiripan) me-mount ulang workspace,
+        // sehingga state lama ter-reset dan request/polling dokumen sebelumnya dibatalkan
+        key={activeDocumentId}
         documentId={activeDocumentId}
         mode={activeMode}
         onBackToState1={handleBackToState1}
