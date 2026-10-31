@@ -7,15 +7,21 @@
 
 import type { components } from './openapi';
 
-export type StatusKeberlakuanApi = components['schemas']['StatusKeberlakuan'];
-/** Nilai yang sudah punya label & warna di frontend */
-export type StatusKeberlakuan = Exclude<StatusKeberlakuanApi, 'belum_berlaku'>;
+export type StatusKeberlakuan = components['schemas']['StatusKeberlakuan'];
 
 /** Urutan tampilan pada filter dan pilihan status */
-export const STATUS_KEBERLAKUAN_OPSI: readonly StatusKeberlakuan[] = ['berlaku', 'diubah', 'dicabut', 'tidak_diketahui'];
+export const STATUS_KEBERLAKUAN_OPSI: readonly StatusKeberlakuan[] = [
+  'berlaku',
+  'belum_berlaku',
+  'diubah',
+  'dicabut',
+  'tidak_diketahui',
+];
 
+/** Label "Belum berlaku" sesuai backend/docs/reports/step26-report.md §9 */
 export const STATUS_KEBERLAKUAN_LABELS: Record<StatusKeberlakuan, string> = {
   berlaku: 'Berlaku',
+  belum_berlaku: 'Belum berlaku',
   diubah: 'Diubah',
   dicabut: 'Dicabut',
   tidak_diketahui: 'Tidak diketahui',
@@ -41,6 +47,12 @@ const GAYA_STATUS: Record<StatusKeberlakuan, GayaStatusKeberlakuan> = {
     badge: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     titik: 'bg-emerald-500',
     pilihan: 'border-emerald-500 bg-emerald-50/40 text-emerald-900',
+  },
+  // Biru: berbeda dari berlaku (hijau), diubah (amber), dan dicabut (merah)
+  belum_berlaku: {
+    badge: 'bg-blue-50 text-blue-700 border-blue-200',
+    titik: 'bg-blue-500',
+    pilihan: 'border-blue-500 bg-blue-50/40 text-blue-900',
   },
   diubah: {
     badge: 'bg-amber-50 text-amber-700 border-amber-200',

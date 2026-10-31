@@ -441,7 +441,7 @@ export interface DocumentItem {
   document_role?: 'corpus_eksisting' | 'draft_kajian' | string | null;
   category_id: number | null;
   category_path: string[] | null;
-  status_keberlakuan: 'berlaku' | 'diubah' | 'dicabut' | 'tidak_diketahui' | string;
+  status_keberlakuan: 'berlaku' | 'belum_berlaku' | 'diubah' | 'dicabut' | 'tidak_diketahui' | string;
   processing_status: 'diterima' | 'diproses' | 'perlu_koreksi' | 'terindeks' | 'gagal' | 'ditolak' | string;
   file_size_bytes: number | null;
   source_url: string | null;

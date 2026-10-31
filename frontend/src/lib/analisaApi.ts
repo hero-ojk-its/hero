@@ -238,7 +238,7 @@ export interface DocumentStatusResponse {
   bidang?: string | null;
   access_classification: 'publik' | 'non_publik';
   document_role: 'corpus_eksisting' | 'draft_kajian';
-  status_keberlakuan: 'berlaku' | 'diubah' | 'dicabut' | 'tidak_diketahui';
+  status_keberlakuan: 'berlaku' | 'belum_berlaku' | 'diubah' | 'dicabut' | 'tidak_diketahui';
   processing_status: ProcessingStatus;
   pdf_url: string;
   text_url: string;
