@@ -18,14 +18,19 @@ import {
   type KlasifikasiAkses, 
   type PeranDokumen 
 } from '../lib/ingestApi';
-import { apiFetch, type DocumentItem } from '../lib/api';
+import { apiFetch, ApiError, type DocumentItem } from '../lib/api';
 import { getPohonKategori, jalurTeks, ratakanPohon, type KategoriTerindeks } from '../lib/kategoriApi';
+
+/** 422 penempatan_gagal: backend me-rollback seluruh koreksi (routers/documents.py patch_document_metadata) */
+const PESAN_PENEMPATAN_GAGAL =
+  'Perubahan belum tersimpan karena berkas gagal dipindahkan ke folder KB. Coba lagi atau hubungi admin.';
 import {
   KLASIFIKASI_AKSES_LABELS,
   PERAN_DOKUMEN_LABELS
 } from './ingest/labels';
 import {
   STATUS_KEBERLAKUAN_OPSI,
+  alasanPenempatan,
   gayaStatusKeberlakuan,
   labelStatusKeberlakuan,
   normalisasiStatusKeberlakuan,
@@ -79,6 +84,8 @@ function EditMetadataModalContent({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [apiError, setApiError] = useState<string | null>(null);
+  /** Pesan backend untuk 422 penempatan_gagal; hanya ditampilkan di balik "Detail teknis" */
+  const [detailTeknis, setDetailTeknis] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -106,6 +113,7 @@ function EditMetadataModalContent({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setApiError(null);
+    setDetailTeknis(null);
     const errors: Record<string, string> = {};
 
     // Validasi ringan di klien: tahun harus 4 digit angka (G07)
@@ -177,6 +185,13 @@ function EditMetadataModalContent({
       onSuccess(updatedDoc);
       onClose();
     } catch (err: unknown) {
+      const detail = err instanceof ApiError && err.detail && typeof err.detail === 'object' ? (err.detail as Record<string, unknown>) : null;
+      if (err instanceof ApiError && err.status === 422 && detail?.code === 'penempatan_gagal') {
+        // Backend me-rollback seluruh koreksi saat berkas gagal dipindah, jadi tidak ada yang tersimpan
+        setApiError(PESAN_PENEMPATAN_GAGAL);
+        setDetailTeknis(alasanPenempatan(detail.message).pesan);
+        return;
+      }
       const msg = err instanceof Error ? err.message : String(err);
       setApiError(msg || 'Gagal menyimpan perubahan metadata.');
     } finally {
@@ -208,9 +223,17 @@ function EditMetadataModalContent({
         <form onSubmit={handleSubmit}>
           <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
             {apiError && (
-              <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-start gap-2">
+              <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-start gap-2" data-galat-metadata>
                 <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5" />
-                <span>{apiError}</span>
+                <div className="min-w-0">
+                  <span>{apiError}</span>
+                  {detailTeknis && (
+                    <details className="mt-1.5" data-detail-teknis>
+                      <summary className="cursor-pointer select-none text-[11px] opacity-75 hover:opacity-100">Detail teknis</summary>
+                      <p className="mt-0.5 text-[11px] font-mono opacity-80 break-all">{detailTeknis}</p>
+                    </details>
+                  )}
+                </div>
               </div>
             )}
 
