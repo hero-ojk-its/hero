@@ -1,7 +1,7 @@
 /**
  * Sumber kebenaran tunggal label & warna status keberlakuan di seluruh frontend
  * (Knowledge Base, detail dokumen, modal ubah status, kandidat pindai, Dashboard),
- * serta label jenis kegagalan ingest.
+ * serta label jenis & alasan kegagalan ingest.
  * Nilai enum mengikuti backend (components['schemas']['StatusKeberlakuan']).
  * Komponen membandingkan NILAI ENUM, bukan teks label.
  */
@@ -106,7 +106,7 @@ export function kelasBadgeStatusKeberlakuan(nilai: unknown): string {
 }
 
 // ============================================================================
-// Kegagalan ingest: failure_type (enum JenisKegagalan)
+// Kegagalan ingest: failure_type (enum JenisKegagalan) & reason_code (teks bebas)
 // ============================================================================
 
 /** Label failure_type (enum JenisKegagalan di backend) */
@@ -120,7 +120,41 @@ export const JENIS_KEGAGALAN_LABELS: Record<string, string> = {
   kesalahan_internal: 'Kesalahan Internal',
 };
 
+/**
+ * Label reason_code yang tidak bernama sama dengan failure_type. Sumber: file_validation.py
+ * (FileRejectCode), failure_service.py (REASON_CODE_MAP), routers/internal.py (ekstraksi),
+ * step26-report.md §9. reason_code lain yang sama dengan failure_type memakai label di atas.
+ */
+const ALASAN_GAGAL_LABELS: Record<string, string> = {
+  pdf_rusak: 'PDF rusak / tidak bisa dibuka',
+  pdf_terenkripsi: 'PDF terkunci kata sandi',
+  teks_kosong: 'Teks tidak terbaca',
+  teks_kosong_ocr: 'OCR tidak menghasilkan teks',
+  berkas_kosong: 'Berkas kosong',
+  ukuran_melebihi_batas: 'Ukuran melebihi batas',
+  kategori_tidak_ditemukan: 'Kategori tidak ditemukan',
+  simpan_ekstraksi_gagal: 'Gagal menyimpan hasil ekstraksi',
+  penempatan_gagal: 'Gagal menempatkan berkas',
+};
+
 export function labelJenisKegagalan(jenis: unknown): string {
   if (typeof jenis !== 'string' || jenis.trim() === '') return '-';
   return JENIS_KEGAGALAN_LABELS[jenis.trim()] ?? formatKodeTakDikenal(jenis);
+}
+
+/** Label reason_code; kode tak dikenal (mis. kode baru dari worker) dibuat terbaca, tidak tampil mentah */
+export function labelAlasanGagal(kode: unknown): string {
+  if (typeof kode !== 'string' || kode.trim() === '') return 'Tidak diketahui';
+  const k = kode.trim();
+  return ALASAN_GAGAL_LABELS[k] ?? JENIS_KEGAGALAN_LABELS[k] ?? formatKodeTakDikenal(k);
+}
+
+/**
+ * Teks untuk baris "Alasan: …" di samping badge failure_type, atau null bila reason_code kosong
+ * atau labelnya sama dengan label failure_type (agar tidak tampil ganda).
+ */
+export function alasanTambahanGagal(failureType: unknown, reasonCode: unknown): string | null {
+  if (typeof reasonCode !== 'string' || reasonCode.trim() === '') return null;
+  const alasan = labelAlasanGagal(reasonCode);
+  return alasan.toLowerCase() === labelJenisKegagalan(failureType).toLowerCase() ? null : alasan;
 }

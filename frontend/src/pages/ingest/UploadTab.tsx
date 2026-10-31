@@ -28,6 +28,7 @@ import {
   type IngestItemDetailResponse
 } from '../../lib/ingestApi';
 import { isApiConfigured, ApiError } from '../../lib/api';
+import { labelAlasanGagal } from '../../lib/labelStatus';
 import NamingFormatPicker from './components/NamingFormatPicker';
 import ManualUploadJobHistory from './components/ManualUploadJobHistory';
 
@@ -393,7 +394,7 @@ export default function UploadTab() {
                     ...f,
                     uploadStatus: 'failed',
                     uploadResult: detail,
-                    uploadError: detail.error || detail.message || detail.reason_code || 'Gagal diproses di server',
+                    uploadError: detail.error || detail.message || (detail.reason_code ? labelAlasanGagal(detail.reason_code) : null) || 'Gagal diproses di server',
                   }
                 : f
             )
@@ -1224,7 +1225,10 @@ export default function UploadTab() {
                         )}
                         {item.uploadStatus === 'failed' && (
                           <span className="text-red-700 font-medium">
-                            {item.uploadError || item.uploadResult?.error || item.uploadResult?.reason_code || 'Penolakan sistem peladen.'}
+                            {item.uploadError ||
+                              item.uploadResult?.error ||
+                              (item.uploadResult?.reason_code ? labelAlasanGagal(item.uploadResult.reason_code) : null) ||
+                              'Penolakan sistem peladen.'}
                           </span>
                         )}
                         {item.uploadStatus === 'uploading' && (

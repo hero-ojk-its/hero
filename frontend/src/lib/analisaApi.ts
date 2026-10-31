@@ -14,6 +14,7 @@
 import { apiFetch, apiFetchBlob, API_BASE_URL, buildQueryString } from './api';
 import type { DocumentsResponse, DocumentItem, DocumentBlob } from './api';
 import { uploadManualPdf, type IngestUploadResponse, type UploadProgressEvent } from './ingestApi';
+import { labelAlasanGagal } from './labelStatus';
 export type { UploadProgressEvent };
 
 // ============================================================================
@@ -333,7 +334,11 @@ export async function uploadDraftPdf(
   const detail = uploadRes.details[0];
 
   if (detail.status === 'failed') {
-    const errorMsg = detail.error || detail.message || detail.reason_code || 'Gagal memproses berkas draf regulasi.';
+    const errorMsg =
+      detail.error ||
+      detail.message ||
+      (detail.reason_code ? labelAlasanGagal(detail.reason_code) : null) ||
+      'Gagal memproses berkas draf regulasi.';
     throw new Error(`Unggah draf gagal: ${errorMsg}`);
   }
 

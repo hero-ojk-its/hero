@@ -44,10 +44,12 @@ export const STATUS_JOB_INGEST_LABELS: Record<string, string> = {
   gagal: 'Gagal',
 };
 
-// Jenis kegagalan: sumber kebenaran di lib/labelStatus.ts
+// Jenis & alasan kegagalan: sumber kebenaran di lib/labelStatus.ts
 export {
   JENIS_KEGAGALAN_LABELS,
   labelJenisKegagalan as getJenisKegagalanLabel,
+  labelAlasanGagal,
+  alasanTambahanGagal,
 } from '../../lib/labelStatus';
 
 export const JENIS_SUMBER_LABELS: Record<string, string> = {
