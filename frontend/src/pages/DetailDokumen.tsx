@@ -34,7 +34,33 @@ import {
   ApiError, 
   adaptDocumentToDetail
 } from '../lib/api';
-import { gayaStatusKeberlakuan, labelStatusKeberlakuan } from '../lib/labelStatus';
+import {
+  FIELD_PENEMPATAN_DOKUMEN,
+  KETERANGAN_BELUM_BERKATEGORI,
+  gayaStatusKeberlakuan,
+  labelPenempatanDokumen,
+  labelStatusKeberlakuan,
+} from '../lib/labelStatus';
+import { jalurTeks } from '../lib/kategoriApi';
+import type { UpdateMetadataResponse } from '../lib/ingestApi';
+
+interface HasilPenempatan {
+  jenis: 'sukses' | 'info';
+  teks: string;
+}
+
+/** Ringkasan penempatan setelah koreksi metadata; null bila tidak relevan (mis. hanya judul berubah) */
+function ringkasPenempatan(res: UpdateMetadataResponse): HasilPenempatan | null {
+  const p = res.placement;
+  if (p) {
+    const jalur = Array.isArray(p.category_path) && p.category_path.length > 0 ? jalurTeks(p.category_path) : null;
+    return { jenis: p.placed ? 'sukses' : 'info', teks: labelPenempatanDokumen(p.reason, jalur) };
+  }
+  // placement null: metadata belum cukup; hanya diberi tahu bila dokumen tetap tanpa kategori
+  const fieldPenempatanBerubah = (res.changed_fields ?? []).some((f) => FIELD_PENEMPATAN_DOKUMEN.includes(f));
+  if (fieldPenempatanBerubah && res.category_id == null) return { jenis: 'info', teks: KETERANGAN_BELUM_BERKATEGORI };
+  return null;
+}
 import type { 
   DocumentItem, 
   AdaptedRegulasiDoc, 
@@ -73,6 +99,7 @@ export default function DetailDokumen() {
   const [isMetadataModalOpen, setIsMetadataModalOpen] = useState<boolean>(false);
   const [isStatusModalOpen, setIsStatusModalOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [hasilPenempatan, setHasilPenempatan] = useState<HasilPenempatan | null>(null);
   const [loading, setLoading] = useState<boolean>(!stateRegulasi && isApiConfigured && Boolean(id));
   const [notFound, setNotFound] = useState<boolean>(false);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -1207,6 +1234,35 @@ export default function DetailDokumen() {
           </div>
         )}
 
+        {/* Hasil penempatan berkas setelah koreksi metadata */}
+        {hasilPenempatan && (
+          <div
+            className={`p-3 rounded-xl border flex items-center justify-between text-xs ${
+              hasilPenempatan.jenis === 'sukses'
+                ? 'bg-emerald-50/60 border-emerald-200 text-emerald-900'
+                : 'bg-gray-50 border-gray-200 text-gray-700'
+            }`}
+            data-hasil-penempatan={hasilPenempatan.jenis}
+            role="status"
+          >
+            <div className="flex items-center gap-2">
+              {hasilPenempatan.jenis === 'sukses' ? (
+                <FolderOpen className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <Info className="w-4 h-4 text-gray-500 shrink-0" />
+              )}
+              <span>{hasilPenempatan.teks}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setHasilPenempatan(null)}
+              className="font-bold px-2 py-0.5 rounded cursor-pointer opacity-80 hover:opacity-100"
+            >
+              Tutup
+            </button>
+          </div>
+        )}
+
         {/* 1. Header Card (Nomor, Status, Judul, Metadata Singkat) */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-6 sm:p-7 space-y-3.5">
           <div className="flex flex-wrap items-center gap-3">
@@ -1552,6 +1608,7 @@ export default function DetailDokumen() {
               setRawDoc(updatedDoc);
               setFetchedDoc(adaptDocumentToDetail(updatedDoc));
               setToastMessage('Metadata tersimpan');
+              setHasilPenempatan(ringkasPenempatan(updatedDoc));
             }}
           />
           <EditStatusModal
@@ -1563,6 +1620,7 @@ export default function DetailDokumen() {
               setRawDoc(updated);
               setFetchedDoc(adaptDocumentToDetail(updated));
               setToastMessage(message || 'Status keberlakuan berhasil diperbarui');
+              setHasilPenempatan(null);
             }}
           />
         </>

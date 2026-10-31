@@ -525,6 +525,28 @@ export async function batchRetryIngestFailures(
 // 8. Document Metadata & Status Management API (/api/v1/documents/)
 // ============================================================================
 
+/** Hasil PlacementService.place() pada koreksi metadata (routers/documents.py patch_document_metadata) */
+export interface PenempatanDokumen {
+  document_id: number;
+  placed: boolean;
+  /** "ditempatkan" | "relokasi" (nilai lain mungkin muncul) */
+  reason: string;
+  old_path?: string | null;
+  new_path?: string | null;
+  category_id: number | null;
+  category_path: string[] | null;
+}
+
+/**
+ * Respons PATCH metadata: dokumen lengkap + info koreksi. `placement` null bila tidak ada field
+ * penempatan yang berubah atau metadata belum cukup untuk ditempatkan.
+ */
+export type UpdateMetadataResponse = DocumentItem & {
+  changed_fields?: string[];
+  placement?: PenempatanDokumen | null;
+  duplikat?: unknown;
+};
+
 /**
  * Memperbarui metadata dokumen via PATCH /api/v1/documents/{id}/metadata
  */
@@ -532,8 +554,8 @@ export async function updateDocumentMetadata(
   id: number,
   body: UpdateMetadataIn,
   signal?: AbortSignal
-): Promise<DocumentItem> {
-  return apiJson<DocumentItem>('PATCH', `/api/v1/documents/${id}/metadata`, body, { signal });
+): Promise<UpdateMetadataResponse> {
+  return apiJson<UpdateMetadataResponse>('PATCH', `/api/v1/documents/${id}/metadata`, body, { signal });
 }
 
 /**

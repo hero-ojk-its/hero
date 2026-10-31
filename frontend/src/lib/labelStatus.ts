@@ -160,6 +160,33 @@ export function alasanTambahanGagal(failureType: unknown, reasonCode: unknown): 
 }
 
 // ============================================================================
+// Penempatan dokumen setelah koreksi metadata (PATCH /documents/{id}/metadata.placement)
+// ============================================================================
+
+/** Field yang memicu penempatan ulang di backend (placement_fields di routers/documents.py) */
+export const FIELD_PENEMPATAN_DOKUMEN: readonly string[] = [
+  'title', 'regulation_number', 'regulation_type', 'release_date', 'regulation_year', 'category_id', 'document_role', 'bidang',
+];
+
+const PENEMPATAN_DOKUMEN_LABELS: Record<string, string> = {
+  ditempatkan: 'Ditempatkan di',
+  relokasi: 'Dipindah ke',
+};
+
+/** placement null + field penempatan berubah + dokumen tetap tanpa kategori */
+export const KETERANGAN_BELUM_BERKATEGORI = 'Dokumen belum berkategori sampai metadata dilengkapi.';
+
+/** "Ditempatkan di POJK / 2023"; kode tak dikenal dibuat terbaca, tidak tampil mentah */
+export function labelPenempatanDokumen(reason: unknown, jalur: string | null): string {
+  const kode = typeof reason === 'string' ? reason.trim() : '';
+  const awalan = PENEMPATAN_DOKUMEN_LABELS[kode];
+  if (awalan) return jalur ? `${awalan} ${jalur}` : `${awalan} folder KB`;
+  if (kode === 'metadata_belum_cukup') return KETERANGAN_BELUM_BERKATEGORI;
+  const label = formatKodeTakDikenal(kode);
+  return jalur ? `${label} · ${jalur}` : label;
+}
+
+// ============================================================================
 // Penempatan dokumen saat kategori diubah nama / dipindah (PATCH /categories/{id}.dokumen_gagal[].alasan)
 // ============================================================================
 

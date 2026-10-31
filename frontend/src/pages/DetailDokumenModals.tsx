@@ -10,22 +10,27 @@ import {
 } from 'lucide-react';
 import { 
   updateDocumentMetadata, 
-  updateDocumentStatus, 
-  getCategories, 
-  type UpdateMetadataIn, 
-  type UpdateDocumentStatusIn, 
-  type CategoryDetailResponse, 
-  type StatusKeberlakuan, 
+  updateDocumentStatus,
+  type UpdateMetadataIn,
+  type UpdateMetadataResponse,
+  type UpdateDocumentStatusIn,
+  type StatusKeberlakuan,
   type KlasifikasiAkses, 
   type PeranDokumen 
 } from '../lib/ingestApi';
-import { apiFetch, type DocumentItem } from '../lib/api';
+import { apiFetch, ApiError, type DocumentItem } from '../lib/api';
+import { getPohonKategori, jalurTeks, ratakanPohon, type KategoriTerindeks } from '../lib/kategoriApi';
+
+/** 422 penempatan_gagal: backend me-rollback seluruh koreksi (routers/documents.py patch_document_metadata) */
+const PESAN_PENEMPATAN_GAGAL =
+  'Perubahan belum tersimpan karena berkas gagal dipindahkan ke folder KB. Coba lagi atau hubungi admin.';
 import {
   KLASIFIKASI_AKSES_LABELS,
   PERAN_DOKUMEN_LABELS
 } from './ingest/labels';
 import {
   STATUS_KEBERLAKUAN_OPSI,
+  alasanPenempatan,
   gayaStatusKeberlakuan,
   labelStatusKeberlakuan,
   normalisasiStatusKeberlakuan,
@@ -39,7 +44,8 @@ interface EditMetadataModalProps {
   isOpen: boolean;
   onClose: () => void;
   document: DocumentItem;
-  onSuccess: (updated: DocumentItem) => void;
+  /** Dokumen terbaru + changed_fields/placement dari backend */
+  onSuccess: (updated: UpdateMetadataResponse) => void;
 }
 
 export function EditMetadataModal(props: EditMetadataModalProps) {
@@ -72,32 +78,42 @@ function EditMetadataModalContent({
   );
 
   // Categories & UI States
-  const [categories, setCategories] = useState<CategoryDetailResponse[]>([]);
+  // Opsi kategori berjalur penuh ("POJK / 2023") dari /categories/tree
+  const [categories, setCategories] = useState<KategoriTerindeks[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [apiError, setApiError] = useState<string | null>(null);
+  /** Pesan backend untuk 422 penempatan_gagal; hanya ditampilkan di balik "Detail teknis" */
+  const [detailTeknis, setDetailTeknis] = useState<string | null>(null);
 
   useEffect(() => {
-    let mounted = true;
-    getCategories()
-      .then((cats) => {
-        if (!mounted) return;
-        setCategories(cats);
-      })
-      .catch((err) => console.warn('Gagal memuat kategori:', err))
-      .finally(() => {
-        if (mounted) setIsLoadingCategories(false);
-      });
+    const controller = new AbortController();
+    // Ditunda satu tick agar mount ganda StrictMode tidak mengirim request dua kali
+    const timer = setTimeout(() => {
+      getPohonKategori({ signal: controller.signal })
+        .then((nodes) => {
+          if (!controller.signal.aborted) setCategories(ratakanPohon(nodes));
+        })
+        .catch((err: unknown) => {
+          if (controller.signal.aborted || (err instanceof Error && err.name === 'AbortError')) return;
+          console.warn('Gagal memuat kategori:', err);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setIsLoadingCategories(false);
+        });
+    }, 0);
 
     return () => {
-      mounted = false;
+      clearTimeout(timer);
+      controller.abort();
     };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setApiError(null);
+    setDetailTeknis(null);
     const errors: Record<string, string> = {};
 
     // Validasi ringan di klien: tahun harus 4 digit angka (G07)
@@ -169,6 +185,13 @@ function EditMetadataModalContent({
       onSuccess(updatedDoc);
       onClose();
     } catch (err: unknown) {
+      const detail = err instanceof ApiError && err.detail && typeof err.detail === 'object' ? (err.detail as Record<string, unknown>) : null;
+      if (err instanceof ApiError && err.status === 422 && detail?.code === 'penempatan_gagal') {
+        // Backend me-rollback seluruh koreksi saat berkas gagal dipindah, jadi tidak ada yang tersimpan
+        setApiError(PESAN_PENEMPATAN_GAGAL);
+        setDetailTeknis(alasanPenempatan(detail.message).pesan);
+        return;
+      }
       const msg = err instanceof Error ? err.message : String(err);
       setApiError(msg || 'Gagal menyimpan perubahan metadata.');
     } finally {
@@ -200,9 +223,17 @@ function EditMetadataModalContent({
         <form onSubmit={handleSubmit}>
           <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
             {apiError && (
-              <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-start gap-2">
+              <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-start gap-2" data-galat-metadata>
                 <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5" />
-                <span>{apiError}</span>
+                <div className="min-w-0">
+                  <span>{apiError}</span>
+                  {detailTeknis && (
+                    <details className="mt-1.5" data-detail-teknis>
+                      <summary className="cursor-pointer select-none text-[11px] opacity-75 hover:opacity-100">Detail teknis</summary>
+                      <p className="mt-0.5 text-[11px] font-mono opacity-80 break-all">{detailTeknis}</p>
+                    </details>
+                  )}
+                </div>
               </div>
             )}
 
@@ -325,14 +356,30 @@ function EditMetadataModalContent({
                   value={categoryId ?? ''}
                   onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : null)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-colors"
+                  aria-describedby={categoryId === null ? 'penjelasan-kategori-otomatis' : undefined}
                 >
-                  <option value="">(Tanpa Kategori)</option>
+                  {/* category_id: null = kembalikan ke kategori otomatis (dikirim hanya bila berbeda dari nilai awal) */}
+                  <option value="">
+                    {document.category_id == null ? '(Belum ada kategori — otomatis)' : 'Kembalikan ke kategori otomatis'}
+                  </option>
+                  {/* Cadangan bila kategori dokumen tidak ada di pohon (mis. baru dihapus) */}
+                  {!isLoadingCategories &&
+                    document.category_id != null &&
+                    !categories.some((c) => c.node.id === document.category_id) && (
+                      <option value={document.category_id}>Kategori #{document.category_id}</option>
+                    )}
                   {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
+                    <option key={cat.node.id} value={cat.node.id}>
+                      {jalurTeks(cat.path)}
                     </option>
                   ))}
                 </select>
+                {categoryId === null && (
+                  <p id="penjelasan-kategori-otomatis" className="text-[11px] text-gray-500 mt-1 leading-snug">
+                    Sistem akan menentukan kategori dari metadata dokumen (jenis &amp; tahun). Bila metadata belum lengkap,
+                    dokumen belum berkategori sampai dilengkapi.
+                  </p>
+                )}
               </div>
 
               {/* Klasifikasi Akses */}
