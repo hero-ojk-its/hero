@@ -1,6 +1,7 @@
 /**
  * Sumber kebenaran tunggal label & warna status keberlakuan di seluruh frontend
- * (Knowledge Base, detail dokumen, modal ubah status, kandidat pindai).
+ * (Knowledge Base, detail dokumen, modal ubah status, kandidat pindai, Dashboard),
+ * serta label jenis kegagalan ingest.
  * Nilai enum mengikuti backend (components['schemas']['StatusKeberlakuan']).
  * Komponen membandingkan NILAI ENUM, bukan teks label.
  */
@@ -102,4 +103,24 @@ export function gayaStatusKeberlakuan(nilai: unknown): GayaStatusKeberlakuan {
 
 export function kelasBadgeStatusKeberlakuan(nilai: unknown): string {
   return gayaStatusKeberlakuan(nilai).badge;
+}
+
+// ============================================================================
+// Kegagalan ingest: failure_type (enum JenisKegagalan)
+// ============================================================================
+
+/** Label failure_type (enum JenisKegagalan di backend) */
+export const JENIS_KEGAGALAN_LABELS: Record<string, string> = {
+  format_tidak_didukung: 'Format Tidak Didukung',
+  duplikat: 'Duplikat',
+  ekstraksi_gagal: 'Ekstraksi Gagal',
+  ocr_gagal: 'OCR Gagal',
+  metadata_tidak_lengkap: 'Metadata Tidak Lengkap',
+  sumber_tidak_dapat_diakses: 'Sumber Tidak Dapat Diakses',
+  kesalahan_internal: 'Kesalahan Internal',
+};
+
+export function labelJenisKegagalan(jenis: unknown): string {
+  if (typeof jenis !== 'string' || jenis.trim() === '') return '-';
+  return JENIS_KEGAGALAN_LABELS[jenis.trim()] ?? formatKodeTakDikenal(jenis);
 }

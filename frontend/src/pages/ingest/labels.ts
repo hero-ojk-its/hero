@@ -44,15 +44,11 @@ export const STATUS_JOB_INGEST_LABELS: Record<string, string> = {
   gagal: 'Gagal',
 };
 
-export const JENIS_KEGAGALAN_LABELS: Record<string, string> = {
-  format_tidak_didukung: 'Format Tidak Didukung',
-  duplikat: 'Duplikat',
-  ekstraksi_gagal: 'Ekstraksi Gagal',
-  ocr_gagal: 'OCR Gagal',
-  metadata_tidak_lengkap: 'Metadata Tidak Lengkap',
-  sumber_tidak_dapat_diakses: 'Sumber Tidak Dapat Diakses',
-  kesalahan_internal: 'Kesalahan Internal',
-};
+// Jenis kegagalan: sumber kebenaran di lib/labelStatus.ts
+export {
+  JENIS_KEGAGALAN_LABELS,
+  labelJenisKegagalan as getJenisKegagalanLabel,
+} from '../../lib/labelStatus';
 
 export const JENIS_SUMBER_LABELS: Record<string, string> = {
   situs_web: 'Situs Web',
@@ -133,11 +129,6 @@ export const JENIS_JOB_INGEST_LABELS: Record<JenisJobIngest, string> = {
   unggah_manual: 'Unggah Manual',
   sinkron_folder: 'Sinkronisasi Folder',
 };
-
-export function getJenisKegagalanLabel(type: string | null | undefined): string {
-  if (!type) return '-';
-  return JENIS_KEGAGALAN_LABELS[type] || type;
-}
 
 export function getJenisJobIngestLabel(type: string | null | undefined): string {
   if (!type) return '-';
