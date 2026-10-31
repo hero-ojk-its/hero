@@ -24,6 +24,12 @@ import {
   adaptDocumentToDetail,
 } from '../lib/api';
 import { useFetch } from '../lib/useFetch';
+import {
+  STATUS_KEBERLAKUAN_OPSI,
+  gayaStatusKeberlakuan,
+  labelStatusKeberlakuan,
+  normalisasiStatusKeberlakuan,
+} from '../lib/labelStatus';
 import type {
   DocumentItem,
   DocumentsResponse,
@@ -40,18 +46,15 @@ const fallbackFilterOptions: Record<string, string[]> = {
   Jenis: ['Semua Jenis', 'POJK', 'PDK', 'SEDK', 'SEOJK'],
   Tahun: ['Semua Tahun', '2026', '2025', '2024', '2023', '2022'],
   Bidang: ['Semua Bidang', 'Perbankan', 'Pasar Modal', 'Fintech', 'Asuransi', 'Tata Kelola IT & AI', 'Lainnya'],
-  Status: ['Semua Status', 'Aktif', 'Diubah', 'Dicabut', 'Tidak diketahui'],
   Sumber: ['Semua Sumber', 'Scraping', 'Folder Lokal', 'OneDrive', 'Upload Manual'],
 };
 
-
-const statusOptions = [
-  'Semua Status',
-  'Aktif',
-  'Diubah',
-  'Dicabut',
-  'Tidak diketahui',
-];
+/** Penanda "semua status"; nilai lain pada filter status selalu nilai enum backend */
+const SEMUA_STATUS = 'Semua Status';
+const statusOptions: readonly string[] = [SEMUA_STATUS, ...STATUS_KEBERLAKUAN_OPSI];
+const labelOpsiStatus = (nilai: string) => (nilai === SEMUA_STATUS ? SEMUA_STATUS : labelStatusKeberlakuan(nilai));
+/** Param URL (?status_keberlakuan= dari Dashboard, termasuk label lama "aktif") -> nilai enum */
+const statusDariParam = (param: string | null) => (param ? normalisasiStatusKeberlakuan(param) ?? SEMUA_STATUS : SEMUA_STATUS);
 
 interface FlatCategory {
   id: number;
@@ -79,14 +82,6 @@ function flattenCategories(nodes: CategoryNode[], depth = 0, parentPath = ''): F
   return result;
 }
 
-const STATUS_REVERSE_MAP: Record<string, string> = {
-  berlaku: 'Aktif',
-  aktif: 'Aktif',
-  diubah: 'Diubah',
-  dicabut: 'Dicabut',
-  tidak_diketahui: 'Tidak diketahui',
-};
-
 export default function KnowledgeBase() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -98,9 +93,7 @@ export default function KnowledgeBase() {
   const initialCategoryIdParam = searchParams.get('category_id') || searchParams.get('kategori');
   const initialStatusParam = searchParams.get('status_keberlakuan') || searchParams.get('status');
 
-  const initialStatus = initialStatusParam
-    ? STATUS_REVERSE_MAP[initialStatusParam.toLowerCase()] || initialStatusParam
-    : 'Semua Status';
+  const initialStatus = statusDariParam(initialStatusParam);
 
   const initialCategoryIdNum =
     initialCategoryIdParam && !isNaN(Number(initialCategoryIdParam)) ? Number(initialCategoryIdParam) : null;
@@ -178,14 +171,9 @@ export default function KnowledgeBase() {
       if (selectedKategori.id !== null) {
         params.category_id = selectedKategori.id;
       }
-      if (selectedStatus !== 'Semua Status') {
-        const statusMap: Record<string, string> = {
-          Aktif: 'berlaku',
-          Diubah: 'diubah',
-          Dicabut: 'dicabut',
-          'Tidak diketahui': 'tidak_diketahui',
-        };
-        params.status_keberlakuan = statusMap[selectedStatus] || selectedStatus.toLowerCase();
+      if (selectedStatus !== SEMUA_STATUS) {
+        // selectedStatus selalu nilai enum backend
+        params.status_keberlakuan = selectedStatus;
       }
 
       const qs = buildQueryString(params);
@@ -368,7 +356,7 @@ export default function KnowledgeBase() {
       }
 
       if (statusParam) {
-        const mapped = STATUS_REVERSE_MAP[statusParam.toLowerCase()] || statusParam;
+        const mapped = statusDariParam(statusParam);
         setSelectedStatus((prev) => (mapped !== prev ? mapped : prev));
       }
 
@@ -430,8 +418,8 @@ export default function KnowledgeBase() {
 
       // Status
       const matchStatus =
-        selectedStatus === 'Semua Status' ||
-        item.status.toLowerCase() === selectedStatus.toLowerCase();
+        selectedStatus === SEMUA_STATUS ||
+        normalisasiStatusKeberlakuan(item.status) === selectedStatus;
 
       // Sumber
       const matchSumber =
@@ -490,7 +478,7 @@ export default function KnowledgeBase() {
     setSelectedJenis('Semua Jenis');
     setSelectedTahun('Semua Tahun');
     setSelectedBidang('Semua Bidang');
-    setSelectedStatus('Semua Status');
+    setSelectedStatus(SEMUA_STATUS);
     setSelectedSumber('Semua Sumber');
     setCurrentPage(1);
   };
@@ -508,42 +496,12 @@ export default function KnowledgeBase() {
 
   // Render Status Badge
   const renderStatusBadge = (statusValue: string) => {
-    const s = (statusValue || '').toLowerCase();
-    if (s === 'aktif' || s === 'berlaku') {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-green-50 text-green-700 text-[11px] font-semibold border border-green-200/60">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
-          Aktif
-        </span>
-      );
-    }
-    if (s === 'diubah') {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-50 text-amber-700 text-[11px] font-semibold border border-amber-200/60">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-          Diubah
-        </span>
-      );
-    }
-    if (s === 'dicabut') {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-50 text-red-700 text-[11px] font-semibold border border-red-200/60">
-          <span className="w-1.5 h-1.5 rounded-full bg-red-600"></span>
-          Dicabut
-        </span>
-      );
-    }
-    if (s === 'tidak diketahui' || s === 'tidak_diketahui') {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-50 text-slate-700 text-[11px] font-semibold border border-slate-200/60">
-          <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-          Tidak diketahui
-        </span>
-      );
-    }
+    // Nilai enum dari API atau label lama pada data contoh; nilai tak dikenal tampil rapi & netral
+    const gaya = gayaStatusKeberlakuan(statusValue);
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-50 text-gray-700 text-[11px] font-semibold border border-gray-200/60">
-        {statusValue}
+      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border ${gaya.badge}`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${gaya.titik}`}></span>
+        {labelStatusKeberlakuan(statusValue)}
       </span>
     );
   };
@@ -833,7 +791,7 @@ export default function KnowledgeBase() {
                   : 'border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400'
               }`}
             >
-              <span>{selectedStatus}</span>
+              <span>{labelOpsiStatus(selectedStatus)}</span>
               <ChevronDown
                 className={`w-4 h-4 transition-transform ${
                   openFilter === 'Status' ? 'rotate-180 text-red-500' : 'text-gray-400'
@@ -855,7 +813,7 @@ export default function KnowledgeBase() {
                       selectedStatus === option ? 'bg-red-50 text-red-700 font-semibold' : 'text-gray-700 hover:bg-gray-50'
                     }`}
                   >
-                    <span>{option}</span>
+                    <span>{labelOpsiStatus(option)}</span>
                     {selectedStatus === option && <CheckCircle className="w-4 h-4 text-red-600" />}
                   </button>
                 ))}

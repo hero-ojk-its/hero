@@ -32,8 +32,9 @@ import {
   apiFetch, 
   apiFetchBlob, 
   ApiError, 
-  adaptDocumentToDetail 
+  adaptDocumentToDetail
 } from '../lib/api';
+import { gayaStatusKeberlakuan, labelStatusKeberlakuan } from '../lib/labelStatus';
 import type { 
   DocumentItem, 
   AdaptedRegulasiDoc, 
@@ -614,12 +615,10 @@ export default function DetailDokumen() {
   };
 
   const sourceInfo = getSourceDisplay(regulasi.sumber);
-  const statusColor = regulasi.status === 'Aktif' ? '#15803d' : regulasi.status === 'Diubah' ? '#b45309' : '#b91c1c';
-  const statusBadge = regulasi.status === 'Aktif' 
-    ? 'bg-green-50 text-green-700 border-green-200/60' 
-    : regulasi.status === 'Diubah' 
-    ? 'bg-amber-50 text-amber-700 border-amber-200/60' 
-    : 'bg-red-50 text-red-700 border-red-200/60';
+  // Warna & label berdasarkan nilai enum (statusKode dari API; data contoh memakai label lama)
+  const statusSumber = ('statusKode' in regulasi && regulasi.statusKode) || regulasi.status;
+  const statusGaya = gayaStatusKeberlakuan(statusSumber);
+  const statusLabel = labelStatusKeberlakuan(statusSumber);
 
   const displayTanggalPublikasi = ('tanggalPublikasi' in regulasi && regulasi.tanggalPublikasi)
     ? regulasi.tanggalPublikasi
@@ -1214,9 +1213,9 @@ export default function DetailDokumen() {
             <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
               {regulasi.nomor}
             </h1>
-            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${statusBadge}`}>
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: statusColor }}></span>
-              {regulasi.status}
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${statusGaya.badge}`}>
+              <span className={`w-2 h-2 rounded-full shrink-0 ${statusGaya.titik}`}></span>
+              {statusLabel}
             </span>
             {isApiConfigured && Boolean(id) && rawDoc && (
               <button
@@ -1305,9 +1304,9 @@ export default function DetailDokumen() {
             <div className="flex flex-col gap-1.5 items-start min-w-0">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Status Keberlakuan</span>
               <div className="flex items-center gap-2 flex-wrap">
-                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${statusBadge}`}>
-                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: statusColor }}></span>
-                  <span>{regulasi.status}</span>
+                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${statusGaya.badge}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusGaya.titik}`}></span>
+                  <span>{statusLabel}</span>
                 </div>
               </div>
             </div>

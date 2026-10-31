@@ -20,11 +20,16 @@ import {
   type PeranDokumen 
 } from '../lib/ingestApi';
 import { apiFetch, type DocumentItem } from '../lib/api';
-import { 
-  STATUS_KEBERLAKUAN_LABELS, 
-  KLASIFIKASI_AKSES_LABELS, 
-  PERAN_DOKUMEN_LABELS 
+import {
+  KLASIFIKASI_AKSES_LABELS,
+  PERAN_DOKUMEN_LABELS
 } from './ingest/labels';
+import {
+  STATUS_KEBERLAKUAN_OPSI,
+  gayaStatusKeberlakuan,
+  labelStatusKeberlakuan,
+  normalisasiStatusKeberlakuan,
+} from '../lib/labelStatus';
 
 // ============================================================================
 // MODAL 1: Koreksi Metadata Dokumen (TC-10 / G06 / G07)
@@ -417,8 +422,9 @@ function EditStatusModalContent({
   document,
   onSuccess,
 }: EditStatusModalProps) {
+  // Status saat ini selalu tercentang; nilai kosong/tak dikenal dianggap "tidak_diketahui"
   const [selectedStatus, setSelectedStatus] = useState<StatusKeberlakuan>(
-    (document.status_keberlakuan as StatusKeberlakuan) || 'berlaku'
+    normalisasiStatusKeberlakuan(document.status_keberlakuan) ?? 'tidak_diketahui'
   );
 
   // Search Revoking Document States
@@ -490,7 +496,7 @@ function EditStatusModalContent({
     }
   };
 
-  const statusOptions: StatusKeberlakuan[] = ['berlaku', 'diubah', 'dicabut', 'tidak_diketahui'];
+  const statusOptions: readonly StatusKeberlakuan[] = STATUS_KEBERLAKUAN_OPSI;
   const displayedSearchResults = searchQuery.trim() ? searchResults : [];
 
   return (
@@ -531,16 +537,8 @@ function EditStatusModalContent({
               <div className="grid grid-cols-2 gap-2.5">
                 {statusOptions.map((st) => {
                   const isChecked = selectedStatus === st;
-                  const label = STATUS_KEBERLAKUAN_LABELS[st] || st;
-
-                  const colorClass =
-                    st === 'berlaku'
-                      ? 'border-emerald-500 bg-emerald-50/40 text-emerald-900'
-                      : st === 'diubah'
-                      ? 'border-amber-500 bg-amber-50/40 text-amber-900'
-                      : st === 'dicabut'
-                      ? 'border-red-500 bg-red-50/40 text-red-900'
-                      : 'border-gray-400 bg-gray-50 text-gray-900';
+                  const label = labelStatusKeberlakuan(st);
+                  const colorClass = gayaStatusKeberlakuan(st).pilihan;
 
                   return (
                     <label
