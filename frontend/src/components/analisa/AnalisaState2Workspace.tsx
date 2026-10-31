@@ -21,7 +21,6 @@ import {
   Info,
   X
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import {
   getMlAnalisa,
   getDocumentStatus,
@@ -35,6 +34,9 @@ import { ApiError, API_BASE_URL, apiFetchBlob } from '../../lib/api';
 import { PanelErrorBoundary } from '../PanelErrorBoundary';
 import { DraftLabel } from '../DraftLabel';
 import RingkasanAiPanel from './RingkasanAiPanel';
+import HarmonisasiPanel from './HarmonisasiPanel';
+import type { HarmonisasiPanelState } from './HarmonisasiPanel';
+import { postHarmonisasi, pesanGalatHarmonisasi } from '../../lib/harmonisasiApi';
 import type {
   MlAnalisaResponse,
   DocumentArticleSummary,
@@ -66,8 +68,6 @@ export default function AnalisaState2Workspace({
   mode,
   onBackToState1
 }: AnalisaState2WorkspaceProps) {
-  const navigate = useNavigate();
-
   // State Pemuatan & Data API
   const [data, setData] = useState<MlAnalisaResponse | null>(null);
   const [articles, setArticles] = useState<DocumentArticleSummary[]>([]);
@@ -169,8 +169,67 @@ export default function AnalisaState2Workspace({
   }, []);
 
   // State Workspace Panel 3: Hasil Analisis Tabs
-  const [activeTab, setActiveTab] = useState<'ringkasan' | 'poin_utama' | 'dasar_hukum' | 'info_tambahan'>('ringkasan');
+  const [activeTab, setActiveTab] = useState<'ringkasan' | 'poin_utama' | 'dasar_hukum' | 'info_tambahan' | 'harmonisasi'>('ringkasan');
   const [kategoriFilter, setKategoriFilter] = useState<string>('Semua');
+  const panelHasilRef = useRef<HTMLDivElement>(null);
+
+  // State Harmonisasi: disimpan di sini agar tidak di-fetch ulang tiap pindah tab.
+  // Dikunci per documentId; hasil untuk dokumen lain dianggap belum dijalankan.
+  const [harmonisasiState, setHarmonisasiState] = useState<(HarmonisasiPanelState & { documentId: number }) | null>(null);
+  const harmonisasi = harmonisasiState?.documentId === documentId ? harmonisasiState : null;
+  const harmonisasiAbortRef = useRef<AbortController | null>(null);
+  const harmonisasiPermintaanRef = useRef<number>(0);
+  /** documentId yang harmonisasinya sudah diminta otomatis (cegah fetch ganda) */
+  const harmonisasiDimintaRef = useRef<number | null>(null);
+
+  const muatHarmonisasi = useCallback(async (segar: boolean) => {
+    harmonisasiAbortRef.current?.abort();
+    const controller = new AbortController();
+    harmonisasiAbortRef.current = controller;
+    const permintaanId = ++harmonisasiPermintaanRef.current;
+    harmonisasiDimintaRef.current = documentId;
+
+    setHarmonisasiState((prev) => ({
+      documentId,
+      status: 'loading',
+      data: prev?.documentId === documentId ? prev.data : null,
+      galat: null,
+    }));
+
+    try {
+      const hasil = await postHarmonisasi(documentId, { segar, signal: controller.signal });
+      if (permintaanId !== harmonisasiPermintaanRef.current) return;
+      setHarmonisasiState({ documentId, status: 'sukses', data: hasil, galat: null });
+    } catch (err: unknown) {
+      if (permintaanId !== harmonisasiPermintaanRef.current || controller.signal.aborted) return;
+      if (err instanceof Error && err.name === 'AbortError') return;
+      setHarmonisasiState((prev) => ({
+        documentId,
+        status: 'galat',
+        data: prev?.documentId === documentId ? prev.data : null,
+        galat: pesanGalatHarmonisasi(err),
+      }));
+    } finally {
+      if (harmonisasiAbortRef.current === controller) harmonisasiAbortRef.current = null;
+    }
+  }, [documentId]);
+
+  // Batalkan harmonisasi in-flight saat ganti dokumen atau unmount
+  useEffect(() => {
+    return () => {
+      harmonisasiAbortRef.current?.abort();
+      harmonisasiAbortRef.current = null;
+      harmonisasiDimintaRef.current = null;
+    };
+  }, [documentId]);
+
+  // Buka tab Harmonisasi; jalankan otomatis sekali per dokumen (dari event, bukan effect, agar tidak ganda di StrictMode)
+  const bukaTabHarmonisasi = useCallback(() => {
+    setActiveTab('harmonisasi');
+    if (harmonisasiDimintaRef.current !== documentId) {
+      void muatHarmonisasi(false);
+    }
+  }, [documentId, muatHarmonisasi]);
 
   // Bersihkan timer retry otomatis saat unmount atau dibatalkan
   const clearRetryTimer = useCallback(() => {
@@ -634,14 +693,10 @@ export default function AnalisaState2Workspace({
     }
   }, [articles, data, showNavFeedback, totalPages, viewMode]);
 
-  // Navigasi ke Harmonisasi
+  // Tombol "Lanjut ke Harmonisasi": buka tab Harmonisasi di panel kanan
   const handleGoToHarmonisasi = () => {
-    navigate('/harmonisasi', {
-      state: {
-        draftId: documentId,
-        draftTitle: displayJudulRegulasi
-      }
-    });
+    bukaTabHarmonisasi();
+    panelHasilRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   // Ekspor Hasil Analisis (DOCX, CSV, JSON) via Backend US-40
@@ -1628,7 +1683,7 @@ export default function AnalisaState2Workspace({
             className="col-span-12 lg:col-span-4 bg-white rounded-xl border border-gray-200 shadow-2xs h-[720px] p-4"
             onCobaLagi={() => loadAnalysis(false, false)}
           >
-          <div className="col-span-12 lg:col-span-4 bg-white rounded-xl border border-gray-200 flex flex-col shadow-2xs overflow-hidden h-[720px]">
+          <div ref={panelHasilRef} className="col-span-12 lg:col-span-4 bg-white rounded-xl border border-gray-200 flex flex-col shadow-2xs overflow-hidden h-[720px]">
             {/* Header Panel Kanan */}
             <div className="p-3.5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2 shrink-0">
               <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
@@ -1643,7 +1698,7 @@ export default function AnalisaState2Workspace({
               </div>
             </div>
 
-            {/* Tab Bar: Ringkasan | Poin Utama | Dasar Hukum | Informasi Tambahan */}
+            {/* Tab Bar: Ringkasan | Poin Utama | Dasar Hukum | Informasi Tambahan | Harmonisasi */}
             <div className="flex border-b border-gray-200 px-2 bg-gray-50/50 text-xs shrink-0 overflow-x-auto">
               <button
                 type="button"
@@ -1688,6 +1743,17 @@ export default function AnalisaState2Workspace({
                 }`}
               >
                 Informasi Tambahan
+              </button>
+              <button
+                type="button"
+                onClick={bukaTabHarmonisasi}
+                className={`py-2.5 px-3 font-semibold transition border-b-2 shrink-0 cursor-pointer ${
+                  activeTab === 'harmonisasi'
+                    ? 'border-red-700 text-red-700'
+                    : 'border-transparent text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                Harmonisasi
               </button>
             </div>
 
@@ -2010,6 +2076,17 @@ export default function AnalisaState2Workspace({
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* TAB 5: HARMONISASI (draft vs korpus, per pasal) */}
+              {activeTab === 'harmonisasi' && (
+                <PanelErrorBoundary nama="Harmonisasi" onCobaLagi={() => void muatHarmonisasi(true)}>
+                  <HarmonisasiPanel
+                    state={harmonisasi}
+                    onMuat={(segar) => void muatHarmonisasi(segar)}
+                    onJumpToPasal={handleJumpToPasal}
+                  />
+                </PanelErrorBoundary>
               )}
             </div>
 
