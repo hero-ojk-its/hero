@@ -482,6 +482,7 @@ export interface DashboardSummaryResponse {
     target_met: boolean;
     by_status_keberlakuan: {
       berlaku?: number;
+      belum_berlaku?: number;
       diubah?: number;
       dicabut?: number;
       tidak_diketahui?: number;
