@@ -411,6 +411,10 @@ export interface FailureListResponse {
 export interface IngestFailureQueryParams {
   job_id?: number;
   failure_type?: string;
+  /** Satu atau lebih reason_code (dikirim berulang: ?reason_code=a&reason_code=b) */
+  reason_code?: string[];
+  /** Kegagalan dari sumber ini (via job.source_id atau scan_candidates.failure_id) */
+  source_id?: number;
   follow_up_status?: 'belum_ditangani' | 'diproses_ulang' | 'diabaikan' | 'all';
   include_duplicates?: boolean;
   skip?: number;
