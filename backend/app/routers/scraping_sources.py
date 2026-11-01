@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.category import Category
+from app.models.document import Document
+from app.models.job_ingest import JobIngest
 from app.models.enums import JenisSumber, KlasifikasiAkses
 from app.models.scraping_source import ScrapingSource
 from app.models.source_file import SourceFile
@@ -541,6 +543,33 @@ def delete_scraping_source(
         )
 
     source_name = source.name
+
+    # Hitung jumlah dokumen terkait sebelum hapus
+    doc_count = (
+        db.query(Document.id)
+        .join(JobIngest, Document.job_id == JobIngest.id)
+        .filter(JobIngest.source_id == source.id)
+        .count()
+    )
+    klasifikasi = (
+        source.default_access_classification.value
+        if hasattr(source.default_access_classification, "value")
+        else str(source.default_access_classification)
+    )
+    source_detail = {
+        "source_id": source.id,
+        "nama": source.name,
+        "jenis": source.source_type.value if hasattr(source.source_type, "value") else str(source.source_type),
+        "url": source.url,
+        "klasifikasi": klasifikasi,
+        "jumlah_dokumen_terkait": doc_count,
+        "crawl_depth": source.crawl_depth,
+        "crawler_adapter": source.crawler_adapter,
+        "naming_format": source.default_naming_format,
+        "naming_separator": source.default_naming_separator,
+        "is_active": source.is_active,
+    }
+
     db.delete(source)
 
     actor_user_id = current_user.id if current_user and getattr(current_user, "id", None) else None
@@ -550,6 +579,7 @@ def delete_scraping_source(
         action=DELETE_SOURCE,
         user_id=actor_user_id,
         target_resource=f"scraping_source:{source_id}",
+        detail=source_detail,
         ip_address=client_ip,
         commit=False,
     )

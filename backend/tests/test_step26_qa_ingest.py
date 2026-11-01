@@ -575,7 +575,7 @@ def test_r18_audit_logs_ip_mask_when_auth_disabled(client: TestClient, db_sessio
     db_session.commit()
     db_session.refresh(log)
 
-    resp = client.get("/api/v1/audit-logs/")
+    resp = client.get("/api/v1/audit-logs/", headers={"X-Internal-API-Key": settings.internal_api_key})
     assert resp.status_code == 200, resp.text
     items = resp.json()
 

@@ -61,7 +61,7 @@ def test_t03_list_endpoints_status_200(client: TestClient):
 
 def test_t04_audit_logs_unauthenticated_auth_disabled(client: TestClient):
     """T04: GET /api/v1/audit-logs/ tanpa token saat AUTH_ENABLED=false -> 200."""
-    res = client.get("/api/v1/audit-logs/")
+    res = client.get("/api/v1/audit-logs/", headers={"X-Internal-API-Key": settings.internal_api_key})
     assert res.status_code == 200
     assert isinstance(res.json(), list)
 
