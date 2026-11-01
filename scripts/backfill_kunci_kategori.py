@@ -15,8 +15,37 @@ from sqlalchemy.orm import Session
 
 import app.database
 from app.models.category import Category
+from app.models.document import Document
 from app.models.audit_log import AuditLog
 from app.services.audit_service import UPDATE_CATEGORY
+
+
+def is_used_in_auto_placement(cat: Category, db: Session) -> bool:
+    """
+    Aturan 1: kategori dipakai penempatan otomatis bila:
+    - auto_created == True, ATAU
+    - punya anak dengan auto_created == True, ATAU
+    - punya dokumen dengan kategori_manual == False
+    """
+    if cat.auto_created:
+        return True
+    has_auto_child = (
+        db.query(Category.id)
+        .filter(Category.parent_id == cat.id, Category.auto_created.is_(True))
+        .first()
+        is not None
+    )
+    if has_auto_child:
+        return True
+    has_auto_doc = (
+        db.query(Document.id)
+        .filter(Document.category_id == cat.id, Document.kategori_manual.is_(False))
+        .first()
+        is not None
+    )
+    if has_auto_doc:
+        return True
+    return False
 
 
 def run_backfill(apply: bool = False, db: Optional[Session] = None) -> None:
@@ -60,10 +89,13 @@ def run_backfill(apply: bool = False, db: Optional[Session] = None) -> None:
                         oldest_name = before["name"]
                         break
 
-            if not oldest_name:
-                continue
+            proposed_key = None
+            if oldest_name and cat.kunci_otomatis != oldest_name:
+                proposed_key = oldest_name
+            elif cat.kunci_otomatis is None and is_used_in_auto_placement(cat, db):
+                proposed_key = cat.name
 
-            if cat.kunci_otomatis == oldest_name:
+            if not proposed_key:
                 continue
 
             filter_parent = (
@@ -75,15 +107,15 @@ def run_backfill(apply: bool = False, db: Optional[Session] = None) -> None:
                 db.query(Category)
                 .filter(
                     filter_parent,
-                    Category.kunci_otomatis == oldest_name,
+                    Category.kunci_otomatis == proposed_key,
                     Category.id != cat.id,
                 )
                 .first()
             )
 
-            if existing_conflict or (cat.parent_id, oldest_name) in batch_proposed:
+            if existing_conflict or (cat.parent_id, proposed_key) in batch_proposed:
                 print(
-                    f"[BENTROK - DILEWATI] id={cat.id} | nama sekarang={cat.name} | kunci usulan={oldest_name} bentrok di induk {cat.parent_id}"
+                    f"[BENTROK - DILEWATI] id={cat.id} | nama sekarang={cat.name} | kunci usulan={proposed_key} bentrok di induk {cat.parent_id}"
                 )
                 continue
 
@@ -91,12 +123,12 @@ def run_backfill(apply: bool = False, db: Optional[Session] = None) -> None:
                 print("id | nama sekarang | kunci usulan")
                 header_printed = True
 
-            print(f"{cat.id} | {cat.name} | {oldest_name}")
-            batch_proposed.add((cat.parent_id, oldest_name))
+            print(f"{cat.id} | {cat.name} | {proposed_key}")
+            batch_proposed.add((cat.parent_id, proposed_key))
             count += 1
 
             if apply:
-                cat.kunci_otomatis = oldest_name
+                cat.kunci_otomatis = proposed_key
                 db.add(cat)
 
         if count == 0:

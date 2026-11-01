@@ -362,3 +362,193 @@ def test_k12_category_responses_include_kunci_otomatis(client: TestClient, db_se
         assert "kategori" in data_patch
         assert "kunci_otomatis" in data_patch["kategori"]
         assert data_patch["kategori"]["kunci_otomatis"] == "2026"
+
+
+# ============================================================================
+# K13: Seed akar POJK auto_created=false + anak 2026 auto_created=true;
+# rename POJK -> "Peraturan OJK"; tempatkan dokumen baru -> masuk ke "Peraturan OJK/2026"
+# ============================================================================
+def test_k13_seed_root_rename_preserves_automatic_placement(client: TestClient, db_session: Session):
+    cat_svc = CategoryService(db_session)
+    root = db_session.query(Category).filter(Category.name == "POJK", Category.parent_id.is_(None)).first()
+    if not root:
+        root = Category(name="POJK", parent_id=None, auto_created=False, kunci_otomatis=None)
+        db_session.add(root)
+        db_session.flush()
+    else:
+        root.kunci_otomatis = None
+        db_session.add(root)
+        db_session.flush()
+
+    child = db_session.query(Category).filter(Category.name == "2026", Category.parent_id == root.id).first()
+    if not child:
+        child = Category(name="2026", parent_id=root.id, auto_created=True, kunci_otomatis="2026")
+        db_session.add(child)
+        db_session.flush()
+
+    db_session.commit()
+
+    with patch.object(settings, "auth_enabled", False):
+        res = client.patch(f"/api/v1/categories/{root.id}", json={"name": "Peraturan OJK"})
+        assert res.status_code == 200
+        data = res.json()["kategori"]
+        assert data["name"] == "Peraturan OJK"
+        assert data["kunci_otomatis"] == "POJK"
+
+    resolved = cat_svc.resolve_or_create_path(["POJK", "2026"])
+    db_session.commit()
+
+    assert resolved.id == child.id
+    assert resolved.parent_id == root.id
+
+    all_roots = db_session.query(Category).filter(Category.parent_id.is_(None)).all()
+    pojk_roots = [c for c in all_roots if c.name == "POJK"]
+    assert len(pojk_roots) == 0
+
+
+# ============================================================================
+# K14: Ganti nama dua kali (POJK -> A -> B) -> kunci tetap "POJK", dokumen baru masuk ke B
+# ============================================================================
+def test_k14_rename_twice_preserves_original_key(client: TestClient, db_session: Session):
+    cat_svc = CategoryService(db_session)
+    root = db_session.query(Category).filter(Category.name == "POJK", Category.parent_id.is_(None)).first()
+    if not root:
+        root = Category(name="POJK", parent_id=None, auto_created=False, kunci_otomatis=None)
+        db_session.add(root)
+        db_session.flush()
+    else:
+        root.name = "POJK"
+        root.kunci_otomatis = None
+        db_session.add(root)
+        db_session.flush()
+
+    child = db_session.query(Category).filter(Category.name == "2026", Category.parent_id == root.id).first()
+    if not child:
+        child = Category(name="2026", parent_id=root.id, auto_created=True, kunci_otomatis="2026")
+        db_session.add(child)
+        db_session.flush()
+    db_session.commit()
+
+    with patch.object(settings, "auth_enabled", False):
+        res1 = client.patch(f"/api/v1/categories/{root.id}", json={"name": "A"})
+        assert res1.status_code == 200
+        assert res1.json()["kategori"]["kunci_otomatis"] == "POJK"
+
+        res2 = client.patch(f"/api/v1/categories/{root.id}", json={"name": "B"})
+        assert res2.status_code == 200
+        assert res2.json()["kategori"]["kunci_otomatis"] == "POJK"
+        assert res2.json()["kategori"]["name"] == "B"
+
+    resolved = cat_svc.resolve_or_create_path(["POJK", "2026"])
+    assert resolved.parent_id == root.id
+    db_session.refresh(root)
+    assert root.name == "B"
+    assert root.kunci_otomatis == "POJK"
+
+
+# ============================================================================
+# K15: Kategori manual murni (POST, tanpa anak otomatis & tanpa dokumen otomatis)
+# diganti nama -> kunci tetap null
+# ============================================================================
+def test_k15_pure_manual_category_rename_keeps_key_null(client: TestClient, db_session: Session):
+    with patch.object(settings, "auth_enabled", False):
+        res = client.post("/api/v1/categories/", json={"name": "Manual Murni"})
+        assert res.status_code == 201
+        cat_id = res.json()["id"]
+        assert res.json()["kunci_otomatis"] is None
+
+        res_patch = client.patch(f"/api/v1/categories/{cat_id}", json={"name": "Manual Diubah"})
+        assert res_patch.status_code == 200
+        assert res_patch.json()["kategori"]["name"] == "Manual Diubah"
+        assert res_patch.json()["kategori"]["kunci_otomatis"] is None
+
+    cat = db_session.query(Category).filter(Category.id == cat_id).first()
+    assert cat.kunci_otomatis is None
+
+
+# ============================================================================
+# K16: Pindah induk kategori otomatis "2026" dari POJK ke SEOJK (tanpa bentrok)
+# -> kunci tetap "2026"; dokumen POJK 2026 berikutnya membuat POJK/2026 baru
+# ============================================================================
+def test_k16_move_child_category_creates_new_under_original_parent(client: TestClient, db_session: Session):
+    cat_svc = CategoryService(db_session)
+    root_pojk = db_session.query(Category).filter(Category.name == "POJK", Category.parent_id.is_(None)).first()
+    if not root_pojk:
+        root_pojk = Category(name="POJK", parent_id=None, auto_created=False, kunci_otomatis="POJK")
+        db_session.add(root_pojk)
+        db_session.flush()
+
+    root_seojk = db_session.query(Category).filter(Category.name == "SEOJK", Category.parent_id.is_(None)).first()
+    if not root_seojk:
+        root_seojk = Category(name="SEOJK", parent_id=None, auto_created=False, kunci_otomatis="SEOJK")
+        db_session.add(root_seojk)
+        db_session.flush()
+
+    # Pastikan SEOJK belum punya anak "2026"
+    existing_seo_2026 = (
+        db_session.query(Category)
+        .filter(Category.name == "2026", Category.parent_id == root_seojk.id)
+        .first()
+    )
+    if existing_seo_2026:
+        db_session.delete(existing_seo_2026)
+        db_session.flush()
+
+    # Anak 2026 di bawah POJK
+    child_2026 = (
+        db_session.query(Category)
+        .filter(Category.name == "2026", Category.parent_id == root_pojk.id)
+        .first()
+    )
+    if not child_2026:
+        child_2026 = Category(name="2026", parent_id=root_pojk.id, auto_created=True, kunci_otomatis="2026")
+        db_session.add(child_2026)
+        db_session.flush()
+    db_session.commit()
+
+    with patch.object(settings, "auth_enabled", False):
+        res = client.patch(f"/api/v1/categories/{child_2026.id}", json={"parent_id": root_seojk.id})
+        assert res.status_code == 200
+        assert res.json()["kategori"]["kunci_otomatis"] == "2026"
+        assert res.json()["kategori"]["parent_id"] == root_seojk.id
+
+    resolved = cat_svc.resolve_or_create_path(["POJK", "2026"])
+    db_session.commit()
+
+    assert resolved.id != child_2026.id
+    assert resolved.parent_id == root_pojk.id
+    assert resolved.name == "2026"
+    assert resolved.kunci_otomatis == "2026"
+
+    db_session.refresh(child_2026)
+    assert child_2026.parent_id == root_seojk.id
+    assert child_2026.kunci_otomatis == "2026"
+
+
+# ============================================================================
+# K17: Migrasi data step / backfill mengisi kunci untuk akar seed yang punya anak otomatis
+# ============================================================================
+def test_k17_migration_data_step_and_backfill_fills_key_for_seed_root(db_session: Session):
+    old_uu = db_session.query(Category).filter(Category.name == "UU", Category.parent_id.is_(None)).all()
+    for u in old_uu:
+        db_session.query(Category).filter(Category.parent_id == u.id).delete()
+        db_session.delete(u)
+    db_session.flush()
+
+    seed_root = Category(name="UU", parent_id=None, auto_created=False, kunci_otomatis=None)
+    db_session.add(seed_root)
+    db_session.flush()
+
+    child = Category(name="2024", parent_id=seed_root.id, auto_created=True, kunci_otomatis="2024")
+    db_session.add(child)
+    db_session.flush()
+    db_session.commit()
+
+    output_buf = io.StringIO()
+    with patch("sys.stdout", output_buf):
+        run_backfill(apply=True, db=db_session)
+
+    db_session.refresh(seed_root)
+    assert seed_root.kunci_otomatis == "UU"
+    out = output_buf.getvalue()
+    assert f"{seed_root.id} | UU | UU" in out

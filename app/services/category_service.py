@@ -162,6 +162,33 @@ class CategoryService:
 
         return curr_category
 
+    def is_used_in_auto_placement(self, cat: Category) -> bool:
+        """
+        Mengecek apakah kategori dipakai dalam penempatan otomatis:
+        - auto_created == True, ATAU
+        - punya anak dengan auto_created == True, ATAU
+        - punya dokumen dengan kategori_manual == False
+        """
+        if cat.auto_created:
+            return True
+        has_auto_child = (
+            self.db.query(Category.id)
+            .filter(Category.parent_id == cat.id, Category.auto_created.is_(True))
+            .first()
+            is not None
+        )
+        if has_auto_child:
+            return True
+        has_auto_doc = (
+            self.db.query(Document.id)
+            .filter(Document.category_id == cat.id, Document.kategori_manual.is_(False))
+            .first()
+            is not None
+        )
+        if has_auto_doc:
+            return True
+        return False
+
     def path_of(self, category: Category) -> List[str]:
         """
         Mengembalikan urutan nama kategori dari root hingga kategori leaf saat ini.
@@ -389,6 +416,9 @@ class CategoryService:
         after_state: Dict[str, Any] = {}
         path_changed = False
 
+        # Cek apakah kategori dipakai penempatan otomatis SEBELUM perubahan apa pun
+        was_used_in_auto_placement = self.is_used_in_auto_placement(cat)
+
         target_parent = parent_id if parent_id_provided else cat.parent_id
 
         # 1. Validasi & penanganan parent_id jika disediakan
@@ -444,8 +474,8 @@ class CategoryService:
                     detail="Nama kategori tidak boleh kosong.",
                 )
             if clean_name != cat.name:
-                # Sebelum mengubah name: bila kunci_otomatis masih null dan kategori ini dulunya otomatis (auto_created=True)
-                if cat.kunci_otomatis is None and cat.auto_created:
+                # Sebelum mengubah name: bila kunci_otomatis masih null dan kategori ini dipakai penempatan otomatis
+                if cat.kunci_otomatis is None and was_used_in_auto_placement:
                     before_state["kunci_otomatis"] = None
                     after_state["kunci_otomatis"] = cat.name
                     cat.kunci_otomatis = cat.name

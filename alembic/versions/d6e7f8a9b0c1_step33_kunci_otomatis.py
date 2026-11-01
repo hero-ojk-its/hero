@@ -30,8 +30,15 @@ def upgrade() -> None:
         ),
     )
 
-    # 2. Data step: isi kunci_otomatis dengan name untuk kategori yang auto_created
-    op.execute("UPDATE categories SET kunci_otomatis = name WHERE auto_created = true")
+    # 2. Data step: isi kunci_otomatis dengan name untuk kategori yang dipakai penempatan otomatis
+    op.execute(
+        "UPDATE categories SET kunci_otomatis = name "
+        "WHERE kunci_otomatis IS NULL AND ("
+        "auto_created = true "
+        "OR id IN (SELECT parent_id FROM categories WHERE auto_created = true AND parent_id IS NOT NULL) "
+        "OR id IN (SELECT category_id FROM documents WHERE kategori_manual = false AND category_id IS NOT NULL)"
+        ")"
+    )
 
     # 3. Partial unique index untuk kategori akar (parent_id IS NULL)
     op.create_index(
