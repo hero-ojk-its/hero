@@ -455,6 +455,8 @@ export interface DocumentItem {
   source_url: string | null;
   pdf_url: string;
   is_placed: boolean;
+  /** true bila kategori dipilih pengguna (Langkah 32); undefined di backend lama */
+  kategori_manual?: boolean;
   restricted: boolean;
   created_at: string;
   updated_at?: string | null;
