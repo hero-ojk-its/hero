@@ -430,13 +430,19 @@ def test_h11_audit_filter_by_mode(
     client.get(f"/api/v1/ml/analisa/{doc1.id}")
     client.get(f"/api/v1/ml/analisa/{doc2.id}?mode=ai")
 
-    resp_all = client.get("/api/v1/audit-logs/?action=RUN_ANALYSIS")
+    resp_all = client.get(
+        "/api/v1/audit-logs/?action=RUN_ANALYSIS",
+        headers={"X-Internal-API-Key": settings.internal_api_key},
+    )
     assert resp_all.status_code == 200
     items_all = resp_all.json()
     assert isinstance(items_all, list)
     assert len(items_all) >= 2
 
-    resp_ai = client.get("/api/v1/audit-logs/?action=RUN_ANALYSIS&mode=ai")
+    resp_ai = client.get(
+        "/api/v1/audit-logs/?action=RUN_ANALYSIS&mode=ai",
+        headers={"X-Internal-API-Key": settings.internal_api_key},
+    )
     assert resp_ai.status_code == 200
     items_ai = resp_ai.json()
     assert isinstance(items_ai, list)

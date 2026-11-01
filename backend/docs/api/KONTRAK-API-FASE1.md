@@ -2330,7 +2330,7 @@ Sistem otorisasi HERO Backend menggunakan kontrol akses berbasis peran (RBAC) ya
      }
      ```
 
-2. **403 Forbidden (`akses_ditolak`):**
+2. **403 Forbidden (`akses_ditolak` atau `butuh_login`):**
    - Pengguna aktif tetapi perannya tidak memiliki izin fitur yang diminta:
      ```json
      {
@@ -2338,6 +2338,15 @@ Sistem otorisasi HERO Backend menggunakan kontrol akses berbasis peran (RBAC) ya
          "code": "akses_ditolak",
          "izin": "AUDIT_BACA",
          "peran": "analis"
+       }
+     }
+     ```
+   - Endpoint administratif (`/users`, `/audit-logs`) diakses saat `AUTH_ENABLED=false` tanpa header kunci internal yang valid:
+     ```json
+     {
+       "detail": {
+         "code": "butuh_login",
+         "message": "Endpoint ini hanya tersedia saat login aktif (AUTH_ENABLED=true) atau dengan kunci internal."
        }
      }
      ```
@@ -2356,6 +2365,15 @@ Sistem otorisasi HERO Backend menggunakan kontrol akses berbasis peran (RBAC) ya
        "detail": "Dokumen non-publik hanya dapat dibuka setelah login diaktifkan."
      }
      ```
+
+3. **429 Too Many Requests (Lockout Login):**
+   - Melebihi batas percobaan login gagal (5 kali per akun atau 30 kali per IP dalam jendela 15 menit):
+     ```json
+     {
+       "detail": "Terlalu banyak percobaan login. Coba lagi dalam 15 menit."
+     }
+     ```
+     Header respons menyertakan `Retry-After: <detik>`.
 
 ### 16.3 Profil Pengguna & Hak Akses Aktif (`/api/v1/auth/me`)
 
@@ -2452,8 +2470,79 @@ Seluruh endpoint di bawah prefix `/api/v1/users` dilindungi oleh izin `PENGGUNA_
 ### 16.5 Jejak Audit Aktivitas (`GET /api/v1/audit-logs/`)
 
 - **Method & Path:** `GET /api/v1/audit-logs/`
-- **Proteksi Akses:** Endpoint ini hanya dilindungi oleh izin `AUDIT_BACA` (khusus Admin Sistem) saat konfigurasi `AUTH_ENABLED=true`. Bila `AUTH_ENABLED=false` (mode pengujian dan staging), endpoint dapat diakses secara terbuka tanpa autentikasi.
+- **Proteksi Akses:**
+  - Saat `AUTH_ENABLED=true`: Wajib memiliki token dengan izin `AUDIT_BACA` (Admin Sistem).
+  - Saat `AUTH_ENABLED=false`: Jika `ADMIN_BUTUH_KUNCI_SAAT_AUTH_MATI=true` (default), wajib menyertakan header `X-Internal-API-Key` yang cocok dengan `INTERNAL_API_KEY`. Bila tidak ada atau keliru, mengembalikan `403 Forbidden` (`butuh_login`).
 - **Penyembunyian IP saat Autentikasi Nonaktif:** Selama `AUTH_ENABLED=false`, seluruh entri respons mengembalikan `ip_address: null` demi privasi pada akses terbuka, tanpa mengubah data asli alamat IP yang tersimpan di basis data. Saat `AUTH_ENABLED=true`, nilai alamat IP asli yang tersimpan di database dikembalikan pada setiap entri riwayat audit.
+- **Query Parameter (Opsional):**
+  - `action`: Filter kode aksi (mis. `LOGIN`, `UPLOAD_DOCUMENT`, `PLACE_DOCUMENT`).
+  - `user_id`: Filter ID pengguna.
+  - `target_resource`: Filter prefix sumber daya target (mis. `document:12`).
+  - `mode`: Filter mode analisa (`deterministik` | `ai`).
+  - `ada_detail`: Filter ketersediaan detail (boolean). `true` → hanya entri dengan `detail` tidak null dan bukan `{}`; `false` → hanya entri dengan `detail` null/kosong; `null` → seluruh entri.
+  - `dari`: Waktu awal filter rentang timestamp (ISO 8601, inklusif).
+  - `sampai`: Waktu akhir filter rentang timestamp (ISO 8601, inklusif).
+- **Format Detail per Aksi (Standardisasi Langkah 34):**
+  | Aksi | Isi `detail` |
+  |---|---|
+  | `UPLOAD_DOCUMENT` | `document_id`, `nama_berkas_asli`, `nama_berkas_baku`, `sha256`, `ukuran_byte`, `jumlah_halaman`, `sumber` (`jenis`, `source_id`, `job_id`), `tipe_dokumen`, `klasifikasi`, `kategori_manual`, `hasil: "baru"` |
+  | `UPLOAD_DOCUMENT` (Duplikat) | `hasil: "duplikat"`, `duplikat_dari`, `alasan: "hash_dan_ukuran"`, `nama_berkas_asli`, `sha256`, `ukuran_byte`, `sumber` |
+  | `OPEN_PDF` / `DOWNLOAD_PDF` | `document_id`, `judul` (max 200 char), `nama_berkas`, `klasifikasi`, `halaman` (opsional) |
+  | `DELETE_SOURCE` | `source_id`, `nama`, `jenis`, `url`, `klasifikasi`, `jumlah_dokumen_terkait`, `crawl_depth`, `crawler_adapter`, `naming_format`, `naming_separator`, `is_active` |
+  | `UPDATE_DOCUMENT_STATUS` | `before: {status_keberlakuan, status_source}`, `after: {status_keberlakuan, status_source}`, `dokumen_pencabut: {id, label}`, `jenis_rujukan`, `alasan` |
+  | `UPDATE_FAILURE` | `failure_id`, `before: {status, catatan}`, `after: {status, catatan}` |
+  | `RETRY_FAILURE` | `failure_id`, `reason_code`, `source_id`, `percobaan_ke`, `hasil`, `outcome`, `document_id` |
+  | `LOGIN` | `username`, `peran` |
+  | `LOGIN_FAILED` | `username`, `alasan: "kredensial_salah" \| "akun_nonaktif" \| "terkunci"`, `jumlah_gagal` |
+  | `LOGIN_LOCKED` | `username`, `kunci`, `durasi_menit` |
+- **Catatan Historis:** Entri audit sebelum Langkah 34 (dan `PLACE_DOCUMENT` sebelum Langkah 27) memang tersimpan dengan `detail: null` karena dicatat sebelum standardisasi payload audit diperkenalkan.
+
+---
+
+### 16.6 Ringkasan Jejak Audit Aktivitas (`GET /api/v1/audit-logs/ringkasan`)
+
+- **Method & Path:** `GET /api/v1/audit-logs/ringkasan`
+- **Proteksi Akses:** Sama persis dengan `GET /api/v1/audit-logs/` (izin `AUDIT_BACA` saat auth aktif, atau `X-Internal-API-Key` saat auth nonaktif).
+- **Respons (200 OK):**
+  ```json
+  [
+    {
+      "action": "LOGIN",
+      "jumlah": 42,
+      "jumlah_detail_kosong": 0,
+      "terakhir": "2026-11-01T14:30:00Z"
+    },
+    {
+      "action": "UPLOAD_DOCUMENT",
+      "jumlah": 180,
+      "jumlah_detail_kosong": 179,
+      "terakhir": "2026-11-01T15:00:00Z"
+    }
+  ]
+  ```
+
+---
+
+### 16.7 Proteksi Rate Limit & Lockout Login (`POST /api/v1/auth/login`)
+
+- **Batas Kegagalan:**
+  - Maksimal 5 kali kegagalan berturut-turut untuk satu akun (`u:<username>`).
+  - Maksimal 30 kali kegagalan berturut-turut untuk satu alamat IP (`ip:<ip>`).
+  - Jendela perhitungan kegagalan: 15 menit (`LOGIN_JENDELA_MENIT=15`).
+  - Durasi lockout: 15 menit (`LOGIN_KUNCI_MENIT=15`).
+- **Pengecekan Lockout:**
+  - Status lockout diperiksa di database sebelum validasi kata sandi. Jika akun atau IP sedang terkunci, permintaan langsung ditolak `429 Too Many Requests` tanpa memverifikasi password atau mengekspos eksistensi akun.
+- **Respons saat Terkunci (429 Too Many Requests):**
+  - Header: `Retry-After: <detik>` (misal `900`)
+  - Body:
+    ```json
+    {
+      "detail": "Terlalu banyak percobaan login. Coba lagi dalam 15 menit."
+    }
+    ```
+- **Reset Akun:** Login yang berhasil otomatis mereset hitungan kegagalan akun (`u:<username>`), sedangkan pelacak IP tetap berjalan.
+- **Pembukaan Kunci Manual:** Admin dapat membuka status lockout manual di server via skrip `scripts/buka_kunci_login.py --username <username> --apply`.
+
 
 
 

@@ -488,3 +488,46 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
    - `INTERNAL_API_KEY` digunakan untuk komunikasi service-to-service (Worker Data/ML). Jangan pernah membagikan kunci ini di kanal publik/grup chat tanpa enkripsi. Gunakan password manager tim yang aman.
 4. **Rotasi Kunci:**
    - Lakukan rotasi berkala untuk `SECRET_KEY` dan `INTERNAL_API_KEY` menjelang rilis Fase 2.
+
+---
+
+## 13. Keamanan Login & Proteksi Endpoint Admin (Langkah 34)
+
+### 13.1 Konfigurasi Proteksi Login & Lockout
+Tersedia variabel konfigurasi baru pada `.env.prod` untuk mencegah brute-force login:
+- `LOGIN_MAKS_GAGAL_PER_AKUN=5`: Batas percobaan gagal per akun (`u:<username>`).
+- `LOGIN_MAKS_GAGAL_PER_IP=30`: Batas percobaan gagal per IP (`ip:<ip>`).
+- `LOGIN_JENDELA_MENIT=15`: Jendela waktu perhitungan akumulasi kegagalan.
+- `LOGIN_KUNCI_MENIT=15`: Durasi lockout (pemblokiran sementara).
+- `ADMIN_BUTUH_KUNCI_SAAT_AUTH_MATI=true`: Melindungi `/api/v1/users` dan `/api/v1/audit-logs` saat `AUTH_ENABLED=false` sehingga tidak dapat diakses publik tanpa kunci internal.
+
+### 13.2 Konfigurasi Reverse Proxy & IP Klien (`FORWARDED_ALLOW_IPS`)
+Di balik reverse proxy (seperti Caddy, Nginx, atau Cloudflare Tunnel), Uvicorn harus membaca IP klien asli via proxy headers.
+Pastikan pengaturan `FORWARDED_ALLOW_IPS` diatur ke alamat IP reverse proxy internal (misal `127.0.0.1`), **BUKAN `*`**.
+> **PENTING:** Jika `FORWARDED_ALLOW_IPS` diatur ke `*` atau tidak dikonfigurasi dengan benar:
+> 1. Semua pengguna akan tampak berasal dari satu alamat IP yang sama (IP proxy), sehingga satu serangan brute-force dapat mengunci seluruh pengguna aplikasi.
+> 2. Penyerang dapat memalsukan IP melalui manipulasi header `X-Forwarded-For`.
+
+### 13.3 Membuka Lockout Login Manual (`scripts/buka_kunci_login.py`)
+Bila akun pengguna atau alamat IP staf terkunci akibat salah ketik berulang:
+```bash
+# 1. Cek status lockout (dry-run):
+docker compose exec backend python scripts/buka_kunci_login.py --username budi_analis
+
+# 2. Buka kunci akun:
+docker compose exec backend python scripts/buka_kunci_login.py --username budi_analis --apply
+
+# 3. Atau buka kunci alamat IP staf:
+docker compose exec backend python scripts/buka_kunci_login.py --ip 192.168.1.50 --apply
+```
+
+### 13.4 Cara Membaca Audit Log Saat Autentikasi Nonaktif (`AUTH_ENABLED=false`)
+Ketika login dinonaktifkan di VPS, endpoint `/api/v1/audit-logs` dan `/api/v1/users` dilindungi oleh `ADMIN_BUTUH_KUNCI_SAAT_AUTH_MATI=true`.
+Untuk keperluan verifikasi dan pengujian QA dari server VPS, panggil endpoint menggunakan `INTERNAL_API_KEY` dari environment tanpa mengetikkan kuncinya secara mentah di terminal:
+```bash
+# Ambil kunci dari file environment dan panggil endpoint ringkasan audit
+curl -s http://localhost:8000/api/v1/audit-logs/ringkasan \
+  -H "X-Internal-API-Key: $(grep '^INTERNAL_API_KEY=' .env.prod | cut -d '=' -f2)"
+```
+Cara ini menjamin kunci rahasia tidak tersimpan dalam riwayat shell (`~/.bash_history`) atau log audit.
+

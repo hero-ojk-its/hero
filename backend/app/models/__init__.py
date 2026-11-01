@@ -31,4 +31,5 @@ from app.models.source_file import SourceFile  # noqa: F401
 from app.models.ingest_failure import IngestFailure  # noqa: F401
 from app.models.scan_session import ScanSession  # noqa: F401
 from app.models.scan_candidate import ScanCandidate  # noqa: F401
+from app.models.percobaan_login import PercobaanLogin  # noqa: F401
 

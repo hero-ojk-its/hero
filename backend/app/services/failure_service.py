@@ -375,17 +375,32 @@ class FailureService:
                 detail="Status hanya boleh diubah menjadi 'belum_ditangani' atau 'diabaikan'. Status 'diproses_ulang' hanya dapat diubah melalui proses retry.",
             )
 
+        before_state = {
+            "status": failure.follow_up_status.value if hasattr(failure.follow_up_status, "value") else str(failure.follow_up_status),
+            "catatan": failure.handling_note,
+        }
+
         failure.follow_up_status = status
         if note is not None:
             failure.handling_note = note
         if actor_user_id is not None:
             failure.handled_by_user_id = actor_user_id
 
+        after_state = {
+            "status": failure.follow_up_status.value if hasattr(failure.follow_up_status, "value") else str(failure.follow_up_status),
+            "catatan": failure.handling_note,
+        }
+
         record_audit(
             self.db,
             action=UPDATE_FAILURE,
             user_id=actor_user_id,
             target_resource=f"ingest_failure:{failure.id}",
+            detail={
+                "failure_id": failure.id,
+                "before": before_state,
+                "after": after_state,
+            },
             ip_address=ip_address,
             commit=False,
         )
@@ -485,12 +500,22 @@ class FailureService:
                 except Exception:
                     pass
 
+            source_id = getattr(failure, "source_id", None) or (failure.job.source_id if getattr(failure, "job", None) else None)
             record_audit(
                 self.db,
                 action=RETRY_FAILURE,
                 user_id=actor_user_id,
                 target_resource=f"ingest_failure:{failure.id}",
-                detail={"outcome": "placed", "document_id": doc.id, "reason": place_res.reason},
+                detail={
+                    "failure_id": failure.id,
+                    "reason_code": failure.reason_code,
+                    "source_id": source_id,
+                    "percobaan_ke": failure.attempt_count,
+                    "hasil": "placed",
+                    "outcome": "placed",
+                    "document_id": doc.id,
+                    "reason": place_res.reason,
+                },
                 ip_address=ip_address,
                 commit=False,
             )
@@ -540,12 +565,21 @@ class FailureService:
                 except Exception:
                     pass
 
+            source_id = getattr(failure, "source_id", None) or (failure.job.source_id if getattr(failure, "job", None) else None)
             record_audit(
                 self.db,
                 action=RETRY_FAILURE,
                 user_id=actor_user_id,
                 target_resource=f"ingest_failure:{failure.id}",
-                detail={"outcome": "requeued", "document_id": doc.id},
+                detail={
+                    "failure_id": failure.id,
+                    "reason_code": failure.reason_code,
+                    "source_id": source_id,
+                    "percobaan_ke": failure.attempt_count,
+                    "hasil": "requeued",
+                    "outcome": "requeued",
+                    "document_id": doc.id,
+                },
                 ip_address=ip_address,
                 commit=False,
             )
@@ -707,11 +741,24 @@ class FailureService:
 
         ingest_svc.finish_job(new_job, [result])
 
+        hasil_str = (
+            result.outcome.value
+            if hasattr(result.outcome, "value")
+            else str(result.outcome)
+        )
+        source_id = getattr(failure, "source_id", None) or (failure.job.source_id if getattr(failure, "job", None) else None)
         record_audit(
             self.db,
             action=RETRY_FAILURE,
             user_id=actor_user_id,
             target_resource=f"ingest_failure:{failure.id}",
+            detail={
+                "failure_id": failure.id,
+                "reason_code": failure.reason_code,
+                "source_id": source_id,
+                "percobaan_ke": failure.attempt_count,
+                "hasil": hasil_str,
+            },
             ip_address=ip_address,
             commit=False,
         )

@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.core.permissions import Izin, PeranPengguna, perlu_izin
+from app.core.permissions import Izin, PeranPengguna, perlu_izin_admin
 from app.models.user import User
 from app.schemas.user import UserCreateIn, UserResponse, UserUpdateIn
 from app.services.audit_service import CREATE_USER, UPDATE_USER, record_audit
@@ -30,7 +30,7 @@ def list_users(
     role: Optional[PeranPengguna] = Query(None, description="Filter berdasarkan peran"),
     is_active: Optional[bool] = Query(None, description="Filter status aktif"),
     db: Session = Depends(get_db),
-    current_user=Depends(perlu_izin(Izin.PENGGUNA_KELOLA)),
+    current_user=Depends(perlu_izin_admin(Izin.PENGGUNA_KELOLA)),
 ) -> List[User]:
     """
     Mengembalikan daftar seluruh akun pengguna sistem HERO.
@@ -56,7 +56,7 @@ def create_user(
     payload: UserCreateIn,
     request: Request,
     db: Session = Depends(get_db),
-    current_user=Depends(perlu_izin(Izin.PENGGUNA_KELOLA)),
+    current_user=Depends(perlu_izin_admin(Izin.PENGGUNA_KELOLA)),
 ) -> User:
     """
     Membuat akun pengguna baru dengan peran tertentu.
@@ -124,7 +124,7 @@ def update_user(
     payload: UserUpdateIn,
     request: Request,
     db: Session = Depends(get_db),
-    current_user=Depends(perlu_izin(Izin.PENGGUNA_KELOLA)),
+    current_user=Depends(perlu_izin_admin(Izin.PENGGUNA_KELOLA)),
 ) -> User:
     """
     Memperbarui profil, peran, status aktif, atau password akun pengguna.

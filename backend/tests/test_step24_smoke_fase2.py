@@ -33,6 +33,7 @@ def _setup_env(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "ml_service_url", "http://mock-ml-service:8080")
     monkeypatch.setattr(settings, "protect_non_public_when_auth_disabled", True)
     monkeypatch.setattr(settings, "auth_enabled", False)
+    monkeypatch.setenv("HERO_INTERNAL_API_KEY", settings.internal_api_key)
     yield
     app.dependency_overrides.pop(get_ml_client, None)
 

@@ -144,6 +144,10 @@ class UpdateDocumentStatusIn(BaseModel):
         ),
         examples=[7],
     )
+    alasan: Optional[str] = Field(
+        None,
+        description="Alasan perubahan status dokumen regulasi",
+    )
 
     model_config = {"json_schema_extra": {"example": {
         "status_keberlakuan": "dicabut",
