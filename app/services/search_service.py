@@ -341,6 +341,7 @@ class SearchService:
                 "document_role": doc_obj.document_role,
                 "category_id": doc_obj.category_id,
                 "category_path": cpath,
+                "kategori_manual": bool(getattr(doc_obj, "kategori_manual", False)),
                 "status_keberlakuan": doc_obj.status_keberlakuan,
                 "status_source": getattr(doc_obj, "status_source", None),
                 "processing_status": doc_obj.processing_status,
