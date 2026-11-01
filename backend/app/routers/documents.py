@@ -33,6 +33,7 @@ from app.schemas.article import (
     UpdateDocumentActiveIn,
     UpdateDocumentActiveResponse,
 )
+from app.schemas.document import DocumentMetadataPatchResponse
 from app.core.permissions import (
     perlu_izin,
     Izin,
@@ -456,6 +457,7 @@ def _format_single_document_response(doc: Document, db: Session, current_user: O
         "extraction_engine": getattr(doc, "extraction_engine", None),
         "category_id": doc.category_id,
         "category_path": cat_path,
+        "kategori_manual": bool(getattr(doc, "kategori_manual", False)),
         "is_placed": is_placed,
         "job_id": doc.job_id,
         "pdf_url": f"/api/v1/documents/{doc.id}/pdf",
@@ -717,7 +719,12 @@ def get_draft_similarity(
     )
 
 
-@router.patch("/{document_id}/metadata", summary="Koreksi metadata dokumen manual")
+@router.patch(
+    "/{document_id}/metadata",
+    response_model=DocumentMetadataPatchResponse,
+    response_model_exclude_unset=True,
+    summary="Koreksi metadata dokumen manual",
+)
 def patch_document_metadata(
     document_id: int,
     payload: UpdateMetadataIn,
@@ -952,28 +959,39 @@ def patch_document_metadata(
     placement_fields = {"title", "regulation_number", "regulation_type", "release_date", "regulation_year", "category_id", "document_role", "bidang"}
     placement_info = None
 
-    if any(f in changed_fields for f in placement_fields) and is_suff:
-        cat_svc = CategoryService(db)
-        place_svc = PlacementService(db, storage, cat_svc, settings)
-        place_res = place_svc.place(doc, force=True, actor_user_id=actor_user_id, ip_address=client_ip)
-        if not place_res.placed and place_res.reason and place_res.reason.startswith("gagal"):
-            db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail={
-                    "code": "penempatan_gagal",
-                    "message": place_res.reason,
-                },
-            )
-        placement_info = {
-            "document_id": place_res.document_id,
-            "placed": place_res.placed,
-            "reason": place_res.reason,
-            "old_path": place_res.old_path,
-            "new_path": place_res.new_path,
-            "category_id": place_res.category_id,
-            "category_path": place_res.category_path,
-        }
+    if any(f in changed_fields for f in placement_fields):
+        if is_suff:
+            cat_svc = CategoryService(db)
+            place_svc = PlacementService(db, storage, cat_svc, settings)
+            place_res = place_svc.place(doc, force=True, actor_user_id=actor_user_id, ip_address=client_ip)
+            if not place_res.placed and place_res.reason and place_res.reason.startswith("gagal"):
+                db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail={
+                        "code": "penempatan_gagal",
+                        "message": place_res.reason,
+                    },
+                )
+            placement_info = {
+                "document_id": place_res.document_id,
+                "placed": place_res.placed,
+                "reason": place_res.reason,
+                "old_path": place_res.old_path,
+                "new_path": place_res.new_path,
+                "category_id": place_res.category_id,
+                "category_path": place_res.category_path,
+            }
+        else:
+            cat_svc = CategoryService(db)
+            curr_cat = db.query(Category).filter(Category.id == doc.category_id).first() if doc.category_id else None
+            curr_path = cat_svc.path_of(curr_cat) if curr_cat else []
+            placement_info = {
+                "placed": False,
+                "reason": "metadata_belum_cukup",
+                "category_id": doc.category_id,
+                "category_path": curr_path,
+            }
 
     # Audit log
     if changed_fields:

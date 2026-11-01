@@ -511,6 +511,7 @@ def list_failures(
     failure_type: Optional[JenisKegagalan] = None,
     reason_code: Optional[List[str]] = Query(None, description="Filter berdasarkan satu atau lebih reason_code"),
     source_id: Optional[int] = Query(None, description="Filter berdasarkan sumber scraping"),
+    tanpa_sumber: bool = Query(False, description="Filter hanya kegagalan tanpa sumber (unggah manual)"),
     follow_up_status: Optional[str] = Query("belum_ditangani", description="belum_ditangani | diproses_ulang | diabaikan | all"),
     include_duplicates: bool = Query(False, description="Tampilkan juga duplikat (default: false)"),
     skip: int = Query(0, ge=0),
@@ -522,12 +523,19 @@ def list_failures(
     """
     [US-23 / S-04] Mengambil daftar log kegagalan dan antrian retry.
     """
+    if tanpa_sumber and source_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Parameter tanpa_sumber tidak dapat digabungkan dengan source_id.",
+        )
+
     svc = FailureService(db=db, storage=storage)
     total, items = svc.list_failures(
         job_id=job_id,
         failure_type=failure_type,
         reason_codes=reason_code,
         source_id=source_id,
+        tanpa_sumber=tanpa_sumber,
         follow_up_status=follow_up_status,
         include_duplicates=include_duplicates,
         skip=skip,

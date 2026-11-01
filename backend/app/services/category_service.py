@@ -188,7 +188,7 @@ class CategoryService:
         langsung (document_count) dan total turunan (total_document_count)
         dalam agregasi tunggal efisien tanpa N+1 query.
         """
-        # 1. Ambil hitungan dokumen per category_id (hanya dokumen aktif)
+        # 1. Ambil hitungan dokumen per category_id (dokumen aktif dan nonaktif)
         doc_counts_query = (
             self.db.query(Document.category_id, func.count(Document.id).label("count"))
             .filter(Document.category_id.isnot(None), Document.is_active == True)  # noqa: E712
@@ -196,6 +196,14 @@ class CategoryService:
             .all()
         )
         doc_counts: Dict[int, int] = {cat_id: cnt for cat_id, cnt in doc_counts_query}
+
+        doc_inactive_counts_query = (
+            self.db.query(Document.category_id, func.count(Document.id).label("count"))
+            .filter(Document.category_id.isnot(None), Document.is_active == False)  # noqa: E712
+            .group_by(Document.category_id)
+            .all()
+        )
+        doc_inactive_counts: Dict[int, int] = {cat_id: cnt for cat_id, cnt in doc_inactive_counts_query}
 
         # 2. Ambil seluruh kategori
         all_categories = self.db.query(Category).order_by(Category.name.asc()).all()
@@ -208,6 +216,7 @@ class CategoryService:
         # 4. Fungsi rekursif untuk membangun pohon dan menghitung total_document_count
         def build_node(cat: Category) -> Dict[str, Any]:
             direct_count = doc_counts.get(cat.id, 0)
+            direct_inactive_count = doc_inactive_counts.get(cat.id, 0)
             child_objs = children_map.get(cat.id, [])
             child_nodes = [build_node(c) for c in child_objs]
             total_count = direct_count + sum(cn["total_document_count"] for cn in child_nodes)
@@ -220,6 +229,7 @@ class CategoryService:
                 "document_count": direct_count,
                 "total_document_count": total_count,
                 "jumlah_dokumen": direct_count,
+                "jumlah_dokumen_nonaktif": direct_inactive_count,
                 "classification_rule": cat.classification_rule,
                 "children": child_nodes,
             }
@@ -500,6 +510,11 @@ class CategoryService:
             .filter(Document.category_id == cat.id, Document.is_active == True)  # noqa: E712
             .count()
         )
+        doc_inactive_count = (
+            self.db.query(Document)
+            .filter(Document.category_id == cat.id, Document.is_active == False)  # noqa: E712
+            .count()
+        )
 
         return {
             "kategori": {
@@ -510,7 +525,10 @@ class CategoryService:
                 "path": cat_path,
                 "document_count": doc_count,
                 "jumlah_dokumen": doc_count,
+                "jumlah_dokumen_nonaktif": doc_inactive_count,
                 "classification_rule": cat.classification_rule,
+                "created_at": cat.created_at,
+                "updated_at": cat.updated_at,
             },
             "dokumen_dipindah": dokumen_dipindah,
             "dokumen_gagal": dokumen_gagal,
@@ -535,7 +553,9 @@ class CategoryService:
             )
 
         subcat_count = self.db.query(Category).filter(Category.parent_id == category_id).count()
-        doc_count = self.db.query(Document).filter(Document.category_id == category_id).count()
+        doc_aktif = self.db.query(Document).filter(Document.category_id == category_id, Document.is_active == True).count()
+        doc_nonaktif = self.db.query(Document).filter(Document.category_id == category_id, Document.is_active == False).count()
+        doc_count = doc_aktif + doc_nonaktif
 
         if subcat_count > 0 or doc_count > 0:
             raise HTTPException(
@@ -543,7 +563,9 @@ class CategoryService:
                 detail={
                     "subkategori": subcat_count,
                     "dokumen": doc_count,
-                    "message": f"Kategori tidak dapat dihapus karena masih memiliki {subcat_count} subkategori dan {doc_count} dokumen.",
+                    "dokumen_aktif": doc_aktif,
+                    "dokumen_nonaktif": doc_nonaktif,
+                    "message": f"Kategori masih memiliki {subcat_count} subkategori dan {doc_count} dokumen ({doc_nonaktif} di antaranya nonaktif).",
                 },
             )
 
