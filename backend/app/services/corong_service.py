@@ -3,12 +3,16 @@ app/services/corong_service.py
 Layanan komputasi agregat statistik corong per sumber (Langkah 27).
 Semua metrik dihitung melalui agregat SQL tanpa memuat baris dokumen penuh (zero full_text).
 """
+from copy import deepcopy
 from datetime import datetime, timezone
 import io
 import csv
+import threading
+import time
 import urllib.parse
 from typing import Dict, Any, List, Optional, Tuple
 
+from fastapi import HTTPException, status
 from sqlalchemy import func, case, or_, and_, select, exists
 from sqlalchemy.orm import Session
 
@@ -158,10 +162,16 @@ def get_corong_data(db: Session, source_id: Optional[int] = None) -> Dict[str, A
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # Ambil daftar sumber
-    query_sources = db.query(ScrapingSource).order_by(ScrapingSource.id.asc())
     if source_id is not None:
-        query_sources = query_sources.filter(ScrapingSource.id == source_id)
-    sources = query_sources.all()
+        source_obj = db.query(ScrapingSource).filter(ScrapingSource.id == source_id).first()
+        if not source_obj:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Sumber dengan ID {source_id} tidak ditemukan",
+            )
+        sources = [source_obj]
+    else:
+        sources = db.query(ScrapingSource).order_by(ScrapingSource.id.asc()).all()
 
     sumber_list: List[Dict[str, Any]] = []
 
@@ -390,9 +400,45 @@ def get_corong_data(db: Session, source_id: Optional[int] = None) -> Dict[str, A
     }
 
     if source_id is not None:
-        # Jika difilter per satu sumber, total dokumen menghitung unik dokumen sumber tersebut
-        total_doc_ids_query = doc_ids_query
-        total_fail_subq = fail_subq
+        # Jika difilter per satu sumber, bangun query eksplisit untuk sumber tersebut
+        total_doc_ids_query = (
+            select(Document.id)
+            .where(Document.is_active == True)  # noqa: E712
+            .where(
+                or_(
+                    Document.job_id.in_(
+                        select(JobIngest.id).where(JobIngest.source_id == source_id)
+                    ),
+                    Document.id.in_(
+                        select(ScanCandidate.document_id)
+                        .join(ScanSession, ScanCandidate.scan_id == ScanSession.id)
+                        .where(ScanSession.source_id == source_id, ScanCandidate.document_id.isnot(None))
+                    ),
+                    Document.id.in_(
+                        select(ScanCandidate.match_document_id)
+                        .join(ScanSession, ScanCandidate.scan_id == ScanSession.id)
+                        .where(ScanSession.source_id == source_id, ScanCandidate.match_document_id.isnot(None))
+                    ),
+                )
+            )
+        )
+        total_fail_subq = (
+            select(IngestFailure.id)
+            .where(
+                or_(
+                    IngestFailure.job_id.in_(
+                        select(JobIngest.id).where(JobIngest.source_id == source_id)
+                    ),
+                    IngestFailure.id.in_(
+                        select(ScanCandidate.failure_id)
+                        .join(ScanSession, ScanCandidate.scan_id == ScanSession.id)
+                        .where(ScanSession.source_id == source_id, ScanCandidate.failure_id.isnot(None))
+                    ),
+                )
+            )
+            .where(IngestFailure.follow_up_status != StatusTindakLanjut.diabaikan)
+            .where(~IngestFailure.reason_code.in_(["duplikat", "duplicate"]))
+        ).subquery()
     else:
         # Seluruh dokumen aktif di KB dihitung sekali secara unik
         total_doc_ids_query = select(Document.id).where(Document.is_active == True)  # noqa: E712
@@ -603,3 +649,42 @@ def generate_corong_csv(data: Dict[str, Any]) -> Tuple[bytes, Dict[str, str]]:
     }
 
     return csv_bytes, headers_dict
+
+
+_corong_cache_lock = threading.Lock()
+_corong_cache: Dict[Optional[int], Dict[str, Any]] = {}
+CORONG_CACHE_TTL_SECONDS = 60.0
+
+
+def get_corong_data_cached(
+    db: Session,
+    source_id: Optional[int] = None,
+    segar: bool = False,
+) -> Dict[str, Any]:
+    """
+    Mengambil data corong dengan cache memori proses (TTL 60 detik).
+    Parameter segar=True melewati cache dan memaksa komputasi ulang.
+    """
+    now = time.time()
+    with _corong_cache_lock:
+        if not segar and source_id in _corong_cache:
+            entry = _corong_cache[source_id]
+            if now - entry["timestamp"] < CORONG_CACHE_TTL_SECONDS:
+                return deepcopy(entry["data"])
+
+    fresh_data = get_corong_data(db, source_id=source_id)
+
+    with _corong_cache_lock:
+        _corong_cache[source_id] = {
+            "data": deepcopy(fresh_data),
+            "timestamp": now,
+        }
+
+    return fresh_data
+
+
+def clear_corong_cache() -> None:
+    """Helper untuk membersihkan seluruh entri cache corong."""
+    with _corong_cache_lock:
+        _corong_cache.clear()
+

@@ -455,7 +455,7 @@ def run_checks(
 
     # S17: GET /api/v1/dashboard/corong
     try:
-        resp = client.get("/api/v1/dashboard/corong")
+        resp = client.get("/api/v1/dashboard/corong?segar=true")
         if resp.status_code == 404:
             hasil_list.append(Hasil("S17", "GAGAL", "server belum memuat Langkah 27"))
         elif resp.status_code == 200:
