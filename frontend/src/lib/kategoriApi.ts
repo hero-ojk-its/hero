@@ -235,10 +235,18 @@ export function pesanGalatKategori(err: unknown, aksi: AksiKategori): PesanGalat
   if (status === 409) {
     const o = objek(detail);
     if (aksi === 'hapus' && (typeof o.subkategori === 'number' || typeof o.dokumen === 'number')) {
-      const konflik = { subkategori: angka(o.subkategori), dokumen: angka(o.dokumen) };
+      const konflik: KonflikHapus = { subkategori: angka(o.subkategori), dokumen: angka(o.dokumen) };
+      // Rincian aktif/nonaktif hanya ada di backend Langkah 32
+      const rinci = typeof o.dokumen_aktif === 'number' && typeof o.dokumen_nonaktif === 'number';
+      if (rinci) {
+        konflik.dokumen_aktif = angka(o.dokumen_aktif);
+        konflik.dokumen_nonaktif = angka(o.dokumen_nonaktif);
+      }
       return {
         judul: 'Kategori tidak bisa dihapus',
-        pesan: `Masih ada ${konflik.subkategori} subkategori dan ${konflik.dokumen} dokumen (termasuk dokumen nonaktif). Pindahkan atau kosongkan isinya dulu.`,
+        pesan: rinci
+          ? `Masih ada ${konflik.subkategori} subkategori, ${konflik.dokumen_aktif} dokumen aktif, dan ${konflik.dokumen_nonaktif} dokumen nonaktif. Pindahkan atau kosongkan isinya dulu.`
+          : `Masih ada ${konflik.subkategori} subkategori dan ${konflik.dokumen} dokumen (termasuk dokumen nonaktif). Pindahkan atau kosongkan isinya dulu.`,
         bisaCobaLagi: false,
         konflikHapus: konflik,
       };

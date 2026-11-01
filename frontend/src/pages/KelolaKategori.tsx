@@ -281,9 +281,14 @@ function KelolaKategoriApi() {
   const tutupKonfirmasi = useCallback(() => setKonfirmasi(null), []);
   const tutupHapus = useCallback(() => setDialogHapus(null), []);
 
-  const bisaHapus = (n: CategoryTreeNode) => n.children.length === 0 && n.jumlah_dokumen === 0;
+  // Backend menolak hapus bila ada subkategori atau dokumen langsung, termasuk nonaktif.
+  // jumlah_dokumen_nonaktif null (backend lama) = tidak diketahui: hanya dokumen aktif yang dicek, 409 tetap ditangani.
+  const bisaHapus = (n: CategoryTreeNode) =>
+    n.children.length === 0 && n.jumlah_dokumen + (n.jumlah_dokumen_nonaktif ?? 0) === 0;
   const alasanTakBisaHapus = (n: CategoryTreeNode) =>
-    `Tidak bisa dihapus: masih ada ${n.children.length} subkategori dan ${n.jumlah_dokumen} dokumen. Pindahkan atau kosongkan dulu.`;
+    n.jumlah_dokumen_nonaktif === null
+      ? `Tidak bisa dihapus: masih ada ${n.children.length} subkategori dan ${n.jumlah_dokumen} dokumen. Pindahkan atau kosongkan dulu.`
+      : `Tidak bisa dihapus: masih ada ${n.children.length} subkategori, ${n.jumlah_dokumen} dokumen aktif, dan ${n.jumlah_dokumen_nonaktif} dokumen nonaktif. Pindahkan atau kosongkan dulu.`;
 
   const tombolSekunder =
     'inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed';
