@@ -152,7 +152,7 @@ def saring_rujukan(
         for item in obj:
             if isinstance(item, dict):
                 # Penanganan khusus elemen list rujukan: netralkan dokumen_id, jangan buang seluruh rujukan
-                if parent_key in ("rujukan", "rujukan_item"):
+                if parent_key == "rujukan":
                     doc_id = item.get("document_id")
                     if isinstance(doc_id, int) and doc_id not in allowed_ids:
                         item_copy = dict(item)
@@ -224,18 +224,20 @@ def sesuaikan_ringkasan_harmonisasi(
         filtered_data["disaring_backend"] = discarded
         filtered_data["disaring_rincian"] = rincian
 
-        ringkasan = filtered_data.get("ringkasan")
-        if isinstance(ringkasan, dict) and "per_jenis" in ringkasan and isinstance(ringkasan["per_jenis"], dict):
-            per_jenis_asli = ringkasan["per_jenis"]
-            per_jenis_baru = {k: 0 for k in per_jenis_asli.keys()}
-            temuan_list = filtered_data.get("temuan") or []
-            if isinstance(temuan_list, list):
-                for t in temuan_list:
-                    if isinstance(t, dict):
-                        jenis = t.get("jenis")
-                        if jenis:
-                            per_jenis_baru[jenis] = per_jenis_baru.get(jenis, 0) + 1
-            ringkasan["per_jenis"] = per_jenis_baru
+        # Hitung ulang per_jenis HANYA bila ada temuan yang disaring
+        if rincian.get("temuan", 0) > 0:
+            ringkasan = filtered_data.get("ringkasan")
+            if isinstance(ringkasan, dict) and "per_jenis" in ringkasan and isinstance(ringkasan["per_jenis"], dict):
+                per_jenis_asli = ringkasan["per_jenis"]
+                per_jenis_baru = {k: 0 for k in per_jenis_asli.keys()}
+                temuan_list = filtered_data.get("temuan") or []
+                if isinstance(temuan_list, list):
+                    for t in temuan_list:
+                        if isinstance(t, dict):
+                            jenis = t.get("jenis")
+                            if jenis:
+                                per_jenis_baru[jenis] = per_jenis_baru.get(jenis, 0) + 1
+                ringkasan["per_jenis"] = per_jenis_baru
     return filtered_data
 
 
@@ -712,6 +714,7 @@ async def get_ml_analisa_klausul(
 @router.post(
     "/harmonisasi/{document_id}",
     response_model=HarmonisasiResponse,
+    response_model_exclude_unset=True,
     summary="Harmonisasi Draft Regulasi",
 )
 async def post_ml_harmonisasi(

@@ -722,6 +722,7 @@ def get_draft_similarity(
 @router.patch(
     "/{document_id}/metadata",
     response_model=DocumentMetadataPatchResponse,
+    response_model_exclude_unset=True,
     summary="Koreksi metadata dokumen manual",
 )
 def patch_document_metadata(

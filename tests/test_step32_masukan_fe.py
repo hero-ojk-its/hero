@@ -695,3 +695,198 @@ def test_f15_csv_corong_bom_and_total(client: TestClient, db_session: Session):
     assert "TOTAL" in text_csv
     assert "Content-Disposition" in resp.headers
     assert "filename*=" in resp.headers["Content-Disposition"]
+
+
+# ============================================================================
+# F16: PATCH metadata exclude_unset
+# ============================================================================
+def test_f16_patch_metadata_exclude_unset(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    from app.routers.documents import router as documents_router
+
+    # Verifikasi konfigurasi response_model_exclude_unset pada route PATCH metadata
+    route = next(
+        r
+        for r in documents_router.routes
+        if getattr(r, "path", None) == "/{document_id}/metadata"
+        and "PATCH" in r.methods
+    )
+    assert route.response_model_exclude_unset is True
+
+    doc = _seed_test_doc(db_session, test_storage, title="Judul Lama", reg_num="PATCH/16/2026")
+
+    with patch.object(settings, "auth_enabled", False):
+        resp = client.patch(
+            f"/api/v1/documents/{doc.id}/metadata",
+            json={"title": "Judul Baru F16"},
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["title"] == "Judul Baru F16"
+    assert "changed_fields" in data
+
+
+# ============================================================================
+# F17: POST /ml/harmonisasi exclude_unset & tipe longgar (pembanding, badge, ringkasan)
+# ============================================================================
+def test_f17_harmonisasi_exclude_unset_and_relaxed_types(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    draft_doc = _seed_test_doc(db_session, test_storage, title="Draft F17", reg_num="DRAFT/17/2026")
+    allowed_doc = _seed_test_doc(db_session, test_storage, title="Publik F17", reg_num="PUB/17/2026")
+
+    mock_payload = {
+        "status": "selesai",
+        "ringkasan": {
+            "per_jenis": {"konflik": "satu", "kustom": 99.5},
+            "extra_field_ringkasan": "nilai_ringkasan",
+            # total_temuan TIDAK DIKIRIM
+        },
+        "temuan": [
+            {
+                "id": "t17",
+                "jenis": "konflik",
+                # judul TIDAK DIKIRIM
+                "deskripsi": "Deskripsi F17",
+                "badge": {"tone": 123, "label": True, "ikon": "alert"},
+                "pembanding": {
+                    "document_id": allowed_doc.id,
+                    "key": 999,
+                    "nomor": 12345,  # int bukan string
+                    "status": 1,
+                    "judul": 2026,
+                    "pdf": False,
+                    "tautan": 404,
+                    "extra_pembanding": "extra_val",
+                },
+                "extra_field_temuan": "temuan_extra",
+            }
+        ],
+        "extra_field_root": "nilai_root",
+    }
+
+    def mock_handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=mock_payload)
+
+    app.dependency_overrides[get_ml_client] = lambda: httpx.AsyncClient(
+        transport=httpx.MockTransport(mock_handler)
+    )
+
+    with patch.object(settings, "auth_enabled", False):
+        resp = client.post(f"/api/v1/ml/harmonisasi/{draft_doc.id}?segar=true", json=None)
+
+    assert resp.status_code == 200
+    data = resp.json()
+
+    # 1. exclude_unset: total_temuan & temuan.judul tidak disuntik bila tidak dikirim
+    assert "total_temuan" not in data["ringkasan"]
+    assert "judul" not in data["temuan"][0]
+
+    # 2. tipe longgar & extra fields dipertahankan
+    assert data["extra_field_root"] == "nilai_root"
+    assert data["ringkasan"]["per_jenis"]["konflik"] == "satu"
+    assert data["ringkasan"]["per_jenis"]["kustom"] == 99.5
+    assert data["ringkasan"]["extra_field_ringkasan"] == "nilai_ringkasan"
+
+    item = data["temuan"][0]
+    assert item["extra_field_temuan"] == "temuan_extra"
+    assert item["badge"]["tone"] == 123
+    assert item["badge"]["label"] is True
+    assert item["badge"]["ikon"] == "alert"
+
+    p = item["pembanding"]
+    assert p["nomor"] == 12345
+    assert p["key"] == 999
+    assert p["extra_pembanding"] == "extra_val"
+
+
+# ============================================================================
+# F18: sesuaikan_ringkasan_harmonisasi mempertahankan per_jenis asli bila temuan=0
+# ============================================================================
+def test_f18_sesuaikan_ringkasan_harmonisasi_preserves_per_jenis_when_no_findings_filtered(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    draft_doc = _seed_test_doc(db_session, test_storage, title="Draft F18", reg_num="DRAFT/18/2026")
+    allowed_doc = _seed_test_doc(db_session, test_storage, title="Publik F18", reg_num="PUB/18/2026")
+
+    # Mock mengirim count 100 & 50 padahal list temuan hanya 1 item
+    mock_payload = {
+        "status": "selesai",
+        "ringkasan": {
+            "total_temuan": 100,
+            "per_jenis": {"tipe_a": 50, "tipe_b": 50},
+        },
+        "temuan": [
+            {
+                "id": "t18",
+                "jenis": "tipe_a",
+                "pembanding": {
+                    "document_id": allowed_doc.id,  # Dokumen publik diizinkan -> rincian['temuan'] == 0
+                },
+            }
+        ],
+    }
+
+    def mock_handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=mock_payload)
+
+    app.dependency_overrides[get_ml_client] = lambda: httpx.AsyncClient(
+        transport=httpx.MockTransport(mock_handler)
+    )
+
+    with patch.object(settings, "auth_enabled", False):
+        resp = client.post(f"/api/v1/ml/harmonisasi/{draft_doc.id}?segar=true", json=None)
+
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["disaring_rincian"]["temuan"] == 0
+    # Karena tidak ada temuan tersaring, per_jenis asli tidak ditimpa
+    assert data["ringkasan"]["per_jenis"] == {"tipe_a": 50, "tipe_b": 50}
+
+
+# ============================================================================
+# F19: tarik_semua dan smoke memanggil corong dengan ?segar=true
+# ============================================================================
+def test_f19_tarik_semua_and_smoke_call_corong_with_segar_true():
+    # 1. tarik_semua.ambil_corong
+    from scripts.tarik_semua import ambil_corong
+
+    mock_client = httpx.Client()
+    with patch.object(mock_client, "get") as mock_get:
+        mock_get.return_value = httpx.Response(
+            200,
+            json={"total": {"dokumen": {"di_kb": 12}, "scan": {"belum_ditarik": 8}}},
+        )
+        res = ambil_corong(mock_client)
+        assert res is not None
+        assert res.di_kb == 12
+        assert res.belum_ditarik == 8
+        assert mock_get.call_count == 1
+        called_url = mock_get.call_args[0][0]
+        assert "segar=true" in called_url
+
+    # 2. smoke_fase2 S17
+    from scripts.smoke_fase2 import run_checks
+
+    mock_smoke_client = httpx.Client()
+    with patch.object(mock_smoke_client, "get") as mock_get:
+        mock_get.return_value = httpx.Response(
+            200,
+            json={
+                "status": "ok",
+                "migration_version": "head",
+                "total": {},
+                "sources": [],
+                "documents": [],
+            },
+        )
+        run_checks(mock_smoke_client, expect_revision="head", tanpa_harmonisasi=True)
+        called_urls = [call.args[0] for call in mock_get.call_args_list if call.args]
+        assert any("/api/v1/dashboard/corong?segar=true" in str(url) for url in called_urls)
+        called_urls = [call.args[0] for call in mock_get.call_args_list if call.args]
+        assert any("/api/v1/dashboard/corong?segar=true" in url for url in called_urls)
+
+
