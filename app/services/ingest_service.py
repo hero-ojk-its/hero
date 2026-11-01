@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 import enum
 import logging
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from pathlib import Path
 
 from sqlalchemy.exc import IntegrityError
@@ -25,7 +25,7 @@ from app.models.enums import (
     StatusPemrosesan,
 )
 from app.models.job_ingest import JobIngest
-from app.services.audit_service import record_audit, UPLOAD_DOCUMENT
+from app.services.audit_service import record_audit, UPLOAD_DOCUMENT, PUBLIKASI_DRAFT
 from app.services.file_validation import (
     FileFingerprint,
     FileValidationError,
@@ -72,6 +72,7 @@ class IngestOptions:
     metadata: Optional[DocumentMetadataInput] = None
     naming_format: Optional[List[str]] = None
     naming_separator: Optional[str] = None
+    persetujuan_publik: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -422,6 +423,9 @@ class IngestService:
                 parent_identity_key=parent_id_key,
                 pdf_terproteksi=pdf_info.terproteksi,
                 page_count=pdf_info.jumlah_halaman,
+                publik_disetujui_oleh=options.persetujuan_publik.get("disetujui_oleh") if options.persetujuan_publik else None,
+                publik_disetujui_alasan=options.persetujuan_publik.get("alasan") if options.persetujuan_publik else None,
+                publik_disetujui_pada=options.persetujuan_publik.get("pada") if options.persetujuan_publik else None,
             )
             self.db.add(doc)
             self.db.flush()
@@ -454,6 +458,12 @@ class IngestService:
                 "kategori_manual": doc.kategori_manual,
                 "hasil": "baru",
             }
+            if options.persetujuan_publik:
+                upload_detail["persetujuan_publik"] = {
+                    "disetujui_oleh": doc.publik_disetujui_oleh,
+                    "alasan": doc.publik_disetujui_alasan,
+                    "pada": doc.publik_disetujui_pada.isoformat() if doc.publik_disetujui_pada else None,
+                }
             record_audit(
                 self.db,
                 action=UPLOAD_DOCUMENT,
@@ -463,6 +473,22 @@ class IngestService:
                 ip_address=ip_address,
                 commit=False,
             )
+
+            if options.persetujuan_publik:
+                record_audit(
+                    self.db,
+                    action=PUBLIKASI_DRAFT,
+                    user_id=actor_user_id,
+                    target_resource=f"document:{doc.id}",
+                    detail={
+                        "document_id": doc.id,
+                        "disetujui_oleh": doc.publik_disetujui_oleh,
+                        "alasan": doc.publik_disetujui_alasan,
+                        "jalur": "unggah",
+                    },
+                    ip_address=ip_address,
+                    commit=False,
+                )
 
             self.db.commit()
             self.db.refresh(doc)

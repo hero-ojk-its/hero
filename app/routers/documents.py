@@ -36,8 +36,10 @@ from app.schemas.article import (
 from app.schemas.document import DocumentMetadataPatchResponse
 from app.core.permissions import (
     perlu_izin,
+    perlu_salah_satu_izin,
     Izin,
     check_non_public_access,
+    punya_izin,
 )
 from app.routers.auth import get_current_user
 from app.services.audit_service import (
@@ -48,7 +50,10 @@ from app.services.audit_service import (
     UPDATE_METADATA,
     DEACTIVATE_DOCUMENT,
     ACTIVATE_DOCUMENT,
+    PUBLIKASI_DRAFT,
 )
+from app.schemas.document import PersetujuanPublikIn
+from app.services.klasifikasi_service import periksa_publikasi_draft
 from app.services.storage_service import StorageService, get_storage_service
 from app.services.category_service import CategoryService
 from app.services.placement_service import PlacementService
@@ -88,6 +93,7 @@ class UpdateMetadataIn(BaseModel):
     is_attachment: Optional[bool] = None
     parent_document_id: Optional[int] = None
     attachment_label: Optional[str] = Field(None, max_length=100)
+    persetujuan_publik: Optional[PersetujuanPublikIn] = None
 
 
 class VersionRelationItem(BaseModel):
@@ -498,6 +504,11 @@ def _format_single_document_response(doc: Document, db: Session, current_user: O
             }
             for lr in legal_refs
         ],
+        "persetujuan_publik": {
+            "disetujui_oleh": doc.publik_disetujui_oleh,
+            "alasan": doc.publik_disetujui_alasan,
+            "pada": doc.publik_disetujui_pada.isoformat() if doc.publik_disetujui_pada else None,
+        } if (doc.publik_disetujui_oleh or doc.publik_disetujui_alasan or doc.publik_disetujui_pada) else None,
     }
 
 
@@ -747,7 +758,7 @@ def patch_document_metadata(
     request: Request,
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage_service),
-    current_user=Depends(perlu_izin(Izin.METADATA_KOREKSI)),
+    current_user=Depends(perlu_salah_satu_izin([Izin.METADATA_KOREKSI, Izin.DRAFT_PUBLIKASI])),
 ):
     """
     Melakukan koreksi metadata dokumen manual (US-21).
@@ -764,6 +775,26 @@ def patch_document_metadata(
     fields_set = payload.model_fields_set
     if not fields_set:
         raise HTTPException(status_code=422, detail="Minimal satu field metadata harus dikirim.")
+
+    # Validasi publikasi draft kajian (Langkah 35, FR-SCR-04a)
+    target_role = payload.document_role if "document_role" in fields_set else doc.document_role
+    target_class = payload.access_classification if "access_classification" in fields_set else doc.access_classification
+    target_role_str = target_role.value if hasattr(target_role, "value") else str(target_role or "")
+    target_class_str = target_class.value if hasattr(target_class, "value") else str(target_class or "")
+    is_target_draft_publik = (target_role_str == "draft_kajian" and target_class_str == "publik")
+
+    # Bila aksi ini bukan publikasi draft kajian, pengguna wajib memiliki METADATA_KOREKSI
+    if not is_target_draft_publik and current_user is not None and settings.auth_enabled:
+        if not punya_izin(current_user, Izin.METADATA_KOREKSI):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "akses_ditolak",
+                    "izin": Izin.METADATA_KOREKSI.value,
+                    "peran": str(getattr(current_user, "role", "")),
+                    "message": f"Akun Anda tidak memiliki izin {Izin.METADATA_KOREKSI.value} untuk aksi ini.",
+                },
+            )
 
     # Validasi
     if "title" in fields_set:
@@ -794,6 +825,22 @@ def patch_document_metadata(
             if getattr(parent_doc, "is_attachment", False):
                 raise HTTPException(status_code=422, detail="Dokumen induk tidak boleh berupa lampiran.")
 
+    # Validasi publikasi draft kajian (Langkah 35, FR-SCR-04a)
+    persetujuan_data = None
+    if is_target_draft_publik:
+        wajib_persetujuan = (
+            doc.publik_disetujui_pada is None
+            or "document_role" in fields_set
+            or "access_classification" in fields_set
+        )
+        if wajib_persetujuan or payload.persetujuan_publik is not None:
+            persetujuan_data = periksa_publikasi_draft(
+                peran=target_role_str,
+                klasifikasi=target_class_str,
+                persetujuan=payload.persetujuan_publik,
+                user=current_user,
+            )
+
     # Catat perubahan diff
     before_dict = {}
     after_dict = {}
@@ -802,7 +849,7 @@ def patch_document_metadata(
     year_from_number = None
 
     for field in fields_set:
-        if field in ("is_attachment", "parent_document_id", "attachment_label"):
+        if field in ("is_attachment", "parent_document_id", "attachment_label", "persetujuan_publik"):
             continue
 
         current_val = getattr(doc, field)
@@ -824,6 +871,40 @@ def patch_document_metadata(
             before_dict[field] = current_val.isoformat() if isinstance(current_val, (date, datetime)) else (current_val.value if hasattr(current_val, "value") else current_val)
             after_dict[field] = new_val.isoformat() if isinstance(new_val, (date, datetime)) else (new_val.value if hasattr(new_val, "value") else new_val)
             setattr(doc, field, new_val)
+
+    # Tangani persetujuan publik draft kajian
+    if is_target_draft_publik and persetujuan_data:
+        if doc.publik_disetujui_oleh != persetujuan_data["disetujui_oleh"]:
+            changed_fields.append("publik_disetujui_oleh")
+            before_dict["publik_disetujui_oleh"] = doc.publik_disetujui_oleh
+            after_dict["publik_disetujui_oleh"] = persetujuan_data["disetujui_oleh"]
+            doc.publik_disetujui_oleh = persetujuan_data["disetujui_oleh"]
+        if doc.publik_disetujui_alasan != persetujuan_data["alasan"]:
+            changed_fields.append("publik_disetujui_alasan")
+            before_dict["publik_disetujui_alasan"] = doc.publik_disetujui_alasan
+            after_dict["publik_disetujui_alasan"] = persetujuan_data["alasan"]
+            doc.publik_disetujui_alasan = persetujuan_data["alasan"]
+        changed_fields.append("publik_disetujui_pada")
+        before_dict["publik_disetujui_pada"] = doc.publik_disetujui_pada.isoformat() if doc.publik_disetujui_pada else None
+        after_dict["publik_disetujui_pada"] = persetujuan_data["pada"].isoformat()
+        doc.publik_disetujui_pada = persetujuan_data["pada"]
+    elif not is_target_draft_publik:
+        # Dokumen keluar dari kombinasi draft+publik -> kosongkan 3 kolom persetujuan
+        if doc.publik_disetujui_oleh is not None:
+            changed_fields.append("publik_disetujui_oleh")
+            before_dict["publik_disetujui_oleh"] = doc.publik_disetujui_oleh
+            after_dict["publik_disetujui_oleh"] = None
+            doc.publik_disetujui_oleh = None
+        if doc.publik_disetujui_alasan is not None:
+            changed_fields.append("publik_disetujui_alasan")
+            before_dict["publik_disetujui_alasan"] = doc.publik_disetujui_alasan
+            after_dict["publik_disetujui_alasan"] = None
+            doc.publik_disetujui_alasan = None
+        if doc.publik_disetujui_pada is not None:
+            changed_fields.append("publik_disetujui_pada")
+            before_dict["publik_disetujui_pada"] = doc.publik_disetujui_pada.isoformat()
+            after_dict["publik_disetujui_pada"] = None
+            doc.publik_disetujui_pada = None
 
     # Tangani penanda kategori_manual
     if "category_id" in fields_set:
@@ -1017,6 +1098,22 @@ def patch_document_metadata(
             user_id=actor_user_id,
             target_resource=f"document:{doc.id}",
             detail={"before": before_dict, "after": after_dict},
+            ip_address=client_ip,
+            commit=False,
+        )
+
+    if is_target_draft_publik and persetujuan_data:
+        record_audit(
+            db,
+            action=PUBLIKASI_DRAFT,
+            user_id=actor_user_id,
+            target_resource=f"document:{doc.id}",
+            detail={
+                "document_id": doc.id,
+                "disetujui_oleh": doc.publik_disetujui_oleh,
+                "alasan": doc.publik_disetujui_alasan,
+                "jalur": "koreksi_metadata",
+            },
             ip_address=client_ip,
             commit=False,
         )

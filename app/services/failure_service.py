@@ -669,6 +669,16 @@ class FailureService:
             if overrides.category_id is not None:
                 cat_id = overrides.category_id
 
+        # Validasi draft kajian + publik saat retry (Langkah 35)
+        if doc_role_val == "draft_kajian" and acc_class_val == "publik":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "draft_publik_butuh_persetujuan",
+                    "message": "Draft kajian hanya boleh publik dengan persetujuan (disetujui_oleh dan alasan wajib diisi).",
+                },
+            )
+
         options = IngestOptions(
             access_classification=KlasifikasiAkses(acc_class_val),
             document_role=PeranDokumen(doc_role_val),

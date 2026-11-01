@@ -228,7 +228,7 @@ HERO_SMOKE_TOKEN="<isi_token_jwt_anda>" python scripts/smoke_fase2.py --base-url
 #### Urutan Pasca-Deploy Fase 2
 Setelah kode baru dideploy ke server VPS, jalankan langkah pemeliharaan dan verifikasi berikut secara berurutan:
 1. **Cek Kesehatan Backend**:
-   Pastikan endpoint `/health` mengembalikan HTTP 200 dengan status `ok`, `migrations_up_to_date: true`, dan `alembic_revision` sama dengan revisi head (`c5d6e7f8a9b0`).
+   Pastikan endpoint `/health` mengembalikan HTTP 200 dengan status `ok`, `migrations_up_to_date: true`, dan `alembic_revision` sama dengan revisi head (`f8a9b0c1d2e3`).
 2. **Backfill Proteksi PDF**:
    Jalankan inspeksi proteksi PDF untuk dokumen yang belum diperiksa:
    ```bash
@@ -242,12 +242,28 @@ Setelah kode baru dideploy ke server VPS, jalankan langkah pemeliharaan dan veri
    # Langkah b: terapkan perubahan
    docker compose exec backend python scripts/relokasi_kategori.py --apply
    ```
-4. **Eksekusi Smoke Test Fase 2**:
+4. **Audit Draft Kajian Publik (Langkah 35)**:
+   Periksa dan amankan draft kajian publik yang belum memiliki persetujuan resmi:
+   ```bash
+   # Langkah a: periksa draft publik tanpa persetujuan (dry-run)
+   docker compose exec backend python scripts/periksa_draft_publik.py
+   # Langkah b: amankan menjadi non-publik bila ada temuan
+   docker compose exec backend python scripts/periksa_draft_publik.py --apply
+   ```
+5. **Audit Pengaman Judul Hasil Ekstraksi (Langkah 35)**:
+   Periksa judul hasil ekstraksi yang terpotong atau terindikasi mengandung teks pasal/paragraf:
+   ```bash
+   # Langkah a: periksa anomali judul (dry-run)
+   docker compose exec backend python scripts/periksa_judul.py
+   # Langkah b: tandai perlu_koreksi agar ditinjau kurator
+   docker compose exec backend python scripts/periksa_judul.py --apply
+   ```
+6. **Eksekusi Smoke Test Fase 2**:
    Jalankan smoke test dari mesin pengembang dengan target **0 GAGAL**:
    ```bash
-   python scripts/smoke_fase2.py --base-url https://api.hero-regulasi.id
+   python scripts/smoke_fase2.py --base-url https://<domain-api>
    ```
-5. **Tindak Lanjuti Peringatan**:
+7. **Tindak Lanjuti Peringatan**:
    Periksa output setelah baris `RINGKASAN`, lalu jalankan tindak lanjut perbaikan jika ada baris `PERINGATAN` yang muncul.
 
 ### 5.4 Uji Fallback ML Mati (#83)
@@ -530,4 +546,38 @@ curl -s http://localhost:8000/api/v1/audit-logs/ringkasan \
   -H "X-Internal-API-Key: $(grep '^INTERNAL_API_KEY=' .env.prod | cut -d '=' -f2)"
 ```
 Cara ini menjamin kunci rahasia tidak tersimpan dalam riwayat shell (`~/.bash_history`) atau log audit.
+
+---
+
+## 14. Pengamanan Draft Publik & Judul Ekstraksi (Langkah 35)
+
+### 14.1 Kebijakan Persetujuan Draft Publik
+Dokumen dengan peran `draft_kajian` yang memiliki klasifikasi akses `publik` wajib menyertakan persetujuan resmi:
+- `publik_disetujui_oleh`: Nama/pejabat yang menyetujui publikasi. Jika `AUTH_ENABLED=true`, hanya pengguna dengan izin `DRAFT_PUBLIKASI` (peran `admin_kb`) yang diizinkan, dan nama disetujui otomatis diisi dengan username peninjau.
+- `publik_disetujui_alasan`: Alasan/justifikasi publikasi (minimal 10 karakter).
+- `publik_disetujui_pada`: Timestamp UTC saat persetujuan dicatat.
+
+Upaya mengunggah atau mengubah dokumen menjadi draft kajian publik tanpa persetujuan lengkap akan ditolak dengan **HTTP 422** (`draft_publik_butuh_persetujuan`). Demikian pula konfigurasi default sumber scraping dengan kombinasi tersebut akan ditolak (**HTTP 422** `sumber_draft_publik_tidak_diizinkan`).
+
+### 14.2 Pemeriksaan dan Remediasi Draft Publik (`scripts/periksa_draft_publik.py`)
+Bila terdapat draft kajian publik lama yang belum memiliki persetujuan resmi:
+```bash
+# 1. Periksa draft publik tanpa persetujuan (dry-run):
+docker compose exec backend python scripts/periksa_draft_publik.py
+
+# 2. Amankan draft dengan menurunkan klasifikasi menjadi non_publik:
+docker compose exec backend python scripts/periksa_draft_publik.py --apply
+```
+
+### 14.3 Pemeriksaan dan Perlindungan Judul Ekstraksi (`scripts/periksa_judul.py`)
+Sistem melindungi basis data dari judul anomali (terlalu panjang, berbentuk paragraf isi pasal, atau memuat teks pembuka peraturan):
+```bash
+# 1. Pindai anomali judul hasil ekstraksi (dry-run):
+docker compose exec backend python scripts/periksa_judul.py
+
+# 2. Tandai dokumen beranomali menjadi perlu_koreksi agar ditinjau kurator:
+docker compose exec backend python scripts/periksa_judul.py --apply
+```
+> **Catatan:** Perintah `--apply` tidak mengubah teks judul dokumen, melainkan menandai status pemrosesan menjadi `perlu_koreksi` dan mencatat jejak audit `UPDATE_METADATA` dengan alasan `langkah35_judul_mencurigakan` untuk peninjauan manual di antarmuka web.
+
 

@@ -291,6 +291,23 @@ class Document(Base):
         comment="Label lampiran, misal: Lampiran I",
     )
 
+    # Persetujuan Publikasi Draft Kajian (Langkah 35)
+    publik_disetujui_oleh = Column(
+        String(255),
+        nullable=True,
+        comment="Username/nama pihak yang menyetujui publikasi draft kajian",
+    )
+    publik_disetujui_alasan = Column(
+        Text,
+        nullable=True,
+        comment="Alasan persetujuan publikasi draft kajian",
+    )
+    publik_disetujui_pada = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Waktu persetujuan publikasi draft kajian",
+    )
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
