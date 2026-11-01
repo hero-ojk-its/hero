@@ -1867,6 +1867,21 @@ Manajemen struktur hierarkis folder kategori Knowledge Base (KB), relokasi otoma
 - **Pencegahan Siklus Hierarki:** Kategori tidak boleh dipindahkan ke dalam dirinya sendiri atau ke dalam subkategori turunannya. Pelanggaran aturan ini menghasilkan HTTP 422 dengan pesan persis: `"Kategori tidak boleh dipindah ke dalam dirinya sendiri atau turunannya"`.
 - **Status Operasional:** Saat ini field `classification_rule` **hanya disimpan (persisted)** di database dan belum digunakan secara aktif oleh sistem klasifikasi otomatis.
 
+#### F. Kunci Kategori Otomatis (`kunci_otomatis`) dan Ganti Nama Permanen
+1. **Arti `kunci_otomatis`:**
+   - Menyimpan penanda segmen template asli (misal `"POJK"`, `"SEOJK"`, `"2026"`).
+   - Pada kategori otomatis baru, `name` dan `kunci_otomatis` diisi nilai yang sama. Pada kategori manual (dibuat lewat `POST /api/v1/categories/`), `kunci_otomatis` bernilai `null`.
+2. **Ganti Nama Kategori Otomatis Permanen:**
+   - Bila pengguna mengganti nama kategori otomatis (misalnya `POJK` diubah menjadi `Peraturan OJK`), nilai `kunci_otomatis = "POJK"` tetap dipertahankan.
+   - Penempatan dokumen baru yang memiliki segmen template `"POJK"` akan memprioritaskan pencocokan via `kunci_otomatis == "POJK"` ke folder `Peraturan OJK` tersebut. Folder baru tidak akan terbuat ganda di akar.
+3. **Efek Pindah Induk (`parent_id` berubah):**
+   - Nilai `kunci_otomatis` tetap dipertahankan pada kategori yang dipindah.
+   - Pencocokan jalur otomatis selalu bersifat per induk. Jika kategori `2026` dipindahkan dari `POJK` ke `SEOJK`, dokumen POJK 2026 berikutnya akan membuat subkategori `2026` baru di bawah `POJK`. Ini merupakan perilaku yang diharapkan untuk merestrukturisasi folder.
+   - **Pencegahan Bentrok Kunci:** Dua kategori di bawah induk yang sama tidak boleh memiliki `kunci_otomatis` yang sama. Jika pemindahan menyebabkan bentrok kunci di induk baru, permintaan ditolak dengan HTTP `409 Conflict`: `"Induk tujuan sudah punya kategori otomatis dengan kunci '<kunci>'"`.
+4. **Cara Pemulihan Kunci (Backfill):**
+   - Kategori otomatis yang terlanjur diganti nama sebelum Langkah 33 dapat dipulihkan kuncinya menggunakan skrip `scripts/backfill_kunci_kategori.py`.
+   - Skrip membaca riwayat audit `UPDATE_CATEGORY` tertua (`detail.before.name`) untuk mengembalikan `kunci_otomatis`. Mode default `--dry-run`, jalankan dengan flag `--apply` untuk menerapkan ke basis data.
+
 ---
 
 ## 11. GERBANG ANALISA (`/api/v1/ml/*`)
