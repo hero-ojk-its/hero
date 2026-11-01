@@ -234,21 +234,38 @@ def get_dashboard_summary(
     }
 
 
-@router.get("/corong", summary="Statistik corong per sumber (scan -> unduh -> simpan -> terbaca)")
+from app.schemas.corong import CorongResponse
+
+
+@router.get(
+    "/corong",
+    response_model=CorongResponse,
+    responses={
+        200: {
+            "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/CorongResponse"}},
+                "text/csv": {"schema": {"type": "string"}},
+            },
+            "description": "Statistik corong per sumber (JSON) atau berkas CSV ber-BOM",
+        }
+    },
+    summary="Statistik corong per sumber (scan -> unduh -> simpan -> terbaca)",
+)
 def get_dashboard_corong(
     source_id: Optional[int] = Query(None, description="Filter untuk satu sumber spesifik"),
     format: str = Query("json", description="Format output: json | csv"),
+    segar: bool = Query(False, description="Paksa hitung ulang tanpa cache"),
     db: Session = Depends(get_db),
     _user=Depends(perlu_izin(Izin.KB_BACA)),
 ):
     """
-    [Langkah 27] Endpoint statistik corong per sumber: scan -> unduh -> simpan -> terbaca,
+    [Langkah 27 / Langkah 32] Endpoint statistik corong per sumber: scan -> unduh -> simpan -> terbaca,
     dengan penanda PDF terproteksi, OCR vs teks langsung, dan drill-down kegagalan.
-    Mendukung format JSON dan CSV (UTF-8 with BOM).
+    Mendukung format JSON (dengan cache 60 detik) dan CSV (UTF-8 with BOM).
     """
-    from app.services.corong_service import get_corong_data, generate_corong_csv
+    from app.services.corong_service import get_corong_data_cached, generate_corong_csv
 
-    data = get_corong_data(db, source_id=source_id)
+    data = get_corong_data_cached(db, source_id=source_id, segar=segar)
     if format.lower() == "csv":
         csv_bytes, headers = generate_corong_csv(data)
         return Response(content=csv_bytes, media_type="text/csv; charset=utf-8", headers=headers)

@@ -180,6 +180,7 @@ def perlu_izin(izin: Izin) -> Callable[..., Any]:
                     "code": "akses_ditolak",
                     "izin": izin_str,
                     "peran": role_str,
+                    "message": f"Akun Anda tidak memiliki izin {izin_str} untuk aksi ini.",
                 },
             )
 

@@ -78,10 +78,11 @@ class Ringkasan:
     pesan_peringatan: Optional[str] = None
 
 
-def ambil_corong(client: httpx.Client) -> Optional[RingkasanCorong]:
+def ambil_corong(client: httpx.Client, segar: bool = True) -> Optional[RingkasanCorong]:
     """Mengambil metrik total corong dari endpoint dashboard/corong."""
     try:
-        resp = client.get("/api/v1/dashboard/corong")
+        url = "/api/v1/dashboard/corong?segar=true" if segar else "/api/v1/dashboard/corong"
+        resp = client.get(url)
         if resp.status_code == 200:
             data = resp.json()
             total = data.get("total", {})

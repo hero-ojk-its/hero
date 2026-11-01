@@ -250,7 +250,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryDetailResponse"
+                }
               }
             }
           },
@@ -285,7 +287,13 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CategoryTreeNode"
+                  },
+                  "type": "array",
+                  "title": "Response Get Category Tree Api V1 Categories Tree Get"
+                }
               }
             }
           }
@@ -382,7 +390,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryUpdateResponse"
+                }
               }
             }
           },
@@ -722,6 +732,18 @@
               "title": "Source Id"
             },
             "description": "Filter berdasarkan sumber scraping"
+          },
+          {
+            "name": "tanpa_sumber",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Filter hanya kegagalan tanpa sumber (unggah manual)",
+              "default": false,
+              "title": "Tanpa Sumber"
+            },
+            "description": "Filter hanya kegagalan tanpa sumber (unggah manual)"
           },
           {
             "name": "follow_up_status",
@@ -1919,7 +1941,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentMetadataPatchResponse"
+                }
               }
             }
           },
@@ -3743,7 +3767,7 @@
           "Dashboard"
         ],
         "summary": "Statistik corong per sumber (scan -> unduh -> simpan -> terbaca)",
-        "description": "[Langkah 27] Endpoint statistik corong per sumber: scan -> unduh -> simpan -> terbaca,\ndengan penanda PDF terproteksi, OCR vs teks langsung, dan drill-down kegagalan.\nMendukung format JSON dan CSV (UTF-8 with BOM).",
+        "description": "[Langkah 27 / Langkah 32] Endpoint statistik corong per sumber: scan -> unduh -> simpan -> terbaca,\ndengan penanda PDF terproteksi, OCR vs teks langsung, dan drill-down kegagalan.\nMendukung format JSON (dengan cache 60 detik) dan CSV (UTF-8 with BOM).",
         "operationId": "get_dashboard_corong_api_v1_dashboard_corong_get",
         "security": [
           {
@@ -3780,14 +3804,33 @@
               "title": "Format"
             },
             "description": "Format output: json | csv"
+          },
+          {
+            "name": "segar",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Paksa hitung ulang tanpa cache",
+              "default": false,
+              "title": "Segar"
+            },
+            "description": "Paksa hitung ulang tanpa cache"
           }
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Statistik corong per sumber (JSON) atau berkas CSV ber-BOM",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CorongResponse"
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -4845,7 +4888,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/HarmonisasiResponse"
+                }
               }
             }
           },
@@ -6528,7 +6573,8 @@
           },
           "auto_created": {
             "type": "boolean",
-            "title": "Auto Created"
+            "title": "Auto Created",
+            "default": false
           },
           "path": {
             "items": {
@@ -6536,15 +6582,23 @@
               "format": "binary"
             },
             "type": "array",
-            "title": "Path"
+            "title": "Path",
+            "default": []
           },
           "document_count": {
             "type": "integer",
-            "title": "Document Count"
+            "title": "Document Count",
+            "default": 0
           },
           "jumlah_dokumen": {
             "type": "integer",
-            "title": "Jumlah Dokumen"
+            "title": "Jumlah Dokumen",
+            "default": 0
+          },
+          "jumlah_dokumen_nonaktif": {
+            "type": "integer",
+            "title": "Jumlah Dokumen Nonaktif",
+            "default": 0
           },
           "classification_rule": {
             "anyOf": [
@@ -6556,18 +6610,113 @@
               }
             ],
             "title": "Classification Rule"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
           }
         },
+        "additionalProperties": true,
         "type": "object",
         "required": [
           "id",
-          "name",
-          "auto_created",
-          "path",
-          "document_count",
-          "jumlah_dokumen"
+          "name"
         ],
         "title": "CategoryDetailResponse"
+      },
+      "CategoryTreeNode": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "auto_created": {
+            "type": "boolean",
+            "title": "Auto Created",
+            "default": false
+          },
+          "document_count": {
+            "type": "integer",
+            "title": "Document Count",
+            "default": 0
+          },
+          "total_document_count": {
+            "type": "integer",
+            "title": "Total Document Count",
+            "default": 0
+          },
+          "jumlah_dokumen": {
+            "type": "integer",
+            "title": "Jumlah Dokumen",
+            "default": 0
+          },
+          "jumlah_dokumen_nonaktif": {
+            "type": "integer",
+            "title": "Jumlah Dokumen Nonaktif",
+            "default": 0
+          },
+          "classification_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification Rule"
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryTreeNode"
+            },
+            "type": "array",
+            "title": "Children",
+            "default": []
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "CategoryTreeNode"
       },
       "CategoryUpdateRequest": {
         "properties": {
@@ -6607,6 +6756,307 @@
         },
         "type": "object",
         "title": "CategoryUpdateRequest"
+      },
+      "CategoryUpdateResponse": {
+        "properties": {
+          "kategori": {
+            "$ref": "#/components/schemas/CategoryDetailResponse"
+          },
+          "dokumen_dipindah": {
+            "type": "integer",
+            "title": "Dokumen Dipindah",
+            "default": 0
+          },
+          "dokumen_gagal": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Dokumen Gagal",
+            "default": []
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "kategori"
+        ],
+        "title": "CategoryUpdateResponse"
+      },
+      "CorongDokumenMetrics": {
+        "properties": {
+          "di_kb": {
+            "type": "integer",
+            "title": "Di Kb",
+            "default": 0
+          },
+          "tersimpan_di_kb": {
+            "type": "integer",
+            "title": "Tersimpan Di Kb",
+            "default": 0
+          },
+          "menunggu_ekstraksi": {
+            "type": "integer",
+            "title": "Menunggu Ekstraksi",
+            "default": 0
+          },
+          "terbaca": {
+            "type": "integer",
+            "title": "Terbaca",
+            "default": 0
+          },
+          "terbaca_teks_langsung": {
+            "type": "integer",
+            "title": "Terbaca Teks Langsung",
+            "default": 0
+          },
+          "terbaca_ocr": {
+            "type": "integer",
+            "title": "Terbaca Ocr",
+            "default": 0
+          },
+          "perlu_koreksi": {
+            "type": "integer",
+            "title": "Perlu Koreksi",
+            "default": 0
+          },
+          "gagal_baca": {
+            "type": "integer",
+            "title": "Gagal Baca",
+            "default": 0
+          },
+          "lainnya": {
+            "type": "integer",
+            "title": "Lainnya",
+            "default": 0
+          },
+          "terpecah_pasal": {
+            "type": "integer",
+            "title": "Terpecah Pasal",
+            "default": 0
+          },
+          "tervektor": {
+            "type": "integer",
+            "title": "Tervektor",
+            "default": 0
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "CorongDokumenMetrics"
+      },
+      "CorongPdfMetrics": {
+        "properties": {
+          "terproteksi": {
+            "type": "integer",
+            "title": "Terproteksi",
+            "default": 0
+          },
+          "terproteksi_terbaca": {
+            "type": "integer",
+            "title": "Terproteksi Terbaca",
+            "default": 0
+          },
+          "hasil_pindai_ocr": {
+            "type": "integer",
+            "title": "Hasil Pindai Ocr",
+            "default": 0
+          },
+          "ocr_gagal": {
+            "type": "integer",
+            "title": "Ocr Gagal",
+            "default": 0
+          },
+          "belum_diperiksa": {
+            "type": "integer",
+            "title": "Belum Diperiksa",
+            "default": 0
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "CorongPdfMetrics"
+      },
+      "CorongResponse": {
+        "properties": {
+          "dihitung_pada": {
+            "type": "string",
+            "title": "Dihitung Pada"
+          },
+          "sumber": {
+            "items": {
+              "$ref": "#/components/schemas/CorongSumberItem"
+            },
+            "type": "array",
+            "title": "Sumber",
+            "default": []
+          },
+          "unggah_manual": {
+            "$ref": "#/components/schemas/CorongUnggahManualItem"
+          },
+          "total": {
+            "$ref": "#/components/schemas/CorongTotalMetrics"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "dihitung_pada",
+          "unggah_manual",
+          "total"
+        ],
+        "title": "CorongResponse"
+      },
+      "CorongScanMetrics": {
+        "properties": {
+          "ditemukan": {
+            "type": "integer",
+            "title": "Ditemukan",
+            "default": 0
+          },
+          "sudah_ada_di_kb": {
+            "type": "integer",
+            "title": "Sudah Ada Di Kb",
+            "default": 0
+          },
+          "ditarik": {
+            "type": "integer",
+            "title": "Ditarik",
+            "default": 0
+          },
+          "duplikat": {
+            "type": "integer",
+            "title": "Duplikat",
+            "default": 0
+          },
+          "gagal_unduh": {
+            "type": "integer",
+            "title": "Gagal Unduh",
+            "default": 0
+          },
+          "belum_ditarik": {
+            "type": "integer",
+            "title": "Belum Ditarik",
+            "default": 0
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "CorongScanMetrics"
+      },
+      "CorongSumberItem": {
+        "properties": {
+          "source_id": {
+            "type": "integer",
+            "title": "Source Id"
+          },
+          "nama": {
+            "type": "string",
+            "title": "Nama"
+          },
+          "jenis": {
+            "type": "string",
+            "title": "Jenis"
+          },
+          "scan": {
+            "$ref": "#/components/schemas/CorongScanMetrics"
+          },
+          "dokumen": {
+            "$ref": "#/components/schemas/CorongDokumenMetrics"
+          },
+          "pdf": {
+            "$ref": "#/components/schemas/CorongPdfMetrics"
+          },
+          "gagal_per_alasan": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Gagal Per Alasan",
+            "default": {}
+          },
+          "persen_terbaca": {
+            "type": "number",
+            "title": "Persen Terbaca",
+            "default": 0.0
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "source_id",
+          "nama",
+          "jenis",
+          "scan",
+          "dokumen",
+          "pdf"
+        ],
+        "title": "CorongSumberItem"
+      },
+      "CorongTotalMetrics": {
+        "properties": {
+          "scan": {
+            "$ref": "#/components/schemas/CorongScanMetrics"
+          },
+          "dokumen": {
+            "$ref": "#/components/schemas/CorongDokumenMetrics"
+          },
+          "pdf": {
+            "$ref": "#/components/schemas/CorongPdfMetrics"
+          },
+          "gagal_per_alasan": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Gagal Per Alasan",
+            "default": {}
+          },
+          "persen_terbaca": {
+            "type": "number",
+            "title": "Persen Terbaca",
+            "default": 0.0
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "scan",
+          "dokumen",
+          "pdf"
+        ],
+        "title": "CorongTotalMetrics"
+      },
+      "CorongUnggahManualItem": {
+        "properties": {
+          "dokumen": {
+            "$ref": "#/components/schemas/CorongDokumenMetrics"
+          },
+          "pdf": {
+            "$ref": "#/components/schemas/CorongPdfMetrics"
+          },
+          "gagal_per_alasan": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Gagal Per Alasan",
+            "default": {}
+          },
+          "persen_terbaca": {
+            "type": "number",
+            "title": "Persen Terbaca",
+            "default": 0.0
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "dokumen",
+          "pdf"
+        ],
+        "title": "CorongUnggahManualItem"
       },
       "DocumentAnalysisComparisonResponse": {
         "properties": {
@@ -6682,6 +7132,543 @@
           "document_id"
         ],
         "title": "DocumentIdentityItemIn"
+      },
+      "DocumentMetadataPatchResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "regulation_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Number"
+          },
+          "regulation_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Type"
+          },
+          "release_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Date"
+          },
+          "effective_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Date"
+          },
+          "regulation_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Year"
+          },
+          "bidang": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bidang"
+          },
+          "naming_format": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Naming Format"
+          },
+          "naming_separator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Naming Separator"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "original_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Filename"
+          },
+          "file_path_pdf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Path Pdf"
+          },
+          "standardized_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standardized Filename"
+          },
+          "access_classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Classification"
+          },
+          "document_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role"
+          },
+          "status_keberlakuan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Keberlakuan"
+          },
+          "status_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Source"
+          },
+          "is_attachment": {
+            "type": "boolean",
+            "title": "Is Attachment",
+            "default": false
+          },
+          "parent_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Document Id"
+          },
+          "parent_identity_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Identity Key"
+          },
+          "attachment_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachment Label"
+          },
+          "lampiran": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lampiran"
+          },
+          "induk": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Induk"
+          },
+          "processing_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Status"
+          },
+          "extraction_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extraction Method"
+          },
+          "extraction_engine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extraction Engine"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "category_path": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Path"
+          },
+          "is_placed": {
+            "type": "boolean",
+            "title": "Is Placed",
+            "default": false
+          },
+          "kategori_manual": {
+            "type": "boolean",
+            "title": "Kategori Manual",
+            "default": false
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "pdf_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf Url"
+          },
+          "text_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Url"
+          },
+          "full_text_length": {
+            "type": "integer",
+            "title": "Full Text Length",
+            "default": 0
+          },
+          "extraction_confidence": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extraction Confidence"
+          },
+          "low_confidence_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low Confidence Fields"
+          },
+          "metadata_corrected_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata Corrected At"
+          },
+          "extracted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted At"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          },
+          "deactivated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deactivated At"
+          },
+          "deactivated_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deactivated Reason"
+          },
+          "identity_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identity Key"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Count"
+          },
+          "duplicate_of_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Of Id"
+          },
+          "changed_fields": {
+            "items": {
+              "type": "string",
+              "format": "binary"
+            },
+            "type": "array",
+            "title": "Changed Fields",
+            "default": []
+          },
+          "placement": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Placement"
+          },
+          "duplikat": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplikat"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "DocumentMetadataPatchResponse"
       },
       "DocumentVersionResponse": {
         "properties": {
@@ -7565,6 +8552,382 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HarmonisasiBadge": {
+        "properties": {
+          "tone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tone"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "HarmonisasiBadge"
+      },
+      "HarmonisasiCache": {
+        "properties": {
+          "hit": {
+            "type": "boolean",
+            "title": "Hit",
+            "default": false
+          },
+          "dibuat": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dibuat"
+          },
+          "basi": {
+            "type": "boolean",
+            "title": "Basi",
+            "default": false
+          },
+          "mode_tersimpan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode Tersimpan"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "HarmonisasiCache"
+      },
+      "HarmonisasiPembanding": {
+        "properties": {
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "nomor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nomor"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "judul": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judul"
+          },
+          "pdf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf"
+          },
+          "tautan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tautan"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "HarmonisasiPembanding"
+      },
+      "HarmonisasiResponse": {
+        "properties": {
+          "draft": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft"
+          },
+          "ringkasan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarmonisasiRingkasan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "temuan": {
+            "items": {
+              "$ref": "#/components/schemas/HarmonisasiTemuan"
+            },
+            "type": "array",
+            "title": "Temuan",
+            "default": []
+          },
+          "disaring_backend": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disaring Backend",
+            "default": 0
+          },
+          "disaring_rincian": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disaring Rincian"
+          },
+          "cache": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarmonisasiCache"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "versi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Versi"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "HarmonisasiResponse"
+      },
+      "HarmonisasiRingkasan": {
+        "properties": {
+          "total_temuan": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Temuan",
+            "default": 0
+          },
+          "per_jenis": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Jenis"
+          },
+          "rencana_perubahan": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rencana Perubahan"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "HarmonisasiRingkasan"
+      },
+      "HarmonisasiTemuan": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "jenis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jenis"
+          },
+          "judul": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judul"
+          },
+          "deskripsi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deskripsi"
+          },
+          "pasal_draft": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pasal Draft"
+          },
+          "pasal_pembanding": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pasal Pembanding"
+          },
+          "badge": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarmonisasiBadge"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pembanding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarmonisasiPembanding"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "HarmonisasiTemuan"
       },
       "IngestItemDetailResponse": {
         "properties": {

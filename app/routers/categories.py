@@ -13,6 +13,11 @@ from app.models.document import Document
 from app.core.permissions import perlu_izin, Izin
 from app.services.category_service import CategoryService
 from app.services.storage_service import StorageService, get_storage_service
+from app.schemas.category import (
+    CategoryTreeNode,
+    CategoryDetailResponse,
+    CategoryUpdateResponse,
+)
 
 router = APIRouter()
 
@@ -29,17 +34,6 @@ class CategoryUpdateRequest(BaseModel):
     classification_rule: Optional[str] = None
 
 
-class CategoryDetailResponse(BaseModel):
-    id: int
-    name: str
-    parent_id: Optional[int] = None
-    auto_created: bool
-    path: List[str]
-    document_count: int
-    jumlah_dokumen: int
-    classification_rule: Optional[str] = None
-
-
 @router.get("/", summary="Daftar Kategori Datar")
 def list_categories(
     db: Session = Depends(get_db),
@@ -49,7 +43,7 @@ def list_categories(
     return db.query(Category).order_by(Category.id).all()
 
 
-@router.get("/tree", summary="Pohon Hierarki Kategori KB")
+@router.get("/tree", response_model=List[CategoryTreeNode], summary="Pohon Hierarki Kategori KB")
 def get_category_tree(
     db: Session = Depends(get_db),
     _user=Depends(perlu_izin(Izin.KB_BACA)),
@@ -83,6 +77,11 @@ def get_category_detail(
         .filter(Document.category_id == cat.id, Document.is_active == True)  # noqa: E712
         .count()
     )
+    doc_inactive_count = (
+        db.query(Document)
+        .filter(Document.category_id == cat.id, Document.is_active == False)  # noqa: E712
+        .count()
+    )
 
     return CategoryDetailResponse(
         id=cat.id,
@@ -92,11 +91,14 @@ def get_category_detail(
         path=cat_path,
         document_count=doc_count,
         jumlah_dokumen=doc_count,
+        jumlah_dokumen_nonaktif=doc_inactive_count,
         classification_rule=cat.classification_rule,
+        created_at=cat.created_at,
+        updated_at=cat.updated_at,
     )
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED, summary="Buat Kategori Baru")
+@router.post("/", response_model=CategoryDetailResponse, status_code=status.HTTP_201_CREATED, summary="Buat Kategori Baru")
 def create_category(
     body: CategoryCreateRequest,
     request: Request,
@@ -117,10 +119,23 @@ def create_category(
         actor_user_id=actor_user_id,
         ip_address=client_ip,
     )
-    return cat
+    cat_path = svc.path_of(cat)
+    return CategoryDetailResponse(
+        id=cat.id,
+        name=cat.name,
+        parent_id=cat.parent_id,
+        auto_created=cat.auto_created,
+        path=cat_path,
+        document_count=0,
+        jumlah_dokumen=0,
+        jumlah_dokumen_nonaktif=0,
+        classification_rule=cat.classification_rule,
+        created_at=cat.created_at,
+        updated_at=cat.updated_at,
+    )
 
 
-@router.patch("/{category_id}", summary="Ubah Kategori (Nama, Induk, Aturan Klasifikasi)")
+@router.patch("/{category_id}", response_model=CategoryUpdateResponse, summary="Ubah Kategori (Nama, Induk, Aturan Klasifikasi)")
 def update_category(
     category_id: int,
     body: CategoryUpdateRequest,

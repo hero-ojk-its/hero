@@ -280,6 +280,7 @@ class FailureService:
         failure_type: Optional[JenisKegagalan] = None,
         reason_codes: Optional[List[str]] = None,
         source_id: Optional[int] = None,
+        tanpa_sumber: bool = False,
         follow_up_status: Optional[str] = None,
         include_duplicates: bool = False,
         skip: int = 0,
@@ -287,7 +288,8 @@ class FailureService:
     ) -> Tuple[int, List[IngestFailure]]:
         """
         Mengambil daftar kegagalan dengan filter dan paginasi.
-        Mendukung filter reason_codes (list) dan source_id (via job.source_id atau scan_candidates.failure_id).
+        Mendukung filter reason_codes (list), source_id (via job.source_id atau scan_candidates.failure_id),
+        dan tanpa_sumber (kegagalan unggah manual tanpa sumber scraping).
         """
         query = self.db.query(IngestFailure)
 
@@ -321,6 +323,21 @@ class FailureService:
                     IngestFailure.job_id.in_(job_fail_subq),
                     IngestFailure.id.in_(cand_fail_subq),
                 )
+            )
+
+        if tanpa_sumber:
+            from app.models.scan_candidate import ScanCandidate
+            from app.models.job_ingest import JobIngest
+
+            cand_fail_subq = select(ScanCandidate.failure_id).where(ScanCandidate.failure_id.isnot(None))
+            job_with_source_subq = select(JobIngest.id).where(JobIngest.source_id.isnot(None))
+
+            query = query.filter(
+                or_(
+                    IngestFailure.job_id.is_(None),
+                    ~IngestFailure.job_id.in_(job_with_source_subq),
+                ),
+                ~IngestFailure.id.in_(cand_fail_subq),
             )
 
         if follow_up_status is not None:

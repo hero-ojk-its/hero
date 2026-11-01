@@ -698,6 +698,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
         "POJK",
         "2026"
       ],
+      "kategori_manual": false,
       "status_keberlakuan": "tidak_diketahui",
       "status_source": null,
       "processing_status": "terindeks",
@@ -775,6 +776,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
         "POJK",
         "2026"
       ],
+      "kategori_manual": false,
       "status_keberlakuan": "tidak_diketahui",
       "status_source": null,
       "processing_status": "terindeks",
@@ -876,6 +878,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
     "POJK",
     "2026"
   ],
+  "kategori_manual": false,
   "is_placed": true,
   "job_id": 3,
   "pdf_url": "/api/v1/documents/1/pdf",
@@ -1305,6 +1308,12 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
 - **Validasi Khusus Lampiran:**
   - `parent_document_id` harus dokumen yang ada, bukan dirinya sendiri, dan bukan merupakan dokumen lampiran lain (HTTP 422 bila melanggar).
   - Jika `is_attachment = false`, sistem otomatis mengosongkan `parent_document_id`, `parent_identity_key`, dan `attachment_label`.
+- **Penanda `kategori_manual`:** Item daftar/pencarian dokumen, detail dokumen, dan respons PATCH metadata menyertakan atribut boolean `"kategori_manual": true|false`.
+- **Blok `placement` Eksplisit:**
+  - Bila salah satu field penempatan berubah dan metadata lengkap (`is_sufficient: true`): berkas dipindah fisik dan `placement` memuat detail `{placed: true, reason: ..., old_path: ..., new_path: ...}`.
+  - Bila field penempatan berubah tetapi metadata belum cukup (`is_sufficient: false`): berkas tidak dipindah dan menghasilkan status eksplisit:
+    `placement = {"placed": false, "reason": "metadata_belum_cukup", "category_id": <id>, "category_path": [...]}`.
+  - Bila tidak ada field penempatan yang berubah: `placement` bernilai `null`.
 - **Respons (200 OK):**
 <!-- AUTO:document_patch_metadata_response -->
 ```json
@@ -1347,6 +1356,7 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
     "2026"
   ],
   "is_placed": true,
+  "kategori_manual": false,
   "job_id": 3,
   "pdf_url": "/api/v1/documents/1/pdf",
   "text_url": "/api/v1/documents/1/text",
@@ -1369,6 +1379,22 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
   "identity_key": null,
   "page_count": 1,
   "duplicate_of_id": null,
+  "changed_fields": [
+    "title"
+  ],
+  "placement": {
+    "document_id": 1,
+    "placed": true,
+    "reason": "relokasi",
+    "old_path": "kb/POJK/2026/Penyelenggaraan Usaha Bank Umum_POJK_2026_Perbankan.pdf",
+    "new_path": "kb/POJK/2026/Penyelenggaraan Usaha Bank Umum Terkoreksi_POJK_2026_Perbankan.pdf",
+    "category_id": 8,
+    "category_path": [
+      "POJK",
+      "2026"
+    ]
+  },
+  "duplikat": null,
   "articles": [
     {
       "id": 1,
@@ -1389,30 +1415,14 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
       "page": null
     }
   ],
-  "legal_references": [],
-  "changed_fields": [
-    "title"
-  ],
-  "placement": {
-    "document_id": 1,
-    "placed": true,
-    "reason": "relokasi",
-    "old_path": "kb/POJK/2026/Penyelenggaraan Usaha Bank Umum_POJK_2026_Perbankan.pdf",
-    "new_path": "kb/POJK/2026/Penyelenggaraan Usaha Bank Umum Terkoreksi_POJK_2026_Perbankan.pdf",
-    "category_id": 8,
-    "category_path": [
-      "POJK",
-      "2026"
-    ]
-  },
-  "duplikat": null
+  "legal_references": []
 }
 ```
 <!-- /AUTO:document_patch_metadata_response -->
 
 ### 9.2 Daftar Antrean Gagal (Ingest Failures)
 - **Method & Path:** `GET /api/v1/ingest/failures`
-- **Query Params:** `job_id`, `failure_type`, `reason_code` (opsional, dapat diulang, misal `?reason_code=teks_kosong&reason_code=teks_kosong_ocr`), `source_id` (opsional, filter sumber scraping via job atau scan candidate), `follow_up_status` (`belum_ditangani`, `diproses_ulang`, `diabaikan`, `all`), `include_duplicates` (`false`), `skip` (`0`), `limit` (`50`).
+- **Query Params:** `job_id`, `failure_type`, `reason_code` (opsional, dapat diulang, misal `?reason_code=teks_kosong&reason_code=teks_kosong_ocr`), `source_id` (opsional, filter sumber scraping via job atau scan candidate), `tanpa_sumber` (opsional, boolean: jika `true`, hanya menampilkan kegagalan unggah manual tanpa sumber scraping; mengirim `tanpa_sumber=true` bersama `source_id` menghasilkan HTTP 422), `follow_up_status` (`belum_ditangani`, `diproses_ulang`, `diabaikan`, `all`), `include_duplicates` (`false`), `skip` (`0`), `limit` (`50`).
 - **Daftar Kode Alasan Kegagalan (`reason_code`):**
   - `format_tidak_didukung`: Berkas bukan format PDF yang valid.
   - `pdf_rusak`: Berkas PDF rusak, corrupt, stream terputus, atau tidak memiliki halaman valid (`FileRejectCode.pdf_rusak`).
@@ -1751,7 +1761,10 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
    - `lainnya`: status lain (misalnya `ditolak`).
    - **Invarian:** `di_kb = menunggu_ekstraksi + terbaca + gagal_baca + lainnya`.
    - `terpecah_pasal`: memiliki ≥ 1 baris di tabel `articles`.
-   - `tervektor`: memiliki ≥ 1 baris `articles` dengan `embedding IS NOT NULL`.
+   - `tervektor`: jumlah **dokumen** aktif yang memiliki ≥ 1 pasal (baris di `articles`) dengan `embedding IS NOT NULL` (dihitung per dokumen unik, bukan jumlah pasal).
+
+> **Cache Respons Corong (60 Detik):**  
+> Endpoint corong dilengkapi cache memori proses dengan TTL 60 detik per `source_id`. Gunakan query parameter `segar=true` untuk melewati cache dan memaksa kalkulasi ulang data corong.
 3. **`pdf`:**
    - `terproteksi`: `pdf_terproteksi = true` (PDF dilindungi proteksi kata sandi pemilik / copy-protected).
    - `terproteksi_terbaca`: bagian dokumen terproteksi yang berhasil `terbaca`.
@@ -1827,7 +1840,7 @@ Manajemen struktur hierarkis folder kategori Knowledge Base (KB), relokasi otoma
      "dokumen_gagal": []
    }
    ```
-3. Kegagalan memindahkan satu dokumen (misal berkas sumber hilang di filesystem) tidak membatalkan pembaruan kategori di database; dokumen tersebut dicatat pada array `dokumen_gagal`.
+3. Kegagalan memindahkan satu dokumen (misal berkas sumber hilang di filesystem) tidak membatalkan pembaruan kategori di database; dokumen tersebut dicatat pada array `dokumen_gagal` dengan bentuk elemen `{"document_id": <id>, "alasan": "<pesan galat>"}`.
 4. Kategori yang awalnya dibuat otomatis (`auto_created: true`), setelah diubah oleh pengguna akan otomatis berubah status menjadi manual (`auto_created: false`).
 
 #### D. Aturan Penghapusan Kategori (`DELETE /api/v1/categories/{id}`)
@@ -1837,17 +1850,22 @@ Manajemen struktur hierarkis folder kategori Knowledge Base (KB), relokasi otoma
   {
     "detail": {
       "subkategori": 2,
-      "dokumen": 0,
-      "message": "Kategori tidak dapat dihapus karena masih memiliki 2 subkategori dan 0 dokumen."
+      "dokumen": 3,
+      "dokumen_aktif": 2,
+      "dokumen_nonaktif": 1,
+      "message": "Kategori masih memiliki 2 subkategori dan 3 dokumen (1 di antaranya nonaktif)."
     }
   }
   ```
 - Penghapusan yang berhasil menghasilkan HTTP `204 No Content` dan mencatat jejak audit `DELETE_CATEGORY`.
 
-#### E. Status Aturan Klasifikasi (`classification_rule`)
-- Field `classification_rule` menerima string JSON objek (maksimal 4.000 karakter, harus berupa dictionary/objek JSON valid).
-- Mengirimkan `null` akan menghapus aturan klasifikasi.
-- **Status Operasional:** Saat ini field `classification_rule` **hanya disimpan (persisted)** di database dan belum digunakan secara aktif oleh sistem klasifikasi otomatis. Aturan pemanfaatan dan skemanya akan disepakati bersama PM pada pengembangan lanjutan.
+#### E. Aturan Klasifikasi (`classification_rule`) dan Validasi Hierarki
+- Field `classification_rule` dikirim sebagai **string berisi JSON objek** (stringified JSON dictionary, maksimal 4.000 karakter):
+  - Contoh Valid: `"classification_rule": "{\"keywords\": [\"perbankan\"], \"min_score\": 0.8}"`
+  - Menyerahkan objek JSON langsung (bukan string) akan ditolak dengan **HTTP 422 Unprocessable Content**.
+  - Mengirimkan `null` akan mengosongkan/menghapus aturan klasifikasi.
+- **Pencegahan Siklus Hierarki:** Kategori tidak boleh dipindahkan ke dalam dirinya sendiri atau ke dalam subkategori turunannya. Pelanggaran aturan ini menghasilkan HTTP 422 dengan pesan persis: `"Kategori tidak boleh dipindah ke dalam dirinya sendiri atau turunannya"`.
+- **Status Operasional:** Saat ini field `classification_rule` **hanya disimpan (persisted)** di database dan belum digunakan secara aktif oleh sistem klasifikasi otomatis.
 
 ---
 
@@ -1899,6 +1917,29 @@ Frontend cukup memanggil satu asal (`API_BASE_URL` backend) tanpa perlu menghubu
   - `k` (opsional): integer `1-20` (default: `5`)
 
 ### 11.5 Harmonisasi Draft Regulasi
+
+#### Otorisasi & Penanganan Akses (HTTP 401 & 403)
+- Memerlukan izin `ANALISA_JALANKAN`. Bila sistem autentikasi aktif:
+  - Tanpa header token Bearer atau token tidak valid: mengembalikan **HTTP 401 Unauthorized** (`{"detail": "Otentikasi diperlukan"}`).
+  - Pengguna dengan peran yang tidak memiliki hak (misal `pilot_user`): mengembalikan **HTTP 403 Forbidden** dengan format detail:
+    ```json
+    {
+      "detail": {
+        "code": "akses_ditolak",
+        "izin": "ANALISA_JALANKAN",
+        "peran": "pilot_user",
+        "message": "Akun Anda tidak memiliki izin ANALISA_JALANKAN untuk aksi ini."
+      }
+    }
+    ```
+- Bila draft berklasifikasi `non_publik` dan pengguna tidak memiliki hak `KB_BACA_NONPUBLIK`: mengembalikan **HTTP 403 Forbidden**.
+
+#### Kontrak Lapisan Data & Nilai Nullable
+- **Field Nullable:** Atribut `temuan[].pembanding`, `pembanding.pdf`, `pembanding.document_id`, dan `ringkasan.rencana_perubahan` dapat bernilai `null` (opsional).
+- **Atribut Pembanding:** Objek `pembanding` memuat atribut opsional `key`, `nomor`, `status`, `judul`, `pdf`, `tautan`, dan `document_id`.
+- **Nilai `badge.tone`:** Nilai warna badge pada temuan mengikuti kode: `success`, `neutral`, `warning`, `info`, atau `danger`.
+- **Rincian Penyaringan (`disaring_rincian`):** Respons harmonisasi memuat objek `disaring_rincian: {"temuan": n, "rujukan": n, "alternatif": n, "lainnya": n}` dan total `disaring_backend` = sum(disaring_rincian).
+- **Hitung Ulang Ringkasan Jenis:** `ringkasan.per_jenis` dihitung ulang secara dinamis dari temuan yang tersisa setelah dokumen yang tidak diizinkan disaring.
 - **Method & Path:** `POST /api/v1/ml/harmonisasi/{document_id}`
 - **Parameter Query:**
   - `segar` (opsional, default: `false`): Jika `true`, memaksa perhitungan ulang harmonisasi ke layanan ML.

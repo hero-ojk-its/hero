@@ -32,6 +32,7 @@ from app.services.analysis_result_service import (
 )
 from app.services.audit_service import RUN_ANALYSIS, RUN_HARMONIZATION, record_audit
 from app.services.analysis_run_service import record_run
+from app.schemas.harmonisasi import HarmonisasiResponse
 
 logger = logging.getLogger("hero")
 
@@ -95,6 +96,7 @@ def saring_rujukan(
     obj: Any,
     allowed_ids: set[int],
     parent_key: Optional[str] = None,
+    rincian: Optional[dict[str, int]] = None,
 ) -> tuple[Any, int]:
     """
     Penyaring rekursif untuk respons ML:
@@ -106,6 +108,9 @@ def saring_rujukan(
     - document_id = null (register belum diunduh) dibiarkan.
     - Objek level atas 'draft' pada harmonisasi dikecualikan.
     """
+    if rincian is None:
+        rincian = {"temuan": 0, "rujukan": 0, "alternatif": 0, "lainnya": 0}
+
     if isinstance(obj, dict):
         new_dict = {}
         total_dibuang = 0
@@ -124,12 +129,14 @@ def saring_rujukan(
                     for sk in SENSITIVE_REF_KEYS:
                         v_copy.pop(sk, None)
                     total_dibuang += 1
-                    rec_val, rec_count = saring_rujukan(v_copy, allowed_ids, parent_key=k)
+                    cat = "rujukan" if k in ("rujukan", "referensi") else ("alternatif" if k == "alternatif" else ("temuan" if k in ("temuan", "pembanding") else "lainnya"))
+                    rincian[cat] = rincian.get(cat, 0) + 1
+                    rec_val, rec_count = saring_rujukan(v_copy, allowed_ids, parent_key=k, rincian=rincian)
                     total_dibuang += rec_count
                     new_dict[k] = rec_val
                     continue
 
-            filtered_v, count_v = saring_rujukan(v, allowed_ids, parent_key=k)
+            filtered_v, count_v = saring_rujukan(v, allowed_ids, parent_key=k, rincian=rincian)
             total_dibuang += count_v
             new_dict[k] = filtered_v
 
@@ -145,7 +152,7 @@ def saring_rujukan(
         for item in obj:
             if isinstance(item, dict):
                 # Penanganan khusus elemen list rujukan: netralkan dokumen_id, jangan buang seluruh rujukan
-                if parent_key == "rujukan":
+                if parent_key in ("rujukan", "rujukan_item"):
                     doc_id = item.get("document_id")
                     if isinstance(doc_id, int) and doc_id not in allowed_ids:
                         item_copy = dict(item)
@@ -153,11 +160,12 @@ def saring_rujukan(
                         for sk in SENSITIVE_REF_KEYS:
                             item_copy.pop(sk, None)
                         total_dibuang += 1
-                        rec_item, rec_count = saring_rujukan(item_copy, allowed_ids, parent_key="rujukan_item")
+                        rincian["rujukan"] = rincian.get("rujukan", 0) + 1
+                        rec_item, rec_count = saring_rujukan(item_copy, allowed_ids, parent_key="rujukan_item", rincian=rincian)
                         total_dibuang += rec_count
                         new_list.append(rec_item)
                     else:
-                        rec_item, rec_count = saring_rujukan(item, allowed_ids, parent_key="rujukan_item")
+                        rec_item, rec_count = saring_rujukan(item, allowed_ids, parent_key="rujukan_item", rincian=rincian)
                         total_dibuang += rec_count
                         new_list.append(rec_item)
                     continue
@@ -166,6 +174,8 @@ def saring_rujukan(
                 doc_id = item.get("document_id")
                 if isinstance(doc_id, int) and doc_id not in allowed_ids:
                     total_dibuang += 1
+                    cat = "temuan" if parent_key in ("temuan", "temuan_item") else ("rujukan" if parent_key in ("rujukan", "rujukan_item") else ("alternatif" if parent_key in ("alternatif", "alternatif_item") else "lainnya"))
+                    rincian[cat] = rincian.get(cat, 0) + 1
                     continue
 
                 # Aturan 2: Elemen list dengan pembanding.document_id tidak diizinkan -> DIBUANG
@@ -174,13 +184,14 @@ def saring_rujukan(
                     p_doc_id = pembanding.get("document_id")
                     if isinstance(p_doc_id, int) and p_doc_id not in allowed_ids:
                         total_dibuang += 1
+                        rincian["temuan"] = rincian.get("temuan", 0) + 1
                         continue
 
-                rec_item, rec_count = saring_rujukan(item, allowed_ids, parent_key=parent_key)
+                rec_item, rec_count = saring_rujukan(item, allowed_ids, parent_key=parent_key, rincian=rincian)
                 total_dibuang += rec_count
                 new_list.append(rec_item)
             else:
-                rec_item, rec_count = saring_rujukan(item, allowed_ids, parent_key=parent_key)
+                rec_item, rec_count = saring_rujukan(item, allowed_ids, parent_key=parent_key, rincian=rincian)
                 total_dibuang += rec_count
                 new_list.append(rec_item)
 
@@ -188,6 +199,44 @@ def saring_rujukan(
 
     else:
         return obj, 0
+
+
+def saring_rujukan_lengkap(
+    obj: Any,
+    allowed_ids: set[int],
+) -> tuple[Any, int, dict[str, int]]:
+    """Versi saring_rujukan yang mengembalikan tuple (filtered_obj, discarded, rincian)."""
+    rincian = {"temuan": 0, "rujukan": 0, "alternatif": 0, "lainnya": 0}
+    filtered_obj, discarded = saring_rujukan(obj, allowed_ids, rincian=rincian)
+    return filtered_obj, discarded, rincian
+
+
+def sesuaikan_ringkasan_harmonisasi(
+    filtered_data: Any,
+    discarded: int,
+    rincian: dict[str, int],
+) -> Any:
+    """
+    Menyesuaikan disaring_backend, disaring_rincian, dan menghitung ulang
+    ringkasan.per_jenis berdasarkan temuan yang tersisa setelah disaring.
+    """
+    if isinstance(filtered_data, dict):
+        filtered_data["disaring_backend"] = discarded
+        filtered_data["disaring_rincian"] = rincian
+
+        ringkasan = filtered_data.get("ringkasan")
+        if isinstance(ringkasan, dict) and "per_jenis" in ringkasan and isinstance(ringkasan["per_jenis"], dict):
+            per_jenis_asli = ringkasan["per_jenis"]
+            per_jenis_baru = {k: 0 for k in per_jenis_asli.keys()}
+            temuan_list = filtered_data.get("temuan") or []
+            if isinstance(temuan_list, list):
+                for t in temuan_list:
+                    if isinstance(t, dict):
+                        jenis = t.get("jenis")
+                        if jenis:
+                            per_jenis_baru[jenis] = per_jenis_baru.get(jenis, 0) + 1
+            ringkasan["per_jenis"] = per_jenis_baru
+    return filtered_data
 
 
 async def forward_ml_request(
@@ -660,7 +709,11 @@ async def get_ml_analisa_klausul(
     return filtered_data
 
 
-@router.post("/harmonisasi/{document_id}", summary="Harmonisasi Draft Regulasi")
+@router.post(
+    "/harmonisasi/{document_id}",
+    response_model=HarmonisasiResponse,
+    summary="Harmonisasi Draft Regulasi",
+)
 async def post_ml_harmonisasi(
     document_id: int,
     request: Request,
@@ -732,9 +785,9 @@ async def post_ml_harmonisasi(
             except Exception as exc:
                 logger.warning("Gagal memanggil record_run pada cache hit harmonisasi: %s", exc)
 
-            filtered_data, discarded = saring_rujukan(cached.result, allowed_ids)
+            filtered_data, discarded, rincian = saring_rujukan_lengkap(cached.result, allowed_ids)
+            sesuaikan_ringkasan_harmonisasi(filtered_data, discarded, rincian)
             if isinstance(filtered_data, dict):
-                filtered_data["disaring_backend"] = discarded
                 filtered_data["cache"] = {
                     "hit": True,
                     "dibuat": cached.created_at.isoformat() if cached.created_at else None,
@@ -818,9 +871,9 @@ async def post_ml_harmonisasi(
                 except Exception as exc:
                     logger.warning("Gagal memanggil record_run pada cache basi harmonisasi: %s", exc)
 
-                filtered_data, discarded = saring_rujukan(fallback.result, allowed_ids)
+                filtered_data, discarded, rincian = saring_rujukan_lengkap(fallback.result, allowed_ids)
+                sesuaikan_ringkasan_harmonisasi(filtered_data, discarded, rincian)
                 if isinstance(filtered_data, dict):
-                    filtered_data["disaring_backend"] = discarded
                     filtered_data["cache"] = {
                         "hit": True,
                         "dibuat": fallback.created_at.isoformat() if fallback.created_at else None,
@@ -994,9 +1047,9 @@ async def post_ml_harmonisasi(
         logger.warning("Gagal memanggil record_run harmonisasi: %s", exc)
 
     # 7. Saring rujukan dan catat audit
-    filtered_data, discarded = saring_rujukan(data, allowed_ids)
+    filtered_data, discarded, rincian = saring_rujukan_lengkap(data, allowed_ids)
+    sesuaikan_ringkasan_harmonisasi(filtered_data, discarded, rincian)
     if isinstance(filtered_data, dict):
-        filtered_data["disaring_backend"] = discarded
         dibuat_str = (
             saved_row.created_at.isoformat()
             if saved_row and saved_row.created_at
