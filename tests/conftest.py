@@ -94,6 +94,7 @@ def db_session() -> Generator[Session, None, None]:
                 job_ingest,
                 scraping_sources,
                 audit_logs,
+                percobaan_login,
                 users,
                 categories
             RESTART IDENTITY CASCADE;

@@ -69,6 +69,66 @@
         }
       }
     },
+    "/api/v1/audit-logs/ringkasan": {
+      "get": {
+        "tags": [
+          "Audit Logs"
+        ],
+        "summary": "Ringkasan Audit Log per Aksi",
+        "description": "Mengembalikan ringkasan statistik audit log per jenis aksi:\n- jumlah: total kemunculan aksi\n- jumlah_detail_kosong: jumlah baris dengan detail null atau kosong\n- terakhir: waktu kejadian terakhir",
+        "operationId": "get_audit_summary_api_v1_audit_logs_ringkasan_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response Get Audit Summary Api V1 Audit Logs Ringkasan Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/audit-logs/": {
       "get": {
         "tags": [
@@ -180,6 +240,78 @@
               "title": "Mode"
             },
             "description": "Filter berdasarkan mode analisa (detail->>'mode_dipakai')"
+          },
+          {
+            "name": "ada_detail",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter ketersediaan detail (true: tidak kosong; false: kosong)",
+              "title": "Ada Detail"
+            },
+            "description": "Filter ketersediaan detail (true: tidak kosong; false: kosong)"
+          },
+          {
+            "name": "dari",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter rentang awal waktu timestamp (inklusif)",
+              "title": "Dari"
+            },
+            "description": "Filter rentang awal waktu timestamp (inklusif)"
+          },
+          {
+            "name": "sampai",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter rentang akhir waktu timestamp (inklusif)",
+              "title": "Sampai"
+            },
+            "description": "Filter rentang akhir waktu timestamp (inklusif)"
+          },
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -5131,6 +5263,22 @@
               "title": "Is Active"
             },
             "description": "Filter status aktif"
+          },
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -5170,6 +5318,24 @@
         "security": [
           {
             "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -5227,6 +5393,22 @@
             "schema": {
               "type": "integer",
               "title": "User Id"
+            }
+          },
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
             }
           }
         ],
@@ -11696,6 +11878,18 @@
             "examples": [
               7
             ]
+          },
+          "alasan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alasan",
+            "description": "Alasan perubahan status dokumen regulasi"
           }
         },
         "type": "object",

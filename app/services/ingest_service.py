@@ -251,6 +251,33 @@ class IngestService:
                 f"Dokumen duplikat: hash SHA-256 dan ukuran {fp.size_bytes} byte "
                 f"sama dengan dokumen ID {existing.id} ({ref_label})."
             )
+
+            # Catat audit UPLOAD_DOCUMENT hasil duplikat
+            try:
+                record_audit(
+                    self.db,
+                    action=UPLOAD_DOCUMENT,
+                    user_id=actor_user_id,
+                    target_resource=f"document:{existing.id}",
+                    detail={
+                        "hasil": "duplikat",
+                        "duplikat_dari": existing.id,
+                        "alasan": "hash_dan_ukuran",
+                        "nama_berkas_asli": item.filename,
+                        "sha256": fp.sha256,
+                        "ukuran_byte": fp.size_bytes,
+                        "sumber": {
+                            "jenis": job.job_type.value if hasattr(job.job_type, "value") else str(job.job_type),
+                            "source_id": job.source_id,
+                            "job_id": job.id,
+                        },
+                    },
+                    ip_address=ip_address,
+                    commit=True,
+                )
+            except Exception as audit_err:
+                logger.warning("Gagal mencatat audit UPLOAD_DOCUMENT duplikat: %s", audit_err)
+
             result = ItemResult(
                 filename=item.filename,
                 outcome=ItemOutcome.duplicate,
@@ -400,11 +427,39 @@ class IngestService:
             self.db.flush()
 
             # Catat audit log dalam transaksi yang sama (commit=False)
+            tipe_dokumen = (
+                doc.document_role.value
+                if hasattr(doc.document_role, "value")
+                else str(doc.document_role)
+            )
+            klasifikasi = (
+                doc.access_classification.value
+                if hasattr(doc.access_classification, "value")
+                else str(doc.access_classification)
+            )
+            upload_detail = {
+                "document_id": doc.id,
+                "nama_berkas_asli": doc.original_filename,
+                "nama_berkas_baku": doc.standardized_filename,
+                "sha256": doc.file_hash,
+                "ukuran_byte": doc.file_size_bytes,
+                "jumlah_halaman": doc.page_count,
+                "sumber": {
+                    "jenis": job.job_type.value if hasattr(job.job_type, "value") else str(job.job_type),
+                    "source_id": job.source_id,
+                    "job_id": job.id,
+                },
+                "tipe_dokumen": tipe_dokumen,
+                "klasifikasi": klasifikasi,
+                "kategori_manual": doc.kategori_manual,
+                "hasil": "baru",
+            }
             record_audit(
                 self.db,
                 action=UPLOAD_DOCUMENT,
                 user_id=actor_user_id,
                 target_resource=f"document:{doc.id}",
+                detail=upload_detail,
                 ip_address=ip_address,
                 commit=False,
             )
@@ -486,6 +541,32 @@ class IngestService:
                     f"Dokumen duplikat (race condition): hash SHA-256 dan ukuran {fp.size_bytes} byte "
                     f"sama dengan dokumen ID {dup_id} ({ref_label})."
                 )
+
+                try:
+                    record_audit(
+                        self.db,
+                        action=UPLOAD_DOCUMENT,
+                        user_id=actor_user_id,
+                        target_resource=f"document:{dup_id}",
+                        detail={
+                            "hasil": "duplikat",
+                            "duplikat_dari": dup_id,
+                            "alasan": "hash_dan_ukuran",
+                            "nama_berkas_asli": item.filename,
+                            "sha256": fp.sha256,
+                            "ukuran_byte": fp.size_bytes,
+                            "sumber": {
+                                "jenis": job.job_type.value if hasattr(job.job_type, "value") else str(job.job_type),
+                                "source_id": job.source_id,
+                                "job_id": job.id,
+                            },
+                        },
+                        ip_address=ip_address,
+                        commit=True,
+                    )
+                except Exception as audit_err:
+                    logger.warning("Gagal mencatat audit UPLOAD_DOCUMENT duplikat race: %s", audit_err)
+
                 result = ItemResult(
                     filename=item.filename,
                     outcome=ItemOutcome.duplicate,

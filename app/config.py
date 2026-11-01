@@ -29,6 +29,13 @@ class Settings(BaseSettings):
     uvicorn_workers: int = 1
     forwarded_allow_ips: str = "127.0.0.1"
 
+    # Keamanan Login & Lockout (Langkah 34)
+    login_maks_gagal_per_akun: int = 5
+    login_maks_gagal_per_ip: int = 30
+    login_jendela_menit: int = 15
+    login_kunci_menit: int = 15
+    admin_butuh_kunci_saat_auth_mati: bool = True
+
     # Storage & Upload
     storage_path: str = "./storage"
     max_upload_mb: int = 100

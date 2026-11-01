@@ -187,3 +187,43 @@ def perlu_izin(izin: Izin) -> Callable[..., Any]:
         return user
 
     return secured_dependency
+
+
+def perlu_izin_admin(izin: Izin) -> Callable[..., Any]:
+    """
+    Dependensi otorisasi untuk endpoint administratif (/users, /audit-logs) (Langkah 34):
+    - AUTH_ENABLED=true: sama persis dengan perlu_izin(izin).
+    - AUTH_ENABLED=false dan ADMIN_BUTUH_KUNCI_SAAT_AUTH_MATI=true:
+      wajib menyertakan header X-Internal-API-Key yang cocok dengan INTERNAL_API_KEY.
+      Tanpa/keliru -> 403 {"code": "butuh_login", "message": "Endpoint ini hanya tersedia saat login aktif (AUTH_ENABLED=true) atau dengan kunci internal."}
+    - AUTH_ENABLED=false dan ADMIN_BUTUH_KUNCI_SAAT_AUTH_MATI=false:
+      diizinkan tanpa token (perilaku lama).
+    """
+    import hmac
+    from fastapi import Header
+    from app.routers.auth import get_current_user
+
+    base_check = perlu_izin(izin)
+
+    def admin_secured_dependency(
+        user: Optional[Any] = Depends(get_current_user),
+        x_internal_api_key: Optional[str] = Header(None, alias="X-Internal-API-Key"),
+    ) -> Optional[Any]:
+        if settings.auth_enabled:
+            return base_check(user=user)
+
+        if settings.admin_butuh_kunci_saat_auth_mati:
+            key = settings.internal_api_key or ""
+            if not x_internal_api_key or not key or not hmac.compare_digest(x_internal_api_key, key):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "code": "butuh_login",
+                        "message": "Endpoint ini hanya tersedia saat login aktif (AUTH_ENABLED=true) atau dengan kunci internal.",
+                    },
+                )
+            return None
+
+        return None
+
+    return admin_secured_dependency
