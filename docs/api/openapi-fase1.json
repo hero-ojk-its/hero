@@ -6560,6 +6560,17 @@
             "type": "string",
             "title": "Name"
           },
+          "kunci_otomatis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kunci Otomatis"
+          },
           "parent_id": {
             "anyOf": [
               {
@@ -6653,6 +6664,17 @@
           "name": {
             "type": "string",
             "title": "Name"
+          },
+          "kunci_otomatis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kunci Otomatis"
           },
           "parent_id": {
             "anyOf": [
@@ -8557,9 +8579,7 @@
         "properties": {
           "tone": {
             "anyOf": [
-              {
-                "type": "string"
-              },
+              {},
               {
                 "type": "null"
               }
@@ -8568,9 +8588,7 @@
           },
           "label": {
             "anyOf": [
-              {
-                "type": "string"
-              },
+              {},
               {
                 "type": "null"
               }
@@ -8585,9 +8603,15 @@
       "HarmonisasiCache": {
         "properties": {
           "hit": {
-            "type": "boolean",
-            "title": "Hit",
-            "default": false
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hit"
           },
           "dibuat": {
             "anyOf": [
@@ -8601,9 +8625,15 @@
             "title": "Dibuat"
           },
           "basi": {
-            "type": "boolean",
-            "title": "Basi",
-            "default": false
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basi"
           },
           "mode_tersimpan": {
             "anyOf": [
@@ -8647,9 +8677,7 @@
           },
           "key": {
             "anyOf": [
-              {
-                "type": "string"
-              },
+              {},
               {
                 "type": "null"
               }
@@ -8658,9 +8686,7 @@
           },
           "nomor": {
             "anyOf": [
-              {
-                "type": "string"
-              },
+              {},
               {
                 "type": "null"
               }
@@ -8669,9 +8695,7 @@
           },
           "status": {
             "anyOf": [
-              {
-                "type": "string"
-              },
+              {},
               {
                 "type": "null"
               }
@@ -8680,9 +8704,7 @@
           },
           "judul": {
             "anyOf": [
-              {
-                "type": "string"
-              },
+              {},
               {
                 "type": "null"
               }
@@ -8691,9 +8713,7 @@
           },
           "pdf": {
             "anyOf": [
-              {
-                "type": "string"
-              },
+              {},
               {
                 "type": "null"
               }
@@ -8702,9 +8722,7 @@
           },
           "tautan": {
             "anyOf": [
-              {
-                "type": "string"
-              },
+              {},
               {
                 "type": "null"
               }
@@ -8741,12 +8759,18 @@
             ]
           },
           "temuan": {
-            "items": {
-              "$ref": "#/components/schemas/HarmonisasiTemuan"
-            },
-            "type": "array",
-            "title": "Temuan",
-            "default": []
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/HarmonisasiTemuan"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temuan"
           },
           "disaring_backend": {
             "anyOf": [
@@ -8757,8 +8781,7 @@
                 "type": "null"
               }
             ],
-            "title": "Disaring Backend",
-            "default": 0
+            "title": "Disaring Backend"
           },
           "disaring_rincian": {
             "anyOf": [
@@ -8804,22 +8827,17 @@
         "properties": {
           "total_temuan": {
             "anyOf": [
-              {
-                "type": "integer"
-              },
+              {},
               {
                 "type": "null"
               }
             ],
-            "title": "Total Temuan",
-            "default": 0
+            "title": "Total Temuan"
           },
           "per_jenis": {
             "anyOf": [
               {
-                "additionalProperties": {
-                  "type": "integer"
-                },
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -8855,9 +8873,7 @@
           },
           "jenis": {
             "anyOf": [
-              {
-                "type": "string"
-              },
+              {},
               {
                 "type": "null"
               }
@@ -8866,9 +8882,7 @@
           },
           "judul": {
             "anyOf": [
-              {
-                "type": "string"
-              },
+              {},
               {
                 "type": "null"
               }
@@ -8877,9 +8891,7 @@
           },
           "deskripsi": {
             "anyOf": [
-              {
-                "type": "string"
-              },
+              {},
               {
                 "type": "null"
               }

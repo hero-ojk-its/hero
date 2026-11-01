@@ -92,24 +92,42 @@ class CategoryService:
             if not seg:
                 continue
 
-            # 1. Cari kategori yang sudah ada
             filter_cond = (
                 (Category.parent_id == curr_parent_id)
                 if curr_parent_id is not None
                 else Category.parent_id.is_(None)
             )
+
+            # 1. Cari kunci_otomatis == seg (Prioritas)
             cat = (
                 self.db.query(Category)
-                .filter(filter_cond, Category.name == seg)
+                .filter(filter_cond, Category.kunci_otomatis == seg)
                 .first()
             )
 
-            # 2. Jika belum ada, buat baru dengan savepoint aman race condition
+            # 2. Bila tidak ada, cari name == seg. Bila ketemu dan kunci_otomatis masih null, isi kunci_otomatis = seg
+            if not cat:
+                cat = (
+                    self.db.query(Category)
+                    .filter(filter_cond, Category.name == seg)
+                    .first()
+                )
+                if cat and cat.kunci_otomatis is None:
+                    try:
+                        with self.db.begin_nested():
+                            cat.kunci_otomatis = seg
+                            self.db.add(cat)
+                            self.db.flush()
+                    except IntegrityError:
+                        pass
+
+            # 3. Bila tidak ada sama sekali, buat baru dengan name=seg, kunci_otomatis=seg, auto_created=True
             if not cat:
                 try:
                     with self.db.begin_nested():
                         new_cat = Category(
                             name=seg,
+                            kunci_otomatis=seg,
                             parent_id=curr_parent_id,
                             auto_created=True,
                         )
@@ -117,12 +135,26 @@ class CategoryService:
                         self.db.flush()
                         cat = new_cat
                 except IntegrityError:
-                    # Konflik karena dibuat paralel oleh transaksi lain
+                    # 4. Konflik (race): cari ulang dengan urutan yang sama (kunci_otomatis lalu name)
                     cat = (
                         self.db.query(Category)
-                        .filter(filter_cond, Category.name == seg)
+                        .filter(filter_cond, Category.kunci_otomatis == seg)
                         .first()
                     )
+                    if not cat:
+                        cat = (
+                            self.db.query(Category)
+                            .filter(filter_cond, Category.name == seg)
+                            .first()
+                        )
+                        if cat and cat.kunci_otomatis is None:
+                            try:
+                                with self.db.begin_nested():
+                                    cat.kunci_otomatis = seg
+                                    self.db.add(cat)
+                                    self.db.flush()
+                            except IntegrityError:
+                                pass
 
             if cat:
                 curr_parent_id = cat.id
@@ -224,6 +256,7 @@ class CategoryService:
             return {
                 "id": cat.id,
                 "name": cat.name,
+                "kunci_otomatis": cat.kunci_otomatis,
                 "parent_id": cat.parent_id,
                 "auto_created": cat.auto_created,
                 "document_count": direct_count,
@@ -411,18 +444,38 @@ class CategoryService:
                     detail="Nama kategori tidak boleh kosong.",
                 )
             if clean_name != cat.name:
+                # Sebelum mengubah name: bila kunci_otomatis masih null dan kategori ini dulunya otomatis (auto_created=True)
+                if cat.kunci_otomatis is None and cat.auto_created:
+                    before_state["kunci_otomatis"] = None
+                    after_state["kunci_otomatis"] = cat.name
+                    cat.kunci_otomatis = cat.name
+
                 path_changed = True
                 before_state["name"] = cat.name
                 after_state["name"] = clean_name
                 cat.name = clean_name
 
-        # Cek keunikan nama pada target parent
-        effective_name = clean_name if (name_provided and clean_name) else cat.name
         filter_cond = (
             (Category.parent_id == target_parent)
             if target_parent is not None
             else Category.parent_id.is_(None)
         )
+
+        # Dua kategori di induk yang sama tidak boleh punya kunci yang sama
+        if cat.kunci_otomatis:
+            existing_key_dup = (
+                self.db.query(Category)
+                .filter(filter_cond, Category.kunci_otomatis == cat.kunci_otomatis, Category.id != cat.id)
+                .first()
+            )
+            if existing_key_dup:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Induk tujuan sudah punya kategori otomatis dengan kunci '{cat.kunci_otomatis}'",
+                )
+
+        # Cek keunikan nama pada target parent
+        effective_name = clean_name if (name_provided and clean_name) else cat.name
         existing_dup = (
             self.db.query(Category)
             .filter(filter_cond, Category.name == effective_name, Category.id != cat.id)
@@ -520,6 +573,7 @@ class CategoryService:
             "kategori": {
                 "id": cat.id,
                 "name": cat.name,
+                "kunci_otomatis": cat.kunci_otomatis,
                 "parent_id": cat.parent_id,
                 "auto_created": cat.auto_created,
                 "path": cat_path,
