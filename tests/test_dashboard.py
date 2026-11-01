@@ -5,6 +5,7 @@ Pengujian ringkasan dashboard dan audit log filtering (B01 - B03, A01).
 from datetime import date, datetime, timezone
 import pytest
 from sqlalchemy import event
+from app.config import settings
 
 from app.models.document import Document
 from app.models.category import Category
@@ -158,7 +159,10 @@ def test_a01_audit_log_target_resource_filter(client, db_session):
     db_session.add_all([log1, log2, log3])
     db_session.commit()
 
-    resp = client.get("/api/v1/audit-logs/?target_resource=document:12")
+    resp = client.get(
+        "/api/v1/audit-logs/?target_resource=document:12",
+        headers={"X-Internal-API-Key": settings.internal_api_key},
+    )
     assert resp.status_code == 200
     items = resp.json()
     assert len(items) == 2

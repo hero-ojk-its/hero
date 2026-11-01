@@ -389,9 +389,20 @@ def run_checks(
 
     # S14: GET /api/v1/audit-logs/?action=RUN_ANALYSIS&limit=1
     try:
-        resp = client.get("/api/v1/audit-logs/?action=RUN_ANALYSIS&limit=1")
+        s14_headers = {}
+        internal_key = os.getenv("HERO_INTERNAL_API_KEY") or os.getenv("INTERNAL_API_KEY")
+        if not internal_key:
+            try:
+                from app.config import settings
+                internal_key = getattr(settings, "internal_api_key", None)
+            except Exception:
+                pass
+        if internal_key:
+            s14_headers["X-Internal-API-Key"] = internal_key
+
+        resp = client.get("/api/v1/audit-logs/?action=RUN_ANALYSIS&limit=1", headers=s14_headers)
         if resp.status_code in (401, 403):
-            hasil_list.append(Hasil("S14", "LEWATI", f"token tanpa AUDIT_BACA ({resp.status_code})"))
+            hasil_list.append(Hasil("S14", "LEWATI", f"butuh login / kunci internal ({resp.status_code})"))
         elif resp.status_code == 200:
             data = resp.json()
             if isinstance(data, list):

@@ -567,11 +567,27 @@ def get_document_pdf(
     client_ip = request.client.host if request.client else None
 
     action_type = DOWNLOAD_PDF if download else OPEN_PDF
+    klasifikasi = (
+        doc.access_classification.value
+        if hasattr(doc.access_classification, "value")
+        else str(doc.access_classification)
+    )
+    pdf_detail = {
+        "document_id": doc.id,
+        "judul": doc.title[:200] if doc.title else None,
+        "nama_berkas": fname,
+        "klasifikasi": klasifikasi,
+    }
+    page_param = request.query_params.get("page") or request.query_params.get("halaman")
+    if page_param and page_param.isdigit():
+        pdf_detail["halaman"] = int(page_param)
+
     record_audit(
         db,
         action=action_type,
         user_id=actor_user_id,
         target_resource=f"document:{doc.id}",
+        detail=pdf_detail,
         ip_address=client_ip,
         commit=True,
     )
@@ -1145,6 +1161,13 @@ def update_document_status(
             )
 
     try:
+        before_status = (
+            doc.status_keberlakuan.value
+            if hasattr(doc.status_keberlakuan, "value")
+            else str(doc.status_keberlakuan)
+        )
+        before_source = doc.status_source
+
         # 3. Update status keberlakuan
         doc.status_keberlakuan = payload.status_keberlakuan
         doc.status_source = "manual"
@@ -1176,11 +1199,44 @@ def update_document_status(
 
         actor_user_id = current_user.id if current_user and getattr(current_user, "id", None) else None
         client_ip = request.client.host if request.client else None
+
+        after_status = (
+            payload.status_keberlakuan.value
+            if hasattr(payload.status_keberlakuan, "value")
+            else str(payload.status_keberlakuan)
+        )
+        after_source = "manual"
+
+        status_detail = {
+            "before": {
+                "status_keberlakuan": before_status,
+                "status_source": before_source,
+            },
+            "after": {
+                "status_keberlakuan": after_status,
+                "status_source": after_source,
+            },
+        }
+        if revoking_doc is not None:
+            status_detail["dokumen_pencabut"] = {
+                "id": revoking_doc.id,
+                "label": revoking_doc.regulation_number or revoking_doc.title,
+            }
+        if legal_ref is not None:
+            status_detail["jenis_rujukan"] = (
+                legal_ref.reference_type.value
+                if hasattr(legal_ref.reference_type, "value")
+                else str(legal_ref.reference_type)
+            )
+        if getattr(payload, "alasan", None):
+            status_detail["alasan"] = payload.alasan
+
         record_audit(
             db,
             action=UPDATE_DOCUMENT_STATUS,
             user_id=actor_user_id,
             target_resource=f"document:{doc.id}",
+            detail=status_detail,
             ip_address=client_ip,
             commit=False,
         )
