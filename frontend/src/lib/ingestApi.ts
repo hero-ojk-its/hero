@@ -527,14 +527,16 @@ export async function batchRetryIngestFailures(
 
 /** Hasil PlacementService.place() pada koreksi metadata (routers/documents.py patch_document_metadata) */
 export interface PenempatanDokumen {
-  document_id: number;
+  /** Tidak dikirim pada placement eksplisit metadata_belum_cukup (Langkah 32) */
+  document_id?: number;
   placed: boolean;
-  /** "ditempatkan" | "relokasi" (nilai lain mungkin muncul) */
+  /** "ditempatkan" | "relokasi" | "metadata_belum_cukup" (Langkah 32); nilai lain mungkin muncul */
   reason: string;
   old_path?: string | null;
   new_path?: string | null;
-  category_id: number | null;
-  category_path: string[] | null;
+  category_id?: number | null;
+  /** Bisa [] bila dokumen tanpa kategori */
+  category_path?: string[] | null;
 }
 
 /**
