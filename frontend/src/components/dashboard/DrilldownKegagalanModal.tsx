@@ -10,6 +10,8 @@ export interface DrilldownKegagalanModalProps {
   reasonCode: string;
   /** undefined/null = semua sumber (Total) */
   sourceId?: number | null;
+  /** Unggah manual (?tanpa_sumber=true); diabaikan bila false */
+  tanpaSumber?: boolean;
   /** Nama cakupan untuk judul, mis. "Total" atau nama sumber */
   cakupan: string;
   onClose: () => void;
@@ -31,7 +33,7 @@ function formatTanggal(iso: string | null | undefined): string {
 }
 
 /** Daftar kegagalan read-only untuk satu alasan; pengelolaan tetap di Antrean Kegagalan */
-export default function DrilldownKegagalanModal({ reasonCode, sourceId, cakupan, onClose }: DrilldownKegagalanModalProps) {
+export default function DrilldownKegagalanModal({ reasonCode, sourceId, tanpaSumber = false, cakupan, onClose }: DrilldownKegagalanModalProps) {
   const [keadaan, setKeadaan] = useState<Keadaan>({ status: 'loading' });
   const [putaran, setPutaran] = useState(0);
 
@@ -39,7 +41,7 @@ export default function DrilldownKegagalanModal({ reasonCode, sourceId, cakupan,
     const controller = new AbortController();
     // Ditunda satu tick agar mount ganda StrictMode tidak mengirim request dua kali
     const timer = setTimeout(() => {
-      getKegagalanDrilldown({ reasonCode, sourceId, signal: controller.signal })
+      getKegagalanDrilldown({ reasonCode, sourceId, tanpaSumber, signal: controller.signal })
         .then((hasil) => {
           if (!controller.signal.aborted) setKeadaan({ status: 'sukses', hasil });
         })
@@ -52,7 +54,7 @@ export default function DrilldownKegagalanModal({ reasonCode, sourceId, cakupan,
       clearTimeout(timer);
       controller.abort();
     };
-  }, [reasonCode, sourceId, putaran]);
+  }, [reasonCode, sourceId, tanpaSumber, putaran]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

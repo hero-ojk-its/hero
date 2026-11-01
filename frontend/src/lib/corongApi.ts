@@ -125,9 +125,41 @@ export function normalisasiCorong(raw: unknown): DashboardCorongResponse {
 // Pemanggilan API
 // ============================================================================
 
-export async function getDashboardCorong({ signal }: { signal?: AbortSignal } = {}): Promise<DashboardCorongResponse> {
-  const raw = await apiFetch<unknown>('/api/v1/dashboard/corong', { signal, timeout: CORONG_TIMEOUT_MS });
+/**
+ * segar=true melewati cache backend 60 detik (Langkah 32). Mount pertama sengaja TANPA segar agar cache terpakai;
+ * backend lama mengabaikan parameter ini.
+ */
+export async function getDashboardCorong(
+  { signal, segar = false }: { signal?: AbortSignal; segar?: boolean } = {}
+): Promise<DashboardCorongResponse> {
+  const raw = await apiFetch<unknown>(`/api/v1/dashboard/corong${segar ? '?segar=true' : ''}`, { signal, timeout: CORONG_TIMEOUT_MS });
   return normalisasiCorong(raw);
+}
+
+// ============================================================================
+// Kapabilitas ?tanpa_sumber=true (Langkah 32)
+// ============================================================================
+
+let probeTanpaSumber: Promise<boolean> | null = null;
+
+/**
+ * Backend lama MENGABAIKAN tanpa_sumber diam-diam dan mengembalikan kegagalan semua sumber, jadi
+ * drill-down unggah manual hanya aktif bila dukungannya dipastikan. Probe: tanpa_sumber=true bersama
+ * source_id=-1 -> backend baru 422 (routers/ingest.py list_failures menolak kombinasi itu), backend lama 200
+ * (filter source_id=-1 kosong). Hasil pasti (422/200) di-cache per sesi; galat lain (jaringan, 403, 5xx)
+ * dianggap "belum didukung" dan boleh diprobe ulang pada pemanggilan berikutnya.
+ */
+export function cekDukunganTanpaSumber(): Promise<boolean> {
+  if (!probeTanpaSumber) {
+    probeTanpaSumber = apiFetch<unknown>('/api/v1/ingest/failures?tanpa_sumber=true&source_id=-1&limit=1')
+      .then(() => false)
+      .catch((err: unknown) => {
+        if (err instanceof ApiError && err.status === 422) return true;
+        probeTanpaSumber = null;
+        return false;
+      });
+  }
+  return probeTanpaSumber;
 }
 
 /** Nama cadangan bila server tidak mengirim Content-Disposition: corong-hero-YYYYMMDD.csv (tanggal lokal) */
@@ -158,14 +190,20 @@ export interface HasilDrilldown {
  * menghitung belum_ditangani + diproses_ulang, sedangkan follow_up_status=all ikut memuat "diabaikan".
  */
 export async function getKegagalanDrilldown(
-  { reasonCode, sourceId, signal }: { reasonCode: string; sourceId?: number | null; signal?: AbortSignal }
+  { reasonCode, sourceId, tanpaSumber = false, signal }: {
+    reasonCode: string;
+    sourceId?: number | null;
+    /** Unggah manual; panggil hanya setelah cekDukunganTanpaSumber() bernilai true */
+    tanpaSumber?: boolean;
+    signal?: AbortSignal;
+  }
 ): Promise<HasilDrilldown> {
   const hasil = await Promise.all(
     STATUS_DIHITUNG_CORONG.map((status) =>
       getIngestFailures(
         {
           reason_code: [reasonCode],
-          ...(typeof sourceId === 'number' ? { source_id: sourceId } : {}),
+          ...(tanpaSumber ? { tanpa_sumber: true } : typeof sourceId === 'number' ? { source_id: sourceId } : {}),
           follow_up_status: status,
           limit: BATAS_DRILLDOWN,
         },
@@ -192,12 +230,13 @@ export interface PesanGalatCorong {
   bisaCobaLagi: boolean;
 }
 
-function pesanGalat(err: unknown, pesan403: string): PesanGalatCorong {
+function pesanGalat(err: unknown, pesan403: string, pesan404?: string): PesanGalatCorong {
   if (!(err instanceof ApiError)) {
     return { judul: 'Terjadi kesalahan', pesan: 'Terjadi kesalahan tak terduga.', bisaCobaLagi: false };
   }
   if (err.status === 401) return { judul: 'Sesi berakhir', pesan: 'Sesi berakhir, silakan masuk lagi.', bisaCobaLagi: false };
   if (err.status === 403) return { judul: 'Akses ditolak', pesan: pesan403, bisaCobaLagi: false };
+  if (err.status === 404 && pesan404) return { judul: 'Tidak ditemukan', pesan: pesan404, bisaCobaLagi: false };
   if (err.status === 0) {
     return /batas waktu/i.test(err.message)
       ? { judul: 'Waktu habis', pesan: 'Perhitungan membutuhkan waktu terlalu lama.', bisaCobaLagi: true }
@@ -210,7 +249,8 @@ function pesanGalat(err: unknown, pesan403: string): PesanGalatCorong {
 }
 
 export function pesanGalatCorong(err: unknown): PesanGalatCorong {
-  return pesanGalat(err, 'Peran Anda tidak memiliki izin melihat statistik corong.');
+  // 404 (Langkah 32): source_id tidak ada; kartu tidak mengirim source_id, jadi hanya sebagai jaring pengaman
+  return pesanGalat(err, 'Peran Anda tidak memiliki izin melihat statistik corong.', 'Sumber dokumen untuk statistik corong tidak ditemukan.');
 }
 
 export function pesanGalatDrilldown(err: unknown): PesanGalatCorong {
