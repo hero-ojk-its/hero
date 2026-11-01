@@ -374,6 +374,15 @@ function EditMetadataModalContent({
                     </option>
                   ))}
                 </select>
+                {/* Asal kategori saat ini (Langkah 32); tidak ditampilkan bila backend tidak mengirim kategori_manual
+                    atau bila pilihan sudah diubah di form */}
+                {typeof document.kategori_manual === 'boolean' &&
+                  document.category_id != null &&
+                  categoryId === document.category_id && (
+                    <p className="text-[11px] text-gray-500 mt-1" data-asal-kategori>
+                      {document.kategori_manual ? 'Kategori ditentukan manual' : 'Kategori ditentukan otomatis'}
+                    </p>
+                  )}
                 {categoryId === null && (
                   <p id="penjelasan-kategori-otomatis" className="text-[11px] text-gray-500 mt-1 leading-snug">
                     Sistem akan menentukan kategori dari metadata dokumen (jenis &amp; tahun). Bila metadata belum lengkap,
@@ -609,6 +618,9 @@ function EditStatusModalContent({
                   );
                 })}
               </div>
+              <p className="mt-2 text-[11px] text-gray-500" data-catatan-status-manual>
+                Status yang diubah manual tidak berubah otomatis saat tanggal berlaku tiba.
+              </p>
             </div>
 
             {/* Field Dokumen Pencabut / Pengubah (TC-20 / G08) */}
