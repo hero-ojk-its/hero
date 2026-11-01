@@ -390,13 +390,7 @@ def run_checks(
     # S14: GET /api/v1/audit-logs/?action=RUN_ANALYSIS&limit=1
     try:
         s14_headers = {}
-        internal_key = os.getenv("HERO_INTERNAL_API_KEY") or os.getenv("INTERNAL_API_KEY")
-        if not internal_key:
-            try:
-                from app.config import settings
-                internal_key = getattr(settings, "internal_api_key", None)
-            except Exception:
-                pass
+        internal_key = os.getenv("HERO_INTERNAL_API_KEY")
         if internal_key:
             s14_headers["X-Internal-API-Key"] = internal_key
 

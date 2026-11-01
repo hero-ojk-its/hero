@@ -718,3 +718,120 @@ def test_p18_skrip_buka_kunci_login(db_session: Session):
     db_session.refresh(rec_ip)
     assert rec_ip.jumlah_gagal == 0
     assert rec_ip.terkunci_sampai is None
+
+
+# ============================================================================
+# P19: Dua pemanggilan _catat_kegagalan_login di session terpisah aman dari IntegrityError
+# ============================================================================
+def test_p19_catat_kegagalan_login_konkurensi_insert_aman(db_session: Session):
+    from sqlalchemy.orm import sessionmaker
+    from app.routers.auth import _catat_kegagalan_login
+
+    kunci = "u:konkurensi_test_p19"
+    now = datetime.now(timezone.utc)
+
+    db_session.query(PercobaanLogin).filter(PercobaanLogin.kunci == kunci).delete()
+    db_session.commit()
+
+    # Session 1 memanggil _catat_kegagalan_login pertama kali
+    gagal1, terkunci1 = _catat_kegagalan_login(
+        db_session, kunci, now, maks_gagal=5, jendela_menit=15, kunci_menit=15
+    )
+    db_session.commit()
+    assert gagal1 == 1
+    assert terkunci1 is False
+
+    # Session 2 terpisah memanggil _catat_kegagalan_login untuk kunci yang sama
+    SessionMaker = sessionmaker(bind=db_session.get_bind())
+    session2 = SessionMaker()
+    try:
+        gagal2, terkunci2 = _catat_kegagalan_login(
+            session2, kunci, now, maks_gagal=5, jendela_menit=15, kunci_menit=15
+        )
+        session2.commit()
+        assert gagal2 == 2
+        assert terkunci2 is False
+    finally:
+        session2.close()
+
+    # Verifikasi akhir di basis data: tidak ada IntegrityError dan jumlah_gagal = 2
+    rec = db_session.query(PercobaanLogin).filter(PercobaanLogin.kunci == kunci).first()
+    assert rec is not None
+    assert rec.jumlah_gagal == 2
+
+
+# ============================================================================
+# P20: Login username tidak ada memanggil bcrypt.checkpw (spy) tepat sekali
+# ============================================================================
+def test_p20_login_username_tidak_ada_memanggil_bcrypt_checkpw_sekali(client: TestClient, monkeypatch):
+    monkeypatch.setattr(settings, "auth_enabled", True)
+    call_count = 0
+    orig_checkpw = bcrypt.checkpw
+
+    def spy_checkpw(password, hashed_password):
+        nonlocal call_count
+        call_count += 1
+        return orig_checkpw(password, hashed_password)
+
+    monkeypatch.setattr(bcrypt, "checkpw", spy_checkpw)
+
+    res = client.post(
+        "/api/v1/auth/login",
+        data={"username": "user_pasti_tidak_eksis_xyz_p20", "password": "RandomPassword123!"},
+    )
+    assert res.status_code == 401
+    assert call_count == 1
+
+
+# ============================================================================
+# P21: Smoke S14 tanpa HERO_INTERNAL_API_KEY tidak mengirim header X-Internal-API-Key
+# ============================================================================
+def test_p21_smoke_s14_tanpa_hero_internal_api_key_tidak_mengirim_header(monkeypatch):
+    from scripts.smoke_fase2 import run_checks
+
+    # INTERNAL_API_KEY di-set di environment, tetapi HERO_INTERNAL_API_KEY dikosongkan
+    monkeypatch.setenv("INTERNAL_API_KEY", "kunci_internal_bukan_hero")
+    monkeypatch.delenv("HERO_INTERNAL_API_KEY", raising=False)
+
+    captured_headers = []
+
+    class MockResponse:
+        status_code = 403
+
+        def json(self):
+            return {}
+
+    class MockClient:
+        def get(self, url, **kwargs):
+            if "/audit-logs" in url:
+                captured_headers.append(kwargs.get("headers", {}))
+            return MockResponse()
+
+    client = MockClient()
+    run_checks(client, doc_id=None)
+
+    assert len(captured_headers) >= 1
+    assert "X-Internal-API-Key" not in captured_headers[0]
+
+
+# ============================================================================
+# P22: Buka kunci --apply mencetak gagal=<nilai lama>
+# ============================================================================
+def test_p22_buka_kunci_apply_mencetak_nilai_gagal_lama(capsys, db_session: Session):
+    now = datetime.now(timezone.utc)
+    kunci = "u:test_user_p22"
+    rec = PercobaanLogin(
+        kunci=kunci,
+        jumlah_gagal=4,
+        jendela_mulai=now,
+        terkunci_sampai=now + timedelta(minutes=15),
+        diperbarui=now,
+    )
+    db_session.merge(rec)
+    db_session.commit()
+
+    buka_kunci(username="test_user_p22", apply=True, db=db_session)
+    captured = capsys.readouterr().out
+    assert "[APPLY]" in captured
+    assert "gagal=4" in captured
+    assert "gagal=0" not in captured

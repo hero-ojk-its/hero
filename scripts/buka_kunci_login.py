@@ -51,6 +51,7 @@ def buka_kunci(
             return
 
         for rec in records:
+            gagal_lama = rec.jumlah_gagal
             terkunci_str = (
                 rec.terkunci_sampai.isoformat()
                 if rec.terkunci_sampai
@@ -60,9 +61,9 @@ def buka_kunci(
                 rec.jumlah_gagal = 0
                 rec.terkunci_sampai = None
                 db.add(rec)
-                print(f"[APPLY] Kunci '{rec.kunci}' berhasil dibuka (sebelumnya gagal={rec.jumlah_gagal}, status={terkunci_str}).")
+                print(f"[APPLY] Kunci '{rec.kunci}' berhasil dibuka (sebelumnya gagal={gagal_lama}, status={terkunci_str}).")
             else:
-                print(f"[DRY-RUN] Kunci '{rec.kunci}' ditemukan (gagal={rec.jumlah_gagal}, terkunci_sampai={terkunci_str}). Gunakan --apply untuk membuka kunci.")
+                print(f"[DRY-RUN] Kunci '{rec.kunci}' ditemukan (gagal={gagal_lama}, terkunci_sampai={terkunci_str}). Gunakan --apply untuk membuka kunci.")
 
         if apply:
             db.commit()

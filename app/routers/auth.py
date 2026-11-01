@@ -5,6 +5,7 @@ import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 import jwt
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -23,6 +24,9 @@ router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 ALGORITHM = "HS256"
 
+# Hash dummy dibuat sekali di level modul untuk perlindungan timing attack
+DUMMY_BCRYPT_HASH: bytes = bcrypt.hashpw(b"dummy-hero", bcrypt.gensalt())
+
 
 def _catat_kegagalan_login(
     db: Session,
@@ -35,8 +39,15 @@ def _catat_kegagalan_login(
     """
     Mencatat satu kegagalan login untuk suatu kunci pelacak.
     Mengembalikan (jumlah_gagal_terbaru, baru_terkunci_boolean).
-    Race-safe: menggunakan with_for_update() pada baris kunci.
+    Race-safe: ON CONFLICT DO NOTHING lalu SELECT with_for_update().
     """
+    stmt = (
+        pg_insert(PercobaanLogin)
+        .values(kunci=kunci, jumlah_gagal=0, jendela_mulai=now, diperbarui=now)
+        .on_conflict_do_nothing(index_elements=["kunci"])
+    )
+    db.execute(stmt)
+
     rec = (
         db.query(PercobaanLogin)
         .filter(PercobaanLogin.kunci == kunci)
@@ -44,24 +55,14 @@ def _catat_kegagalan_login(
         .first()
     )
     baru_terkunci = False
-    if not rec:
-        rec = PercobaanLogin(
-            kunci=kunci,
-            jumlah_gagal=1,
-            jendela_mulai=now,
-            terkunci_sampai=None,
-            diperbarui=now,
-        )
-        db.add(rec)
-        db.flush()
+
+    if (now - rec.jendela_mulai) > timedelta(minutes=jendela_menit):
+        rec.jumlah_gagal = 1
+        rec.jendela_mulai = now
+        rec.terkunci_sampai = None
     else:
-        if (now - rec.jendela_mulai) > timedelta(minutes=jendela_menit):
-            rec.jumlah_gagal = 1
-            rec.jendela_mulai = now
-            rec.terkunci_sampai = None
-        else:
-            rec.jumlah_gagal += 1
-        rec.diperbarui = now
+        rec.jumlah_gagal += 1
+    rec.diperbarui = now
 
     if rec.jumlah_gagal >= maks_gagal and (rec.terkunci_sampai is None or rec.terkunci_sampai <= now):
         rec.terkunci_sampai = now + timedelta(minutes=kunci_menit)
@@ -209,13 +210,19 @@ def login(
 
     # Verifikasi password menggunakan bcrypt murni
     password_valid = False
+    plain_bytes = form_data.password[:72].encode("utf-8") if form_data.password else b""
+
     if user and user.hashed_password:
         try:
-            plain_bytes = form_data.password[:72].encode('utf-8')
-            hashed_bytes = user.hashed_password.encode('utf-8')
+            hashed_bytes = user.hashed_password.encode("utf-8")
             password_valid = bcrypt.checkpw(plain_bytes, hashed_bytes)
         except Exception:
             password_valid = False
+    else:
+        try:
+            bcrypt.checkpw(plain_bytes, DUMMY_BCRYPT_HASH)
+        except Exception:
+            pass
 
     if not user or not password_valid:
         gagal_user, kunci_user = _catat_kegagalan_login(
