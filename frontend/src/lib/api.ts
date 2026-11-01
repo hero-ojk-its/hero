@@ -10,13 +10,21 @@ export interface ValidationErrorItem {
   type?: string;
 }
 
+/** Pesan 403 akses_ditolak; tanpa kode izin mentah (mis. METADATA_KOREKSI) */
+export const PESAN_AKSES_DITOLAK = 'Peran Anda tidak memiliki izin untuk aksi ini.';
+
 export class ApiError extends Error {
   status: number;
   detail: string | ValidationErrorItem[] | unknown;
 
   constructor(status: number, detail: string | ValidationErrorItem[] | unknown) {
     let formattedMessage = `API Error ${status}`;
-    if (typeof detail === 'string') {
+    const kode = detail && typeof detail === 'object' && !Array.isArray(detail) ? (detail as Record<string, unknown>).code : undefined;
+    if (status === 403 && kode === 'akses_ditolak') {
+      // Langkah 32 menambah detail.message "Akun Anda tidak memiliki izin <IZIN> ...", yang memuat kode izin.
+      // Hanya err.message yang diganti; err.detail tetap utuh untuk pemeta galat yang membacanya.
+      formattedMessage = PESAN_AKSES_DITOLAK;
+    } else if (typeof detail === 'string') {
       formattedMessage = detail;
     } else if (Array.isArray(detail)) {
       // Menangani format error validasi FastAPI (HTTP 422)

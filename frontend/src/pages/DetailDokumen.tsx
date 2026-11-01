@@ -49,16 +49,28 @@ interface HasilPenempatan {
   teks: string;
 }
 
-/** Ringkasan penempatan setelah koreksi metadata; null bila tidak relevan (mis. hanya judul berubah) */
+/**
+ * Ringkasan penempatan setelah koreksi metadata; null bila tidak relevan (mis. hanya judul berubah).
+ * - placed true: "Ditempatkan di …" / "Dipindah ke …"
+ * - placed false (Langkah 32: metadata_belum_cukup eksplisit, juga saat dokumen tetap berkategori):
+ *   tanpa kategori -> "belum berkategori"; tetap berkategori & berkas belum di folder KB -> info netral;
+ *   selain itu tidak ada pesan
+ * - placement null (backend lama): "belum berkategori" bila field penempatan berubah & dokumen tanpa kategori
+ */
 function ringkasPenempatan(res: UpdateMetadataResponse): HasilPenempatan | null {
   const p = res.placement;
+  const tanpaKategori = res.category_id == null;
   if (p) {
-    const jalur = Array.isArray(p.category_path) && p.category_path.length > 0 ? jalurTeks(p.category_path) : null;
-    return { jenis: p.placed ? 'sukses' : 'info', teks: labelPenempatanDokumen(p.reason, jalur) };
+    if (p.placed) {
+      const jalur = Array.isArray(p.category_path) && p.category_path.length > 0 ? jalurTeks(p.category_path) : null;
+      return { jenis: 'sukses', teks: labelPenempatanDokumen(p.reason, jalur) };
+    }
+    if (tanpaKategori) return { jenis: 'info', teks: KETERANGAN_BELUM_BERKATEGORI };
+    if (res.is_placed !== true) return { jenis: 'info', teks: labelPenempatanDokumen(p.reason, null) };
+    return null;
   }
-  // placement null: metadata belum cukup; hanya diberi tahu bila dokumen tetap tanpa kategori
   const fieldPenempatanBerubah = (res.changed_fields ?? []).some((f) => FIELD_PENEMPATAN_DOKUMEN.includes(f));
-  if (fieldPenempatanBerubah && res.category_id == null) return { jenis: 'info', teks: KETERANGAN_BELUM_BERKATEGORI };
+  if (fieldPenempatanBerubah && tanpaKategori) return { jenis: 'info', teks: KETERANGAN_BELUM_BERKATEGORI };
   return null;
 }
 import type { 
