@@ -86,6 +86,7 @@ def get_category_detail(
     return CategoryDetailResponse(
         id=cat.id,
         name=cat.name,
+        kunci_otomatis=cat.kunci_otomatis,
         parent_id=cat.parent_id,
         auto_created=cat.auto_created,
         path=cat_path,
@@ -123,6 +124,7 @@ def create_category(
     return CategoryDetailResponse(
         id=cat.id,
         name=cat.name,
+        kunci_otomatis=cat.kunci_otomatis,
         parent_id=cat.parent_id,
         auto_created=cat.auto_created,
         path=cat_path,

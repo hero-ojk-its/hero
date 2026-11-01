@@ -11,6 +11,7 @@ class CategoryTreeNode(BaseModel):
     model_config = ConfigDict(extra="allow")
     id: int
     name: str
+    kunci_otomatis: Optional[str] = None
     parent_id: Optional[int] = None
     auto_created: bool = False
     document_count: int = 0
@@ -25,6 +26,7 @@ class CategoryDetailResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="allow")
     id: int
     name: str
+    kunci_otomatis: Optional[str] = None
     parent_id: Optional[int] = None
     auto_created: bool = False
     path: List[str] = []
@@ -41,4 +43,3 @@ class CategoryUpdateResponse(BaseModel):
     kategori: CategoryDetailResponse
     dokumen_dipindah: int = 0
     dokumen_gagal: List[Dict[str, Any]] = []
-
