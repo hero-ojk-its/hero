@@ -1048,9 +1048,9 @@ export interface paths {
         };
         /**
          * Statistik corong per sumber (scan -> unduh -> simpan -> terbaca)
-         * @description [Langkah 27] Endpoint statistik corong per sumber: scan -> unduh -> simpan -> terbaca,
+         * @description [Langkah 27 / Langkah 32] Endpoint statistik corong per sumber: scan -> unduh -> simpan -> terbaca,
          *     dengan penanda PDF terproteksi, OCR vs teks langsung, dan drill-down kegagalan.
-         *     Mendukung format JSON dan CSV (UTF-8 with BOM).
+         *     Mendukung format JSON (dengan cache 60 detik) dan CSV (UTF-8 with BOM).
          */
         get: operations["get_dashboard_corong_api_v1_dashboard_corong_get"];
         put?: never;
@@ -1951,16 +1951,82 @@ export interface components {
             name: string;
             /** Parent Id */
             parent_id?: number | null;
-            /** Auto Created */
+            /**
+             * Auto Created
+             * @default false
+             */
             auto_created: boolean;
-            /** Path */
+            /**
+             * Path
+             * @default []
+             */
             path: string[];
-            /** Document Count */
+            /**
+             * Document Count
+             * @default 0
+             */
             document_count: number;
-            /** Jumlah Dokumen */
+            /**
+             * Jumlah Dokumen
+             * @default 0
+             */
             jumlah_dokumen: number;
+            /**
+             * Jumlah Dokumen Nonaktif
+             * @default 0
+             */
+            jumlah_dokumen_nonaktif: number;
             /** Classification Rule */
             classification_rule?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** CategoryTreeNode */
+        CategoryTreeNode: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Parent Id */
+            parent_id?: number | null;
+            /**
+             * Auto Created
+             * @default false
+             */
+            auto_created: boolean;
+            /**
+             * Document Count
+             * @default 0
+             */
+            document_count: number;
+            /**
+             * Total Document Count
+             * @default 0
+             */
+            total_document_count: number;
+            /**
+             * Jumlah Dokumen
+             * @default 0
+             */
+            jumlah_dokumen: number;
+            /**
+             * Jumlah Dokumen Nonaktif
+             * @default 0
+             */
+            jumlah_dokumen_nonaktif: number;
+            /** Classification Rule */
+            classification_rule?: string | null;
+            /**
+             * Children
+             * @default []
+             */
+            children: components["schemas"]["CategoryTreeNode"][];
+        } & {
+            [key: string]: unknown;
         };
         /** CategoryUpdateRequest */
         CategoryUpdateRequest: {
@@ -1970,6 +2036,228 @@ export interface components {
             parent_id?: number | null;
             /** Classification Rule */
             classification_rule?: string | null;
+        };
+        /** CategoryUpdateResponse */
+        CategoryUpdateResponse: {
+            kategori: components["schemas"]["CategoryDetailResponse"];
+            /**
+             * Dokumen Dipindah
+             * @default 0
+             */
+            dokumen_dipindah: number;
+            /**
+             * Dokumen Gagal
+             * @default []
+             */
+            dokumen_gagal: {
+                [key: string]: unknown;
+            }[];
+        } & {
+            [key: string]: unknown;
+        };
+        /** CorongDokumenMetrics */
+        CorongDokumenMetrics: {
+            /**
+             * Di Kb
+             * @default 0
+             */
+            di_kb: number;
+            /**
+             * Tersimpan Di Kb
+             * @default 0
+             */
+            tersimpan_di_kb: number;
+            /**
+             * Menunggu Ekstraksi
+             * @default 0
+             */
+            menunggu_ekstraksi: number;
+            /**
+             * Terbaca
+             * @default 0
+             */
+            terbaca: number;
+            /**
+             * Terbaca Teks Langsung
+             * @default 0
+             */
+            terbaca_teks_langsung: number;
+            /**
+             * Terbaca Ocr
+             * @default 0
+             */
+            terbaca_ocr: number;
+            /**
+             * Perlu Koreksi
+             * @default 0
+             */
+            perlu_koreksi: number;
+            /**
+             * Gagal Baca
+             * @default 0
+             */
+            gagal_baca: number;
+            /**
+             * Lainnya
+             * @default 0
+             */
+            lainnya: number;
+            /**
+             * Terpecah Pasal
+             * @default 0
+             */
+            terpecah_pasal: number;
+            /**
+             * Tervektor
+             * @default 0
+             */
+            tervektor: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** CorongPdfMetrics */
+        CorongPdfMetrics: {
+            /**
+             * Terproteksi
+             * @default 0
+             */
+            terproteksi: number;
+            /**
+             * Terproteksi Terbaca
+             * @default 0
+             */
+            terproteksi_terbaca: number;
+            /**
+             * Hasil Pindai Ocr
+             * @default 0
+             */
+            hasil_pindai_ocr: number;
+            /**
+             * Ocr Gagal
+             * @default 0
+             */
+            ocr_gagal: number;
+            /**
+             * Belum Diperiksa
+             * @default 0
+             */
+            belum_diperiksa: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** CorongResponse */
+        CorongResponse: {
+            /** Dihitung Pada */
+            dihitung_pada: string;
+            /**
+             * Sumber
+             * @default []
+             */
+            sumber: components["schemas"]["CorongSumberItem"][];
+            unggah_manual: components["schemas"]["CorongUnggahManualItem"];
+            total: components["schemas"]["CorongTotalMetrics"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** CorongScanMetrics */
+        CorongScanMetrics: {
+            /**
+             * Ditemukan
+             * @default 0
+             */
+            ditemukan: number;
+            /**
+             * Sudah Ada Di Kb
+             * @default 0
+             */
+            sudah_ada_di_kb: number;
+            /**
+             * Ditarik
+             * @default 0
+             */
+            ditarik: number;
+            /**
+             * Duplikat
+             * @default 0
+             */
+            duplikat: number;
+            /**
+             * Gagal Unduh
+             * @default 0
+             */
+            gagal_unduh: number;
+            /**
+             * Belum Ditarik
+             * @default 0
+             */
+            belum_ditarik: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** CorongSumberItem */
+        CorongSumberItem: {
+            /** Source Id */
+            source_id: number;
+            /** Nama */
+            nama: string;
+            /** Jenis */
+            jenis: string;
+            scan: components["schemas"]["CorongScanMetrics"];
+            dokumen: components["schemas"]["CorongDokumenMetrics"];
+            pdf: components["schemas"]["CorongPdfMetrics"];
+            /**
+             * Gagal Per Alasan
+             * @default {}
+             */
+            gagal_per_alasan: {
+                [key: string]: number;
+            };
+            /**
+             * Persen Terbaca
+             * @default 0
+             */
+            persen_terbaca: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** CorongTotalMetrics */
+        CorongTotalMetrics: {
+            scan: components["schemas"]["CorongScanMetrics"];
+            dokumen: components["schemas"]["CorongDokumenMetrics"];
+            pdf: components["schemas"]["CorongPdfMetrics"];
+            /**
+             * Gagal Per Alasan
+             * @default {}
+             */
+            gagal_per_alasan: {
+                [key: string]: number;
+            };
+            /**
+             * Persen Terbaca
+             * @default 0
+             */
+            persen_terbaca: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** CorongUnggahManualItem */
+        CorongUnggahManualItem: {
+            dokumen: components["schemas"]["CorongDokumenMetrics"];
+            pdf: components["schemas"]["CorongPdfMetrics"];
+            /**
+             * Gagal Per Alasan
+             * @default {}
+             */
+            gagal_per_alasan: {
+                [key: string]: number;
+            };
+            /**
+             * Persen Terbaca
+             * @default 0
+             */
+            persen_terbaca: number;
+        } & {
+            [key: string]: unknown;
         };
         /** DocumentAnalysisComparisonResponse */
         DocumentAnalysisComparisonResponse: {
@@ -1988,6 +2276,137 @@ export interface components {
             identity_key?: string | null;
             /** Page Count */
             page_count?: number | null;
+        };
+        /** DocumentMetadataPatchResponse */
+        DocumentMetadataPatchResponse: {
+            /** Id */
+            id: number;
+            /** Title */
+            title?: string | null;
+            /** Regulation Number */
+            regulation_number?: string | null;
+            /** Regulation Type */
+            regulation_type?: string | null;
+            /** Release Date */
+            release_date?: string | null;
+            /** Effective Date */
+            effective_date?: string | null;
+            /** Regulation Year */
+            regulation_year?: number | null;
+            /** Bidang */
+            bidang?: string | null;
+            /** Naming Format */
+            naming_format?: unknown | null;
+            /** Naming Separator */
+            naming_separator?: string | null;
+            /** Source Url */
+            source_url?: string | null;
+            /** Original Filename */
+            original_filename?: string | null;
+            /** File Path Pdf */
+            file_path_pdf?: string | null;
+            /** Standardized Filename */
+            standardized_filename?: string | null;
+            /** Access Classification */
+            access_classification?: string | null;
+            /** Document Role */
+            document_role?: string | null;
+            /** Status Keberlakuan */
+            status_keberlakuan?: string | null;
+            /** Status Source */
+            status_source?: string | null;
+            /**
+             * Is Attachment
+             * @default false
+             */
+            is_attachment: boolean;
+            /** Parent Document Id */
+            parent_document_id?: number | null;
+            /** Parent Identity Key */
+            parent_identity_key?: string | null;
+            /** Attachment Label */
+            attachment_label?: string | null;
+            /** Lampiran */
+            lampiran?: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Induk */
+            induk?: {
+                [key: string]: unknown;
+            } | null;
+            /** Processing Status */
+            processing_status?: string | null;
+            /** Extraction Method */
+            extraction_method?: string | null;
+            /** Extraction Engine */
+            extraction_engine?: string | null;
+            /** Category Id */
+            category_id?: number | null;
+            /** Category Path */
+            category_path?: string[] | null;
+            /**
+             * Is Placed
+             * @default false
+             */
+            is_placed: boolean;
+            /**
+             * Kategori Manual
+             * @default false
+             */
+            kategori_manual: boolean;
+            /** Job Id */
+            job_id?: number | null;
+            /** Pdf Url */
+            pdf_url?: string | null;
+            /** Text Url */
+            text_url?: string | null;
+            /**
+             * Full Text Length
+             * @default 0
+             */
+            full_text_length: number;
+            /** Extraction Confidence */
+            extraction_confidence?: unknown | null;
+            /** Low Confidence Fields */
+            low_confidence_fields?: string[] | null;
+            /** Metadata Corrected At */
+            metadata_corrected_at?: string | null;
+            /** Extracted At */
+            extracted_at?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Deactivated At */
+            deactivated_at?: string | null;
+            /** Deactivated Reason */
+            deactivated_reason?: string | null;
+            /** Identity Key */
+            identity_key?: string | null;
+            /** Page Count */
+            page_count?: number | null;
+            /** Duplicate Of Id */
+            duplicate_of_id?: number | null;
+            /**
+             * Changed Fields
+             * @default []
+             */
+            changed_fields: string[];
+            /** Placement */
+            placement?: {
+                [key: string]: unknown;
+            } | null;
+            /** Duplikat */
+            duplikat?: {
+                [key: string]: unknown;
+            } | null;
+        } & {
+            [key: string]: unknown;
         };
         /** DocumentVersionResponse */
         DocumentVersionResponse: {
@@ -2238,6 +2657,117 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HarmonisasiBadge */
+        HarmonisasiBadge: {
+            /** Tone */
+            tone?: string | null;
+            /** Label */
+            label?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** HarmonisasiCache */
+        HarmonisasiCache: {
+            /**
+             * Hit
+             * @default false
+             */
+            hit: boolean;
+            /** Dibuat */
+            dibuat?: string | null;
+            /**
+             * Basi
+             * @default false
+             */
+            basi: boolean;
+            /** Mode Tersimpan */
+            mode_tersimpan?: string | null;
+            /** Run Id */
+            run_id?: number | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** HarmonisasiPembanding */
+        HarmonisasiPembanding: {
+            /** Document Id */
+            document_id?: number | null;
+            /** Key */
+            key?: string | null;
+            /** Nomor */
+            nomor?: string | null;
+            /** Status */
+            status?: string | null;
+            /** Judul */
+            judul?: string | null;
+            /** Pdf */
+            pdf?: string | null;
+            /** Tautan */
+            tautan?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** HarmonisasiResponse */
+        HarmonisasiResponse: {
+            /** Draft */
+            draft?: {
+                [key: string]: unknown;
+            } | null;
+            ringkasan?: components["schemas"]["HarmonisasiRingkasan"] | null;
+            /**
+             * Temuan
+             * @default []
+             */
+            temuan: components["schemas"]["HarmonisasiTemuan"][];
+            /**
+             * Disaring Backend
+             * @default 0
+             */
+            disaring_backend: number | null;
+            /** Disaring Rincian */
+            disaring_rincian?: {
+                [key: string]: number;
+            } | null;
+            cache?: components["schemas"]["HarmonisasiCache"] | null;
+            /** Versi */
+            versi?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** HarmonisasiRingkasan */
+        HarmonisasiRingkasan: {
+            /**
+             * Total Temuan
+             * @default 0
+             */
+            total_temuan: number | null;
+            /** Per Jenis */
+            per_jenis?: {
+                [key: string]: number;
+            } | null;
+            /** Rencana Perubahan */
+            rencana_perubahan?: unknown | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** HarmonisasiTemuan */
+        HarmonisasiTemuan: {
+            /** Id */
+            id?: unknown | null;
+            /** Jenis */
+            jenis?: string | null;
+            /** Judul */
+            judul?: string | null;
+            /** Deskripsi */
+            deskripsi?: string | null;
+            /** Pasal Draft */
+            pasal_draft?: unknown | null;
+            /** Pasal Pembanding */
+            pasal_pembanding?: unknown | null;
+            badge?: components["schemas"]["HarmonisasiBadge"] | null;
+            pembanding?: components["schemas"]["HarmonisasiPembanding"] | null;
+        } & {
+            [key: string]: unknown;
         };
         /** IngestItemDetailResponse */
         IngestItemDetailResponse: {
@@ -3550,7 +4080,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CategoryDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3579,7 +4109,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CategoryTreeNode"][];
                 };
             };
         };
@@ -3665,7 +4195,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CategoryUpdateResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3787,6 +4317,8 @@ export interface operations {
                 reason_code?: string[] | null;
                 /** @description Filter berdasarkan sumber scraping */
                 source_id?: number | null;
+                /** @description Filter hanya kegagalan tanpa sumber (unggah manual) */
+                tanpa_sumber?: boolean;
                 /** @description belum_ditangani | diproses_ulang | diabaikan | all */
                 follow_up_status?: string | null;
                 /** @description Tampilkan juga duplikat (default: false) */
@@ -4365,7 +4897,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DocumentMetadataPatchResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5429,6 +5961,8 @@ export interface operations {
                 source_id?: number | null;
                 /** @description Format output: json | csv */
                 format?: string;
+                /** @description Paksa hitung ulang tanpa cache */
+                segar?: boolean;
             };
             header?: never;
             path?: never;
@@ -5436,13 +5970,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description Statistik corong per sumber (JSON) atau berkas CSV ber-BOM */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CorongResponse"];
+                    "text/csv": string;
                 };
             };
             /** @description Validation Error */
@@ -5993,7 +6528,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["HarmonisasiResponse"];
                 };
             };
             /** @description Validation Error */
