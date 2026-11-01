@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight, Download, Filter, Info, Loader2, RefreshCw } from 'lucide-react';
 import {
+  cekDukunganTanpaSumber,
   formatDihitungPada,
   getDashboardCorong,
   persenTerhadap,
@@ -15,6 +16,8 @@ import DrilldownKegagalanModal from './DrilldownKegagalanModal';
 interface Drilldown {
   reasonCode: string;
   sourceId: number | null;
+  /** Unggah manual: ?tanpa_sumber=true (hanya bila backend mendukung) */
+  tanpaSumber: boolean;
   cakupan: string;
 }
 
@@ -113,7 +116,8 @@ export default function CorongIngestCard() {
     // Ditunda satu tick: pada mount-unmount-mount StrictMode, cleanup membatalkan timer
     // sebelum request terkirim sehingga tidak ada fetch ganda.
     const timer = setTimeout(() => {
-      getDashboardCorong({ signal: controller.signal })
+      // Mount pertama memakai cache backend (60 detik); "Muat ulang" / "Coba lagi" meminta data segar
+      getDashboardCorong({ signal: controller.signal, segar: putaran > 0 })
         .then((data) => {
           if (!controller.signal.aborted) setKeadaan({ status: 'sukses', data });
         })
@@ -135,6 +139,21 @@ export default function CorongIngestCard() {
 
   const [drilldown, setDrilldown] = useState<Drilldown | null>(null);
   const tutupDrilldown = useCallback(() => setDrilldown(null), []);
+
+  // null = belum diketahui; probe hanya saat tampilan "Unggah manual" punya kegagalan (hasil di-cache per sesi)
+  const [dukungTanpaSumber, setDukungTanpaSumber] = useState<boolean | null>(null);
+  const perluProbe =
+    keadaan.status === 'sukses' && pilihan === 'manual' && Object.keys(keadaan.data.unggah_manual.gagal_per_alasan).length > 0;
+  useEffect(() => {
+    if (!perluProbe) return;
+    let aktif = true;
+    void cekDukunganTanpaSumber().then((ya) => {
+      if (aktif) setDukungTanpaSumber(ya);
+    });
+    return () => {
+      aktif = false;
+    };
+  }, [perluProbe]);
 
   const [mengunduhCsv, setMengunduhCsv] = useState(false);
   const [galatCsv, setGalatCsv] = useState<PesanGalatCorong | null>(null);
@@ -180,6 +199,11 @@ export default function CorongIngestCard() {
             Dari pemindaian sumber sampai dokumen terbaca, terpecah pasal, dan tervektor
             {dihitung ? <> · Dihitung pada {dihitung}</> : null}
           </p>
+          {data && (
+            <p className="text-[10px] text-gray-400 mt-0.5" data-catatan-cache>
+              Data di-cache hingga 60 detik; "Muat ulang" menghitung ulang.
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {data && (
@@ -261,8 +285,14 @@ export default function CorongIngestCard() {
         <ResumeCorong
           terpilih={terpilih}
           jumlahSumber={data?.sumber.length ?? 0}
+          dukungTanpaSumber={dukungTanpaSumber === true}
           onPilihAlasan={(reasonCode) =>
-            setDrilldown({ reasonCode, sourceId: terpilih.sourceId, cakupan: terpilih.judul })
+            setDrilldown({
+              reasonCode,
+              sourceId: terpilih.sourceId,
+              tanpaSumber: terpilih.jenis === 'manual',
+              cakupan: terpilih.judul,
+            })
           }
         />
       ))}
@@ -271,6 +301,7 @@ export default function CorongIngestCard() {
         <DrilldownKegagalanModal
           reasonCode={drilldown.reasonCode}
           sourceId={drilldown.sourceId}
+          tanpaSumber={drilldown.tanpaSumber}
           cakupan={drilldown.cakupan}
           onClose={tutupDrilldown}
         />
@@ -282,12 +313,14 @@ export default function CorongIngestCard() {
 interface ResumeCorongProps {
   terpilih: BlokTerpilih;
   jumlahSumber: number;
+  /** Backend terbukti mendukung ?tanpa_sumber=true (probe 422) */
+  dukungTanpaSumber: boolean;
   onPilihAlasan: (reasonCode: string) => void;
 }
 
-function ResumeCorong({ terpilih, jumlahSumber, onPilihAlasan }: ResumeCorongProps) {
-  // /ingest/failures belum bisa memfilter "unggah manual" (tanpa sumber), jadi tidak bisa ditelusuri
-  const bisaDitelusuri = terpilih.jenis !== 'manual';
+function ResumeCorong({ terpilih, jumlahSumber, dukungTanpaSumber, onPilihAlasan }: ResumeCorongProps) {
+  // Unggah manual hanya bisa ditelusuri bila backend mendukung tanpa_sumber (backend lama mengabaikannya)
+  const bisaDitelusuri = terpilih.jenis !== 'manual' || dukungTanpaSumber;
   const { blok, scan } = terpilih;
   const d = blok.dokumen;
   const pTerbaca = persenTerhadap(d.terbaca, d.di_kb);

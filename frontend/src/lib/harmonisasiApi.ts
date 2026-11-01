@@ -12,7 +12,7 @@
 import { apiJson, ApiError, buildQueryString } from './api';
 import { ANALISA_TIMEOUT_MS, ML_API_BASE_URL } from './analisaApi';
 import type { MlAnalisaCache } from './analisaApi';
-import type { operations } from './openapi';
+import type { components, operations } from './openapi';
 
 type HarmonisasiOperation = operations['post_ml_harmonisasi_api_v1_ml_harmonisasi__document_id__post'];
 export type HarmonisasiQuery = NonNullable<HarmonisasiOperation['parameters']['query']>;
@@ -129,8 +129,13 @@ export interface HarmonisasiResponse {
   kandidat_register?: unknown[] | null;
   catatan?: string | null;
   waktu_detik?: number | null;
-  /** Jumlah item yang disaring gateway karena hak akses */
-  disaring_backend?: number;
+  /** Jumlah item yang disaring gateway karena hak akses (skema generate: bisa null) */
+  disaring_backend?: number | null;
+  /**
+   * Rincian disaring_backend (Langkah 32): kunci backend "temuan", "rujukan", "alternatif", "lainnya";
+   * tidak ada di backend lama
+   */
+  disaring_rincian?: components['schemas']['HarmonisasiResponse']['disaring_rincian'];
   cache?: MlAnalisaCache;
 }
 
@@ -168,6 +173,31 @@ const LABEL_JENIS: Record<JenisTemuan, string> = {
   memperjelas: 'Melengkapi',
   konflik: 'Konflik',
 };
+
+const URUTAN_DISARING = ['temuan', 'rujukan', 'alternatif', 'lainnya'] as const;
+
+/**
+ * "N item disembunyikan karena tidak ada akses: 3 temuan, 1 rujukan, …" atau null bila tidak ada yang disaring.
+ * N = disaring_backend (cadangan: jumlah rincian). Rincian dari disaring_rincian (Langkah 32): kunci bernilai 0
+ * disembunyikan, kunci tak dikenal digabung ke "lainnya". Backend lama (tanpa rincian) hanya menampilkan N.
+ */
+export function ringkasDisaring(data: Pick<HarmonisasiResponse, 'disaring_backend' | 'disaring_rincian'> | null | undefined): string | null {
+  const per: Record<(typeof URUTAN_DISARING)[number], number> = { temuan: 0, rujukan: 0, alternatif: 0, lainnya: 0 };
+  const rincian = data?.disaring_rincian;
+  if (rincian && typeof rincian === 'object' && !Array.isArray(rincian)) {
+    for (const [k, v] of Object.entries(rincian)) {
+      if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) continue;
+      const kunci = (URUTAN_DISARING as readonly string[]).includes(k) ? (k as keyof typeof per) : 'lainnya';
+      per[kunci] += v;
+    }
+  }
+  const jumlahRincian = Object.values(per).reduce((a, b) => a + b, 0);
+  const backend = typeof data?.disaring_backend === 'number' && data.disaring_backend > 0 ? data.disaring_backend : 0;
+  const total = backend > 0 ? backend : jumlahRincian;
+  if (total <= 0) return null;
+  const bagian = URUTAN_DISARING.filter((k) => per[k] > 0).map((k) => `${per[k]} ${k}`);
+  return `${total} item disembunyikan karena tidak ada akses${bagian.length ? `: ${bagian.join(', ')}` : ''}`;
+}
 
 export function isJenisTemuan(jenis: unknown): jenis is JenisTemuan {
   return typeof jenis === 'string' && (JENIS_TEMUAN as readonly string[]).includes(jenis);

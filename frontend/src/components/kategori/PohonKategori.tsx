@@ -68,6 +68,10 @@ function NodeKategori({ node, depth, ...p }: PohonKategoriProps & { node: Catego
             data-jumlah
           >
             {node.jumlah_dokumen} langsung · {node.total_document_count} total
+            {/* null = backend lama (tidak diketahui); 0 tidak ditampilkan */}
+            {(node.jumlah_dokumen_nonaktif ?? 0) > 0 && (
+              <span className="text-gray-400" data-nonaktif> · +{node.jumlah_dokumen_nonaktif} nonaktif</span>
+            )}
           </span>
         </button>
       </div>

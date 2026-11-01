@@ -14,6 +14,8 @@
  */
 
 import { apiFetch, apiJson, ApiError } from './api';
+import type { components } from './openapi';
+import type { TanpaIndeks } from './tipeApi';
 
 /** PATCH nama/induk memindahkan berkas fisik seluruh subpohon secara sinkron */
 export const KATEGORI_TIMEOUT_MS = 120000;
@@ -24,28 +26,33 @@ export const MAKS_ATURAN_KLASIFIKASI = 4000;
 // Tipe
 // ============================================================================
 
-export interface CategoryTreeNode {
-  id: number;
-  name: string;
-  parent_id: number | null;
-  auto_created: boolean;
-  /** Dokumen aktif langsung di kategori ini (= document_count) */
-  jumlah_dokumen: number;
-  /** Dokumen aktif termasuk seluruh subkategori */
-  total_document_count: number;
-  classification_rule: string | null;
-  children: CategoryTreeNode[];
-}
+type Skema = components['schemas'];
 
-export interface CategoryDetail {
-  id: number;
-  name: string;
+/**
+ * Dari skema generate CategoryTreeNode (Langkah 32), tanpa index signature dan setelah normalisasi:
+ * - jumlah_dokumen: dokumen aktif langsung (= document_count)
+ * - total_document_count: dokumen aktif termasuk seluruh subkategori
+ * - jumlah_dokumen_nonaktif: dokumen nonaktif langsung; null = backend lama (tidak diketahui), bukan 0
+ */
+export type CategoryTreeNode = Omit<
+  TanpaIndeks<Skema['CategoryTreeNode']>,
+  'parent_id' | 'classification_rule' | 'jumlah_dokumen_nonaktif' | 'document_count' | 'children'
+> & {
   parent_id: number | null;
-  auto_created: boolean;
-  path: string[];
-  jumlah_dokumen: number;
   classification_rule: string | null;
-}
+  jumlah_dokumen_nonaktif: number | null;
+  children: CategoryTreeNode[];
+};
+
+/** Dari skema generate CategoryDetailResponse; jumlah_dokumen_nonaktif null = backend lama */
+export type CategoryDetail = Omit<
+  TanpaIndeks<Skema['CategoryDetailResponse']>,
+  'parent_id' | 'classification_rule' | 'jumlah_dokumen_nonaktif' | 'document_count' | 'created_at' | 'updated_at'
+> & {
+  parent_id: number | null;
+  classification_rule: string | null;
+  jumlah_dokumen_nonaktif: number | null;
+};
 
 export interface DokumenGagalPenempatan {
   document_id: number;
@@ -63,6 +70,9 @@ export interface KonflikHapus {
   subkategori: number;
   /** Termasuk dokumen nonaktif (backend tidak menyaring is_active) */
   dokumen: number;
+  /** Rincian Langkah 32; tidak ada di backend lama */
+  dokumen_aktif?: number;
+  dokumen_nonaktif?: number;
 }
 
 /** Body PATCH: hanya field yang berubah. `parent_id: null` = pindah ke akar, beda dengan tidak dikirim. */
@@ -86,6 +96,7 @@ type Objek = Record<string, unknown>;
 const objek = (v: unknown): Objek => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Objek) : {});
 const angka = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 const idAtauNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const angkaAtauNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
 const teksAtauNull = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 
 function normalisasiNode(v: unknown): CategoryTreeNode | null {
@@ -99,6 +110,8 @@ function normalisasiNode(v: unknown): CategoryTreeNode | null {
     parent_id: idAtauNull(o.parent_id),
     auto_created: o.auto_created === true,
     jumlah_dokumen: angka(langsung),
+    // null = backend lama (tidak mengirim field ini), dibedakan dari 0
+    jumlah_dokumen_nonaktif: angkaAtauNull(o.jumlah_dokumen_nonaktif),
     total_document_count: typeof o.total_document_count === 'number' ? o.total_document_count : angka(langsung),
     classification_rule: teksAtauNull(o.classification_rule),
     children: anak,
@@ -122,6 +135,7 @@ function normalisasiHasilUbah(raw: unknown): CategoryUpdateResult {
           auto_created: k.auto_created === true,
           path: Array.isArray(k.path) ? k.path.filter((s): s is string => typeof s === 'string') : [],
           jumlah_dokumen: angka(typeof k.jumlah_dokumen === 'number' ? k.jumlah_dokumen : k.document_count),
+          jumlah_dokumen_nonaktif: angkaAtauNull(k.jumlah_dokumen_nonaktif),
           classification_rule: teksAtauNull(k.classification_rule),
         }
       : null,
@@ -221,10 +235,18 @@ export function pesanGalatKategori(err: unknown, aksi: AksiKategori): PesanGalat
   if (status === 409) {
     const o = objek(detail);
     if (aksi === 'hapus' && (typeof o.subkategori === 'number' || typeof o.dokumen === 'number')) {
-      const konflik = { subkategori: angka(o.subkategori), dokumen: angka(o.dokumen) };
+      const konflik: KonflikHapus = { subkategori: angka(o.subkategori), dokumen: angka(o.dokumen) };
+      // Rincian aktif/nonaktif hanya ada di backend Langkah 32
+      const rinci = typeof o.dokumen_aktif === 'number' && typeof o.dokumen_nonaktif === 'number';
+      if (rinci) {
+        konflik.dokumen_aktif = angka(o.dokumen_aktif);
+        konflik.dokumen_nonaktif = angka(o.dokumen_nonaktif);
+      }
       return {
         judul: 'Kategori tidak bisa dihapus',
-        pesan: `Masih ada ${konflik.subkategori} subkategori dan ${konflik.dokumen} dokumen (termasuk dokumen nonaktif). Pindahkan atau kosongkan isinya dulu.`,
+        pesan: rinci
+          ? `Masih ada ${konflik.subkategori} subkategori, ${konflik.dokumen_aktif} dokumen aktif, dan ${konflik.dokumen_nonaktif} dokumen nonaktif. Pindahkan atau kosongkan isinya dulu.`
+          : `Masih ada ${konflik.subkategori} subkategori dan ${konflik.dokumen} dokumen (termasuk dokumen nonaktif). Pindahkan atau kosongkan isinya dulu.`,
         bisaCobaLagi: false,
         konflikHapus: konflik,
       };

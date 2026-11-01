@@ -37,7 +37,12 @@ export default function DetailKategori({ item, aksi }: DetailKategoriProps) {
         ] as const).map(([label, nilai, ket]) => (
           <div key={label} className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2" title={ket}>
             <dt className="text-[11px] font-semibold text-gray-500">{label}</dt>
-            <dd className="text-xl font-bold text-gray-900" data-angka={label}>{nilai}</dd>
+            <dd className="text-xl font-bold text-gray-900" data-angka={label}>
+              {nilai}
+              {label === 'Dokumen langsung' && (node.jumlah_dokumen_nonaktif ?? 0) > 0 && (
+                <span className="ml-1 text-xs font-semibold text-gray-500" data-nonaktif>+{node.jumlah_dokumen_nonaktif} nonaktif</span>
+              )}
+            </dd>
             <p className="text-[10px] text-gray-400 leading-tight">{ket}</p>
           </div>
         ))}

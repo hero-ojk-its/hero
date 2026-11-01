@@ -12,88 +12,58 @@
 import { apiFetch, apiFetchBlob, ApiError } from './api';
 import { getIngestFailures } from './ingestApi';
 import type { FailureResponse } from './ingestApi';
+import type { components } from './openapi';
+import type { TanpaIndeks } from './tipeApi';
 
 /** Perhitungan corong bisa lebih lama dari batas bawaan 15 detik */
 export const CORONG_TIMEOUT_MS = 30000;
 
 // ============================================================================
-// Tipe respons
+// Tipe respons: dari skema generate (Langkah 32), tanpa index signature
 // ============================================================================
 
+type Skema = components['schemas'];
+
 /** Invarian: ditemukan = sudah_ada_di_kb + ditarik + duplikat + gagal_unduh + belum_ditarik */
-export interface CorongScan {
-  ditemukan: number;
-  sudah_ada_di_kb: number;
-  ditarik: number;
-  duplikat: number;
-  gagal_unduh: number;
-  belum_ditarik: number;
-}
+export type CorongScan = TanpaIndeks<Skema['CorongScanMetrics']>;
 
-/** Invarian: di_kb = menunggu_ekstraksi + terbaca + gagal_baca + lainnya */
-export interface CorongDokumen {
-  di_kb: number;
-  tersimpan_di_kb: number;
-  menunggu_ekstraksi: number;
-  /** = terbaca_teks_langsung + terbaca_ocr (terindeks + perlu_koreksi) */
-  terbaca: number;
-  terbaca_teks_langsung: number;
-  terbaca_ocr: number;
-  /** Bagian dari terbaca */
-  perlu_koreksi: number;
-  gagal_baca: number;
-  lainnya: number;
-  /** Dokumen yang punya minimal satu pasal (dihitung terpisah dari terbaca) */
-  terpecah_pasal: number;
-  /** Dokumen yang punya minimal satu pasal ber-embedding */
-  tervektor: number;
-}
+/**
+ * Invarian: di_kb = menunggu_ekstraksi + terbaca + gagal_baca + lainnya; terbaca = teks langsung + OCR.
+ * terpecah_pasal dan tervektor dihitung terpisah dari terbaca.
+ */
+export type CorongDokumen = TanpaIndeks<Skema['CorongDokumenMetrics']>;
 
-export interface CorongPdf {
-  terproteksi: number;
-  terproteksi_terbaca: number;
-  hasil_pindai_ocr: number;
-  /** = gagal teks_kosong_ocr + ocr_gagal */
-  ocr_gagal: number;
-  /** pdf_terproteksi belum diperiksa (dokumen sebelum backfill Langkah 27) */
-  belum_diperiksa: number;
-}
+/** ocr_gagal = teks_kosong_ocr + ocr_gagal; belum_diperiksa = dokumen sebelum backfill Langkah 27 */
+export type CorongPdf = TanpaIndeks<Skema['CorongPdfMetrics']>;
 
 /** reason_code -> jumlah; tanpa status "diabaikan" dan tanpa duplikat */
 export type GagalPerAlasan = Record<string, number>;
 
-export interface CorongBlok {
+/** Skema generate dengan blok bersarang yang juga sudah tanpa index signature */
+type Blok<T> = Omit<TanpaIndeks<T>, 'dokumen' | 'pdf' | 'scan' | 'gagal_per_alasan'> & {
   dokumen: CorongDokumen;
   pdf: CorongPdf;
   gagal_per_alasan: GagalPerAlasan;
-  /** 0.0–100.0, 1 desimal */
-  persen_terbaca: number;
-}
-
-export interface CorongSumber extends CorongBlok {
-  source_id: number;
-  nama: string;
-  /** JenisSumber: situs_web | folder_lokal | onedrive_public (nilai lain mungkin muncul) */
-  jenis: string;
-  scan: CorongScan;
-}
+};
 
 /** Unggah manual tidak punya blok scan */
+export type CorongBlok = Blok<Skema['CorongUnggahManualItem']>;
 export type CorongUnggahManual = CorongBlok;
 
-export interface CorongTotal extends CorongBlok {
-  /** Jumlah scan semua sumber */
-  scan: CorongScan;
-}
+/** jenis: situs_web | folder_lokal | onedrive_public (nilai lain mungkin muncul) */
+export type CorongSumber = Blok<Skema['CorongSumberItem']> & { scan: CorongScan };
 
-export interface DashboardCorongResponse {
-  /** UTC, mis. "2026-10-30T07:34:50Z" */
+/** scan = jumlah scan semua sumber */
+export type CorongTotal = Blok<Skema['CorongTotalMetrics']> & { scan: CorongScan };
+
+export type DashboardCorongResponse = Omit<TanpaIndeks<Skema['CorongResponse']>, 'dihitung_pada' | 'sumber' | 'unggah_manual' | 'total'> & {
+  /** UTC, mis. "2026-10-30T07:34:50Z"; null setelah normalisasi bila tidak ada/tidak valid */
   dihitung_pada: string | null;
   sumber: CorongSumber[];
   unggah_manual: CorongUnggahManual;
   /** Dokumen unik seluruh KB; jumlah semua sumber tidak sama dengan total */
   total: CorongTotal;
-}
+};
 
 // ============================================================================
 // Normalisasi: field hilang / bukan angka dianggap 0
@@ -155,9 +125,41 @@ export function normalisasiCorong(raw: unknown): DashboardCorongResponse {
 // Pemanggilan API
 // ============================================================================
 
-export async function getDashboardCorong({ signal }: { signal?: AbortSignal } = {}): Promise<DashboardCorongResponse> {
-  const raw = await apiFetch<unknown>('/api/v1/dashboard/corong', { signal, timeout: CORONG_TIMEOUT_MS });
+/**
+ * segar=true melewati cache backend 60 detik (Langkah 32). Mount pertama sengaja TANPA segar agar cache terpakai;
+ * backend lama mengabaikan parameter ini.
+ */
+export async function getDashboardCorong(
+  { signal, segar = false }: { signal?: AbortSignal; segar?: boolean } = {}
+): Promise<DashboardCorongResponse> {
+  const raw = await apiFetch<unknown>(`/api/v1/dashboard/corong${segar ? '?segar=true' : ''}`, { signal, timeout: CORONG_TIMEOUT_MS });
   return normalisasiCorong(raw);
+}
+
+// ============================================================================
+// Kapabilitas ?tanpa_sumber=true (Langkah 32)
+// ============================================================================
+
+let probeTanpaSumber: Promise<boolean> | null = null;
+
+/**
+ * Backend lama MENGABAIKAN tanpa_sumber diam-diam dan mengembalikan kegagalan semua sumber, jadi
+ * drill-down unggah manual hanya aktif bila dukungannya dipastikan. Probe: tanpa_sumber=true bersama
+ * source_id=-1 -> backend baru 422 (routers/ingest.py list_failures menolak kombinasi itu), backend lama 200
+ * (filter source_id=-1 kosong). Hasil pasti (422/200) di-cache per sesi; galat lain (jaringan, 403, 5xx)
+ * dianggap "belum didukung" dan boleh diprobe ulang pada pemanggilan berikutnya.
+ */
+export function cekDukunganTanpaSumber(): Promise<boolean> {
+  if (!probeTanpaSumber) {
+    probeTanpaSumber = apiFetch<unknown>('/api/v1/ingest/failures?tanpa_sumber=true&source_id=-1&limit=1')
+      .then(() => false)
+      .catch((err: unknown) => {
+        if (err instanceof ApiError && err.status === 422) return true;
+        probeTanpaSumber = null;
+        return false;
+      });
+  }
+  return probeTanpaSumber;
 }
 
 /** Nama cadangan bila server tidak mengirim Content-Disposition: corong-hero-YYYYMMDD.csv (tanggal lokal) */
@@ -188,14 +190,20 @@ export interface HasilDrilldown {
  * menghitung belum_ditangani + diproses_ulang, sedangkan follow_up_status=all ikut memuat "diabaikan".
  */
 export async function getKegagalanDrilldown(
-  { reasonCode, sourceId, signal }: { reasonCode: string; sourceId?: number | null; signal?: AbortSignal }
+  { reasonCode, sourceId, tanpaSumber = false, signal }: {
+    reasonCode: string;
+    sourceId?: number | null;
+    /** Unggah manual; panggil hanya setelah cekDukunganTanpaSumber() bernilai true */
+    tanpaSumber?: boolean;
+    signal?: AbortSignal;
+  }
 ): Promise<HasilDrilldown> {
   const hasil = await Promise.all(
     STATUS_DIHITUNG_CORONG.map((status) =>
       getIngestFailures(
         {
           reason_code: [reasonCode],
-          ...(typeof sourceId === 'number' ? { source_id: sourceId } : {}),
+          ...(tanpaSumber ? { tanpa_sumber: true } : typeof sourceId === 'number' ? { source_id: sourceId } : {}),
           follow_up_status: status,
           limit: BATAS_DRILLDOWN,
         },
@@ -222,12 +230,13 @@ export interface PesanGalatCorong {
   bisaCobaLagi: boolean;
 }
 
-function pesanGalat(err: unknown, pesan403: string): PesanGalatCorong {
+function pesanGalat(err: unknown, pesan403: string, pesan404?: string): PesanGalatCorong {
   if (!(err instanceof ApiError)) {
     return { judul: 'Terjadi kesalahan', pesan: 'Terjadi kesalahan tak terduga.', bisaCobaLagi: false };
   }
   if (err.status === 401) return { judul: 'Sesi berakhir', pesan: 'Sesi berakhir, silakan masuk lagi.', bisaCobaLagi: false };
   if (err.status === 403) return { judul: 'Akses ditolak', pesan: pesan403, bisaCobaLagi: false };
+  if (err.status === 404 && pesan404) return { judul: 'Tidak ditemukan', pesan: pesan404, bisaCobaLagi: false };
   if (err.status === 0) {
     return /batas waktu/i.test(err.message)
       ? { judul: 'Waktu habis', pesan: 'Perhitungan membutuhkan waktu terlalu lama.', bisaCobaLagi: true }
@@ -240,7 +249,8 @@ function pesanGalat(err: unknown, pesan403: string): PesanGalatCorong {
 }
 
 export function pesanGalatCorong(err: unknown): PesanGalatCorong {
-  return pesanGalat(err, 'Peran Anda tidak memiliki izin melihat statistik corong.');
+  // 404 (Langkah 32): source_id tidak ada; kartu tidak mengirim source_id, jadi hanya sebagai jaring pengaman
+  return pesanGalat(err, 'Peran Anda tidak memiliki izin melihat statistik corong.', 'Sumber dokumen untuk statistik corong tidak ditemukan.');
 }
 
 export function pesanGalatDrilldown(err: unknown): PesanGalatCorong {

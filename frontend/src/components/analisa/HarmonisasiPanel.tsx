@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import { ExternalLink, FileText, Info, Loader2, RefreshCw } from 'lucide-react';
 import { apiFetchBlob } from '../../lib/api';
-import { labelTemuan, warnaTemuan, isJenisTemuan } from '../../lib/harmonisasiApi';
+import { labelTemuan, warnaTemuan, isJenisTemuan, ringkasDisaring } from '../../lib/harmonisasiApi';
 import type {
   HarmonisasiPembanding,
   HarmonisasiResponse,
@@ -92,7 +92,8 @@ export default function HarmonisasiPanel({ state, onMuat, onJumpToPasal }: Harmo
 
   const kartu = [...KARTU_JENIS, ...((jumlahPerJenis.konflik ?? 0) > 0 ? (['konflik'] as JenisTemuan[]) : [])];
   const temuanTampil = filterJenis ? temuan.filter((t) => t.jenis === filterJenis) : temuan;
-  const disaring = typeof data?.disaring_backend === 'number' ? data.disaring_backend : 0;
+  // Hitungan kartu tetap dari temuan yang tampil; ini hanya keterangan
+  const catatanDisaring = ringkasDisaring(data);
   const ringkasan = data?.ringkasan ?? null;
 
   const bukaPdf = (e: MouseEvent | KeyboardEvent, p: HarmonisasiPembanding | null | undefined) => {
@@ -227,10 +228,10 @@ export default function HarmonisasiPanel({ state, onMuat, onJumpToPasal }: Harmo
             )}
           </div>
 
-          {disaring > 0 && (
-            <p className="flex items-center gap-1.5 text-[10px] text-gray-500 italic">
+          {catatanDisaring && (
+            <p className="flex items-center gap-1.5 text-[10px] text-gray-500 italic" data-catatan-disaring>
               <Info size={11} className="shrink-0" />
-              {disaring} item disembunyikan karena tidak ada akses
+              {catatanDisaring}
             </p>
           )}
 

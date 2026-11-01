@@ -415,6 +415,12 @@ export interface IngestFailureQueryParams {
   reason_code?: string[];
   /** Kegagalan dari sumber ini (via job.source_id atau scan_candidates.failure_id) */
   source_id?: number;
+  /**
+   * Hanya kegagalan tanpa sumber / unggah manual (Langkah 32). Backend lama MENGABAIKANNYA diam-diam
+   * (mengembalikan semua sumber), jadi pakai hanya setelah kapabilitasnya dipastikan. Tidak boleh
+   * digabung dengan source_id (422).
+   */
+  tanpa_sumber?: boolean;
   follow_up_status?: 'belum_ditangani' | 'diproses_ulang' | 'diabaikan' | 'all';
   include_duplicates?: boolean;
   skip?: number;
