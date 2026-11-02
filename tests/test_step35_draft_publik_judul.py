@@ -47,10 +47,18 @@ from app.models.enums import (
     StatusKeberlakuan,
     StatusPemrosesan,
     JenisSumber,
+    JenisJobIngest,
+    StatusJobIngest,
 )
-from app.core.permissions import PeranPengguna
+from app.core.permissions import Izin, PeranPengguna
 from app.routers.auth import ALGORITHM
 from app.services.judul_service import periksa_judul
+from app.services.ingest_service import (
+    IngestService,
+    IngestItem,
+    IngestOptions,
+    ItemOutcome,
+)
 from scripts.periksa_draft_publik import run_periksa_draft_publik
 from scripts.periksa_judul import run_periksa_judul
 from tests.conftest import make_pdf
@@ -514,6 +522,231 @@ def test_d13_skrip_periksa_draft_publik(db: Session):
     assert d1.access_classification == KlasifikasiAkses.non_publik
     assert d2.access_classification == KlasifikasiAkses.non_publik
     assert d3.access_classification == KlasifikasiAkses.publik  # tetap publik
+
+
+def test_d14_ingest_service_turunkan_klasifikasi_draft_publik_tanpa_persetujuan(db: Session, test_storage: Any):
+    """D14: IngestService dengan options draft_kajian+publik tanpa persetujuan (simulasi jalur scan/sumber lama) -> dokumen tersimpan non_publik; audit memuat klasifikasi_diturunkan."""
+    ingest_svc = IngestService(db=db, storage=test_storage)
+    job = JobIngest(
+        job_type=JenisJobIngest.scraping,
+        triggered_by="scan",
+        source_ref="source:test_d14",
+        status=StatusJobIngest.berjalan,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    pdf_bytes = make_pdf("Dokumen Scan Draft Kajian Lama")
+    item = IngestItem(
+        filename="draft_scan_lama_d14.pdf",
+        content=pdf_bytes,
+        source_url="https://jdih.example.com/draft_scan_lama_d14.pdf",
+    )
+    options = IngestOptions(
+        access_classification=KlasifikasiAkses.publik,
+        document_role=PeranDokumen.draft_kajian,
+        persetujuan_publik=None,
+    )
+
+    res = ingest_svc.ingest_one(job, item, options)
+    assert res.outcome == ItemOutcome.success
+    assert res.document_id is not None
+
+    doc = db.query(Document).filter(Document.id == res.document_id).first()
+    assert doc is not None
+    assert doc.document_role == PeranDokumen.draft_kajian
+    assert doc.access_classification == KlasifikasiAkses.non_publik
+
+    # Periksa audit log UPLOAD_DOCUMENT
+    audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.target_resource == f"document:{doc.id}", AuditLog.action == "UPLOAD_DOCUMENT")
+        .first()
+    )
+    assert audit is not None
+    assert "klasifikasi_diturunkan" in audit.detail
+    assert audit.detail["klasifikasi_diturunkan"] == {
+        "dari": "publik",
+        "ke": "non_publik",
+        "alasan": "draft_publik_tanpa_persetujuan",
+    }
+
+
+def test_d15_skrip_periksa_draft_publik_sumber(db: Session):
+    """D15: periksa_draft_publik.py dengan sumber seed draft+publik -> dry-run mencetak sumber tanpa mengubah; --apply mengubah default sumber jadi non_publik + audit UPDATE_SOURCE."""
+    uid = uuid.uuid4().hex[:8]
+    src = ScrapingSource(
+        name=f"Sumber Draft Publik D15 {uid}",
+        url=f"https://example.com/d15_source_{uid}",
+        source_type=JenisSumber.situs_web,
+        default_document_role=PeranDokumen.draft_kajian,
+        default_access_classification=KlasifikasiAkses.publik,
+        is_active=True,
+    )
+    db.add(src)
+    db.commit()
+    db.refresh(src)
+
+    # 1. Dry-run
+    res_dry = run_periksa_draft_publik(db, apply=False)
+    assert res_dry["total_sumber"] >= 1
+    assert res_dry["sumber_diubah"] == 0
+
+    db.refresh(src)
+    assert src.default_access_classification == KlasifikasiAkses.publik
+
+    # 2. Apply
+    res_apply = run_periksa_draft_publik(db, apply=True)
+    assert res_apply["sumber_diubah"] >= 1
+
+    db.refresh(src)
+    assert src.default_access_classification == KlasifikasiAkses.non_publik
+
+    # Periksa audit UPDATE_SOURCE
+    audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.target_resource == f"source:{src.id}", AuditLog.action == "UPDATE_SOURCE")
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    assert audit is not None
+    assert audit.detail.get("alasan") == "langkah35_sumber_draft_publik"
+    assert audit.detail.get("before") == {"default_access_classification": "publik"}
+    assert audit.detail.get("after") == {"default_access_classification": "non_publik"}
+
+
+def test_d16_auth_aktif_admin_kb_patch_draft_ke_publik_diterima(client: TestClient, db: Session):
+    """D16: AUTH_ENABLED=true, admin_kb PATCH {access_classification: publik, persetujuan_publik} pada draft non_publik -> 200."""
+    orig_auth = settings.auth_enabled
+    settings.auth_enabled = True
+    try:
+        user_admin = User(
+            username=f"admin_d16_{uuid.uuid4().hex[:6]}",
+            hashed_password="$2b$12$dummyhashforadmin",
+            role=PeranPengguna.admin_kb,
+            is_active=True,
+        )
+        db.add(user_admin)
+        db.commit()
+        token = _buat_token_auth(user_admin)
+
+        doc = _seed_doc(
+            db,
+            title="Draft Non-Publik D16",
+            role=PeranDokumen.draft_kajian,
+            access=KlasifikasiAkses.non_publik,
+        )
+
+        resp = client.patch(
+            f"/api/v1/documents/{doc.id}/metadata",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "access_classification": "publik",
+                "persetujuan_publik": {
+                    "disetujui_oleh": "Kepala Riset Regulasi",
+                    "alasan": "Persetujuan publikasi draft kajian uji D16 sah",
+                },
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["access_classification"] == "publik"
+        assert data["persetujuan_publik"] is not None
+        assert data["persetujuan_publik"]["disetujui_oleh"] == user_admin.username
+
+        db.refresh(doc)
+        assert doc.access_classification == KlasifikasiAkses.publik
+        assert doc.publik_disetujui_oleh == user_admin.username
+    finally:
+        settings.auth_enabled = orig_auth
+
+
+def test_d17_auth_aktif_admin_kb_patch_title_ditolak_403(client: TestClient, db: Session):
+    """D17: AUTH_ENABLED=true, admin_kb PATCH {title: 'X'} pada draft publik yang sudah disetujui -> 403 akses_ditolak."""
+    orig_auth = settings.auth_enabled
+    settings.auth_enabled = True
+    try:
+        user_admin = User(
+            username=f"admin_d17_{uuid.uuid4().hex[:6]}",
+            hashed_password="$2b$12$dummyhashforadmin",
+            role=PeranPengguna.admin_kb,
+            is_active=True,
+        )
+        db.add(user_admin)
+        db.commit()
+        token = _buat_token_auth(user_admin)
+
+        now = datetime.now(timezone.utc)
+        doc = _seed_doc(
+            db,
+            title="Judul Asli Disetujui D17",
+            role=PeranDokumen.draft_kajian,
+            access=KlasifikasiAkses.publik,
+            publik_disetujui_oleh="Direktur Riset",
+            publik_disetujui_alasan="Disetujui publikasi sah",
+            publik_disetujui_pada=now,
+        )
+
+        resp = client.patch(
+            f"/api/v1/documents/{doc.id}/metadata",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"title": "Judul Baru Yang Ditolak"},
+        )
+        assert resp.status_code == 403, resp.text
+        body = resp.json()
+        assert body.get("detail", {}).get("code") == "akses_ditolak"
+        assert body.get("detail", {}).get("izin") in ("metadata:koreksi", Izin.METADATA_KOREKSI.value)
+
+        db.refresh(doc)
+        assert doc.title == "Judul Asli Disetujui D17"
+    finally:
+        settings.auth_enabled = orig_auth
+
+
+def test_d18_auth_aktif_analis_patch_title_draft_publik_diterima(client: TestClient, db: Session):
+    """D18: AUTH_ENABLED=true, analis PATCH {title: 'X'} pada draft publik yang sudah disetujui -> 200 (tanpa persetujuan ulang)."""
+    orig_auth = settings.auth_enabled
+    settings.auth_enabled = True
+    try:
+        user_analis = User(
+            username=f"analis_d18_{uuid.uuid4().hex[:6]}",
+            hashed_password="$2b$12$dummyhashforanalis",
+            role=PeranPengguna.analis,
+            is_active=True,
+        )
+        db.add(user_analis)
+        db.commit()
+        token = _buat_token_auth(user_analis)
+
+        now = datetime.now(timezone.utc)
+        doc = _seed_doc(
+            db,
+            title="Judul Awal Analis D18",
+            role=PeranDokumen.draft_kajian,
+            access=KlasifikasiAkses.publik,
+            publik_disetujui_oleh="Direktur Riset",
+            publik_disetujui_alasan="Disetujui sah sebelumnya",
+            publik_disetujui_pada=now,
+        )
+
+        resp = client.patch(
+            f"/api/v1/documents/{doc.id}/metadata",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"title": "Judul Baru Yang Sah Oleh Analis"},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["title"] == "Judul Baru Yang Sah Oleh Analis"
+        assert data["access_classification"] == "publik"
+        assert data["persetujuan_publik"] is not None
+
+        db.refresh(doc)
+        assert doc.title == "Judul Baru Yang Sah Oleh Analis"
+        assert doc.access_classification == KlasifikasiAkses.publik
+        assert doc.publik_disetujui_pada is not None
+    finally:
+        settings.auth_enabled = orig_auth
 
 
 def test_j01_periksa_judul_ojk_wajar():

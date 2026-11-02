@@ -783,18 +783,23 @@ def patch_document_metadata(
     target_class_str = target_class.value if hasattr(target_class, "value") else str(target_class or "")
     is_target_draft_publik = (target_role_str == "draft_kajian" and target_class_str == "publik")
 
-    # Bila aksi ini bukan publikasi draft kajian, pengguna wajib memiliki METADATA_KOREKSI
-    if not is_target_draft_publik and current_user is not None and settings.auth_enabled:
+    # Aturan otorisasi Langkah 35b:
+    # Bila pengguna TIDAK punya METADATA_KOREKSI (hanya DRAFT_PUBLIKASI),
+    # field yang dikirim hanya boleh subset dari {"access_classification", "persetujuan_publik"}
+    # DAN hasil akhirnya harus draft_kajian + publik.
+    if current_user is not None and settings.auth_enabled:
         if not punya_izin(current_user, Izin.METADATA_KOREKSI):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail={
-                    "code": "akses_ditolak",
-                    "izin": Izin.METADATA_KOREKSI.value,
-                    "peran": str(getattr(current_user, "role", "")),
-                    "message": f"Akun Anda tidak memiliki izin {Izin.METADATA_KOREKSI.value} untuk aksi ini.",
-                },
-            )
+            allowed_fields = {"access_classification", "persetujuan_publik"}
+            if not fields_set.issubset(allowed_fields) or not is_target_draft_publik:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "code": "akses_ditolak",
+                        "izin": Izin.METADATA_KOREKSI.value,
+                        "peran": str(getattr(current_user, "role", "")),
+                        "message": f"Akun Anda tidak memiliki izin {Izin.METADATA_KOREKSI.value} untuk aksi ini.",
+                    },
+                )
 
     # Validasi
     if "title" in fields_set:

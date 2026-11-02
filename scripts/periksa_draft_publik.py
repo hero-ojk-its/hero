@@ -31,11 +31,13 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings
 from app.models.document import Document
+from app.models.scraping_source import ScrapingSource
 from app.models.analysis_result import AnalysisResult
 from app.models.enums import KlasifikasiAkses, PeranDokumen
 from app.services.audit_service import (
     record_audit,
     UPDATE_METADATA,
+    UPDATE_SOURCE,
     ANALYSIS_CACHE_INVALIDATED,
 )
 
@@ -135,9 +137,73 @@ def run_periksa_draft_publik(
         print("-" * 105)
         print(f"Gunakan flag --apply untuk mengubah {total_ditemukan} dokumen di atas menjadi non_publik.")
 
+    # Bagian 2: Pemeriksaan default sumber scraping (Langkah 35b)
+    print("\n=== Pemeriksaan Default Sumber Scraping ===")
+    src_query = (
+        db.query(ScrapingSource)
+        .filter(
+            ScrapingSource.default_document_role == PeranDokumen.draft_kajian,
+            ScrapingSource.default_access_classification == KlasifikasiAkses.publik,
+        )
+        .order_by(ScrapingSource.id.asc())
+    )
+    if limit is not None:
+        src_query = src_query.limit(limit)
+
+    sources: List[ScrapingSource] = src_query.all()
+    total_sumber = len(sources)
+
+    print(f"Total sumber dengan default draft_kajian + publik: {total_sumber}")
+    print("-" * 65)
+    print(f"{'ID':<6} | {'Nama':<35} | {'Jenis'}")
+    print("-" * 65)
+
+    sumber_diubah = 0
+    for src in sources:
+        jenis_str = src.source_type.value if hasattr(src.source_type, "value") else str(src.source_type)
+        nama_str = (src.name or "")[:35]
+        print(f"{src.id:<6} | {nama_str:<35} | {jenis_str}")
+
+        if apply:
+            before_val = (
+                src.default_access_classification.value
+                if hasattr(src.default_access_classification, "value")
+                else str(src.default_access_classification)
+            )
+            src.default_access_classification = KlasifikasiAkses.non_publik
+            after_val = (
+                src.default_access_classification.value
+                if hasattr(src.default_access_classification, "value")
+                else str(src.default_access_classification)
+            )
+
+            record_audit(
+                db,
+                action=UPDATE_SOURCE,
+                user_id=None,
+                target_resource=f"source:{src.id}",
+                detail={
+                    "alasan": "langkah35_sumber_draft_publik",
+                    "before": {"default_access_classification": before_val},
+                    "after": {"default_access_classification": after_val},
+                },
+                commit=False,
+            )
+            sumber_diubah += 1
+
+    if apply and sumber_diubah > 0:
+        db.commit()
+        print("-" * 65)
+        print(f"Sukses mengupdate {sumber_diubah} sumber menjadi non_publik.")
+    elif not apply and total_sumber > 0:
+        print("-" * 65)
+        print(f"Gunakan flag --apply untuk mengubah {total_sumber} sumber di atas menjadi non_publik.")
+
     return {
         "total_ditemukan": total_ditemukan,
         "diubah": diubah_count,
+        "total_sumber": total_sumber,
+        "sumber_diubah": sumber_diubah,
     }
 
 
