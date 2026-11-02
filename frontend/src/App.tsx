@@ -10,11 +10,14 @@ import AnalisaRegulasi from './pages/AnalisaRegulasi';
 import Settings from './pages/Settings';
 import AuditLog from './pages/AuditLog';
 import KelolaPengguna from './pages/KelolaPengguna';
+import Login from './pages/Login';
 
 function App() {
   return (
     <HashRouter>
       <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/masuk" element={<Login />} />
         <Route path="/" element={<DashboardLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="ingest" element={<IngestDokumen />} />

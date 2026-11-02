@@ -13,11 +13,22 @@ export interface ValidationErrorItem {
 /** Pesan 403 akses_ditolak; tanpa kode izin mentah (mis. METADATA_KOREKSI) */
 export const PESAN_AKSES_DITOLAK = 'Peran Anda tidak memiliki izin untuk aksi ini.';
 
+export interface ApiErrorOptions {
+  retryAfter?: number | null;
+  headers?: Headers;
+}
+
 export class ApiError extends Error {
   status: number;
   detail: string | ValidationErrorItem[] | unknown;
+  retryAfter?: number | null;
+  headers?: Headers;
 
-  constructor(status: number, detail: string | ValidationErrorItem[] | unknown) {
+  constructor(
+    status: number,
+    detail: string | ValidationErrorItem[] | unknown,
+    options?: ApiErrorOptions
+  ) {
     let formattedMessage = `API Error ${status}`;
     const kode = detail && typeof detail === 'object' && !Array.isArray(detail) ? (detail as Record<string, unknown>).code : undefined;
     if (status === 403 && kode === 'akses_ditolak') {
@@ -56,6 +67,8 @@ export class ApiError extends Error {
     this.name = 'ApiError';
     this.status = status;
     this.detail = detail;
+    this.retryAfter = options?.retryAfter ?? null;
+    this.headers = options?.headers;
   }
 }
 
@@ -185,7 +198,22 @@ async function prepareAndFetchResponse(
         errorDetail = response.statusText || `Galat HTTP ${response.status}`;
       }
 
-      throw new ApiError(response.status, errorDetail);
+      // Ekstrak header Retry-After (misal: HTTP 429)
+      let retryAfter: number | null = null;
+      const retryAfterHeader = response.headers.get('retry-after');
+      if (retryAfterHeader) {
+        const parsedSec = Number(retryAfterHeader);
+        if (!isNaN(parsedSec) && parsedSec >= 0) {
+          retryAfter = Math.round(parsedSec);
+        } else {
+          const parsedDate = Date.parse(retryAfterHeader);
+          if (!isNaN(parsedDate)) {
+            retryAfter = Math.max(0, Math.round((parsedDate - Date.now()) / 1000));
+          }
+        }
+      }
+
+      throw new ApiError(response.status, errorDetail, { retryAfter, headers: response.headers });
     }
 
     return response;
