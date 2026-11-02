@@ -724,7 +724,8 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "rank": null,
       "highlight": null,
       "created_at": "2026-10-01T10:00:00Z",
-      "updated_at": "2026-10-01T10:00:00Z"
+      "updated_at": "2026-10-01T10:00:00Z",
+      "persetujuan_publik": null
     }
   ],
   "query": {
@@ -802,7 +803,8 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "rank": 0.4,
       "highlight": "Bank Umum adalah bank konvensional dan syariah. BAB II <mark>MODAL</mark> <mark>INTI</mark> Pasal 2: <mark>Modal</mark> <mark>inti</mark> minimum bagi Bank Umum ditetapkan sebesar Rp3.000.000.000.000 (tiga triliun rupiah",
       "created_at": "2026-10-01T10:00:00Z",
-      "updated_at": "2026-10-01T10:00:00Z"
+      "updated_at": "2026-10-01T10:00:00Z",
+      "persetujuan_publik": null
     }
   ],
   "query": {
@@ -922,7 +924,8 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "page": null
     }
   ],
-  "legal_references": []
+  "legal_references": [],
+  "persetujuan_publik": null
 }
 ```
 <!-- /AUTO:document_detail_response -->
@@ -1395,6 +1398,7 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
     ]
   },
   "duplikat": null,
+  "persetujuan_publik": null,
   "articles": [
     {
       "id": 1,
