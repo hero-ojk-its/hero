@@ -49,10 +49,12 @@ class Settings(BaseSettings):
     category_unknown_year: str = "Tanpa Tahun"
     draft_category_root: str = "Draft Kajian"
 
-    # Ekstraksi Data/ML & Metadata (Langkah 5)
+    # Ekstraksi Data/ML & Metadata (Langkah 5 & 35)
     metadata_confidence_threshold: float = 0.7
     extraction_claim_timeout_minutes: int = 30
     extraction_max_attempts: int = 3
+    judul_maks_karakter: int = 300
+    judul_maks_kata: int = 45
 
     # Sumber Folder Lokal (Langkah 6)
     local_source_roots: str = "./sources"

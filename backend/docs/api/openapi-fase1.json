@@ -6225,6 +6225,30 @@
             ],
             "title": "Source Url",
             "description": "URL asal dokumen (opsional)"
+          },
+          "persetujuan_publik_oleh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persetujuan Publik Oleh",
+            "description": "Pihak yang menyetujui publikasi draft kajian (wajib jika peran draft_kajian dan akses publik)"
+          },
+          "persetujuan_publik_alasan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persetujuan Publik Alasan",
+            "description": "Alasan persetujuan publikasi draft kajian (wajib minimal 10 karakter jika draft_kajian publik)"
           }
         },
         "type": "object",
@@ -7865,6 +7889,18 @@
               }
             ],
             "title": "Duplikat"
+          },
+          "persetujuan_publik": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persetujuan Publik"
           }
         },
         "additionalProperties": true,
@@ -8170,7 +8206,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "maxLength": 255
+                "maxLength": 5000
               },
               {
                 "type": "null"
@@ -10372,6 +10408,34 @@
         "title": "PeranPengguna",
         "description": "Peran pengguna sistem HERO sesuai dokumen 08 §PERAN."
       },
+      "PersetujuanPublikIn": {
+        "properties": {
+          "disetujui_oleh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disetujui Oleh"
+          },
+          "alasan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alasan"
+          }
+        },
+        "type": "object",
+        "title": "PersetujuanPublikIn"
+      },
       "PullProgress": {
         "properties": {
           "job_id": {
@@ -12112,6 +12176,16 @@
               }
             ],
             "title": "Attachment Label"
+          },
+          "persetujuan_publik": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PersetujuanPublikIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

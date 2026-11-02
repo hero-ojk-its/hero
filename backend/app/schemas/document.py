@@ -7,6 +7,17 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict
 
 
+class PersetujuanPublikIn(BaseModel):
+    disetujui_oleh: Optional[str] = None
+    alasan: Optional[str] = None
+
+
+class PersetujuanPublikOut(BaseModel):
+    disetujui_oleh: Optional[str] = None
+    alasan: Optional[str] = None
+    pada: Optional[datetime] = None
+
+
 class DocumentMetadataPatchResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
     id: int
@@ -59,4 +70,5 @@ class DocumentMetadataPatchResponse(BaseModel):
     changed_fields: List[str] = []
     placement: Optional[Dict[str, Any]] = None
     duplikat: Optional[Dict[str, Any]] = None
+    persetujuan_publik: Optional[Dict[str, Any]] = None
 

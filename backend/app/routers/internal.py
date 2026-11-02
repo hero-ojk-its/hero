@@ -54,6 +54,7 @@ from app.services.identity_service import fallback_identity_key
 from app.services.duplicate_service import check_identity_duplicate
 from app.services.version_service import recompute_status, sync_relations
 from app.services.attachment_service import detect_attachment_heuristic, link_attachment, link_pending_children
+from app.services.judul_service import periksa_judul
 
 logger = logging.getLogger("hero")
 router = APIRouter()
@@ -82,7 +83,7 @@ class ExtractionErrorIn(BaseModel):
 
 class ExtractionResultIn(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    title: Optional[str] = Field(None, max_length=_DOC_TITLE_MAX_LEN, validation_alias="judul")
+    title: Optional[str] = Field(None, max_length=5000, validation_alias="judul")
     regulation_number: Optional[str] = Field(None, max_length=_DOC_REG_NUM_MAX_LEN, validation_alias="nomor_peraturan")
     regulation_type: Optional[str] = Field(None, max_length=_DOC_REG_TYPE_MAX_LEN, validation_alias="jenis_peraturan")
     release_date: Optional[date] = Field(None, validation_alias="tanggal_terbit")
@@ -604,6 +605,8 @@ def patch_extraction_result(
     # 2. Penanganan Sukses
     ignored_fields = []
     changed_fields = []
+    judul_info = None
+    force_perlu_koreksi = False
 
     if payload.full_text is not None:
         if doc.full_text != payload.full_text:
@@ -653,9 +656,32 @@ def patch_extraction_result(
                 low_title in ("untitled", "untitled document", "tanpa judul", "dokumen", "document")
                 or low_title.startswith("microsoft word - document")
             )
-            if not is_placeholder and doc.title != clean_title:
-                doc.title = clean_title
-                changed_fields.append("title")
+            if not is_placeholder:
+                hasil_judul = periksa_judul(clean_title)
+                if hasil_judul.status == "ok":
+                    if doc.title != hasil_judul.judul:
+                        doc.title = hasil_judul.judul
+                        changed_fields.append("title")
+                elif hasil_judul.status == "dipotong":
+                    if doc.title != hasil_judul.judul:
+                        doc.title = hasil_judul.judul
+                        changed_fields.append("title")
+                    force_perlu_koreksi = True
+                    judul_info = {
+                        "status": "dipotong",
+                        "alasan": hasil_judul.alasan,
+                        "panjang_asli": len(clean_title),
+                        "cuplikan_asli": clean_title[:120],
+                    }
+                elif hasil_judul.status == "ditolak":
+                    # Pertahankan judul lama
+                    force_perlu_koreksi = True
+                    judul_info = {
+                        "status": "ditolak",
+                        "alasan": hasil_judul.alasan,
+                        "panjang_asli": len(clean_title),
+                        "cuplikan_asli": clean_title[:120],
+                    }
 
         year_from_num = None
         if payload.regulation_number and payload.regulation_number.strip():
@@ -767,6 +793,9 @@ def patch_extraction_result(
                 if k in ("title", "regulation_number", "regulation_type", "release_date"):
                     metadata_has_low_conf = True
 
+    if force_perlu_koreksi and "title" not in low_confidence_fields:
+        low_confidence_fields.append("title")
+
     # Evaluasi teks hasil ekstraksi: bila kosong atau hanya spasi -> gagal
     doc_text = doc.full_text or ""
     if not doc_text.strip():
@@ -795,22 +824,26 @@ def patch_extraction_result(
     has_empty_reg = not doc.regulation_number or not doc.regulation_number.strip()
     has_empty_title = not doc.title or not doc.title.strip()
 
-    if has_empty_reg or has_empty_title or metadata_has_low_conf:
+    if has_empty_reg or has_empty_title or metadata_has_low_conf or force_perlu_koreksi:
         doc.processing_status = StatusPemrosesan.perlu_koreksi
     else:
         doc.processing_status = StatusPemrosesan.terindeks
+
+    audit_detail = {
+        "document_id": doc.id,
+        "status": doc.processing_status.value,
+        "changed_fields": changed_fields,
+        "ignored_fields": ignored_fields,
+        "low_confidence_fields": low_confidence_fields,
+    }
+    if judul_info is not None:
+        audit_detail["judul"] = judul_info
 
     record_audit(
         db,
         action=EXTRACTION_RESULT,
         target_resource=f"document:{doc.id}",
-        detail={
-            "document_id": doc.id,
-            "status": doc.processing_status.value,
-            "changed_fields": changed_fields,
-            "ignored_fields": ignored_fields,
-            "low_confidence_fields": low_confidence_fields,
-        },
+        detail=audit_detail,
         commit=False,
     )
 
@@ -976,7 +1009,7 @@ def patch_extraction_result(
 
     db.refresh(doc)
 
-    return {
+    res_dict = {
         "status": doc.processing_status.value,
         "changed_fields": changed_fields,
         "ignored_fields": ignored_fields,
@@ -984,6 +1017,10 @@ def patch_extraction_result(
         "placement": placement_info,
         "duplikat": duplicate_info,
     }
+    if judul_info is not None:
+        res_dict["judul"] = judul_info
+
+    return res_dict
 
 
 @router.post(

@@ -626,6 +626,8 @@ def test_d14_unggah_ulang_pdf_byte_identik_duplicate(client: TestClient, db_sess
     data = {
         "access_classification": "publik",
         "document_role": "draft_kajian",
+        "persetujuan_publik_oleh": "Kepala Divisi Kepatuhan",
+        "persetujuan_publik_alasan": "Uji duplikasi draft identik (Langkah 35)",
     }
     resp1 = client.post("/api/v1/ingest/upload-pdf", files=files1, data=data)
     assert resp1.status_code == 200, resp1.text

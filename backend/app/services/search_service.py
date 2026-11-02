@@ -368,6 +368,11 @@ class SearchService:
                 "highlight": highlight_val,
                 "created_at": doc_obj.created_at,
                 "updated_at": doc_obj.updated_at,
+                "persetujuan_publik": {
+                    "disetujui_oleh": doc_obj.publik_disetujui_oleh,
+                    "alasan": doc_obj.publik_disetujui_alasan,
+                    "pada": doc_obj.publik_disetujui_pada.isoformat() if doc_obj.publik_disetujui_pada else None,
+                } if (doc_obj.publik_disetujui_oleh or doc_obj.publik_disetujui_alasan or doc_obj.publik_disetujui_pada) else None,
             })
 
         return total_count, items
