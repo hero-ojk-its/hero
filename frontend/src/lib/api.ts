@@ -437,6 +437,12 @@ export function buildQueryString(params: Record<string, unknown>): string {
 // Tipe Data Kontrak API HERO
 // -------------------------------------------------------------
 
+export interface PersetujuanPublikDetail {
+  disetujui_oleh?: string | null;
+  alasan?: string | null;
+  pada?: string | null;
+}
+
 export interface DocumentItem {
   id: number;
   title: string;
@@ -466,6 +472,7 @@ export interface DocumentItem {
   file_path_pdf?: string | null;
   rank?: number | null;
   highlight?: string | null;
+  persetujuan_publik?: PersetujuanPublikDetail | null;
 }
 
 export interface DocumentsResponse {

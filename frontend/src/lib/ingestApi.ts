@@ -33,6 +33,7 @@ export type NamingSampleInput = components['schemas']['NamingSampleInput'];
 export type CategoryDetailResponse = components['schemas']['CategoryDetailResponse'];
 
 export type UpdateMetadataIn = components['schemas']['UpdateMetadataIn'];
+export type PersetujuanPublikIn = components['schemas']['PersetujuanPublikIn'];
 export type UpdateDocumentStatusIn = components['schemas']['UpdateDocumentStatusIn'];
 export type UpdateDocumentStatusResponse = components['schemas']['UpdateDocumentStatusResponse'];
 export type StatusKeberlakuan = components['schemas']['StatusKeberlakuan'];
