@@ -485,6 +485,7 @@ export interface CategoryNode {
   id: number;
   name: string;
   parent_id: number | null;
+  kunci_otomatis?: string | null;
   auto_created?: boolean;
   document_count: number;
   total_document_count: number;

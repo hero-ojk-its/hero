@@ -11,11 +11,14 @@ export interface DetailKategoriProps {
 
 export default function DetailKategori({ item, aksi }: DetailKategoriProps) {
   const { node, path } = item;
+  const kunciBersih = typeof node.kunci_otomatis === 'string' ? node.kunci_otomatis.trim() : '';
+  const hasKunciOtomatis = kunciBersih.length > 0;
+
   return (
     <div className="space-y-4" data-detail-kategori={node.id}>
       <div>
         <p className="text-[11px] text-gray-500" data-jalur>{jalurTeks(path)}</p>
-        <h3 className="mt-1 flex items-center gap-2 text-lg font-bold text-gray-900">
+        <h3 className="mt-1 flex items-center gap-2 text-lg font-bold text-gray-900 flex-wrap">
           <Folder size={18} className="text-amber-500" />
           {node.name}
           <span
@@ -26,6 +29,14 @@ export default function DetailKategori({ item, aksi }: DetailKategoriProps) {
           >
             {node.auto_created ? 'Dibuat otomatis' : 'Dibuat / diubah pengguna'}
           </span>
+          {hasKunciOtomatis && (
+            <span
+              className="px-2 py-0.5 rounded-full border border-amber-200 bg-amber-50 text-amber-800 text-[11px] font-semibold"
+              data-badge-kunci-otomatis
+            >
+              Folder otomatis (kunci: {kunciBersih})
+            </span>
+          )}
         </h3>
       </div>
 

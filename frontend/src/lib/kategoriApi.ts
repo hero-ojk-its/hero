@@ -36,9 +36,10 @@ type Skema = components['schemas'];
  */
 export type CategoryTreeNode = Omit<
   TanpaIndeks<Skema['CategoryTreeNode']>,
-  'parent_id' | 'classification_rule' | 'jumlah_dokumen_nonaktif' | 'document_count' | 'children'
+  'parent_id' | 'classification_rule' | 'jumlah_dokumen_nonaktif' | 'document_count' | 'children' | 'kunci_otomatis'
 > & {
   parent_id: number | null;
+  kunci_otomatis: string | null;
   classification_rule: string | null;
   jumlah_dokumen_nonaktif: number | null;
   children: CategoryTreeNode[];
@@ -47,9 +48,10 @@ export type CategoryTreeNode = Omit<
 /** Dari skema generate CategoryDetailResponse; jumlah_dokumen_nonaktif null = backend lama */
 export type CategoryDetail = Omit<
   TanpaIndeks<Skema['CategoryDetailResponse']>,
-  'parent_id' | 'classification_rule' | 'jumlah_dokumen_nonaktif' | 'document_count' | 'created_at' | 'updated_at'
+  'parent_id' | 'classification_rule' | 'jumlah_dokumen_nonaktif' | 'document_count' | 'created_at' | 'updated_at' | 'kunci_otomatis'
 > & {
   parent_id: number | null;
+  kunci_otomatis: string | null;
   classification_rule: string | null;
   jumlah_dokumen_nonaktif: number | null;
 };
@@ -109,6 +111,7 @@ function normalisasiNode(v: unknown): CategoryTreeNode | null {
     name: typeof o.name === 'string' && o.name.trim() !== '' ? o.name : `Kategori #${o.id}`,
     parent_id: idAtauNull(o.parent_id),
     auto_created: o.auto_created === true,
+    kunci_otomatis: teksAtauNull(o.kunci_otomatis),
     jumlah_dokumen: angka(langsung),
     // null = backend lama (tidak mengirim field ini), dibedakan dari 0
     jumlah_dokumen_nonaktif: angkaAtauNull(o.jumlah_dokumen_nonaktif),
@@ -133,6 +136,7 @@ function normalisasiHasilUbah(raw: unknown): CategoryUpdateResult {
           name: typeof k.name === 'string' ? k.name : '',
           parent_id: idAtauNull(k.parent_id),
           auto_created: k.auto_created === true,
+          kunci_otomatis: teksAtauNull(k.kunci_otomatis),
           path: Array.isArray(k.path) ? k.path.filter((s): s is string => typeof s === 'string') : [],
           jumlah_dokumen: angka(typeof k.jumlah_dokumen === 'number' ? k.jumlah_dokumen : k.document_count),
           jumlah_dokumen_nonaktif: angkaAtauNull(k.jumlah_dokumen_nonaktif),
@@ -251,7 +255,43 @@ export function pesanGalatKategori(err: unknown, aksi: AksiKategori): PesanGalat
         konflikHapus: konflik,
       };
     }
-    return { judul: 'Nama sudah dipakai', pesan: 'Sudah ada kategori dengan nama ini di bawah induk yang sama. Gunakan nama lain.', bisaCobaLagi: false };
+
+    const pesanBackend = teksDetail(detail);
+    const pesanLower = pesanBackend.toLowerCase();
+
+    // Konflik kunci otomatis (Langkah 33): mis. "Induk tujuan sudah punya kategori otomatis dengan kunci '...'"
+    if (pesanLower.includes('kunci') || (pesanLower.includes('induk tujuan') && pesanLower.includes('otomatis'))) {
+      return {
+        judul: 'Konflik kategori otomatis',
+        pesan: pesanBackend || 'Induk tujuan sudah memiliki kategori otomatis dengan kunci yang sama.',
+        bisaCobaLagi: false,
+      };
+    }
+
+    // Konflik nama duplikat: mis. "Kategori dengan nama '...' sudah ada di bawah induk yang sama."
+    if (pesanLower.includes('nama') || pesanLower.includes('sudah ada')) {
+      return {
+        judul: 'Nama sudah dipakai',
+        pesan: pesanBackend || 'Sudah ada kategori dengan nama ini di bawah induk yang sama. Gunakan nama lain.',
+        bisaCobaLagi: false,
+      };
+    }
+
+    // 409 lain yang membawa pesan spesifik dari backend
+    if (pesanBackend.trim() !== '') {
+      return {
+        judul: 'Konflik kategori',
+        pesan: pesanBackend,
+        bisaCobaLagi: false,
+      };
+    }
+
+    // Fallback umum bila tidak ada rincian
+    return {
+      judul: 'Konflik kategori',
+      pesan: 'Terjadi konflik data kategori di server. Periksa kembali nama atau induk tujuan.',
+      bisaCobaLagi: false,
+    };
   }
   if (status === 422) return { judul: 'Isian tidak valid', pesan: pesan422(detail), bisaCobaLagi: false };
   if (status === 0) {
