@@ -14,6 +14,17 @@ class StorageError(Exception):
     pass
 
 
+def _to_os_path(path: Path) -> str:
+    """
+    Mengonversi Path ke string path OS yang aman.
+    Di Windows, path absolut panjang (>240 char) diberi prefix \\\\?\\ agar tidak melanggar MAX_PATH (260 char).
+    """
+    s = str(path.resolve())
+    if os.name == "nt" and not s.startswith("\\\\?\\") and len(s) >= 240:
+        return "\\\\?\\" + s
+    return s
+
+
 class StorageService:
     def __init__(self, base_path: str | Path):
         self.base_path = Path(base_path).resolve()
@@ -82,7 +93,7 @@ class StorageService:
 
                 try:
                     # Mode 'xb' (exclusive creation) menjamin tidak ada penimpaan file
-                    with open(candidate_path, "xb") as dst:
+                    with open(_to_os_path(candidate_path), "xb") as dst:
                         dst.write(content)
                     # Berhasil disimpan
                     rel_path = f"{clean_subdir}/{candidate_name}".lstrip("/").replace("\\", "/")
@@ -132,10 +143,10 @@ class StorageService:
 
             try:
                 # Klaim slot nama berkas secara eksklusif
-                with open(candidate_path, "xb") as _:
+                with open(_to_os_path(candidate_path), "xb") as _:
                     pass
                 # Ganti dengan berkas sumber secara atomik
-                os.replace(src_abs, candidate_path)
+                os.replace(_to_os_path(src_abs), _to_os_path(candidate_path))
                 rel_path = f"{clean_subdir}/{candidate_name}".lstrip("/").replace("\\", "/")
                 return rel_path
             except FileExistsError:
