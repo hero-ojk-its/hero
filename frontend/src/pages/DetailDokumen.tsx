@@ -663,6 +663,26 @@ export default function DetailDokumen() {
     ? regulasi.tanggalPublikasi
     : 'Belum diketahui';
 
+  const displayWaktuPersetujuan = rawDoc?.persetujuan_publik?.pada
+    ? (() => {
+        try {
+          const d = new Date(rawDoc.persetujuan_publik.pada);
+          if (!isNaN(d.getTime())) {
+            return d.toLocaleDateString('id-ID', {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            });
+          }
+        } catch {
+          // ignore
+        }
+        return rawDoc.persetujuan_publik.pada;
+      })()
+    : '-';
+
   const displayUkuran = ('ukuran' in regulasi && regulasi.ukuran && regulasi.ukuran !== '-')
     ? regulasi.ukuran
     : ('ukuran' in regulasi && regulasi.ukuran === '-' ? '-' : '2.4 MB');
@@ -1405,6 +1425,49 @@ export default function DetailDokumen() {
             </div>
           </div>
         </div>
+
+        {/* 2b. Persetujuan Publikasi Draft Kajian (Langkah 35) - Hanya muncul jika ada data persetujuan */}
+        {rawDoc?.persetujuan_publik && (rawDoc.persetujuan_publik.disetujui_oleh || rawDoc.persetujuan_publik.alasan || rawDoc.persetujuan_publik.pada) && (
+          <div
+            id="section-detail-persetujuan-publik"
+            className="bg-amber-50/70 rounded-xl shadow-xs border border-amber-200/90 p-6 sm:p-7 space-y-4 animate-in fade-in duration-200"
+          >
+            <div className="flex items-center gap-2.5 pb-3 border-b border-amber-200/70">
+              <div className="p-1.5 bg-amber-100 text-amber-800 rounded-lg shrink-0">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-bold text-amber-950 text-base">Persetujuan Publikasi Draft Kajian</h3>
+                <p className="text-xs text-amber-800 mt-0.5">
+                  Informasi persetujuan resmi publikasi rancangan peraturan ke klasifikasi publik.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-5 gap-x-8 pt-1">
+              <div className="flex flex-col gap-1 min-w-0">
+                <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">Disetujui Oleh</span>
+                <p className="text-sm font-semibold text-gray-900 truncate" title={rawDoc.persetujuan_publik.disetujui_oleh || '-'}>
+                  {rawDoc.persetujuan_publik.disetujui_oleh || '-'}
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-1 min-w-0">
+                <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">Waktu Persetujuan</span>
+                <p className="text-sm font-medium text-gray-900">
+                  {displayWaktuPersetujuan}
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-1 min-w-0 md:col-span-2 lg:col-span-1">
+                <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">Alasan Persetujuan</span>
+                <p className="text-xs text-gray-800 font-medium leading-relaxed bg-white/80 p-2.5 rounded-lg border border-amber-200/60">
+                  {rawDoc.persetujuan_publik.alasan || '-'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 3. Dokumen Asli (Buka Dokumen, Buka PDF Asli, & Unduh) */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-6 sm:p-7">

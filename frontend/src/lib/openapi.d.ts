@@ -42,6 +42,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/audit-logs/ringkasan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ringkasan Audit Log per Aksi
+         * @description Mengembalikan ringkasan statistik audit log per jenis aksi:
+         *     - jumlah: total kemunculan aksi
+         *     - jumlah_detail_kosong: jumlah baris dengan detail null atau kosong
+         *     - terakhir: waktu kejadian terakhir
+         */
+        get: operations["get_audit_summary_api_v1_audit_logs_ringkasan_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/audit-logs/": {
         parameters: {
             query?: never;
@@ -1775,6 +1798,16 @@ export interface components {
              * @description URL asal dokumen (opsional)
              */
             source_url?: string | null;
+            /**
+             * Persetujuan Publik Oleh
+             * @description Pihak yang menyetujui publikasi draft kajian (wajib jika peran draft_kajian dan akses publik)
+             */
+            persetujuan_publik_oleh?: string | null;
+            /**
+             * Persetujuan Publik Alasan
+             * @description Alasan persetujuan publikasi draft kajian (wajib minimal 10 karakter jika draft_kajian publik)
+             */
+            persetujuan_publik_alasan?: string | null;
         };
         /**
          * BulkArticleIn
@@ -1949,6 +1982,8 @@ export interface components {
             id: number;
             /** Name */
             name: string;
+            /** Kunci Otomatis */
+            kunci_otomatis?: string | null;
             /** Parent Id */
             parent_id?: number | null;
             /**
@@ -1991,6 +2026,8 @@ export interface components {
             id: number;
             /** Name */
             name: string;
+            /** Kunci Otomatis */
+            kunci_otomatis?: string | null;
             /** Parent Id */
             parent_id?: number | null;
             /**
@@ -2405,6 +2442,10 @@ export interface components {
             duplikat?: {
                 [key: string]: unknown;
             } | null;
+            /** Persetujuan Publik */
+            persetujuan_publik?: {
+                [key: string]: unknown;
+            } | null;
         } & {
             [key: string]: unknown;
         };
@@ -2661,26 +2702,20 @@ export interface components {
         /** HarmonisasiBadge */
         HarmonisasiBadge: {
             /** Tone */
-            tone?: string | null;
+            tone?: unknown | null;
             /** Label */
-            label?: string | null;
+            label?: unknown | null;
         } & {
             [key: string]: unknown;
         };
         /** HarmonisasiCache */
         HarmonisasiCache: {
-            /**
-             * Hit
-             * @default false
-             */
-            hit: boolean;
+            /** Hit */
+            hit?: boolean | null;
             /** Dibuat */
             dibuat?: string | null;
-            /**
-             * Basi
-             * @default false
-             */
-            basi: boolean;
+            /** Basi */
+            basi?: boolean | null;
             /** Mode Tersimpan */
             mode_tersimpan?: string | null;
             /** Run Id */
@@ -2693,17 +2728,17 @@ export interface components {
             /** Document Id */
             document_id?: number | null;
             /** Key */
-            key?: string | null;
+            key?: unknown | null;
             /** Nomor */
-            nomor?: string | null;
+            nomor?: unknown | null;
             /** Status */
-            status?: string | null;
+            status?: unknown | null;
             /** Judul */
-            judul?: string | null;
+            judul?: unknown | null;
             /** Pdf */
-            pdf?: string | null;
+            pdf?: unknown | null;
             /** Tautan */
-            tautan?: string | null;
+            tautan?: unknown | null;
         } & {
             [key: string]: unknown;
         };
@@ -2714,16 +2749,10 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             ringkasan?: components["schemas"]["HarmonisasiRingkasan"] | null;
-            /**
-             * Temuan
-             * @default []
-             */
-            temuan: components["schemas"]["HarmonisasiTemuan"][];
-            /**
-             * Disaring Backend
-             * @default 0
-             */
-            disaring_backend: number | null;
+            /** Temuan */
+            temuan?: components["schemas"]["HarmonisasiTemuan"][] | null;
+            /** Disaring Backend */
+            disaring_backend?: number | null;
             /** Disaring Rincian */
             disaring_rincian?: {
                 [key: string]: number;
@@ -2736,14 +2765,11 @@ export interface components {
         };
         /** HarmonisasiRingkasan */
         HarmonisasiRingkasan: {
-            /**
-             * Total Temuan
-             * @default 0
-             */
-            total_temuan: number | null;
+            /** Total Temuan */
+            total_temuan?: unknown | null;
             /** Per Jenis */
             per_jenis?: {
-                [key: string]: number;
+                [key: string]: unknown;
             } | null;
             /** Rencana Perubahan */
             rencana_perubahan?: unknown | null;
@@ -2755,11 +2781,11 @@ export interface components {
             /** Id */
             id?: unknown | null;
             /** Jenis */
-            jenis?: string | null;
+            jenis?: unknown | null;
             /** Judul */
-            judul?: string | null;
+            judul?: unknown | null;
             /** Deskripsi */
-            deskripsi?: string | null;
+            deskripsi?: unknown | null;
             /** Pasal Draft */
             pasal_draft?: unknown | null;
             /** Pasal Pembanding */
@@ -3204,6 +3230,13 @@ export interface components {
          * @enum {string}
          */
         PeranPengguna: "analis" | "admin_kb" | "admin_sistem" | "pilot_user";
+        /** PersetujuanPublikIn */
+        PersetujuanPublikIn: {
+            /** Disetujui Oleh */
+            disetujui_oleh?: string | null;
+            /** Alasan */
+            alasan?: string | null;
+        };
         /**
          * PullProgress
          * @description Progres penarikan dokumen dari job terkait.
@@ -3778,6 +3811,11 @@ export interface components {
              * @example 7
              */
             revoking_document_id?: number | null;
+            /**
+             * Alasan
+             * @description Alasan perubahan status dokumen regulasi
+             */
+            alasan?: string | null;
         };
         /**
          * UpdateDocumentStatusResponse
@@ -3839,6 +3877,7 @@ export interface components {
             parent_document_id?: number | null;
             /** Attachment Label */
             attachment_label?: string | null;
+            persetujuan_publik?: components["schemas"]["PersetujuanPublikIn"] | null;
         };
         /** UserCreateIn */
         UserCreateIn: {
@@ -4001,6 +4040,39 @@ export interface operations {
             };
         };
     };
+    get_audit_summary_api_v1_audit_logs_ringkasan_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Internal-API-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_audit_logs_api_v1_audit_logs__get: {
         parameters: {
             query?: {
@@ -4014,8 +4086,16 @@ export interface operations {
                 target_resource?: string | null;
                 /** @description Filter berdasarkan mode analisa (detail->>'mode_dipakai') */
                 mode?: ("deterministik" | "ai") | null;
+                /** @description Filter ketersediaan detail (true: tidak kosong; false: kosong) */
+                ada_detail?: boolean | null;
+                /** @description Filter rentang awal waktu timestamp (inklusif) */
+                dari?: string | null;
+                /** @description Filter rentang akhir waktu timestamp (inklusif) */
+                sampai?: string | null;
             };
-            header?: never;
+            header?: {
+                "X-Internal-API-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6617,7 +6697,9 @@ export interface operations {
                 /** @description Filter status aktif */
                 is_active?: boolean | null;
             };
-            header?: never;
+            header?: {
+                "X-Internal-API-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6646,7 +6728,9 @@ export interface operations {
     create_user_api_v1_users__post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-Internal-API-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6679,7 +6763,9 @@ export interface operations {
     update_user_api_v1_users__user_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-Internal-API-Key"?: string | null;
+            };
             path: {
                 user_id: number;
             };

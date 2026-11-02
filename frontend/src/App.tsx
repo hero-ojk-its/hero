@@ -8,6 +8,8 @@ import KelolaKategori from './pages/KelolaKategori';
 import Harmonisasi from './pages/Harmonisasi';
 import AnalisaRegulasi from './pages/AnalisaRegulasi';
 import Settings from './pages/Settings';
+import AuditLog from './pages/AuditLog';
+import KelolaPengguna from './pages/KelolaPengguna';
 
 function App() {
   return (
@@ -22,6 +24,10 @@ function App() {
           <Route path="analisa" element={<AnalisaRegulasi />} />
           <Route path="harmonisasi" element={<Harmonisasi />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="audit-log" element={<AuditLog />} />
+          <Route path="audit-logs" element={<AuditLog />} />
+          <Route path="users" element={<KelolaPengguna />} />
+          <Route path="pengguna" element={<KelolaPengguna />} />
         </Route>
       </Routes>
     </HashRouter>
