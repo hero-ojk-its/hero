@@ -37,6 +37,8 @@ export interface FormKategoriProps {
 const AKAR = '';
 
 export default function FormKategori({ mode, node, parentIdAwal, rata, sibuk, galat, onCobaLagi, onBatal, onKirim }: FormKategoriProps) {
+  const kunciOtomatis = typeof node?.kunci_otomatis === 'string' ? node.kunci_otomatis.trim() : '';
+  const hasKunciOtomatis = kunciOtomatis.length > 0;
   const [nama, setNama] = useState(node?.name ?? '');
   const [induk, setInduk] = useState<string>(parentIdAwal === null ? AKAR : String(parentIdAwal));
   const [aturan, setAturan] = useState(node?.classification_rule ?? '');
@@ -77,7 +79,26 @@ export default function FormKategori({ mode, node, parentIdAwal, rata, sibuk, ga
         )}
       </div>
 
-      {mode === 'ubah' && node?.auto_created && (
+      {mode === 'ubah' && hasKunciOtomatis && (
+        <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" data-peringatan-kunci-otomatis>
+          <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-semibold">
+              Folder otomatis (kunci: {kunciOtomatis})
+            </p>
+            <p className="leading-relaxed">
+              Kategori ini terhubung dengan alur penempatan dokumen otomatis. Pemindahan induk kategori dapat mengalami konflik jika induk tujuan sudah memiliki kategori otomatis dengan kunci yang sama.
+            </p>
+            {node?.auto_created && (
+              <p className="text-[11px] text-amber-800/90 leading-relaxed">
+                Setelah diubah, nama lama bisa muncul lagi saat dokumen baru ditempatkan otomatis, dan dokumen yang kategorinya tidak dipilih manual bisa pindah balik saat metadatanya dikoreksi.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {mode === 'ubah' && !hasKunciOtomatis && node?.auto_created && (
         <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" data-peringatan-otomatis>
           <AlertTriangle size={14} className="shrink-0 mt-0.5" />
           <p>
