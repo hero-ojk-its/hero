@@ -44,6 +44,10 @@ LABEL_TEXT = {
     "konflik": "Konflik", "menggantikan": "Menggantikan", "memperjelas": "Memperjelas",
     "duplikasi": "Duplikasi", "pasal_baru": "Pasal Baru",
 }
+# Kosakata Pak Faris (Weekly #7) untuk "analisa": status tiap pasal terhadap KB.
+# Kunci internal tetap sama; ini hanya nama tampilan yang disepakati dengan mitra.
+STATUS_KB = {"pasal_baru": "baru", "duplikasi": "sama", "menggantikan": "menggantikan",
+             "memperjelas": "melengkapi", "konflik": "konflik"}
 LABEL_TONE = {"konflik": "danger", "menggantikan": "warning", "memperjelas": "info",
               "duplikasi": "neutral", "pasal_baru": "success"}
 
@@ -478,7 +482,9 @@ def harmonise(conn: sqlite3.Connection, draft: DraftDoc, cfg: dict[str, Any] | N
     summary = {
         "pasal_draft": len(d_arts), "pasal_korpus": len(corpus),
         "dokumen_korpus": len({c.doc_id for c in corpus}),
-        "per_jenis": per_jenis, "rujukan": len(refs), "rujukan_dicabut": len(rujukan_dicabut),
+        "per_jenis": per_jenis,
+        "status_pasal": {STATUS_KB[k]: v for k, v in per_jenis.items()},
+        "rujukan": len(refs), "rujukan_dicabut": len(rujukan_dicabut),
         "rencana_perubahan": {"diubah": sorted(plan.diubah), "disisipkan": sorted(plan.disisipkan),
                               "dihapus": sorted(plan.dihapus)} if not plan.kosong else None,
     }

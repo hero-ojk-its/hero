@@ -176,3 +176,11 @@ def test_register_suggests_related_regulations_missing_from_the_kb(tmp_path):
                      None, "", [])
     got = [c["key"] for c in register_candidates(cat.conn, draft, CFG)]
     assert got == ["POJK|11|2022"]
+
+
+def test_status_pasal_memakai_kosakata_pak_faris():
+    from hero.harmonisasi.engine import LABELS, STATUS_KB
+
+    assert set(STATUS_KB) == set(LABELS), "setiap label harus punya padanan kosakata mitra"
+    assert {STATUS_KB[k] for k in ("pasal_baru", "duplikasi", "menggantikan", "memperjelas")} == \
+        {"baru", "sama", "menggantikan", "melengkapi"}

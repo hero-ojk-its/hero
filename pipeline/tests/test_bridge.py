@@ -1144,3 +1144,14 @@ def test_run_once_paralel_satu_dokumen_gagal_tidak_menjatuhkan_yang_lain(
     rep = w.run_once(limit=10)
     assert [o.status for o in rep.outcomes] == ["terindeks", "error", "terindeks"]
     st.close()
+
+
+def test_lupakan_kiriman_membuat_dokumen_dikirim_ulang(tmp_path):
+    st = BridgeState(tmp_path / "b.db")
+    st.begin_extraction(5, file_hash="h", attempt=1)
+    st.finish_extraction(5, status="selesai", articles=7, articles_hash="h")
+    assert st.dokumen_selesai() == [5] and st.articles_already_sent(5, "h") == 7
+    st.lupakan_kiriman([5])
+    assert st.articles_already_sent(5, "h") == 0
+    assert st.dokumen_selesai() == []
+    st.close()

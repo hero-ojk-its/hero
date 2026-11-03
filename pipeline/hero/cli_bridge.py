@@ -197,6 +197,50 @@ def ekstraksi(
 
 
 # ---------------------------------------------------------------------------
+@bridge_app.command("ulang-ekstraksi")
+def ulang_ekstraksi(
+    dokumen: Optional[list[int]] = typer.Option(None, "--dokumen", "-d",
+                                                help="ID dokumen backend (boleh berulang)."),
+    semua: bool = typer.Option(False, "--semua",
+                               help="Semua dokumen yang pernah selesai diekstraksi di worker ini."),
+    yakin: bool = typer.Option(False, "--yakin", help="Jalankan; tanpa ini hanya menampilkan rencana."),
+    config: Path = CONFIG_OPT,
+) -> None:
+    """Antre-ulang dokumen lama agar pasalnya dikirim lagi lengkap dengan halaman PDF.
+
+    Untuk dokumen yang diekstraksi sebelum kontrak pasal Langkah 13 (halaman belum
+    tersimpan di backend). Pasal diganti-bersih, bukan digandakan. Lalu jalankan
+    `hero bridge ekstraksi --loop` seperti biasa."""
+    from hero.bridge.client import BackendClient, BackendError
+    from hero.bridge.state import BridgeState, default_path
+
+    if not dokumen and not semua:
+        console.print("[red]sebutkan --dokumen ID atau --semua[/]")
+        raise typer.Exit(2)
+    settings, bridge = _ctx(config)
+    st = BridgeState(default_path(settings))
+    try:
+        ids = sorted(set(dokumen or [])) if dokumen else st.dokumen_selesai()
+        console.print(f"{len(ids)} dokumen akan diantre ulang"
+                      + ("" if yakin else " [dim](rencana saja; tambahkan --yakin)[/]"))
+        if not yakin or not ids:
+            return
+        ok = 0
+        with BackendClient(bridge) as c:
+            for i in ids:
+                try:
+                    c.requeue(i)
+                except BackendError as exc:
+                    console.print(f"[yellow]•[/] dokumen {i}: {exc}")
+                    continue
+                st.lupakan_kiriman([i])
+                ok += 1
+        console.print(f"[green]✓[/] {ok} dokumen kembali ke antrean ekstraksi")
+    finally:
+        st.close()
+
+
+# ---------------------------------------------------------------------------
 @bridge_app.command("sinkron")
 def sinkron(
     dokumen: Optional[list[int]] = typer.Option(None, "--dokumen", "-d",
