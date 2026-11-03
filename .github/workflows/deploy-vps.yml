@@ -11,14 +11,16 @@
 #
 # Pengaman:
 #  - hanya jalan bila CI-nya SUKSES dan itu push ke main (bukan PR, bukan fork);
-#  - environment `vps-production`: tambahkan Required reviewers di Settings → Environments
-#    bila ingin satu klik persetujuan sebelum menyentuh produksi (disarankan untuk backend,
-#    karena migrasi basis data);
+#  - TANPA gerbang persetujuan manual: push ke main yang lolos CI men-deploy langsung,
+#    tidak ada klik approve. Keputusan sadar (bukan default aman) — kalau mau gerbang
+#    persetujuan lagi, pakai Environment (butuh akses admin repo untuk membuatnya) dan
+#    tambahkan `environment: vps-production` kembali di kedua job SSH di bawah;
 #  - satu deploy pada satu waktu (concurrency), tidak pernah dibatalkan di tengah jalan;
 #  - skrip di VPS membuat cadangan, melatih migrasi pada SALINAN data, lalu memverifikasi
 #    /health dan mengembalikan image lama bila gagal (lihat deploy/vps/README.md).
 #
-# Rahasia (Environment `vps-production`): VPS_HOST, VPS_USER, VPS_SSH_KEY, VPS_KNOWN_HOSTS.
+# Rahasia (repo, Settings → Secrets and variables → Actions → Secrets — butuh akses
+# write, bukan admin): VPS_HOST, VPS_USER, VPS_SSH_KEY, VPS_KNOWN_HOSTS.
 # Dua saklar (Settings → Secrets and variables → Actions → Variables), keduanya default MATI:
 #   DEPLOY_VPS_ENABLED=true  → workflow berjalan; backend DIBANGUN dan didorong ke GHCR
 #                              (cukup untuk server lokal yang menarik image sendiri)
@@ -164,7 +166,6 @@ jobs:
     if: vars.DEPLOY_VPS_SSH == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    environment: vps-production
     permissions:
       contents: read
       packages: read
@@ -213,7 +214,6 @@ jobs:
     if: needs.tentukan.outputs.komponen == 'pipeline' && vars.DEPLOY_VPS_SSH == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    environment: vps-production
     steps:
       - uses: actions/checkout@v4
         with:
