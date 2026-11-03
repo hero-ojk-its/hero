@@ -10,7 +10,15 @@ set -euo pipefail
 
 HERO_HOME=/opt/hero
 HERO_USER=hero
-ML_BIND=172.17.0.1          # gateway docker0: hanya dapat dicapai container, bukan internet
+# Gateway jaringan Docker tempat backend bisa menjangkau host. BUKAN gateway
+# bridge default (172.17.0.1) — itu hanya benar bila backend dijalankan tanpa
+# docker-compose atau tanpa jaringan kustom. docker-compose membuat jaringan
+# sendiri per proyek (nama bebas), dengan gateway sendiri; cek dulu dengan
+#   docker network inspect <jaringan backend> --format '{{json .IPAM.Config}}'
+# Bind ke gateway yang SALAH berarti backend timeout menjangkau layanan ini
+# (Docker mengisolasi antar-jaringan bridge secara default) — bukan error yang
+# jelas, dan mudah terlewat karena ini menyalakan tanpa galat.
+ML_BIND=172.17.0.1          # gateway docker0 bawaan: hanya dapat dicapai container, bukan internet
 ML_PORT=8100
 CORS_ORIGIN="https://hero-ojk.vercel.app,https://hero-ojk-its.github.io"
 
