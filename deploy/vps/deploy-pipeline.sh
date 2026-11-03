@@ -16,7 +16,9 @@ set -Eeuo pipefail
 HERO_HOME="${HERO_HOME:-/opt/hero}"
 HERO_USER="${HERO_USER:-hero}"
 VENV="${VENV:-$HERO_HOME/.venv}"
-ML_HEALTH_URL="${ML_HEALTH_URL:-http://172.17.0.1:8100/health}"
+# Harus sama dengan --host di ExecStart hero-ml.service (gateway jaringan docker backend,
+# bukan docker0 172.17.0.1). Salah alamat = layanan sehat dianggap mati lalu di-rollback.
+ML_HEALTH_URL="${ML_HEALTH_URL:-http://172.19.0.1:8100/health}"
 SERVICES="${SERVICES:-hero-ml hero-bridge-ekstraksi}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-90}"
 HEALTH_INTERVAL="${HEALTH_INTERVAL:-3}"
