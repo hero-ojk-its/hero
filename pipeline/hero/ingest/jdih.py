@@ -450,7 +450,14 @@ def harvest_jdih(
         if html is None:
             report.errors.append(f"could not read detail page: {entry.detail_url}")
             continue
-        doc_url = find_document_link(html, BASE_URL)
+        # ``find_document_link`` (DOM-order first match) dulu dipakai di sini dan
+        # kadang menarik baris "Abstrak"/"Lampiran" yang muncul lebih dulu di HTML
+        # daripada baris "Peraturan" — menghasilkan dokumen 1 halaman atau lampiran
+        # tanpa pasal sama sekali di katalog (ditemukan: ratusan POJK/PADK dengan
+        # 0 pasal meski panjangnya wajar). ``parse_detail`` + ``primary_document``
+        # sudah memfilter berdasarkan label, bukan urutan DOM — pakai itu di jalur
+        # unduhan sungguhan juga, bukan cuma di jalur pindai-saja (``inventory.py``).
+        doc_url = parse_detail(html, BASE_URL).get("document_url")
         if not doc_url:
             report.errors.append(
                 f"no downloadable document on detail page: {entry.title[:80]}")
