@@ -52,6 +52,10 @@ from app.crawlers.url_utils import (
 )
 from app.services.folder_connector import list_pdf_files, FolderAccessError
 
+# Peran dokumen yang bukan regulasi berdiri sendiri (lihat determine_doc_kind) — tidak
+# boleh masuk KB sebagai dokumen sendiri lewat "Pilih Semua Baru".
+NON_UTAMA_DOC_KINDS = {"abstrak", "faq", "lampiran", "non_regulasi"}
+
 from app.schemas.scan import (
     ScanCreate,
     ScanSelectionUpdate,
@@ -667,8 +671,14 @@ class ScanService:
         rejected: List[RejectedSelection] = []
 
         if payload.action == "select_all_new":
+            # "Baru" berarti belum ada di KB DAN bukan Abstrak/FAQ/Lampiran/non-regulasi —
+            # keempatnya bukan dokumen regulasi berdiri sendiri (ditemukan di produksi:
+            # "Pilih Semua Baru" menarik 35 abstrak/faq ke KB karena hanya menyaring
+            # match_status, bukan doc_kind). Tetap bisa dipilih manual lewat action='set'
+            # bagi kasus yang memang perlu, misalnya audit Lampiran yang belum tertaut.
             for c in candidates:
-                if c.match_status != StatusKandidat.sudah_ada:
+                kind = c.doc_kind or "utama"
+                if c.match_status != StatusKandidat.sudah_ada and kind not in NON_UTAMA_DOC_KINDS:
                     c.selected = True
                 else:
                     c.selected = False
