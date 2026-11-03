@@ -31,11 +31,16 @@ class BridgeSettings:
 
     base_url: str = "http://127.0.0.1:8000"
     api_key: str = ""
-    # Timeout `requests`: batas DIAM antar-byte, bukan tenggat total, jadi unduhan
-    # besar yang masih mengalir tidak dipotong. Dilonggarkan dari 60s karena
-    # timeout pada POST tulis (mis. 150 pasal) memicu retry, dan retry pada tulis
-    # yang sebenarnya sudah sampai bisa menggandakan pasal (lihat invarian 7).
-    timeout: float = 300.0
+    # Batas DIAM baca `requests` (antar-byte), bukan tenggat total. 0 / kosong =
+    # tanpa batas: timeout pada POST tulis (mis. 150 pasal) memicu retry, dan
+    # retry pada tulis yang sebenarnya sudah sampai bisa menggandakan pasal
+    # (lihat invarian 7) — jadi lebih aman menunggu backend sampai menjawab.
+    timeout: float = 0.0
+    # Batas menyambung ke backend. Ini bukan batas proses ingest: backend yang
+    # mati harus terdeteksi cepat agar percobaan ulang/antrian bekerja.
+    connect_timeout: float = 15.0
+    # Dokumen yang diekstraksi bersamaan oleh satu worker (>= 1).
+    extract_workers: int = 2
     verify_tls: bool = True
     # Jeda antar-polling saat antrian kosong. Backend memberi 202/daftar kosong,
     # jadi polling adalah kontraknya — bukan pilihan kami.
@@ -83,6 +88,12 @@ class BridgeSettings:
     # None = ikuti apa pun yang diminta backend.
     max_candidates_cap: int | None = 500
     extra: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def request_timeout(self) -> tuple[float, float | None]:
+        """Argumen ``timeout`` untuk ``requests``: (menyambung, baca); baca None = tanpa batas."""
+        baca = float(self.timeout) if self.timeout and self.timeout > 0 else None
+        return (float(self.connect_timeout), baca)
 
     def url(self, path: str) -> str:
         return f"{self.base_url.rstrip('/')}/{path.lstrip('/')}"

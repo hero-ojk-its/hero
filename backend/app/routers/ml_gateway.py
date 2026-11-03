@@ -43,7 +43,9 @@ SENSITIVE_REF_KEYS = {"kutipan", "pdf", "halaman", "pasal", "pasal_mirip", "skor
 
 async def get_ml_client() -> AsyncIterator[httpx.AsyncClient]:
     """Dependency klien HTTP untuk komunikasi dengan layanan analisa ML."""
-    async with httpx.AsyncClient(timeout=settings.ml_timeout_seconds) as client:
+    baca = settings.ml_timeout_seconds if settings.ml_timeout_seconds > 0 else None
+    timeout = httpx.Timeout(baca, connect=settings.ml_connect_timeout_seconds)
+    async with httpx.AsyncClient(timeout=timeout) as client:
         yield client
 
 
@@ -268,7 +270,7 @@ async def forward_ml_request(
             params=params,
             json=json_data,
         )
-    except httpx.ConnectError as exc:
+    except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
         logger.warning("Gagal terhubung ke layanan analisa: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

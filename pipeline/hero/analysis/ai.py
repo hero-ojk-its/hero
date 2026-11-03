@@ -307,6 +307,16 @@ class AiNarrator:
         return {"aktif": ready, "sdk": sdk, "kredensial": cred, "penyedia": prov,
                 "model": self.settings.ai_model, "ringkas": summary}
 
+    def _timeout(self):
+        """Batas klien AI. ``ai_timeout`` <= 0 = tanpa batas baca: narasi dokumen
+        tebal tidak dipotong di tengah. Menyambung tetap dibatasi 15 s agar
+        layanan yang mati gagal cepat dan jatuh ke hasil Deterministik."""
+        batas = getattr(self.settings, "ai_timeout", 0) or 0
+        if batas > 0:
+            return float(batas)
+        import httpx
+        return httpx.Timeout(None, connect=15.0)
+
     def _get_client(self):
         if self._client is None:
             if self.provider == GEMINI:
@@ -314,7 +324,7 @@ class AiNarrator:
                 self._client = genai.Client()
             else:
                 import anthropic
-                self._client = anthropic.Anthropic(max_retries=2, timeout=120.0)
+                self._client = anthropic.Anthropic(max_retries=2, timeout=self._timeout())
         return self._client
 
     def narrate(self, a: AnalysisV2, *, akses: str = "publik", conn: sqlite3.Connection | None = None,

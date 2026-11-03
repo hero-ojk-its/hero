@@ -419,3 +419,12 @@ def test_status_menyebut_penyedia_dan_sdk_yang_tepat():
     assert st["model"] == "gemini-2.5-pro"
     assert "google.genai" in st["ringkas"] or "gemini-2.5-pro" in st["ringkas"]
     assert "anthropic" not in st["ringkas"]
+
+
+def test_klien_ai_tanpa_batas_baca_bawaan_tapi_menyambung_dibatasi():
+    import httpx
+
+    t = AiNarrator(AnalysisSettings())._timeout()
+    assert isinstance(t, httpx.Timeout)
+    assert t.read is None and t.connect == 15.0
+    assert AiNarrator(AnalysisSettings(ai_timeout=45))._timeout() == 45.0

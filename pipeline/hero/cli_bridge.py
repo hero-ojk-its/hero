@@ -173,12 +173,15 @@ def ekstraksi(
     batch: Optional[int] = typer.Option(None, "--batch", help="Jumlah batch sebelum berhenti."),
     limit: Optional[int] = typer.Option(None, "--limit", help="Dokumen diklaim per putaran (1-50)."),
     embedder: Optional[str] = typer.Option(None, "--embedder", help="lsa | semantic | none."),
+    workers: Optional[int] = typer.Option(None, "--workers", "-w", min=1,
+                                          help="Dokumen diekstraksi bersamaan (bawaan: bridge.extract_workers)."),
     config: Path = CONFIG_OPT,
 ) -> None:
     """Ambil antrian ekstraksi backend: OCR → metadata → pasal → vektor → kirim balik."""
     from hero.bridge.extract_worker import ExtractionWorker
 
-    settings, bridge = _ctx(config, claim_documents=limit, embedder=embedder)
+    settings, bridge = _ctx(config, claim_documents=limit, embedder=embedder,
+                            extract_workers=workers)
     w = ExtractionWorker(settings, bridge)
     try:
         rep = (w.run_forever(max_batches=batch, progress=_say) if loop

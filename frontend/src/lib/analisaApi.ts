@@ -33,11 +33,11 @@ export const ML_API_BASE_URL: string = rawMlUrl
   : `${API_BASE_URL}/api/v1/ml`;
 
 /**
- * Batas waktu request analisa & ekspor (ms).
- * Backend menunggu layanan ML hingga 120 detik (ml_timeout_seconds) sebelum membalas 504,
- * jadi frontend diberi sedikit lebih lama agar pesan 504 dari backend sempat diterima.
+ * Batas waktu request analisa & ekspor (ms). `0` = tanpa batas.
+ * Backend (ML_TIMEOUT_SECONDS=0) juga menunggu layanan ML sampai menjawab, jadi analisis
+ * dokumen tebal tidak terpotong. Pengguna tetap dapat membatalkan lewat AbortSignal.
  */
-export const ANALISA_TIMEOUT_MS = 130000;
+export const ANALISA_TIMEOUT_MS = 0;
 
 // ============================================================================
 // 2. Tipe Data Kontrak ML Health (GET /api/v1/ml/health)

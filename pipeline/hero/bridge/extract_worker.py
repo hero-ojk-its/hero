@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -326,12 +327,32 @@ class ExtractionWorker:
             rep.seconds = time.perf_counter() - started
             return rep
         say(f"{len(items)} dokumen diklaim")
-        for item in items:
-            out = self.process_one(item)
-            rep.outcomes.append(out)
-            say(f"  {out.line()}")
+        workers = max(1, min(int(self.bridge.extract_workers or 1), len(items)))
+        if workers == 1:
+            for item in items:
+                out = self.process_one(item)
+                rep.outcomes.append(out)
+                say(f"  {out.line()}")
+        else:
+            # Unduh/kirim-balik satu dokumen tumpang-tindih dengan OCR dokumen
+            # lain. Hasil dilaporkan sesuai urutan klaim, bukan urutan selesai,
+            # supaya laporan dan uji tetap deterministik.
+            with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="hero-ekstraksi") as pool:
+                for out in pool.map(self._process_safe, items):
+                    rep.outcomes.append(out)
+                    say(f"  {out.line()}")
         rep.seconds = time.perf_counter() - started
         return rep
+
+    def _process_safe(self, item: dict[str, Any]) -> Outcome:
+        """``process_one`` yang tidak pernah melempar: satu dokumen bermasalah
+        tidak boleh menjatuhkan dokumen lain dalam putaran yang sama."""
+        try:
+            return self.process_one(item)
+        except Exception as exc:                                 # noqa: BLE001
+            log.exception("dokumen %s gagal di luar jalur terduga", item.get("document_id"))
+            return Outcome(int(item.get("document_id") or 0), "error",
+                           detail=f"{type(exc).__name__}: {exc}")
 
     def run_forever(self, *, max_batches: int | None = None,
                     stop: Callable[[], bool] | None = None,

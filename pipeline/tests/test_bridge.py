@@ -1066,3 +1066,81 @@ def test_worker_mencatat_jumlah_halaman_untuk_cermin(tmp_settings, tmp_path, reg
     w.process_one({"document_id": 17, "file_hash": "h", "attempt": 1})
     assert st.all_metadata()[17]["page_count"] >= 1
     st.close()
+
+
+# ---------------------------------------------------------------------------
+# Tanpa timeout baca & ekstraksi paralel
+# ---------------------------------------------------------------------------
+def test_timeout_baca_nol_berarti_tanpa_batas_tapi_menyambung_tetap_dibatasi():
+    assert BridgeSettings(timeout=0).request_timeout == (15.0, None)
+    assert BridgeSettings().request_timeout == (15.0, None), "bawaan: ingest tidak dipotong"
+    assert BridgeSettings(timeout=30, connect_timeout=5).request_timeout == (5.0, 30.0)
+
+
+def test_klien_memakai_timeout_tanpa_batas_baca():
+    class Sesi:
+        headers: dict = {}
+        diterima: dict = {}
+
+        def request(self, method, url, **kw):
+            Sesi.diterima = kw
+
+            class R:
+                status_code = 200
+                content = b"{}"
+
+                def json(self):
+                    return {}
+            return R()
+
+    from hero.bridge.client import BackendClient
+
+    sesi = Sesi()
+    sesi.headers = {}
+    BackendClient(BridgeSettings(base_url="http://x", api_key="k"), session=sesi)._json("GET", "/health")
+    assert Sesi.diterima["timeout"] == (15.0, None)
+
+
+class _AntrianBackend(FakeBackend):
+    def __init__(self, pdf, items):
+        super().__init__(pdf)
+        self.items = items
+
+    def claim_extraction(self, limit):
+        ambil, self.items = self.items[:limit], self.items[limit:]
+        return ambil
+
+
+def test_run_once_paralel_menjaga_urutan_dan_menyelesaikan_semua(
+        tmp_settings, tmp_path, regulation_pdf):
+    pdf = regulation_pdf(tmp_path / "pojk.pdf", nomor=11, tahun=2026)
+    items = [{"document_id": i, "file_hash": f"h{i}", "attempt": 1,
+              "original_filename": "pojk.pdf"} for i in (10, 11, 12, 13)]
+    be = _AntrianBackend(pdf, items)
+    w, st = _worker(tmp_settings, be, tmp_path, extract_workers=3)
+    rep = w.run_once(limit=10)
+    assert rep.claimed == 4
+    assert [o.document_id for o in rep.outcomes] == [10, 11, 12, 13]
+    assert all(o.status == "terindeks" for o in rep.outcomes)
+    assert {a["document_id"] for a in be.articles} == {10, 11, 12, 13}
+    st.close()
+
+
+def test_run_once_paralel_satu_dokumen_gagal_tidak_menjatuhkan_yang_lain(
+        tmp_settings, tmp_path, regulation_pdf, monkeypatch):
+    pdf = regulation_pdf(tmp_path / "pojk.pdf", nomor=11, tahun=2026)
+    items = [{"document_id": i, "file_hash": f"h{i}", "attempt": 1,
+              "original_filename": "pojk.pdf"} for i in (1, 2, 3)]
+    be = _AntrianBackend(pdf, items)
+    w, st = _worker(tmp_settings, be, tmp_path, extract_workers=3)
+    asli = w.process_one
+
+    def kadang_meledak(item):
+        if item["document_id"] == 2:
+            raise RuntimeError("meledak")
+        return asli(item)
+
+    monkeypatch.setattr(w, "process_one", kadang_meledak)
+    rep = w.run_once(limit=10)
+    assert [o.status for o in rep.outcomes] == ["terindeks", "error", "terindeks"]
+    st.close()

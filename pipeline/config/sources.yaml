@@ -39,10 +39,14 @@ bridge:
   batch_articles: 150
   batch_candidates: 200
   poll_seconds: 5.0
-  # Diukur: ekstraksi 435 halaman 2,1 s; OCR 0,49 s/halaman; analisa v2 terburuk
-  # 11,5 s. Jadi 300 s bukan untuk kerja lapisan data, tapi agar backend yang
-  # sedang sibuk (migrasi/beban) tidak memotong POST tulis di tengah jalan.
-  timeout: 300
+  # Batas DIAM antar-byte ke backend (detik). 0 = tanpa batas baca: ingest tidak
+  # dipotong oleh backend yang sedang sibuk (migrasi/beban) atau berkas besar.
+  # Waktu menyambung tetap dibatasi (connect_timeout) supaya backend yang mati
+  # gagal cepat dan dicoba ulang, bukan menggantung.
+  timeout: 0
+  # Dokumen diekstraksi bersamaan (unduh/OCR satu dokumen tumpang-tindih dengan
+  # kirim-balik dokumen lain). Di VPS 2 inti / 1,9 GB biarkan 2.
+  extract_workers: 2
   send_full_text: true
   push_ayat: false
 
@@ -65,6 +69,7 @@ analysis:
   ai_effort: medium
   ai_allow_internal: false      # dokumen berklasifikasi internal tidak dikirim ke layanan AI
   ai_max_facts: 24
+  ai_timeout: 0             # detik menunggu model; 0 = tanpa batas (jatuh ke Deterministik hanya bila galat nyata)
 
 # US-20a — penamaan berkas baku sebelum masuk folder KB. OJK belum punya format
 # baku (Weekly #4), jadi templat bebas disusun; `hero penamaan cek` untuk
@@ -99,7 +104,7 @@ ocr:
   languages: "ind+eng"      # Indonesian first, English fallback
   dpi: 300
   min_chars_per_page: 120   # below this a page is treated as image-only
-  max_pages: 60             # OCR budget per document
+  max_pages: 0              # anggaran halaman OCR per dokumen; 0 = tanpa batas (semua halaman dibaca)
   preprocess: true           # orientation fix (OSD) + deskew + binarize before OCR
   deskew: true                # projection-profile tilt correction (needs numpy)
   adaptive_retry: true        # retry a low-confidence page with a different PSM
