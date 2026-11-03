@@ -310,3 +310,38 @@ export function pesanGalatHarmonisasi(err: unknown): PesanGalat {
       return { judul: 'Harmonisasi gagal', pesan: `Harmonisasi gagal dijalankan (HTTP ${err.status}). Silakan coba lagi.` };
   }
 }
+
+// ============================================================================
+// Cache Sesi Harmonisasi (Pekerjaan B)
+// ============================================================================
+
+const HARMONISASI_STORAGE_PREFIX = 'hero_harmonisasi_doc_';
+
+export function getStoredHarmonisasiResult(documentId: number): HarmonisasiResponse | null {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return null;
+    const raw = sessionStorage.getItem(`${HARMONISASI_STORAGE_PREFIX}${documentId}`);
+    if (!raw) return null;
+    return JSON.parse(raw) as HarmonisasiResponse;
+  } catch {
+    return null;
+  }
+}
+
+export function saveStoredHarmonisasiResult(documentId: number, data: HarmonisasiResponse): void {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return;
+    sessionStorage.setItem(`${HARMONISASI_STORAGE_PREFIX}${documentId}`, JSON.stringify(data));
+  } catch {
+    // Abaikan kegagalan penulisan storage
+  }
+}
+
+export function clearStoredHarmonisasiResult(documentId: number): void {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return;
+    sessionStorage.removeItem(`${HARMONISASI_STORAGE_PREFIX}${documentId}`);
+  } catch {
+    // Abaikan
+  }
+}

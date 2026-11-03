@@ -261,6 +261,8 @@ export interface DraftUploadMetadata {
   bidang?: string;
   release_date?: string;
   access_classification?: 'publik' | 'non_publik';
+  persetujuan_publik_oleh?: string;
+  persetujuan_publik_alasan?: string;
 }
 
 export interface UploadDraftResult {
@@ -308,6 +310,19 @@ export async function uploadDraftPdf(
   formData.append('files', file);
   formData.append('access_classification', metadata?.access_classification || 'non_publik');
   formData.append('document_role', 'draft_kajian');
+
+  // Persetujuan Publikasi Draft Kajian (Langkah 35, FR-SCR-04a, Kasus B)
+  // Hanya dikirim jika peran draft_kajian dan klasifikasi publik, tanpa nilai whitespace
+  if (metadata?.access_classification === 'publik') {
+    const oleh = metadata.persetujuan_publik_oleh?.trim();
+    const alasan = metadata.persetujuan_publik_alasan?.trim();
+    if (oleh) {
+      formData.append('persetujuan_publik_oleh', oleh);
+    }
+    if (alasan) {
+      formData.append('persetujuan_publik_alasan', alasan);
+    }
+  }
 
   if (metadata?.title && metadata.title.trim() !== '') {
     formData.append('title', metadata.title.trim());
@@ -719,6 +734,67 @@ export function normalisasiRingkasanAi(nilai: unknown): MlAnalisaAiSentenceNorma
     if (typeof obj.kalimat !== 'string' || obj.kalimat.trim() === '') return [];
     return [{ kalimat: obj.kalimat.trim(), fakta: daftarTeks(obj.fakta), rujukan: daftarTeks(obj.rujukan) }];
   });
+}
+
+// ============================================================================
+// 11. Manajemen Persistensi Workspace Analisa Regulasi (Pekerjaan B)
+// ============================================================================
+
+export interface StoredAnalisaWorkspace {
+  documentId: number;
+  mode: 'deterministik' | 'ai';
+  selectedPasal?: string;
+  activeTab?: 'ringkasan' | 'poin_utama' | 'dasar_hukum' | 'info_tambahan' | 'harmonisasi';
+  updatedAt?: number;
+}
+
+export const ANALISA_WORKSPACE_STORAGE_KEY = 'hero_analisa_active_workspace';
+
+export function getStoredAnalisaWorkspace(): StoredAnalisaWorkspace | null {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return null;
+    const raw = sessionStorage.getItem(ANALISA_WORKSPACE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.documentId === 'number' && parsed.documentId > 0) {
+      return {
+        documentId: parsed.documentId,
+        mode: parsed.mode === 'ai' ? 'ai' : 'deterministik',
+        selectedPasal: typeof parsed.selectedPasal === 'string' ? parsed.selectedPasal : undefined,
+        activeTab: typeof parsed.activeTab === 'string' ? parsed.activeTab : undefined,
+        updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : undefined,
+      };
+    }
+  } catch {
+    // Abaikan jika storage restricted / parsing gagal
+  }
+  return null;
+}
+
+export function saveStoredAnalisaWorkspace(state: Partial<StoredAnalisaWorkspace> & { documentId: number }): void {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return;
+    const existing = getStoredAnalisaWorkspace();
+    const merged: StoredAnalisaWorkspace = {
+      documentId: state.documentId,
+      mode: state.mode ?? existing?.mode ?? 'deterministik',
+      selectedPasal: state.selectedPasal !== undefined ? state.selectedPasal : existing?.selectedPasal,
+      activeTab: state.activeTab !== undefined ? state.activeTab : existing?.activeTab,
+      updatedAt: Date.now(),
+    };
+    sessionStorage.setItem(ANALISA_WORKSPACE_STORAGE_KEY, JSON.stringify(merged));
+  } catch {
+    // Abaikan kegagalan penulisan storage
+  }
+}
+
+export function clearStoredAnalisaWorkspace(): void {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return;
+    sessionStorage.removeItem(ANALISA_WORKSPACE_STORAGE_KEY);
+  } catch {
+    // Abaikan
+  }
 }
 
 export type { DocumentsResponse, DocumentItem, DocumentBlob };

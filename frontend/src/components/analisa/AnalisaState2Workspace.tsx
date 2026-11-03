@@ -28,7 +28,9 @@ import {
   isDocumentReadyForAnalysis,
   exportDocumentAnalysis,
   parsePasalRef,
-  normalisasiKerangka
+  normalisasiKerangka,
+  getStoredAnalisaWorkspace,
+  saveStoredAnalisaWorkspace
 } from '../../lib/analisaApi';
 import { ApiError, API_BASE_URL, apiFetchBlob } from '../../lib/api';
 import { PanelErrorBoundary } from '../PanelErrorBoundary';
@@ -38,7 +40,12 @@ import HarmonisasiPanel from './HarmonisasiPanel';
 import KemiripanDraftBanner from './KemiripanDraftBanner';
 import StatusPasalKb from './StatusPasalKb';
 import type { HarmonisasiPanelState } from './HarmonisasiPanel';
-import { postHarmonisasi, pesanGalatHarmonisasi } from '../../lib/harmonisasiApi';
+import {
+  postHarmonisasi,
+  pesanGalatHarmonisasi,
+  getStoredHarmonisasiResult,
+  saveStoredHarmonisasiResult
+} from '../../lib/harmonisasiApi';
 import type {
   MlAnalisaResponse,
   DocumentArticleSummary,
@@ -114,6 +121,15 @@ export default function AnalisaState2Workspace({
     return () => document.removeEventListener('click', handleClickOutside);
   }, [isExportMenuOpen]);
 
+  // Ambil state tersimpan di sessionStorage (Pekerjaan B: Persistensi Workspace)
+  const storedWs = getStoredAnalisaWorkspace();
+  const initialPasal = (storedWs?.documentId === documentId && storedWs.selectedPasal)
+    ? storedWs.selectedPasal
+    : 'Pasal 1';
+  const initialTab = (storedWs?.documentId === documentId && storedWs.activeTab)
+    ? (storedWs.activeTab as 'ringkasan' | 'poin_utama' | 'dasar_hukum' | 'info_tambahan' | 'harmonisasi')
+    : 'ringkasan';
+
   // State Workspace Panel 1: Struktur Dokumen
   const [expandedBabs, setExpandedBabs] = useState<Record<string, boolean>>({
     'BAB I': true,
@@ -122,7 +138,7 @@ export default function AnalisaState2Workspace({
     'BAB IV': true,
     'BAB V': true
   });
-  const [selectedPasal, setSelectedPasal] = useState<string>('Pasal 1');
+  const [selectedPasal, setSelectedPasal] = useState<string>(initialPasal);
   const [structureSearch, setStructureSearch] = useState<string>('');
 
   // State Workspace Panel 2: Naskah Regulasi
@@ -170,19 +186,39 @@ export default function AnalisaState2Workspace({
     }, 4500);
   }, []);
 
-  // State Workspace Panel 3: Hasil Analisis Tabs
-  const [activeTab, setActiveTab] = useState<'ringkasan' | 'poin_utama' | 'dasar_hukum' | 'info_tambahan' | 'harmonisasi'>('ringkasan');
+  // State Workspace Panel 3: Hasil Analisis Tabs (dipulihkan dari storage jika ada)
+  const [activeTab, setActiveTab] = useState<'ringkasan' | 'poin_utama' | 'dasar_hukum' | 'info_tambahan' | 'harmonisasi'>(initialTab);
   const [kategoriFilter, setKategoriFilter] = useState<string>('Semua');
   const panelHasilRef = useRef<HTMLDivElement>(null);
 
-  // State Harmonisasi: disimpan di sini agar tidak di-fetch ulang tiap pindah tab.
-  // Dikunci per documentId; hasil untuk dokumen lain dianggap belum dijalankan.
-  const [harmonisasiState, setHarmonisasiState] = useState<(HarmonisasiPanelState & { documentId: number }) | null>(null);
+  // State Harmonisasi: dipulihkan dari sessionStorage agar tidak hilang atau auto-fetch ulang (Pekerjaan B)
+  const cachedHarmonisasi = getStoredHarmonisasiResult(documentId);
+  const [harmonisasiState, setHarmonisasiState] = useState<(HarmonisasiPanelState & { documentId: number }) | null>(() => {
+    if (cachedHarmonisasi) {
+      return {
+        documentId,
+        status: 'sukses',
+        data: cachedHarmonisasi,
+        galat: null,
+      };
+    }
+    return null;
+  });
   const harmonisasi = harmonisasiState?.documentId === documentId ? harmonisasiState : null;
   const harmonisasiAbortRef = useRef<AbortController | null>(null);
   const harmonisasiPermintaanRef = useRef<number>(0);
-  /** documentId yang harmonisasinya sudah diminta otomatis (cegah fetch ganda) */
-  const harmonisasiDimintaRef = useRef<number | null>(null);
+  /** documentId yang harmonisasinya sudah diminta otomatis atau dipulihkan dari cache (cegah fetch ganda) */
+  const harmonisasiDimintaRef = useRef<number | null>(cachedHarmonisasi ? documentId : null);
+
+  // Simpan perubahan navigasi pasal & tab ke storage secara reaktif (Pekerjaan B)
+  useEffect(() => {
+    saveStoredAnalisaWorkspace({
+      documentId,
+      mode,
+      selectedPasal,
+      activeTab,
+    });
+  }, [documentId, mode, selectedPasal, activeTab]);
 
   const muatHarmonisasi = useCallback(async (segar: boolean) => {
     harmonisasiAbortRef.current?.abort();
@@ -201,6 +237,7 @@ export default function AnalisaState2Workspace({
     try {
       const hasil = await postHarmonisasi(documentId, { segar, signal: controller.signal });
       if (permintaanId !== harmonisasiPermintaanRef.current) return;
+      saveStoredHarmonisasiResult(documentId, hasil);
       setHarmonisasiState({ documentId, status: 'sukses', data: hasil, galat: null });
     } catch (err: unknown) {
       if (permintaanId !== harmonisasiPermintaanRef.current || controller.signal.aborted) return;
@@ -705,6 +742,20 @@ export default function AnalisaState2Workspace({
     }
   }, [articles, data, showNavFeedback, totalPages, viewMode]);
 
+  // Pulihkan navigasi pasal saat pertama kali data berhasil dimuat (Pekerjaan B)
+  const hasRestoredPasalRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (!loading && data && selectedPasal && !hasRestoredPasalRef.current) {
+      hasRestoredPasalRef.current = true;
+      if (selectedPasal !== 'Pasal 1') {
+        const timer = setTimeout(() => {
+          handleJumpToPasal(selectedPasal);
+        }, 50);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [loading, data, selectedPasal, handleJumpToPasal]);
+
   // Tombol "Lanjut ke Harmonisasi": buka tab Harmonisasi di panel kanan
   const handleGoToHarmonisasi = () => {
     bukaTabHarmonisasi();
@@ -969,8 +1020,16 @@ export default function AnalisaState2Workspace({
           </p>
         </div>
 
-        {/* Tombol Analisis Ulang (Mendukung parameter segar) */}
+        {/* Tombol Aksi Header: Mulai Analisis Baru & Analisis Ulang (Pekerjaan B) */}
         <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={onBackToState1}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold shadow-2xs transition cursor-pointer"
+            title="Keluar dari ruang kerja analisis ini dan mulai analisis dokumen baru"
+          >
+            <span>Mulai Analisis Baru</span>
+          </button>
           <button
             type="button"
             onClick={() => loadAnalysis(true)}
@@ -1185,7 +1244,7 @@ export default function AnalisaState2Workspace({
                 {errorMessage || 'Terjadi kendala teknis saat menghubungi peladen backend.'}
               </p>
             </div>
-            <div className="flex items-center justify-center">
+            <div className="flex items-center justify-center gap-2.5">
               <button
                 type="button"
                 onClick={() => loadAnalysis(false, false)}
@@ -1193,6 +1252,13 @@ export default function AnalisaState2Workspace({
               >
                 <RefreshCw size={13} />
                 <span>Coba Lagi</span>
+              </button>
+              <button
+                type="button"
+                onClick={onBackToState1}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer"
+              >
+                <span>Mulai Analisis Baru</span>
               </button>
             </div>
           </div>

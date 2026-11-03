@@ -19,7 +19,10 @@ import {
   getDocumentStatus, 
   checkMlHealth, 
   isDocumentReadyForAnalysis, 
-  isDocumentProcessingFailed 
+  isDocumentProcessingFailed,
+  getStoredAnalisaWorkspace,
+  saveStoredAnalisaWorkspace,
+  clearStoredAnalisaWorkspace 
 } from '../lib/analisaApi';
 import type { 
   DocumentStatusResponse, 
@@ -30,6 +33,7 @@ import type {
 import { potongJudul } from '../lib/kemiripanApi';
 import { usePolling } from '../lib/usePolling';
 import { ErrorState } from '../components/ErrorState';
+import { ApiError } from '../lib/api';
 import AnalisaState2Workspace from '../components/analisa/AnalisaState2Workspace';
 
 export default function AnalisaRegulasi() {
@@ -64,6 +68,17 @@ export default function AnalisaRegulasi() {
   // Klasifikasi akses dokumen: 'publik' | 'non_publik' (Kepatuhan NDA)
   const [accessClassification, setAccessClassification] = useState<'publik' | 'non_publik'>('non_publik');
 
+  // Persetujuan Publikasi Draft Kajian (Langkah 35, FR-SCR-04a, Kasus B)
+  const [persetujuanPublikOleh, setPersetujuanPublikOleh] = useState<string>('');
+  const [persetujuanPublikAlasan, setPersetujuanPublikAlasan] = useState<string>('');
+  const [persetujuanTouched, setPersetujuanTouched] = useState<boolean>(false);
+
+  // Status Validasi Draft Kajian Publik (Kasus B)
+  const isDraftPublik = accessClassification === 'publik';
+  const isPersetujuanOlehValid = !isDraftPublik || persetujuanPublikOleh.trim().length > 0;
+  const isPersetujuanAlasanValid = !isDraftPublik || persetujuanPublikAlasan.trim().length >= 10;
+  const isPersetujuanValid = isPersetujuanOlehValid && isPersetujuanAlasanValid;
+
   // 4. State Layanan ML & Eksekusi Upload
   const [mlHealth, setMlHealth] = useState<MlHealthResponse | null>(null);
   const [mlHealthLoading, setMlHealthLoading] = useState<boolean>(true);
@@ -81,6 +96,10 @@ export default function AnalisaRegulasi() {
   const [isPollingActive, setIsPollingActive] = useState<boolean>(false);
   const [pollingTimeoutOccurred, setPollingTimeoutOccurred] = useState<boolean>(false);
 
+  // 6. State Pemulihan Workspace (Pekerjaan B)
+  const [isRestoringWorkspace, setIsRestoringWorkspace] = useState<boolean>(true);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+
   // Hook Polling Status Dokumen Backend (Interval 2s, tanpa batas waktu: dokumen tebal tetap dipantau sampai selesai)
   const documentPolling = usePolling<DocumentStatusResponse>({
     fn: (signal) => getDocumentStatus(uploadedDocumentId!, signal),
@@ -89,9 +108,16 @@ export default function AnalisaRegulasi() {
     enabled: isPollingActive && uploadedDocumentId !== null && uploadedDocumentId > 0,
     onSuccess: (doc) => {
       setIsPollingActive(false);
+      // Baca klasifikasi aktual dari response backend (Pekerjaan A)
+      if (doc.access_classification) {
+        setAccessClassification(doc.access_classification);
+      }
       if (isDocumentReadyForAnalysis(doc)) {
         // Dokumen siap dianalisis: transisi ke State 2 Workspace via useSearchParams
         const effectiveMode = mlHealth?.mode_ai === true ? selectedMode : 'deterministik';
+        if (uploadedDocumentId) {
+          saveStoredAnalisaWorkspace({ documentId: uploadedDocumentId, mode: effectiveMode });
+        }
         setSearchParams({
           documentId: String(uploadedDocumentId),
           mode: effectiveMode,
@@ -158,6 +184,77 @@ export default function AnalisaRegulasi() {
     };
   }, [checkHealthStatus]);
 
+  // Efek Pemulihan Workspace Analisa Regulasi (Pekerjaan B)
+  useEffect(() => {
+    let isCancelled = false;
+
+    const restoreWorkspace = async () => {
+      // 1. Jika URL sudah memiliki documentId aktif, simpan ke storage dan selesai
+      if (activeDocumentId !== null) {
+        saveStoredAnalisaWorkspace({
+          documentId: activeDocumentId,
+          mode: activeMode,
+        });
+        setIsRestoringWorkspace(false);
+        return;
+      }
+
+      // 2. Jika URL tidak punya documentId, periksa apakah ada session yang tersimpan
+      const stored = getStoredAnalisaWorkspace();
+      if (!stored || !stored.documentId) {
+        setIsRestoringWorkspace(false);
+        return;
+      }
+
+      // 3. Validasi ke backend via GET /api/v1/documents/{document_id}
+      try {
+        const doc = await getDocumentStatus(stored.documentId);
+        if (isCancelled) return;
+
+        // Baca klasifikasi aktual dari response backend (Pekerjaan A)
+        if (doc.access_classification) {
+          setAccessClassification(doc.access_classification);
+        }
+
+        if (isDocumentReadyForAnalysis(doc)) {
+          // Dokumen sudah terindeks: pulihkan ke State 2 Workspace via useSearchParams
+          const targetMode = stored.mode || 'deterministik';
+          setSearchParams({
+            documentId: String(stored.documentId),
+            mode: targetMode,
+          }, { replace: true });
+        } else if (doc.processing_status === 'diproses' || doc.processing_status === 'diterima') {
+          // Dokumen masih dalam proses: pulihkan State 1 dan aktifkan polling 2 detik
+          setUploadedDocumentId(stored.documentId);
+          if (doc.title) setTitle(doc.title);
+          setIsPollingActive(true);
+        } else if (isDocumentProcessingFailed(doc)) {
+          // Dokumen gagal diproses
+          setUploadedDocumentId(stored.documentId);
+        }
+      } catch (err: unknown) {
+        if (isCancelled) return;
+        // Dokumen tidak ditemukan atau akses ditolak
+        clearStoredAnalisaWorkspace();
+        if (err instanceof ApiError && err.status === 404) {
+          setRestoreError(`Dokumen analisis sebelumnya (#${stored.documentId}) tidak ditemukan di peladen.`);
+        } else if (err instanceof ApiError && err.status === 403) {
+          setRestoreError(`Akses ke dokumen analisis sebelumnya (#${stored.documentId}) dibatasi (memerlukan sesi login).`);
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsRestoringWorkspace(false);
+        }
+      }
+    };
+
+    restoreWorkspace();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeDocumentId, activeMode, setSearchParams]);
+
   // Handler Drag & Drop File
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -216,6 +313,11 @@ export default function AnalisaRegulasi() {
 
   // Kartu duplikat -> "Unggah berkas lain": kosongkan berkas & isian khusus berkas, pilihan lain dipertahankan
   const handleUnggahBerkasLain = () => {
+    clearStoredAnalisaWorkspace();
+    setUploadedDocumentId(null);
+    setIsPollingActive(false);
+    documentPolling.stop();
+    setRestoreError(null);
     setDuplikat(null);
     setSelectedFile(null);
     setTitle('');
@@ -241,6 +343,19 @@ export default function AnalisaRegulasi() {
       return;
     }
 
+    if (isDraftPublik && !isPersetujuanValid) {
+      setPersetujuanTouched(true);
+      if (!persetujuanPublikOleh.trim()) {
+        setUploadError('Nama pihak yang menyetujui (Disetujui oleh) wajib diisi untuk draft kajian publik.');
+        return;
+      }
+      if (persetujuanPublikAlasan.trim().length < 10) {
+        setUploadError('Alasan persetujuan wajib diisi minimal 10 karakter untuk draft kajian publik.');
+        return;
+      }
+      return;
+    }
+
     setUploadError(null);
     setDuplikat(null);
     setIsUploading(true);
@@ -262,6 +377,8 @@ export default function AnalisaRegulasi() {
         bidang: bidang.trim() || undefined,
         release_date: releaseDate.trim() || undefined,
         access_classification: accessClassification,
+        persetujuan_publik_oleh: isDraftPublik ? persetujuanPublikOleh.trim() || undefined : undefined,
+        persetujuan_publik_alasan: isDraftPublik ? persetujuanPublikAlasan.trim() || undefined : undefined,
       };
 
       // Unggah via API client dengan pemantauan progress byte riil
@@ -292,6 +409,7 @@ export default function AnalisaRegulasi() {
 
       const docId = result.documentId;
       setUploadedDocumentId(docId);
+      saveStoredAnalisaWorkspace({ documentId: docId, mode: selectedMode });
       setIsUploading(false);
       setUploadProgress(null);
       uploadAbortControllerRef.current = null;
@@ -316,7 +434,22 @@ export default function AnalisaRegulasi() {
       }
       setIsUploading(false);
       setUploadProgress(null);
-      const msg = err instanceof Error ? err.message : 'Terjadi kegagalan saat mengunggah berkas draf.';
+      let msg = 'Terjadi kegagalan saat mengunggah berkas draf.';
+      if (err instanceof ApiError) {
+        const detailObj =
+          err.detail && typeof err.detail === 'object' && !Array.isArray(err.detail)
+            ? (err.detail as Record<string, unknown>)
+            : null;
+        if (err.status === 422 && detailObj?.code === 'draft_publik_butuh_persetujuan' && typeof detailObj.message === 'string') {
+          msg = detailObj.message;
+        } else if (typeof detailObj?.message === 'string') {
+          msg = detailObj.message;
+        } else {
+          msg = err.message;
+        }
+      } else if (err instanceof Error) {
+        msg = err.message;
+      }
       setUploadError(msg);
     }
   };
@@ -331,14 +464,16 @@ export default function AnalisaRegulasi() {
       uploadAbortControllerRef.current = null;
     }
     const effectiveMode = (mlHealth && mlHealth.mode_ai === false) ? 'deterministik' : mode;
+    saveStoredAnalisaWorkspace({ documentId: docId, mode: effectiveMode });
     setSearchParams({
       documentId: String(docId),
       mode: effectiveMode,
     });
   };
 
-  // Handler Kembali dari State 2 ke State 1
+  // Handler Kembali dari State 2 ke State 1 (Pekerjaan B: reset workspace)
   const handleBackToState1 = () => {
+    clearStoredAnalisaWorkspace();
     setSearchParams({});
     documentPolling.stop();
     setIsPollingActive(false);
@@ -352,8 +487,25 @@ export default function AnalisaRegulasi() {
     setUploadedDocumentId(null);
     setPollingTimeoutOccurred(false);
     setDuplikat(null);
+    setSelectedFile(null);
+    setTitle('');
+    setRegulationNumber('');
+    setPersetujuanPublikOleh('');
+    setPersetujuanPublikAlasan('');
+    setPersetujuanTouched(false);
+    setRestoreError(null);
     checkHealthStatus();
   };
+
+  // Tampilan Memulihkan Sesi Ruang Kerja Sebelumnya (Pekerjaan B)
+  if (isRestoringWorkspace && activeDocumentId === null && getStoredAnalisaWorkspace() !== null) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-3">
+        <RefreshCw size={24} className="animate-spin text-red-700" />
+        <p className="text-xs font-semibold text-gray-600">Memulihkan ruang kerja analisis regulasi...</p>
+      </div>
+    );
+  }
 
   // ============================================================================
   // TAMPILAN STATE 2: WORKSPACE TIGA PANEL (Jika documentId ada di URL)
@@ -419,6 +571,26 @@ export default function AnalisaRegulasi() {
           )}
         </div>
       </div>
+
+      {/* Banner Galat Pemulihan Workspace (Pekerjaan B) */}
+      {restoreError && (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs text-amber-900 animate-in fade-in">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle size={18} className="text-amber-700 shrink-0" />
+            <span>{restoreError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setRestoreError(null);
+              clearStoredAnalisaWorkspace();
+            }}
+            className="px-3 py-1 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded-md font-semibold cursor-pointer shrink-0"
+          >
+            Mulai Analisis Baru
+          </button>
+        </div>
+      )}
 
       {/* 2b. Hasil unggah duplikat byte-identik */}
       {duplikat && (
@@ -601,6 +773,17 @@ export default function AnalisaRegulasi() {
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* Opsi Mulai Dokumen Baru saat Polling Berlangsung */}
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={handleBackToState1}
+              className="text-xs font-semibold text-gray-500 hover:text-red-700 underline cursor-pointer"
+            >
+              Batalkan dan Mulai Analisis Dokumen Baru
+            </button>
           </div>
 
           {/* Detail Ekstraksi Terkini Berdasarkan processing_status Backend */}
@@ -880,12 +1063,102 @@ export default function AnalisaRegulasi() {
                   <div className="space-y-0.5">
                     <span className="text-xs font-bold block">Publik (Terbuka)</span>
                     <span className="text-[11px] text-gray-500 leading-relaxed block">
-                      Dokumen regulasi terbuka untuk umum. Dapat langsung dianalisis tanpa login.
+                      Dokumen regulasi terbuka untuk umum. Wajib menyertakan persetujuan publikasi draf kajian.
                     </span>
                   </div>
                 </button>
               </div>
             </div>
+
+            {/* Form Persetujuan Publikasi Draft Kajian (Langkah 35, Kasus B) */}
+            {isDraftPublik && (
+              <div className="md:col-span-2 p-4 bg-emerald-50/40 border border-emerald-200 rounded-xl space-y-4 animate-in fade-in duration-200">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-emerald-600" />
+                  <h4 className="text-xs font-bold text-emerald-950 uppercase tracking-wide">
+                    Persetujuan Publikasi Draf Kajian Terbuka
+                  </h4>
+                </div>
+                <p className="text-[11px] text-emerald-900 leading-relaxed -mt-2">
+                  Sesuai kebijakan tata kelola regulasi, draf kajian yang dipublikasikan secara terbuka wajib mencantumkan pihak yang menyetujui dan alasan justifikasi resmi (minimal 10 karakter).
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Input: Disetujui oleh */}
+                  <div>
+                    <label
+                      htmlFor="input-persetujuan-oleh"
+                      className="block text-xs font-bold text-gray-900 mb-1"
+                    >
+                      Disetujui oleh <span className="text-red-600">* (Wajib)</span>
+                    </label>
+                    <input
+                      id="input-persetujuan-oleh"
+                      name="persetujuan_publik_oleh"
+                      type="text"
+                      value={persetujuanPublikOleh}
+                      onChange={(e) => {
+                        setPersetujuanPublikOleh(e.target.value);
+                        setPersetujuanTouched(true);
+                      }}
+                      placeholder="Contoh: Direktur Eksekutif Riset"
+                      className={`block w-full py-2 px-3 border rounded-lg text-xs text-gray-900 bg-white focus:ring-emerald-600 focus:border-emerald-600 font-medium ${
+                        persetujuanTouched && !persetujuanPublikOleh.trim()
+                          ? 'border-red-500 bg-red-50/30 ring-1 ring-red-500'
+                          : 'border-gray-300'
+                      }`}
+                    />
+                    {persetujuanTouched && !persetujuanPublikOleh.trim() && (
+                      <p className="text-[11px] text-red-600 mt-1 font-medium">
+                        Nama pihak yang menyetujui wajib diisi.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Input: Alasan Persetujuan (min 10 karakter) */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label
+                        htmlFor="textarea-persetujuan-alasan"
+                        className="block text-xs font-bold text-gray-900"
+                      >
+                        Alasan Persetujuan <span className="text-red-600">* (Minimal 10 karakter)</span>
+                      </label>
+                      <span
+                        className={`text-[11px] font-mono font-medium ${
+                          persetujuanPublikAlasan.trim().length >= 10
+                            ? 'text-emerald-700'
+                            : 'text-amber-700'
+                        }`}
+                      >
+                        {persetujuanPublikAlasan.trim().length} / 10 karakter
+                      </span>
+                    </div>
+                    <textarea
+                      id="textarea-persetujuan-alasan"
+                      name="persetujuan_publik_alasan"
+                      rows={2}
+                      value={persetujuanPublikAlasan}
+                      onChange={(e) => {
+                        setPersetujuanPublikAlasan(e.target.value);
+                        setPersetujuanTouched(true);
+                      }}
+                      placeholder="Tuliskan justifikasi persetujuan publikasi resmi (minimal 10 karakter)..."
+                      className={`block w-full py-2 px-3 border rounded-lg text-xs text-gray-900 bg-white focus:ring-emerald-600 focus:border-emerald-600 font-medium ${
+                        persetujuanTouched && persetujuanPublikAlasan.trim().length < 10
+                          ? 'border-red-500 bg-red-50/30 ring-1 ring-red-500'
+                          : 'border-gray-300'
+                      }`}
+                    />
+                    {persetujuanTouched && persetujuanPublikAlasan.trim().length < 10 && (
+                      <p className="text-[11px] text-red-600 mt-1 font-medium">
+                        Alasan persetujuan wajib diisi minimal 10 karakter (kurang {Math.max(0, 10 - persetujuanPublikAlasan.trim().length)} karakter).
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -959,13 +1232,23 @@ export default function AnalisaRegulasi() {
           </div>
         )}
 
+        {/* Banner Peringatan Persetujuan Publik */}
+        {isDraftPublik && !isPersetujuanValid && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center text-amber-800 text-xs font-medium animate-in fade-in duration-200">
+            <AlertCircle size={16} className="text-amber-600 mr-2 shrink-0" />
+            <span>
+              <strong>Perhatian:</strong> Draft kajian publik memerlukan nama pihak yang menyetujui dan alasan minimal 10 karakter sebelum analisis dapat dimulai.
+            </span>
+          </div>
+        )}
+
         {/* Tombol Aksi Mulai Analisis */}
         <div className="pt-2 flex items-center justify-end">
           <button
             type="submit"
-            disabled={!selectedFile || isUploading || isPollingActive}
+            disabled={!selectedFile || isUploading || isPollingActive || (isDraftPublik && !isPersetujuanValid)}
             className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer ${
-              selectedFile && !isUploading && !isPollingActive
+              selectedFile && !isUploading && !isPollingActive && (!isDraftPublik || isPersetujuanValid)
                 ? 'bg-red-700 hover:bg-red-800 text-white'
                 : 'bg-gray-200 text-gray-400 cursor-not-allowed'
             }`}
