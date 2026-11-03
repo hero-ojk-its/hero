@@ -1,0 +1,14 @@
+[Unit]
+Description=Jadwal hitung ulang status keberlakuan HERO (harian 00:10 WIB)
+
+[Timer]
+# Zona waktu disebut eksplisit: batas `effective_date` adalah tengah malam WIB,
+# bukan UTC. Jalan 10 menit setelahnya supaya pergantian tanggal sudah pasti.
+OnCalendar=*-*-* 00:10:00 Asia/Jakarta
+# Server lokal bisa mati (listrik/internet). Persistent membuat jadwal yang
+# terlewat dijalankan saat server hidup kembali, jadi status tidak nyangkut.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

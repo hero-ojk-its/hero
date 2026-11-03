@@ -87,6 +87,7 @@ log "[6/9] Skrip deploy → ${HERO_HOME}/ci (milik root)"
 install -m 755 -o root -g root \
   "$SRC/deploy/vps/deploy-backend.sh" \
   "$SRC/deploy/vps/deploy-pipeline.sh" \
+  "$SRC/deploy/vps/recompute-status.sh" \
   "$SRC/deploy/lokal/watch-deploy.sh" \
   "$HERO_HOME/ci/"
 
@@ -128,6 +129,9 @@ install -m 644 "$SRC/pipeline/deploy/systemd/hero-ml.service" /etc/systemd/syste
 install -m 644 "$SRC/pipeline/deploy/systemd/hero-bridge-ekstraksi.service" /etc/systemd/system/
 install -m 644 "$SRC/deploy/lokal/systemd/hero-watch-deploy.service" /etc/systemd/system/
 install -m 644 "$SRC/deploy/lokal/systemd/hero-watch-deploy.timer" /etc/systemd/system/
+# Status keberlakuan berubah karena kalender, bukan karena aksi pengguna.
+install -m 644 "$SRC/pipeline/deploy/systemd/hero-recompute-status.service" /etc/systemd/system/
+install -m 644 "$SRC/pipeline/deploy/systemd/hero-recompute-status.timer" /etc/systemd/system/
 systemctl daemon-reload
 
 cat <<SELESAI
@@ -141,6 +145,8 @@ Pemasangan dasar selesai. Yang masih harus Anda lakukan (deploy/lokal/README.md)
   3. Deploy backend 1x   : sudo $HERO_HOME/ci/watch-deploy.sh backend
   4. Cloudflare Tunnel   : akses dari internet (bagian 6 README)
   5. Nyalakan pengawas   : sudo systemctl enable --now hero-watch-deploy.timer
+  6. Nyalakan hitung ulang status harian:
+       sudo systemctl enable --now hero-recompute-status.timer
 
 Cek kapan saja:  sudo LAPOR_SAJA=1 $HERO_HOME/ci/watch-deploy.sh
 SELESAI

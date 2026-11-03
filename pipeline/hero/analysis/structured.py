@@ -31,7 +31,7 @@ from collections import Counter
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-VERSION = "v2.1"
+VERSION = "v2.2"
 
 # Lower-case only, matched case-sensitively: Indonesian legislative drafting
 # writes obligations in lower case ("wajib menyampaikan") and defined terms in
@@ -301,6 +301,35 @@ def framework(structure: dict[str, Any], articles: list[dict[str, Any]]) -> list
 _LAMP_HEADING = re.compile(r"^(BAB\s+[IVXLC]+\b.*|[IVXLC]{1,5}\.\s+[A-Z].*|[A-H]\.\s+[A-Z].*)$")
 _SIGNATURE = re.compile(r"KEPALA|KETUA|DEWAN KOMISIONER|REPUBLIK INDONESIA|DITETAPKAN|SALINAN|"
                         r"DIREKTUR|DEPUTI|ttd|NOMOR\s|TENTANG$", re.I)
+# The Lampiran's own title. These form-words are how OJK actually names an
+# attachment, so matching them states a fact instead of guessing which line
+# "looks like" a title (invarian 6).
+_LAMP_TITLE = re.compile(r"^(PEDOMAN|TATA\s+CARA|FORMAT|FORMULIR|MATRIKS|DAFTAR|CONTOH|"
+                         r"PETUNJUK|KERTAS\s+KERJA|STANDAR|TABEL|RINCIAN|KLASIFIKASI)\b",
+                         re.I)
+# Fallback only: a Lampiran that is one flattened table has no numbered
+# headings at all — its sections are bare capitals ("PROSPEK USAHA DEBITUR").
+# Used strictly when _LAMP_HEADING found nothing, so documents that already
+# parse cleanly keep the headings they have.
+_LAMP_CAPS = re.compile(r"^[A-Z][A-Z0-9\s/().,&'-]{5,}$")
+_LAMP_SKIP = re.compile(r"^(LAMPIRAN|PERATURAN|SURAT\s+EDARAN|OTORITAS\s+JASA\s+KEUANGAN)\b",
+                        re.I)
+# "DAFTAR ISI" names the table of contents, not the attachment, and a dotted
+# leader line is that table's rows. Neither is a title.
+_LAMP_NOT_TITLE = re.compile(r"^DAFTAR\s+ISI\b|\.{4,}", re.I)
+
+
+def _judul_lampiran_wajar(line: str) -> bool:
+    """A Lampiran title is printed in capitals; running prose is not a title.
+
+    Without this, "Contoh: utang pajak, liabilitas imbal kerja dan ..." — an
+    example sentence in the middle of an attachment — was presented as the
+    attachment's title. An empty field is the honest answer (invarian 6).
+    """
+    huruf = [c for c in line if c.isalpha()]
+    if len(huruf) < 4:
+        return False
+    return sum(c.isupper() for c in huruf) / len(huruf) >= 0.7
 
 
 def lampiran_profile(full_text: str | None, articles: list[dict[str, Any]]) -> dict[str, Any]:
@@ -315,19 +344,43 @@ def lampiran_profile(full_text: str | None, articles: list[dict[str, Any]]) -> d
     refs = [a for a in articles if _LAMPIRAN_REF.search(a["text"] or "")]
     heavy = bool(refs) and len(articles) <= 6
     headings: list[str] = []
+    judul: str | None = None
     if heavy and full_text:
         low = full_text.lower()
         close = low.find("ditetapkan di")
         start = low.find("lampiran", close if close >= 0 else 0)
-        for line in full_text[start if start >= 0 else 0:].splitlines():
+        tail = full_text[start if start >= 0 else 0:]
+        caps: list[str] = []
+        sisa = 0                      # continuation lines still allowed for the title
+        for line in tail.splitlines():
             line = _clean(line)
-            if 6 <= len(line) <= 110 and _LAMP_HEADING.match(line) and not _SIGNATURE.search(line):
+            if not (6 <= len(line) <= 110) or _SIGNATURE.search(line):
+                continue
+            if judul is None and _LAMP_TITLE.match(line) \
+                    and not _LAMP_NOT_TITLE.search(line) \
+                    and _judul_lampiran_wajar(line):
+                # The title wraps: the PDF prints "PEDOMAN" on its own line and
+                # the subject on the next. A bare form-word is not an answer, so
+                # keep collecting the continuation lines.
+                judul = line
+                sisa = 0 if len(line) > 25 else 2
+            elif sisa > 0 and _LAMP_CAPS.match(line) and not _LAMP_SKIP.match(line) \
+                    and not _LAMP_NOT_TITLE.search(line):
+                judul = f"{judul} {line}".strip()
+                sisa = 0 if len(judul) > 40 else sisa - 1
+            if _LAMP_HEADING.match(line):
                 if line not in headings:
                     headings.append(line)
-            if len(headings) >= 10:
-                break
+                if len(headings) >= 10:
+                    break
+            elif (len(caps) < 10 and line not in caps
+                    and not _LAMP_SKIP.match(line) and _LAMP_CAPS.match(line)
+                    and line != judul):
+                caps.append(line)
+        if not headings:
+            headings = caps
     return {"berat_lampiran": heavy, "pasal_rujukan": [f"Pasal {a['number']}" for a in refs][:3],
-            "judul_bagian": headings}
+            "judul_bagian": headings, "judul_lampiran": judul}
 
 
 def sanctions(points: list[Point]) -> list[str]:
@@ -426,8 +479,10 @@ def compose_summary(ident: dict[str, Any], kerangka: list[dict[str, Any]], subje
         add(f"{_clause(p, 'mulai berlaku|berlaku sejak', 25)}.", [p])
     if lampiran.get("berat_lampiran"):
         isi = f" Bagian Lampiran antara lain: {'; '.join(lampiran['judul_bagian'][:6])}." if lampiran["judul_bagian"] else ""
+        judul = lampiran.get("judul_lampiran")
+        apa = f" Lampiran berjudul \"{judul}\"." if judul else ""
         out.append({"kalimat": "Substansi utama peraturan ini berada di Lampiran, bukan di batang tubuh; "
-                               "ringkasan pasal di atas karenanya tidak lengkap." + isi,
+                               "ringkasan pasal di atas karenanya tidak lengkap." + apa + isi,
                     "rujukan": lampiran["pasal_rujukan"], "fakta": []})
     return out
 

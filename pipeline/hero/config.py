@@ -175,6 +175,10 @@ class AnalysisSettings:
     """URD 3.1: AI-Assisted is optional and off by default; Deterministic always runs."""
 
     ai_enabled: bool = False
+    # Penyedia layanan AI: "anthropic" (Claude) atau "gemini" (Google AI).
+    # Dibiarkan kosong = ditebak dari nama model, supaya mengganti ai_model saja
+    # sudah cukup dan tidak ada kombinasi penyedia/model yang saling bertentangan.
+    ai_provider: str = ""
     ai_model: str = "claude-opus-5"
     ai_effort: str = "medium"          # low | medium | high — narration is not a hard reasoning task
     # Documents classified internal/rahasia never leave the server unless this

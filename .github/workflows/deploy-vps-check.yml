@@ -33,6 +33,7 @@ jobs:
           docker run --rm -v "$PWD/deploy:/mnt:ro" koalaman/shellcheck:v0.11.0 \
             -x -S style \
             /mnt/vps/ci-entry.sh /mnt/vps/deploy-backend.sh /mnt/vps/deploy-pipeline.sh \
+            /mnt/vps/recompute-status.sh \
             /mnt/vps/tests/test_deploy.sh \
             /mnt/lokal/watch-deploy.sh /mnt/lokal/install-server.sh /mnt/lokal/tests/test_watch.sh
       - name: actionlint

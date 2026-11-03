@@ -166,3 +166,86 @@ def test_rename_source_leaves_content_untouched(tmp_path):
         row = cat.get("d1")
         assert row["source_name"] == "JDIH OJK — Register Peraturan"
         assert row["sha256"] == "h1"   # konten tidak ikut berubah
+
+
+# -- ekspor analisa v2 (FR-ANL-09) -------------------------------------------
+
+def _simpan_analisa_v2(cat: Catalog, doc_id: str, hasil: dict) -> None:
+    """Tulis satu baris analysis_v2 seperti yang dilakukan analysis/structured.py."""
+    import json as _json
+
+    cat.conn.execute(
+        "CREATE TABLE IF NOT EXISTS analysis_v2 ("
+        "doc_id TEXT PRIMARY KEY, versi TEXT NOT NULL, fingerprint TEXT, "
+        "hasil TEXT NOT NULL, waktu_ms REAL, dibuat TEXT NOT NULL)")
+    cat.conn.execute(
+        "INSERT OR REPLACE INTO analysis_v2 VALUES (?,?,?,?,?,datetime('now'))",
+        (doc_id, "v2.1", "fp", _json.dumps(hasil), 12.5))
+    cat.conn.commit()
+
+
+def test_export_analisa_membawa_pasal_dan_halaman(tmp_path):
+    from hero.kb.export import export
+
+    with Catalog(tmp_path / "c.db") as cat:
+        rec = record("d" * 64)
+        cat.upsert_document(rec)
+        _simpan_analisa_v2(cat, rec.doc_id, {
+            "identitas": {"tentang": "KETAHANAN SIBER", "status": "berlaku"},
+            "metrik": {"jumlah_pasal": 3, "jumlah_poin": 2, "kata_ringkasan": 40},
+            "ringkasan_teks": "POJK 1 Tahun 2026 tentang Ketahanan Siber.",
+            "poin": [
+                {"id": "p1", "kategori": "Kewajiban", "pasal": "Pasal 2 ayat (1)",
+                 "halaman": 3, "prioritas": 4, "teks": "Bank wajib ..."},
+                {"id": "p2", "kategori": "Sanksi", "pasal": "Pasal 9",
+                 "halaman": 7, "prioritas": 5, "teks": "Sanksi administratif ..."},
+            ],
+        })
+        counts = export(cat, tmp_path / "out", "csv")
+
+    assert counts["analisa"] == 1
+    assert counts["analisa_poin"] == 2
+
+    import csv
+
+    poin = list(csv.DictReader(
+        open(tmp_path / "out" / "analisa_poin.csv", encoding="utf-8-sig")))
+    # Invarian 2: tidak ada poin tanpa rujukan pasal + halaman.
+    assert all(r["pasal"] and r["halaman"] for r in poin)
+    # Label akses ikut, supaya konsumen hilir bisa menyaring non-publik.
+    assert all("access_class" in r for r in poin)
+
+    ringkas = list(csv.DictReader(
+        open(tmp_path / "out" / "analisa.csv", encoding="utf-8-sig")))
+    assert ringkas[0]["tentang"] == "KETAHANAN SIBER"
+    assert ringkas[0]["versi"] == "v2.1"
+
+
+def test_export_analisa_kosong_bila_belum_dianalisa(tmp_path):
+    """Katalog tanpa tabel analysis_v2 tidak boleh menggagalkan ekspor."""
+    from hero.kb.export import export
+
+    with Catalog(tmp_path / "c.db") as cat:
+        cat.upsert_document(record("e" * 64))
+        counts = export(cat, tmp_path / "out", "csv")
+
+    assert counts["analisa"] == 0
+    assert counts["analisa_poin"] == 0
+    assert counts["documents"] == 1
+
+
+def test_export_analisa_melewati_json_rusak(tmp_path):
+    """Satu baris cache separuh tertulis tidak boleh menjatuhkan seluruh ekspor."""
+    from hero.kb.export import export
+
+    with Catalog(tmp_path / "c.db") as cat:
+        rec = record("f" * 64)
+        cat.upsert_document(rec)
+        _simpan_analisa_v2(cat, rec.doc_id, {"poin": []})
+        cat.conn.execute("UPDATE analysis_v2 SET hasil = '{rusak' WHERE doc_id = ?",
+                         (rec.doc_id,))
+        cat.conn.commit()
+        counts = export(cat, tmp_path / "out", "csv")
+
+    assert counts["analisa"] == 0
+    assert counts["documents"] == 1

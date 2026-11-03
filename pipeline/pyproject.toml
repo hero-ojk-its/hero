@@ -34,10 +34,14 @@ vector = ["scikit-learn>=1.5", "sqlite-vec>=0.1.6"]
 semantic = ["fastembed>=0.4"]
 # AI-Assisted narration (Fase 2): Claude API. Optional — Deterministic mode never needs it.
 ai = ["anthropic>=1.0"]
+# AI-Assisted narration lewat Google AI (Gemini). Alternatif `ai`, bukan tambahan:
+# penyedia dipilih di analysis.ai_provider / ditebak dari analysis.ai_model.
+ai-gemini = ["google-genai>=1.0"]
 # Jembatan ke backend tim: baca/tulis kolom pgvector & benchmark Postgres.
 # Worker pindai/ekstraksi TIDAK butuh ini (cukup `requests`, sudah inti).
 pg = ["psycopg[binary]>=3.1"]
 all = ["hero[api,vector,semantic,ai,pg]"]
+all-gemini = ["hero[api,vector,semantic,ai-gemini,pg]"]
 
 [project.scripts]
 hero = "hero.cli:main"

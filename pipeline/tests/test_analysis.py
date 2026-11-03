@@ -54,6 +54,57 @@ def test_lampiran_heavy_regulation_is_flagged_with_real_headings():
     assert prof["judul_bagian"] == ["I. KETENTUAN UMUM", "II. PELAPORAN BULANAN"]
 
 
+def test_lampiran_judul_dibaca_dan_disambung_saat_terpotong_baris():
+    """Judul lampiran dicetak terpotong: "PEDOMAN" lalu perihalnya di baris berikut."""
+    arts = [{"number": "1", "text": "Pedoman sebagaimana tercantum dalam: a. Lampiran I."}]
+    full = ("Ditetapkan di Jakarta\nLAMPIRAN I\nPERATURAN ANGGOTA DEWAN KOMISIONER\n"
+            "NOMOR 1 TAHUN 2026\nTENTANG\nPENYELENGGARAAN TEKNOLOGI INFORMASI\n"
+            "PEDOMAN\nPENYELENGGARAAN TEKNOLOGI INFORMASI OLEH BANK UMUM\n"
+            "I. KETENTUAN UMUM\nisi\n")
+    prof = lampiran_profile(full, arts)
+    assert prof["judul_lampiran"] == ("PEDOMAN PENYELENGGARAAN TEKNOLOGI INFORMASI "
+                                      "OLEH BANK UMUM")
+
+
+def test_lampiran_tabel_rata_memakai_judul_kapital_sebagai_cadangan():
+    """Lampiran berupa satu tabel tidak punya penomoran — bagiannya huruf kapital."""
+    arts = [{"number": "1", "text": "Pedoman sebagaimana tercantum dalam Lampiran."}]
+    full = ("Ditetapkan di Jakarta\nLAMPIRAN\nNOMOR 7 TAHUN 2026\nTENTANG\n"
+            "PENILAIAN KUALITAS PIUTANG\nPEDOMAN PENILAIAN KUALITAS PIUTANG PEMBIAYAAN\n"
+            "PROSPEK USAHA DEBITUR\nisi baris\nKUALITAS MANAJEMEN\n")
+    prof = lampiran_profile(full, arts)
+    assert prof["judul_lampiran"] == "PEDOMAN PENILAIAN KUALITAS PIUTANG PEMBIAYAAN"
+    # Tanpa cadangan ini, judul_bagian kosong dan keluarannya nyaris hampa.
+    assert "PROSPEK USAHA DEBITUR" in prof["judul_bagian"]
+    assert "KUALITAS MANAJEMEN" in prof["judul_bagian"]
+
+
+def test_lampiran_bagian_bernomor_tetap_menang_atas_cadangan_kapital():
+    """Dokumen yang sudah terbaca rapi tidak boleh berubah karena cadangan."""
+    arts = [{"number": "1", "text": "Pedoman sebagaimana tercantum dalam Lampiran."}]
+    full = ("Ditetapkan di Jakarta\nLAMPIRAN\nI. KETENTUAN UMUM\nPROSPEK USAHA DEBITUR\n"
+            "II. PELAPORAN\n")
+    prof = lampiran_profile(full, arts)
+    assert prof["judul_bagian"] == ["I. KETENTUAN UMUM", "II. PELAPORAN"]
+
+
+def test_lampiran_kalimat_prosa_tidak_diakui_sebagai_judul():
+    """Invarian 6: lebih baik kosong daripada menyajikan kalimat contoh sebagai judul."""
+    arts = [{"number": "1", "text": "Pedoman sebagaimana tercantum dalam Lampiran."}]
+    full = ("Ditetapkan di Jakarta\nLAMPIRAN\n"
+            "Contoh: utang pajak, liabilitas imbal kerja, dan pendapatan yang ditangguhkan.\n")
+    prof = lampiran_profile(full, arts)
+    assert prof["judul_lampiran"] is None
+
+
+def test_lampiran_daftar_isi_bukan_judul_lampiran():
+    arts = [{"number": "1", "text": "Pedoman sebagaimana tercantum dalam Lampiran."}]
+    full = ("Ditetapkan di Jakarta\nLAMPIRAN\nDAFTAR ISI\n"
+            "BAB I - PENDAHULUAN ....................................\n")
+    prof = lampiran_profile(full, arts)
+    assert prof["judul_lampiran"] is None
+
+
 def test_revoked_name_skips_the_self_reference():
     t = ("Pada saat Peraturan Otoritas Jasa Keuangan ini mulai berlaku, Peraturan Otoritas Jasa Keuangan "
          "Nomor 37/POJK.03/2017 tentang Pemanfaatan Tenaga Kerja Asing (Lembaran Negara …), dicabut")
@@ -240,3 +291,131 @@ def test_sanction_article_ranks_by_density(tmp_path):
     conn.execute("INSERT INTO analysis_v2 VALUES ('d', ?)", (json.dumps({"poin": poin}),))
     got = _points_by_label(conn, "d", ["Sanksi"])
     assert list(got) == ["11", "14"] and len(got["11"]) == 5
+
+
+# ------------------------------------------------- penyedia Gemini (Google AI)
+class FakeGemini:
+    """Bentuk respons google-genai: .text, .usage_metadata, .candidates[0]."""
+
+    def __init__(self, payload=None, finish_reason="STOP", candidates=True,
+                 block_reason=None, raise_exc=None):
+        self.calls = 0
+        self.payload, self.finish_reason = payload, finish_reason
+        self.candidates, self.block_reason, self.raise_exc = candidates, block_reason, raise_exc
+        self.models = SimpleNamespace(generate_content=self.generate_content)
+
+    def generate_content(self, **kw):
+        self.calls += 1
+        self.kwargs = kw
+        if self.raise_exc is not None:
+            raise self.raise_exc
+        text = json.dumps(self.payload) if self.payload is not None else ""
+        kand = [SimpleNamespace(finish_reason=self.finish_reason)] if self.candidates else []
+        return SimpleNamespace(
+            text=text, model_version="gemini-2.5-pro", candidates=kand,
+            prompt_feedback=SimpleNamespace(block_reason=self.block_reason),
+            usage_metadata=SimpleNamespace(prompt_token_count=11, candidates_token_count=7,
+                                           cached_content_token_count=0))
+
+
+def _gemini(**kw) -> AnalysisSettings:
+    return AnalysisSettings(ai_enabled=True, ai_model="gemini-2.5-pro", **kw)
+
+
+def test_penyedia_ditebak_dari_nama_model():
+    from hero.analysis.ai import ANTHROPIC, GEMINI, provider_of
+
+    assert provider_of(AnalysisSettings(ai_model="gemini-2.5-pro")) == GEMINI
+    assert provider_of(AnalysisSettings(ai_model="claude-opus-5")) == ANTHROPIC
+    # Eksplisit menang atas tebakan.
+    assert provider_of(AnalysisSettings(ai_model="claude-opus-5", ai_provider="google")) == GEMINI
+
+
+def test_penyedia_tidak_dikenal_ditolak_bukan_didiamkan():
+    from hero.analysis.ai import provider_of
+
+    with pytest.raises(ValueError, match="tidak dikenal"):
+        provider_of(AnalysisSettings(ai_provider="openai"))
+
+
+def test_gemini_keluaran_terverifikasi_dipakai_dan_berujukan(catalog):
+    a = _analysis(catalog)
+    fake = FakeGemini(_good_output(build_facts(a)))
+    res = AiNarrator(_gemini(), client=fake).narrate(a)
+    assert res.status == "ai" and res.ringkasan[1]["rujukan"]
+    assert res.model == "gemini-2.5-pro"
+    cfg = fake.kwargs["config"]
+    assert cfg["response_mime_type"] == "application/json"
+    assert cfg["system_instruction"].startswith("Anda membantu analis regulasi")
+    # Parafrase fakta, bukan karangan.
+    assert cfg["temperature"] == 0
+
+
+def test_gemini_skema_dibersihkan_dari_additional_properties(catalog):
+    a = _analysis(catalog)
+    fake = FakeGemini(_good_output(build_facts(a)))
+    AiNarrator(_gemini(), client=fake).narrate(a)
+    skema = json.dumps(fake.kwargs["config"]["response_schema"])
+    # Gemini menolak permintaan yang memuat kata kunci ini.
+    assert "additionalProperties" not in skema
+    assert "ringkasan" in skema and "poin_kunci" in skema
+
+
+def test_gemini_angka_diubah_tetap_ditolak_verifikasi(catalog):
+    """Jaminan inti tidak boleh bergantung pada penyedia."""
+    a = _analysis(catalog)
+    facts = build_facts(a)
+    buruk = _good_output(facts)
+    buruk["ringkasan"][0]["kalimat"] = "Peraturan ini mengatur 99 hari kerja."
+    res = AiNarrator(_gemini(), client=FakeGemini(buruk)).narrate(a)
+    assert res.status == "deterministik" and res.pelanggaran
+
+
+def test_gemini_dokumen_internal_tetap_tidak_pernah_dikirim(catalog):
+    fake = FakeGemini()
+    res = AiNarrator(_gemini(), client=fake).narrate(_analysis(catalog), akses="internal")
+    assert res.status == "deterministik" and fake.calls == 0
+
+
+def test_gemini_keluaran_terpotong_jatuh_ke_deterministik(catalog):
+    a = _analysis(catalog)
+    res = AiNarrator(_gemini(), client=FakeGemini(_good_output(build_facts(a)),
+                                                  finish_reason="MAX_TOKENS")).narrate(a)
+    assert res.status == "deterministik" and "terpotong" in res.alasan
+
+
+def test_gemini_penolakan_filter_keamanan_dilaporkan_apa_adanya(catalog):
+    a = _analysis(catalog)
+    res = AiNarrator(_gemini(), client=FakeGemini(finish_reason="SAFETY")).narrate(a)
+    assert res.status == "deterministik" and "menolak" in res.alasan
+
+
+def test_gemini_permintaan_diblokir_tidak_dilaporkan_sebagai_json_rusak(catalog):
+    """Kandidat kosong berarti diblokir; 'bukan JSON valid' menyesatkan operator."""
+    a = _analysis(catalog)
+    res = AiNarrator(_gemini(), client=FakeGemini(candidates=False,
+                                                  block_reason="SAFETY")).narrate(a)
+    assert res.status == "deterministik" and "diblokir" in res.alasan
+
+
+@pytest.mark.parametrize("kode, petunjuk", [
+    (401, "Kredensial"), (403, "Kredensial"), (429, "Kuota"),
+    (404, "tidak ditemukan"), (503, "bermasalah"),
+])
+def test_gemini_galat_api_dipilah_dari_kode_status(kode, petunjuk):
+    from hero.analysis.ai import _pilah_galat_gemini
+
+    assert petunjuk in _pilah_galat_gemini(SimpleNamespace(code=kode))
+
+
+def test_status_menyebut_penyedia_dan_sdk_yang_tepat():
+    """Tanpa SDK Google terpasang, status harus menyebut SDK ITU — bukan anthropic.
+
+    Sebelum ada jalur Gemini, pesannya selalu "SDK anthropic belum terpasang",
+    yang mengirim operator memasang paket yang salah.
+    """
+    st = AiNarrator(_gemini(), client=FakeGemini()).status()
+    assert st["penyedia"] == "gemini"
+    assert st["model"] == "gemini-2.5-pro"
+    assert "google.genai" in st["ringkas"] or "gemini-2.5-pro" in st["ringkas"]
+    assert "anthropic" not in st["ringkas"]

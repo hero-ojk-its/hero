@@ -31,7 +31,11 @@ class BridgeSettings:
 
     base_url: str = "http://127.0.0.1:8000"
     api_key: str = ""
-    timeout: float = 60.0
+    # Timeout `requests`: batas DIAM antar-byte, bukan tenggat total, jadi unduhan
+    # besar yang masih mengalir tidak dipotong. Dilonggarkan dari 60s karena
+    # timeout pada POST tulis (mis. 150 pasal) memicu retry, dan retry pada tulis
+    # yang sebenarnya sudah sampai bisa menggandakan pasal (lihat invarian 7).
+    timeout: float = 300.0
     verify_tls: bool = True
     # Jeda antar-polling saat antrian kosong. Backend memberi 202/daftar kosong,
     # jadi polling adalah kontraknya — bukan pilihan kami.

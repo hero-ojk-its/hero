@@ -27,6 +27,8 @@ apt-get install -y -qq python3 python3-venv python3-pip openssl \
 log "2/8 User sistem dan direktori"
 id -u "$HERO_USER" >/dev/null 2>&1 || useradd --system --home-dir "$HERO_HOME" --shell /usr/sbin/nologin "$HERO_USER"
 mkdir -p "$HERO_HOME"/data/{staging,logs,export,knowledge_base,vectors,models} "$HERO_HOME/config"
+# Skrip operasional yang dipanggil systemd: milik root, bukan milik layanan.
+install -d -m 0755 -o root -g root "$HERO_HOME/ci"
 # Seluruh /opt/hero: user hero perlu menulis .venv dan data. Dijalankan ulang = aman.
 chown -R "$HERO_USER:$HERO_USER" "$HERO_HOME"
 
@@ -109,6 +111,13 @@ for u in hero-bridge-ekstraksi.service hero-ml.service hero-bridge-sinkron.servi
 done
 systemctl daemon-reload
 systemctl enable --now hero-bridge-ekstraksi.service hero-ml.service hero-bridge-sinkron.timer
+
+# Hitung ulang status keberlakuan harian: status `berlaku` bergantung pada
+# effective_date yang terlewati kalender, bukan pada aksi pengguna.
+install -m 0755 -o root -g root "$HERO_HOME/deploy/vps/recompute-status.sh" "$HERO_HOME/ci/"
+install -m 0644 "$S/hero-recompute-status.service" "$S/hero-recompute-status.timer" /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now hero-recompute-status.timer
 
 # Cadangan DB harian hanya dijadwalkan bila kredensial rclone (Nextcloud) sudah dibuat,
 # supaya provisioning tidak menjadwalkan backup yang pasti gagal.
