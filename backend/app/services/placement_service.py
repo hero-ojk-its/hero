@@ -27,7 +27,7 @@ logger = logging.getLogger("hero")
 class PlacementResult:
     document_id: int
     placed: bool
-    reason: str  # "ditempatkan" | "metadata_belum_cukup" | "sudah_ditempatkan" | "gagal: ..."
+    reason: str  # "ditempatkan" | "relokasi" | "metadata_belum_cukup" | "sudah_ditempatkan" | "gagal: ..."
     old_path: Optional[str]
     new_path: Optional[str]
     category_id: Optional[int]
@@ -52,6 +52,7 @@ class PlacementService:
         doc: Document,
         *,
         force: bool = False,
+        keep_category: bool = False,
         actor_user_id: Optional[int] = None,
         ip_address: Optional[str] = None,
     ) -> PlacementResult:
@@ -65,6 +66,7 @@ class PlacementService:
             release_date=doc.release_date,
             bidang=doc.bidang,
             original_filename=doc.original_filename,
+            regulation_year=doc.regulation_year,
         )
 
         # 1. Cek kelengkapan metadata
@@ -105,8 +107,23 @@ class PlacementService:
             )
 
         # 3. Tentukan kategori tujuan
+        old_cat = (
+            self.db.query(Category).filter(Category.id == doc.category_id).first()
+            if doc.category_id
+            else None
+        )
+        old_cat_path = "/".join(self.categories.path_of(old_cat)) if old_cat else None
+        old_kategori_info = {"id": old_cat.id, "path": old_cat_path} if old_cat else None
+
         target_cat = None
-        if doc.category_id is not None:
+        if keep_category and doc.category_id is not None:
+            target_cat = self.db.query(Category).filter(Category.id == doc.category_id).first()
+            if target_cat:
+                cat_segments = self.categories.path_of(target_cat)
+            else:
+                cat_segments = self.categories.category_segments_for(doc)
+                target_cat = self.categories.resolve_or_create_path(cat_segments)
+        elif getattr(doc, "kategori_manual", False) and doc.category_id is not None:
             target_cat = self.db.query(Category).filter(Category.id == doc.category_id).first()
             if target_cat:
                 cat_segments = self.categories.path_of(target_cat)
@@ -146,11 +163,26 @@ class PlacementService:
             if target_cat:
                 doc.category_id = target_cat.id
 
+            alasan = "relokasi" if is_in_kb else "ditempatkan"
+            new_cat_path = "/".join(cat_segments)
+            new_kategori_info = {"id": target_cat.id, "path": new_cat_path} if target_cat else None
+
+            audit_detail = {
+                "document_id": doc.id,
+                "alasan": alasan,
+                "old_path": old_path,
+                "new_path": new_path,
+                "kategori_lama": old_kategori_info,
+                "kategori_baru": new_kategori_info,
+                "kategori_manual": getattr(doc, "kategori_manual", False),
+            }
+
             record_audit(
                 self.db,
                 action=PLACE_DOCUMENT,
                 user_id=actor_user_id,
                 target_resource=f"document:{doc.id}",
+                detail=audit_detail,
                 ip_address=ip_address,
                 commit=False,
             )
@@ -168,7 +200,7 @@ class PlacementService:
             return PlacementResult(
                 document_id=doc.id,
                 placed=True,
-                reason="ditempatkan",
+                reason=alasan,
                 old_path=old_path,
                 new_path=new_path,
                 category_id=doc.category_id,

@@ -155,6 +155,13 @@ class Document(Base):
         index=True,
         comment="FK ke kategori / folder KB"
     )
+    kategori_manual = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+        comment="Apakah kategori dokumen ditentukan secara manual oleh pengguna",
+    )
     job_id = Column(
         Integer,
         ForeignKey("job_ingest.id", ondelete="SET NULL"),
@@ -234,6 +241,12 @@ class Document(Base):
         nullable=True,
         comment="Jumlah halaman PDF"
     )
+    pdf_terproteksi = Column(
+        Boolean,
+        nullable=True,
+        index=True,
+        comment="PDF memiliki proteksi kata sandi pemilik / diproteksi",
+    )
     duplicate_of_id = Column(
         Integer,
         ForeignKey("documents.id", ondelete="SET NULL"),
@@ -276,6 +289,23 @@ class Document(Base):
         String(100),
         nullable=True,
         comment="Label lampiran, misal: Lampiran I",
+    )
+
+    # Persetujuan Publikasi Draft Kajian (Langkah 35)
+    publik_disetujui_oleh = Column(
+        String(255),
+        nullable=True,
+        comment="Username/nama pihak yang menyetujui publikasi draft kajian",
+    )
+    publik_disetujui_alasan = Column(
+        Text,
+        nullable=True,
+        comment="Alasan persetujuan publikasi draft kajian",
+    )
+    publik_disetujui_pada = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Waktu persetujuan publikasi draft kajian",
     )
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

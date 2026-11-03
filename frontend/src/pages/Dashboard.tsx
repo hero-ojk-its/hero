@@ -19,8 +19,11 @@ import {
   getJenisJobIngestLabel,
   getJobStatusBadgeClass,
 } from './ingest/labels';
+import { gayaStatusKeberlakuan, labelStatusKeberlakuan } from '../lib/labelStatus';
 import { LoadingState } from '../components/LoadingState';
 import { ErrorState } from '../components/ErrorState';
+import { PanelErrorBoundary } from '../components/PanelErrorBoundary';
+import CorongIngestCard from '../components/dashboard/CorongIngestCard';
 
 // Data statis untuk mode contoh (fallback saat API tidak aktif)
 const mockStatData = {
@@ -328,16 +331,30 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Baris kecil di bawah kartu: status belum diketahui */}
+          {/* Baris kecil di bawah kartu: belum berlaku & status belum diketahui (link ke KB berfilter, param = nilai enum) */}
           {isApiConfigured && summary && (
-            <div className="flex items-center justify-end px-1 -mt-2">
-              <span className="text-xs text-gray-500">
-                Status belum diketahui:{' '}
-                <span className="font-semibold text-gray-700">
-                  {summary.kb.by_status_keberlakuan.tidak_diketahui ?? 0}
-                </span>{' '}
-                dokumen
-              </span>
+            <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 px-1 -mt-2 text-xs text-gray-500">
+              {([
+                ['belum_berlaku', 'Belum berlaku'],
+                ['tidak_diketahui', 'Status belum diketahui'],
+              ] as const).map(([status, teks], idx) => (
+                <span key={status} className="inline-flex items-center gap-2">
+                  {idx > 0 && <span aria-hidden="true">·</span>}
+                  <Link
+                    to={`/knowledge?status_keberlakuan=${status}`}
+                    className="inline-flex items-center gap-1.5 hover:text-gray-800 hover:underline"
+                    title={`Lihat dokumen berstatus ${labelStatusKeberlakuan(status)} di Knowledge Base`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${gayaStatusKeberlakuan(status).titik}`} />
+                    <span>
+                      {teks}:{' '}
+                      <span className="font-semibold text-gray-700">
+                        {summary.kb.by_status_keberlakuan[status] ?? 0}
+                      </span>
+                    </span>
+                  </Link>
+                </span>
+              ))}
             </div>
           )}
 
@@ -418,7 +435,18 @@ export default function Dashboard() {
               )}
             </div>
           </div>
+        </>
+      )}
 
+      {/* Corong ingest: fetch, galat, dan muat ulang sendiri, lepas dari ringkasan dashboard */}
+      {isApiConfigured && (
+        <PanelErrorBoundary nama="Corong Ingest">
+          <CorongIngestCard />
+        </PanelErrorBoundary>
+      )}
+
+      {(!loading || summary) && !error && (
+        <>
           {/* Bottom Row: Ringkasan Aktivitas Sistem */}
           <div className="pt-2">
             <h3 className="text-base font-bold text-gray-900">Ringkasan Aktivitas Sistem</h3>

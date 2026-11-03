@@ -2,19 +2,40 @@
  * Client API HERO untuk komunikasi dengan Backend FastAPI.
  */
 
+import { labelStatusKeberlakuan } from './labelStatus';
+
 export interface ValidationErrorItem {
   loc?: (string | number)[];
   msg?: string;
   type?: string;
 }
 
+/** Pesan 403 akses_ditolak; tanpa kode izin mentah (mis. METADATA_KOREKSI) */
+export const PESAN_AKSES_DITOLAK = 'Peran Anda tidak memiliki izin untuk aksi ini.';
+
+export interface ApiErrorOptions {
+  retryAfter?: number | null;
+  headers?: Headers;
+}
+
 export class ApiError extends Error {
   status: number;
   detail: string | ValidationErrorItem[] | unknown;
+  retryAfter?: number | null;
+  headers?: Headers;
 
-  constructor(status: number, detail: string | ValidationErrorItem[] | unknown) {
+  constructor(
+    status: number,
+    detail: string | ValidationErrorItem[] | unknown,
+    options?: ApiErrorOptions
+  ) {
     let formattedMessage = `API Error ${status}`;
-    if (typeof detail === 'string') {
+    const kode = detail && typeof detail === 'object' && !Array.isArray(detail) ? (detail as Record<string, unknown>).code : undefined;
+    if (status === 403 && kode === 'akses_ditolak') {
+      // Langkah 32 menambah detail.message "Akun Anda tidak memiliki izin <IZIN> ...", yang memuat kode izin.
+      // Hanya err.message yang diganti; err.detail tetap utuh untuk pemeta galat yang membacanya.
+      formattedMessage = PESAN_AKSES_DITOLAK;
+    } else if (typeof detail === 'string') {
       formattedMessage = detail;
     } else if (Array.isArray(detail)) {
       // Menangani format error validasi FastAPI (HTTP 422)
@@ -46,6 +67,8 @@ export class ApiError extends Error {
     this.name = 'ApiError';
     this.status = status;
     this.detail = detail;
+    this.retryAfter = options?.retryAfter ?? null;
+    this.headers = options?.headers;
   }
 }
 
@@ -175,7 +198,22 @@ async function prepareAndFetchResponse(
         errorDetail = response.statusText || `Galat HTTP ${response.status}`;
       }
 
-      throw new ApiError(response.status, errorDetail);
+      // Ekstrak header Retry-After (misal: HTTP 429)
+      let retryAfter: number | null = null;
+      const retryAfterHeader = response.headers.get('retry-after');
+      if (retryAfterHeader) {
+        const parsedSec = Number(retryAfterHeader);
+        if (!isNaN(parsedSec) && parsedSec >= 0) {
+          retryAfter = Math.round(parsedSec);
+        } else {
+          const parsedDate = Date.parse(retryAfterHeader);
+          if (!isNaN(parsedDate)) {
+            retryAfter = Math.max(0, Math.round((parsedDate - Date.now()) / 1000));
+          }
+        }
+      }
+
+      throw new ApiError(response.status, errorDetail, { retryAfter, headers: response.headers });
     }
 
     return response;
@@ -427,6 +465,12 @@ export function buildQueryString(params: Record<string, unknown>): string {
 // Tipe Data Kontrak API HERO
 // -------------------------------------------------------------
 
+export interface PersetujuanPublikDetail {
+  disetujui_oleh?: string | null;
+  alasan?: string | null;
+  pada?: string | null;
+}
+
 export interface DocumentItem {
   id: number;
   title: string;
@@ -439,12 +483,14 @@ export interface DocumentItem {
   document_role?: 'corpus_eksisting' | 'draft_kajian' | string | null;
   category_id: number | null;
   category_path: string[] | null;
-  status_keberlakuan: 'berlaku' | 'diubah' | 'dicabut' | 'tidak_diketahui' | string;
+  status_keberlakuan: 'berlaku' | 'belum_berlaku' | 'diubah' | 'dicabut' | 'tidak_diketahui' | string;
   processing_status: 'diterima' | 'diproses' | 'perlu_koreksi' | 'terindeks' | 'gagal' | 'ditolak' | string;
   file_size_bytes: number | null;
   source_url: string | null;
   pdf_url: string;
   is_placed: boolean;
+  /** true bila kategori dipilih pengguna (Langkah 32); undefined di backend lama */
+  kategori_manual?: boolean;
   restricted: boolean;
   created_at: string;
   updated_at?: string | null;
@@ -454,6 +500,7 @@ export interface DocumentItem {
   file_path_pdf?: string | null;
   rank?: number | null;
   highlight?: string | null;
+  persetujuan_publik?: PersetujuanPublikDetail | null;
 }
 
 export interface DocumentsResponse {
@@ -466,9 +513,14 @@ export interface CategoryNode {
   id: number;
   name: string;
   parent_id: number | null;
+  kunci_otomatis?: string | null;
   auto_created?: boolean;
   document_count: number;
   total_document_count: number;
+  /** Dokumen aktif langsung di kategori ini (Langkah 28; sama dengan document_count) */
+  jumlah_dokumen?: number;
+  /** Teks JSON objek; disimpan, belum dipakai klasifikasi otomatis (Langkah 28) */
+  classification_rule?: string | null;
   children: CategoryNode[];
 }
 
@@ -480,6 +532,7 @@ export interface DashboardSummaryResponse {
     target_met: boolean;
     by_status_keberlakuan: {
       berlaku?: number;
+      belum_berlaku?: number;
       diubah?: number;
       dicabut?: number;
       tidak_diketahui?: number;
@@ -541,7 +594,10 @@ export interface AdaptedRegulasiDoc {
   kategori: string;
   topik: string;
   tahun: number | string;
+  /** Label tampilan status keberlakuan */
   status: string;
+  /** Nilai enum status_keberlakuan dari backend (dasar warna badge) */
+  statusKode?: string;
   sumber: string;
   ukuran?: string;
   sha256?: string;
@@ -600,13 +656,6 @@ export function adaptDocumentToDetail(doc: DocumentItem): AdaptedRegulasiDoc {
     }
   }
 
-  const statusMap: Record<string, string> = {
-    berlaku: 'Aktif',
-    diubah: 'Diubah',
-    dicabut: 'Dicabut',
-    tidak_diketahui: 'Tidak diketahui',
-  };
-
   return {
     id: doc.id,
     judul: doc.title || '-',
@@ -619,7 +668,8 @@ export function adaptDocumentToDetail(doc: DocumentItem): AdaptedRegulasiDoc {
     topik: doc.bidang || '-',
     tahun,
     tanggalPublikasi,
-    status: statusMap[doc.status_keberlakuan] || doc.status_keberlakuan || 'Tidak diketahui',
+    status: labelStatusKeberlakuan(doc.status_keberlakuan),
+    statusKode: doc.status_keberlakuan || 'tidak_diketahui',
     sumber: doc.source_url || '-',
     ukuran: formatFileSize(doc.file_size_bytes),
     sha256: doc.file_hash || undefined,

@@ -397,10 +397,10 @@ def test_p09_auth_disabled_legacy_behavior(client: TestClient):
     res_sources = client.get("/api/v1/scraping-sources/")
     assert res_sources.status_code not in (401, 403)
 
-    res_audit = client.get("/api/v1/audit-logs/")
+    res_audit = client.get("/api/v1/audit-logs/", headers={"X-Internal-API-Key": settings.internal_api_key})
     assert res_audit.status_code not in (401, 403)
 
-    res_users = client.get("/api/v1/users/")
+    res_users = client.get("/api/v1/users/", headers={"X-Internal-API-Key": settings.internal_api_key})
     assert res_users.status_code not in (401, 403)
 
 
@@ -504,6 +504,7 @@ def test_p12_cannot_deactivate_last_active_admin(
     # Ketika auth mati atau request eksternal tanpa self-token mencoba menonaktifkan admin terakhir:
     res = client.patch(
         f"/api/v1/users/{admin_user.id}",
+        headers={"X-Internal-API-Key": settings.internal_api_key},
         json={"is_active": False},
     )
     assert res.status_code == 409

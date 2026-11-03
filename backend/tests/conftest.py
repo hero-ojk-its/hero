@@ -94,6 +94,7 @@ def db_session() -> Generator[Session, None, None]:
                 job_ingest,
                 scraping_sources,
                 audit_logs,
+                percobaan_login,
                 users,
                 categories
             RESTART IDENTITY CASCADE;
@@ -102,6 +103,8 @@ def db_session() -> Generator[Session, None, None]:
 
         # Seed 5 kategori awal
         seed_initial_categories(db)
+        from app.services.corong_service import clear_corong_cache
+        clear_corong_cache()
         yield db
     finally:
         db.close()

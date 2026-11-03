@@ -33,10 +33,13 @@ from app.schemas.article import (
     UpdateDocumentActiveIn,
     UpdateDocumentActiveResponse,
 )
+from app.schemas.document import DocumentMetadataPatchResponse
 from app.core.permissions import (
     perlu_izin,
+    perlu_salah_satu_izin,
     Izin,
     check_non_public_access,
+    punya_izin,
 )
 from app.routers.auth import get_current_user
 from app.services.audit_service import (
@@ -47,7 +50,10 @@ from app.services.audit_service import (
     UPDATE_METADATA,
     DEACTIVATE_DOCUMENT,
     ACTIVATE_DOCUMENT,
+    PUBLIKASI_DRAFT,
 )
+from app.schemas.document import PersetujuanPublikIn
+from app.services.klasifikasi_service import periksa_publikasi_draft
 from app.services.storage_service import StorageService, get_storage_service
 from app.services.category_service import CategoryService
 from app.services.placement_service import PlacementService
@@ -87,6 +93,7 @@ class UpdateMetadataIn(BaseModel):
     is_attachment: Optional[bool] = None
     parent_document_id: Optional[int] = None
     attachment_label: Optional[str] = Field(None, max_length=100)
+    persetujuan_publik: Optional[PersetujuanPublikIn] = None
 
 
 class VersionRelationItem(BaseModel):
@@ -456,6 +463,7 @@ def _format_single_document_response(doc: Document, db: Session, current_user: O
         "extraction_engine": getattr(doc, "extraction_engine", None),
         "category_id": doc.category_id,
         "category_path": cat_path,
+        "kategori_manual": bool(getattr(doc, "kategori_manual", False)),
         "is_placed": is_placed,
         "job_id": doc.job_id,
         "pdf_url": f"/api/v1/documents/{doc.id}/pdf",
@@ -496,6 +504,11 @@ def _format_single_document_response(doc: Document, db: Session, current_user: O
             }
             for lr in legal_refs
         ],
+        "persetujuan_publik": {
+            "disetujui_oleh": doc.publik_disetujui_oleh,
+            "alasan": doc.publik_disetujui_alasan,
+            "pada": doc.publik_disetujui_pada.isoformat() if doc.publik_disetujui_pada else None,
+        } if (doc.publik_disetujui_oleh or doc.publik_disetujui_alasan or doc.publik_disetujui_pada) else None,
     }
 
 
@@ -565,11 +578,27 @@ def get_document_pdf(
     client_ip = request.client.host if request.client else None
 
     action_type = DOWNLOAD_PDF if download else OPEN_PDF
+    klasifikasi = (
+        doc.access_classification.value
+        if hasattr(doc.access_classification, "value")
+        else str(doc.access_classification)
+    )
+    pdf_detail = {
+        "document_id": doc.id,
+        "judul": doc.title[:200] if doc.title else None,
+        "nama_berkas": fname,
+        "klasifikasi": klasifikasi,
+    }
+    page_param = request.query_params.get("page") or request.query_params.get("halaman")
+    if page_param and page_param.isdigit():
+        pdf_detail["halaman"] = int(page_param)
+
     record_audit(
         db,
         action=action_type,
         user_id=actor_user_id,
         target_resource=f"document:{doc.id}",
+        detail=pdf_detail,
         ip_address=client_ip,
         commit=True,
     )
@@ -624,14 +653,112 @@ def get_document_text(
     }
 
 
-@router.patch("/{document_id}/metadata", summary="Koreksi metadata dokumen manual")
+class DraftMiripItem(BaseModel):
+    document_id: int
+    judul: str
+    diunggah: Optional[str] = None
+    persen: float
+    status: str
+
+
+class DraftTerdekatItem(BaseModel):
+    document_id: int
+    persen: float
+
+
+class RingkasPasal(BaseModel):
+    sama: int = 0
+    berubah: int = 0
+    baru: int = 0
+    dihapus: int = 0
+
+
+class RincianPasal(BaseModel):
+    pasal: str
+    status: str
+    persen: Optional[float] = None
+
+
+class PerPasalDetail(BaseModel):
+    dibanding_dengan: int
+    ringkas: RingkasPasal
+    pasal: List[RincianPasal]
+
+
+class DraftKemiripanResponse(BaseModel):
+    document_id: int
+    ambang: float
+    dibandingkan: int
+    draft_mirip: List[DraftMiripItem]
+    terdekat: Optional[DraftTerdekatItem] = None
+    per_pasal: Optional[PerPasalDetail] = None
+    catatan: Optional[str] = None
+
+
+@router.get(
+    "/{document_id}/kemiripan-draft",
+    response_model=DraftKemiripanResponse,
+    summary="Kemiripan draft berulang dan perbandingan per pasal",
+    responses={
+        403: {"description": "Akses dokumen non-publik ditolak / izin tidak memadai"},
+        404: {"description": "Dokumen tidak ditemukan"},
+        409: {"description": "Draft belum selesai diekstraksi"},
+        422: {"description": "Dokumen bukan draft kajian"},
+    },
+)
+def get_draft_similarity(
+    document_id: int,
+    ambang: Optional[float] = Query(None, ge=0.0, le=100.0, description="Ambang batas kemiripan (0-100 persen)"),
+    limit: int = Query(5, ge=1, le=20, description="Batas jumlah draft mirip yang ditampilkan"),
+    db: Session = Depends(get_db),
+    current_user=Depends(perlu_izin(Izin.KB_BACA)),
+):
+    """
+    Menghitung persentase kemiripan teks terhadap draft-draft kajian lain (Jaccard 5-gram shingle)
+    dan membandingkan perbedaan per pasal jika kemiripan melampaui ambang.
+    """
+    from app.services.kemiripan_service import cari_kemiripan_draft
+
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
+
+    check_non_public_access(doc, current_user)
+
+    if doc.document_role != PeranDokumen.draft_kajian:
+        raise HTTPException(
+            status_code=422,
+            detail="Kemiripan draft hanya untuk dokumen draft kajian",
+        )
+
+    if not doc.full_text or not doc.full_text.strip():
+        raise HTTPException(
+            status_code=409,
+            detail="Draft belum selesai diekstraksi",
+        )
+
+    return cari_kemiripan_draft(
+        db=db,
+        doc=doc,
+        user=current_user,
+        ambang=ambang,
+        limit=limit,
+    )
+
+
+@router.patch(
+    "/{document_id}/metadata",
+    response_model=DocumentMetadataPatchResponse,
+    response_model_exclude_unset=True,
+    summary="Koreksi metadata dokumen manual",
+)
 def patch_document_metadata(
     document_id: int,
     payload: UpdateMetadataIn,
     request: Request,
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage_service),
-    current_user=Depends(perlu_izin(Izin.METADATA_KOREKSI)),
+    current_user=Depends(perlu_salah_satu_izin([Izin.METADATA_KOREKSI, Izin.DRAFT_PUBLIKASI])),
 ):
     """
     Melakukan koreksi metadata dokumen manual (US-21).
@@ -648,6 +775,31 @@ def patch_document_metadata(
     fields_set = payload.model_fields_set
     if not fields_set:
         raise HTTPException(status_code=422, detail="Minimal satu field metadata harus dikirim.")
+
+    # Validasi publikasi draft kajian (Langkah 35, FR-SCR-04a)
+    target_role = payload.document_role if "document_role" in fields_set else doc.document_role
+    target_class = payload.access_classification if "access_classification" in fields_set else doc.access_classification
+    target_role_str = target_role.value if hasattr(target_role, "value") else str(target_role or "")
+    target_class_str = target_class.value if hasattr(target_class, "value") else str(target_class or "")
+    is_target_draft_publik = (target_role_str == "draft_kajian" and target_class_str == "publik")
+
+    # Aturan otorisasi Langkah 35b:
+    # Bila pengguna TIDAK punya METADATA_KOREKSI (hanya DRAFT_PUBLIKASI),
+    # field yang dikirim hanya boleh subset dari {"access_classification", "persetujuan_publik"}
+    # DAN hasil akhirnya harus draft_kajian + publik.
+    if current_user is not None and settings.auth_enabled:
+        if not punya_izin(current_user, Izin.METADATA_KOREKSI):
+            allowed_fields = {"access_classification", "persetujuan_publik"}
+            if not fields_set.issubset(allowed_fields) or not is_target_draft_publik:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "code": "akses_ditolak",
+                        "izin": Izin.METADATA_KOREKSI.value,
+                        "peran": str(getattr(current_user, "role", "")),
+                        "message": f"Akun Anda tidak memiliki izin {Izin.METADATA_KOREKSI.value} untuk aksi ini.",
+                    },
+                )
 
     # Validasi
     if "title" in fields_set:
@@ -678,6 +830,22 @@ def patch_document_metadata(
             if getattr(parent_doc, "is_attachment", False):
                 raise HTTPException(status_code=422, detail="Dokumen induk tidak boleh berupa lampiran.")
 
+    # Validasi publikasi draft kajian (Langkah 35, FR-SCR-04a)
+    persetujuan_data = None
+    if is_target_draft_publik:
+        wajib_persetujuan = (
+            doc.publik_disetujui_pada is None
+            or "document_role" in fields_set
+            or "access_classification" in fields_set
+        )
+        if wajib_persetujuan or payload.persetujuan_publik is not None:
+            persetujuan_data = periksa_publikasi_draft(
+                peran=target_role_str,
+                klasifikasi=target_class_str,
+                persetujuan=payload.persetujuan_publik,
+                user=current_user,
+            )
+
     # Catat perubahan diff
     before_dict = {}
     after_dict = {}
@@ -686,7 +854,7 @@ def patch_document_metadata(
     year_from_number = None
 
     for field in fields_set:
-        if field in ("is_attachment", "parent_document_id", "attachment_label"):
+        if field in ("is_attachment", "parent_document_id", "attachment_label", "persetujuan_publik"):
             continue
 
         current_val = getattr(doc, field)
@@ -708,6 +876,50 @@ def patch_document_metadata(
             before_dict[field] = current_val.isoformat() if isinstance(current_val, (date, datetime)) else (current_val.value if hasattr(current_val, "value") else current_val)
             after_dict[field] = new_val.isoformat() if isinstance(new_val, (date, datetime)) else (new_val.value if hasattr(new_val, "value") else new_val)
             setattr(doc, field, new_val)
+
+    # Tangani persetujuan publik draft kajian
+    if is_target_draft_publik and persetujuan_data:
+        if doc.publik_disetujui_oleh != persetujuan_data["disetujui_oleh"]:
+            changed_fields.append("publik_disetujui_oleh")
+            before_dict["publik_disetujui_oleh"] = doc.publik_disetujui_oleh
+            after_dict["publik_disetujui_oleh"] = persetujuan_data["disetujui_oleh"]
+            doc.publik_disetujui_oleh = persetujuan_data["disetujui_oleh"]
+        if doc.publik_disetujui_alasan != persetujuan_data["alasan"]:
+            changed_fields.append("publik_disetujui_alasan")
+            before_dict["publik_disetujui_alasan"] = doc.publik_disetujui_alasan
+            after_dict["publik_disetujui_alasan"] = persetujuan_data["alasan"]
+            doc.publik_disetujui_alasan = persetujuan_data["alasan"]
+        changed_fields.append("publik_disetujui_pada")
+        before_dict["publik_disetujui_pada"] = doc.publik_disetujui_pada.isoformat() if doc.publik_disetujui_pada else None
+        after_dict["publik_disetujui_pada"] = persetujuan_data["pada"].isoformat()
+        doc.publik_disetujui_pada = persetujuan_data["pada"]
+    elif not is_target_draft_publik:
+        # Dokumen keluar dari kombinasi draft+publik -> kosongkan 3 kolom persetujuan
+        if doc.publik_disetujui_oleh is not None:
+            changed_fields.append("publik_disetujui_oleh")
+            before_dict["publik_disetujui_oleh"] = doc.publik_disetujui_oleh
+            after_dict["publik_disetujui_oleh"] = None
+            doc.publik_disetujui_oleh = None
+        if doc.publik_disetujui_alasan is not None:
+            changed_fields.append("publik_disetujui_alasan")
+            before_dict["publik_disetujui_alasan"] = doc.publik_disetujui_alasan
+            after_dict["publik_disetujui_alasan"] = None
+            doc.publik_disetujui_alasan = None
+        if doc.publik_disetujui_pada is not None:
+            changed_fields.append("publik_disetujui_pada")
+            before_dict["publik_disetujui_pada"] = doc.publik_disetujui_pada.isoformat()
+            after_dict["publik_disetujui_pada"] = None
+            doc.publik_disetujui_pada = None
+
+    # Tangani penanda kategori_manual
+    if "category_id" in fields_set:
+        if payload.category_id is not None:
+            doc.kategori_manual = True
+        else:
+            doc.kategori_manual = False
+            doc.category_id = None
+            if "category_id" not in changed_fields:
+                changed_fields.append("category_id")
 
     # Tangani field lampiran khusus
     if "is_attachment" in fields_set:
@@ -846,31 +1058,42 @@ def patch_document_metadata(
             doc.processing_status = StatusPemrosesan.terindeks
 
     # Placement / Relokasi jika field penamaan/kategori berubah
-    placement_fields = {"title", "regulation_number", "regulation_type", "release_date", "category_id", "document_role", "bidang"}
+    placement_fields = {"title", "regulation_number", "regulation_type", "release_date", "regulation_year", "category_id", "document_role", "bidang"}
     placement_info = None
 
-    if any(f in changed_fields for f in placement_fields) and is_suff:
-        cat_svc = CategoryService(db)
-        place_svc = PlacementService(db, storage, cat_svc, settings)
-        place_res = place_svc.place(doc, force=True, actor_user_id=actor_user_id, ip_address=client_ip)
-        if not place_res.placed and place_res.reason and place_res.reason.startswith("gagal"):
-            db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail={
-                    "code": "penempatan_gagal",
-                    "message": place_res.reason,
-                },
-            )
-        placement_info = {
-            "document_id": place_res.document_id,
-            "placed": place_res.placed,
-            "reason": place_res.reason,
-            "old_path": place_res.old_path,
-            "new_path": place_res.new_path,
-            "category_id": place_res.category_id,
-            "category_path": place_res.category_path,
-        }
+    if any(f in changed_fields for f in placement_fields):
+        if is_suff:
+            cat_svc = CategoryService(db)
+            place_svc = PlacementService(db, storage, cat_svc, settings)
+            place_res = place_svc.place(doc, force=True, actor_user_id=actor_user_id, ip_address=client_ip)
+            if not place_res.placed and place_res.reason and place_res.reason.startswith("gagal"):
+                db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail={
+                        "code": "penempatan_gagal",
+                        "message": place_res.reason,
+                    },
+                )
+            placement_info = {
+                "document_id": place_res.document_id,
+                "placed": place_res.placed,
+                "reason": place_res.reason,
+                "old_path": place_res.old_path,
+                "new_path": place_res.new_path,
+                "category_id": place_res.category_id,
+                "category_path": place_res.category_path,
+            }
+        else:
+            cat_svc = CategoryService(db)
+            curr_cat = db.query(Category).filter(Category.id == doc.category_id).first() if doc.category_id else None
+            curr_path = cat_svc.path_of(curr_cat) if curr_cat else []
+            placement_info = {
+                "placed": False,
+                "reason": "metadata_belum_cukup",
+                "category_id": doc.category_id,
+                "category_path": curr_path,
+            }
 
     # Audit log
     if changed_fields:
@@ -880,6 +1103,22 @@ def patch_document_metadata(
             user_id=actor_user_id,
             target_resource=f"document:{doc.id}",
             detail={"before": before_dict, "after": after_dict},
+            ip_address=client_ip,
+            commit=False,
+        )
+
+    if is_target_draft_publik and persetujuan_data:
+        record_audit(
+            db,
+            action=PUBLIKASI_DRAFT,
+            user_id=actor_user_id,
+            target_resource=f"document:{doc.id}",
+            detail={
+                "document_id": doc.id,
+                "disetujui_oleh": doc.publik_disetujui_oleh,
+                "alasan": doc.publik_disetujui_alasan,
+                "jalur": "koreksi_metadata",
+            },
             ip_address=client_ip,
             commit=False,
         )
@@ -1024,6 +1263,13 @@ def update_document_status(
             )
 
     try:
+        before_status = (
+            doc.status_keberlakuan.value
+            if hasattr(doc.status_keberlakuan, "value")
+            else str(doc.status_keberlakuan)
+        )
+        before_source = doc.status_source
+
         # 3. Update status keberlakuan
         doc.status_keberlakuan = payload.status_keberlakuan
         doc.status_source = "manual"
@@ -1055,11 +1301,44 @@ def update_document_status(
 
         actor_user_id = current_user.id if current_user and getattr(current_user, "id", None) else None
         client_ip = request.client.host if request.client else None
+
+        after_status = (
+            payload.status_keberlakuan.value
+            if hasattr(payload.status_keberlakuan, "value")
+            else str(payload.status_keberlakuan)
+        )
+        after_source = "manual"
+
+        status_detail = {
+            "before": {
+                "status_keberlakuan": before_status,
+                "status_source": before_source,
+            },
+            "after": {
+                "status_keberlakuan": after_status,
+                "status_source": after_source,
+            },
+        }
+        if revoking_doc is not None:
+            status_detail["dokumen_pencabut"] = {
+                "id": revoking_doc.id,
+                "label": revoking_doc.regulation_number or revoking_doc.title,
+            }
+        if legal_ref is not None:
+            status_detail["jenis_rujukan"] = (
+                legal_ref.reference_type.value
+                if hasattr(legal_ref.reference_type, "value")
+                else str(legal_ref.reference_type)
+            )
+        if getattr(payload, "alasan", None):
+            status_detail["alasan"] = payload.alasan
+
         record_audit(
             db,
             action=UPDATE_DOCUMENT_STATUS,
             user_id=actor_user_id,
             target_resource=f"document:{doc.id}",
+            detail=status_detail,
             ip_address=client_ip,
             commit=False,
         )

@@ -6,25 +6,37 @@ import {
   Search, 
   CheckCircle, 
   FileText, 
-  Save 
+  Save,
+  ShieldCheck
 } from 'lucide-react';
 import { 
   updateDocumentMetadata, 
-  updateDocumentStatus, 
-  getCategories, 
-  type UpdateMetadataIn, 
-  type UpdateDocumentStatusIn, 
-  type CategoryDetailResponse, 
-  type StatusKeberlakuan, 
+  updateDocumentStatus,
+  type UpdateMetadataIn,
+  type UpdateMetadataResponse,
+  type PersetujuanPublikIn,
+  type UpdateDocumentStatusIn,
+  type StatusKeberlakuan,
   type KlasifikasiAkses, 
   type PeranDokumen 
 } from '../lib/ingestApi';
-import { apiFetch, type DocumentItem } from '../lib/api';
-import { 
-  STATUS_KEBERLAKUAN_LABELS, 
-  KLASIFIKASI_AKSES_LABELS, 
-  PERAN_DOKUMEN_LABELS 
+import { apiFetch, ApiError, type DocumentItem } from '../lib/api';
+import { getPohonKategori, jalurTeks, ratakanPohon, type KategoriTerindeks } from '../lib/kategoriApi';
+
+/** 422 penempatan_gagal: backend me-rollback seluruh koreksi (routers/documents.py patch_document_metadata) */
+const PESAN_PENEMPATAN_GAGAL =
+  'Perubahan belum tersimpan karena berkas gagal dipindahkan ke folder KB. Coba lagi atau hubungi admin.';
+import {
+  KLASIFIKASI_AKSES_LABELS,
+  PERAN_DOKUMEN_LABELS
 } from './ingest/labels';
+import {
+  STATUS_KEBERLAKUAN_OPSI,
+  alasanPenempatan,
+  gayaStatusKeberlakuan,
+  labelStatusKeberlakuan,
+  normalisasiStatusKeberlakuan,
+} from '../lib/labelStatus';
 
 // ============================================================================
 // MODAL 1: Koreksi Metadata Dokumen (TC-10 / G06 / G07)
@@ -34,12 +46,32 @@ interface EditMetadataModalProps {
   isOpen: boolean;
   onClose: () => void;
   document: DocumentItem;
-  onSuccess: (updated: DocumentItem) => void;
+  /** Dokumen terbaru + changed_fields/placement dari backend */
+  onSuccess: (updated: UpdateMetadataResponse) => void;
 }
 
 export function EditMetadataModal(props: EditMetadataModalProps) {
   if (!props.isOpen) return null;
   return <EditMetadataModalContent {...props} />;
+}
+
+function formatWaktuPersetujuan(isoStr?: string | null): string {
+  if (!isoStr) return '-';
+  try {
+    const d = new Date(isoStr);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    }
+  } catch {
+    // abaikan jika parsing gagal
+  }
+  return isoStr;
 }
 
 function EditMetadataModalContent({
@@ -66,33 +98,63 @@ function EditMetadataModalContent({
     (document.document_role as PeranDokumen) || 'corpus_eksisting'
   );
 
+  // Form States & Kalkulasi Persetujuan Publik Draft Kajian (Langkah 35)
+  const initialRole = (document.document_role as PeranDokumen) || 'corpus_eksisting';
+  const initialClass = (document.access_classification as KlasifikasiAkses) || 'publik';
+  const existingApproval = document.persetujuan_publik || null;
+  const hasExistingApproval = Boolean(existingApproval && (existingApproval.pada || existingApproval.disetujui_oleh));
+
+  const [persetujuanOleh, setPersetujuanOleh] = useState(existingApproval?.disetujui_oleh || '');
+  const [persetujuanAlasan, setPersetujuanAlasan] = useState(existingApproval?.alasan || '');
+
+  const isTargetDraftPublik = documentRole === 'draft_kajian' && accessClassification === 'publik';
+  const isRoleChanged = documentRole !== initialRole;
+  const isClassChanged = accessClassification !== initialClass;
+  // Sesuai aturan backend: persetujuan baru WAJIB jika belum pernah disetujui, ATAU peran berubah, ATAU klasifikasi berubah
+  const wajibPersetujuanBaru = isTargetDraftPublik && (!hasExistingApproval || isRoleChanged || isClassChanged);
+
+  // Cek apakah isian persetujuan diedit manual oleh pengguna dibanding data awal
+  const isApprovalEdited =
+    persetujuanOleh.trim() !== (existingApproval?.disetujui_oleh || '') ||
+    persetujuanAlasan.trim() !== (existingApproval?.alasan || '');
+
   // Categories & UI States
-  const [categories, setCategories] = useState<CategoryDetailResponse[]>([]);
+  // Opsi kategori berjalur penuh ("POJK / 2023") dari /categories/tree
+  const [categories, setCategories] = useState<KategoriTerindeks[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [apiError, setApiError] = useState<string | null>(null);
+  /** Pesan backend untuk 422 penempatan_gagal; hanya ditampilkan di balik "Detail teknis" */
+  const [detailTeknis, setDetailTeknis] = useState<string | null>(null);
 
   useEffect(() => {
-    let mounted = true;
-    getCategories()
-      .then((cats) => {
-        if (!mounted) return;
-        setCategories(cats);
-      })
-      .catch((err) => console.warn('Gagal memuat kategori:', err))
-      .finally(() => {
-        if (mounted) setIsLoadingCategories(false);
-      });
+    const controller = new AbortController();
+    // Ditunda satu tick agar mount ganda StrictMode tidak mengirim request dua kali
+    const timer = setTimeout(() => {
+      getPohonKategori({ signal: controller.signal })
+        .then((nodes) => {
+          if (!controller.signal.aborted) setCategories(ratakanPohon(nodes));
+        })
+        .catch((err: unknown) => {
+          if (controller.signal.aborted || (err instanceof Error && err.name === 'AbortError')) return;
+          console.warn('Gagal memuat kategori:', err);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setIsLoadingCategories(false);
+        });
+    }, 0);
 
     return () => {
-      mounted = false;
+      clearTimeout(timer);
+      controller.abort();
     };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setApiError(null);
+    setDetailTeknis(null);
     const errors: Record<string, string> = {};
 
     // Validasi ringan di klien: tahun harus 4 digit angka (G07)
@@ -106,6 +168,21 @@ function EditMetadataModalContent({
     if (releaseDate.trim()) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(releaseDate.trim())) {
         errors.release_date = 'Format tanggal terbit harus YYYY-MM-DD (contoh: 2024-12-31)';
+      }
+    }
+
+    // Validasi draft kajian publik (Langkah 35)
+    if (isTargetDraftPublik) {
+      if (wajibPersetujuanBaru || isApprovalEdited) {
+        if (!persetujuanOleh.trim()) {
+          errors.persetujuan_oleh = 'Nama penyetuju publikasi wajib diisi';
+        }
+        const cleanAlasan = persetujuanAlasan.trim();
+        if (!cleanAlasan) {
+          errors.persetujuan_alasan = 'Alasan persetujuan publikasi wajib diisi (minimal 10 karakter)';
+        } else if (cleanAlasan.length < 10) {
+          errors.persetujuan_alasan = `Alasan persetujuan minimal 10 karakter (saat ini ${cleanAlasan.length} karakter)`;
+        }
       }
     }
 
@@ -152,6 +229,16 @@ function EditMetadataModalContent({
       payload.document_role = documentRole;
     }
 
+    // Persetujuan publik draft kajian (Langkah 35):
+    // Kirim HANYA jika target dokumen draft_kajian + publik DAN (wajib persetujuan baru ATAU pengguna mengubah isian persetujuan)
+    if (isTargetDraftPublik && (wajibPersetujuanBaru || isApprovalEdited)) {
+      const persetujuanData: PersetujuanPublikIn = {
+        disetujui_oleh: persetujuanOleh.trim(),
+        alasan: persetujuanAlasan.trim(),
+      };
+      payload.persetujuan_publik = persetujuanData;
+    }
+
     // Jika tidak ada perubahan, tutup modal tanpa memanggil API
     if (Object.keys(payload).length === 0) {
       onClose();
@@ -164,6 +251,17 @@ function EditMetadataModalContent({
       onSuccess(updatedDoc);
       onClose();
     } catch (err: unknown) {
+      const detail = err instanceof ApiError && err.detail && typeof err.detail === 'object' ? (err.detail as Record<string, unknown>) : null;
+      if (err instanceof ApiError && err.status === 422 && detail?.code === 'penempatan_gagal') {
+        // Backend me-rollback seluruh koreksi saat berkas gagal dipindah, jadi tidak ada yang tersimpan
+        setApiError(PESAN_PENEMPATAN_GAGAL);
+        setDetailTeknis(alasanPenempatan(detail.message).pesan);
+        return;
+      }
+      if (err instanceof ApiError && err.status === 422 && detail?.code === 'draft_publik_butuh_persetujuan') {
+        setApiError(typeof detail.message === 'string' ? detail.message : 'Draft kajian publik memerlukan persetujuan.');
+        return;
+      }
       const msg = err instanceof Error ? err.message : String(err);
       setApiError(msg || 'Gagal menyimpan perubahan metadata.');
     } finally {
@@ -195,9 +293,17 @@ function EditMetadataModalContent({
         <form onSubmit={handleSubmit}>
           <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
             {apiError && (
-              <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-start gap-2">
+              <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-start gap-2" data-galat-metadata>
                 <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5" />
-                <span>{apiError}</span>
+                <div className="min-w-0">
+                  <span>{apiError}</span>
+                  {detailTeknis && (
+                    <details className="mt-1.5" data-detail-teknis>
+                      <summary className="cursor-pointer select-none text-[11px] opacity-75 hover:opacity-100">Detail teknis</summary>
+                      <p className="mt-0.5 text-[11px] font-mono opacity-80 break-all">{detailTeknis}</p>
+                    </details>
+                  )}
+                </div>
               </div>
             )}
 
@@ -320,14 +426,39 @@ function EditMetadataModalContent({
                   value={categoryId ?? ''}
                   onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : null)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-colors"
+                  aria-describedby={categoryId === null ? 'penjelasan-kategori-otomatis' : undefined}
                 >
-                  <option value="">(Tanpa Kategori)</option>
+                  {/* category_id: null = kembalikan ke kategori otomatis (dikirim hanya bila berbeda dari nilai awal) */}
+                  <option value="">
+                    {document.category_id == null ? '(Belum ada kategori — otomatis)' : 'Kembalikan ke kategori otomatis'}
+                  </option>
+                  {/* Cadangan bila kategori dokumen tidak ada di pohon (mis. baru dihapus) */}
+                  {!isLoadingCategories &&
+                    document.category_id != null &&
+                    !categories.some((c) => c.node.id === document.category_id) && (
+                      <option value={document.category_id}>Kategori #{document.category_id}</option>
+                    )}
                   {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
+                    <option key={cat.node.id} value={cat.node.id}>
+                      {jalurTeks(cat.path)}
                     </option>
                   ))}
                 </select>
+                {/* Asal kategori saat ini (Langkah 32); tidak ditampilkan bila backend tidak mengirim kategori_manual
+                    atau bila pilihan sudah diubah di form */}
+                {typeof document.kategori_manual === 'boolean' &&
+                  document.category_id != null &&
+                  categoryId === document.category_id && (
+                    <p className="text-[11px] text-gray-500 mt-1" data-asal-kategori>
+                      {document.kategori_manual ? 'Kategori ditentukan manual' : 'Kategori ditentukan otomatis'}
+                    </p>
+                  )}
+                {categoryId === null && (
+                  <p id="penjelasan-kategori-otomatis" className="text-[11px] text-gray-500 mt-1 leading-snug">
+                    Sistem akan menentukan kategori dari metadata dokumen (jenis &amp; tahun). Bila metadata belum lengkap,
+                    dokumen belum berkategori sampai dilengkapi.
+                  </p>
+                )}
               </div>
 
               {/* Klasifikasi Akses */}
@@ -360,6 +491,98 @@ function EditMetadataModalContent({
                 </select>
               </div>
             </div>
+
+            {/* Form Persetujuan Publik Draft Kajian (Langkah 35) */}
+            {isTargetDraftPublik && (
+              <div
+                id="section-koreksi-persetujuan-publik"
+                className="p-4 bg-amber-50/70 border border-amber-200 rounded-xl space-y-3"
+              >
+                <div className="flex items-start gap-2.5">
+                  <ShieldCheck size={18} className="text-amber-700 shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wider">
+                        Persetujuan Publikasi Draft Kajian
+                      </h4>
+                      {hasExistingApproval && !isRoleChanged && !isClassChanged ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          Persetujuan Tersimpan
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-200/80 text-amber-900 border border-amber-300">
+                          Persetujuan Baru Wajib
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-amber-800/90 mt-1 leading-relaxed">
+                      {hasExistingApproval && !isRoleChanged && !isClassChanged
+                        ? `Dokumen ini telah memiliki persetujuan yang valid${
+                            existingApproval?.disetujui_oleh ? ` oleh "${existingApproval.disetujui_oleh}"` : ''
+                          }${
+                            existingApproval?.pada ? ` pada ${formatWaktuPersetujuan(existingApproval.pada)}` : ''
+                          }. Anda dapat mempertahankan data persetujuan ini atau memperbaruinya.`
+                        : 'Sesuai tata kelola HERO, dokumen Draft Kajian yang diklasifikasikan sebagai Publik wajib memiliki pencatatan nama penyetuju dan alasan persetujuan.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 pt-1">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">
+                      Disetujui Oleh <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="persetujuan_publik_oleh"
+                      value={persetujuanOleh}
+                      onChange={(e) => {
+                        setPersetujuanOleh(e.target.value);
+                        if (validationErrors.persetujuan_oleh) {
+                          setValidationErrors((prev) => ({ ...prev, persetujuan_oleh: '' }));
+                        }
+                      }}
+                      className={`w-full px-3 py-2 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-colors ${
+                        validationErrors.persetujuan_oleh ? 'border-red-500 bg-red-50/30' : 'border-gray-300'
+                      }`}
+                      placeholder="Nama pejabat / penanggung jawab persetujuan..."
+                    />
+                    {validationErrors.persetujuan_oleh && (
+                      <p className="text-xs text-red-600 mt-1 font-semibold">{validationErrors.persetujuan_oleh}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-gray-700">
+                        Alasan Persetujuan <span className="text-red-500">*</span>
+                      </label>
+                      <span className={`text-[10px] ${persetujuanAlasan.trim().length >= 10 ? 'text-gray-500' : 'text-amber-700 font-semibold'}`}>
+                        {persetujuanAlasan.trim().length}/10 karakter minimal
+                      </span>
+                    </div>
+                    <textarea
+                      rows={2}
+                      name="persetujuan_publik_alasan"
+                      value={persetujuanAlasan}
+                      onChange={(e) => {
+                        setPersetujuanAlasan(e.target.value);
+                        if (validationErrors.persetujuan_alasan) {
+                          setValidationErrors((prev) => ({ ...prev, persetujuan_alasan: '' }));
+                        }
+                      }}
+                      className={`w-full px-3 py-2 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-colors ${
+                        validationErrors.persetujuan_alasan ? 'border-red-500 bg-red-50/30' : 'border-gray-300'
+                      }`}
+                      placeholder="Jelaskan alasan publikasi draft kajian (minimal 10 karakter)..."
+                    />
+                    {validationErrors.persetujuan_alasan && (
+                      <p className="text-xs text-red-600 mt-1 font-semibold">{validationErrors.persetujuan_alasan}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Footer Modal */}
@@ -417,8 +640,9 @@ function EditStatusModalContent({
   document,
   onSuccess,
 }: EditStatusModalProps) {
+  // Status saat ini selalu tercentang; nilai kosong/tak dikenal dianggap "tidak_diketahui"
   const [selectedStatus, setSelectedStatus] = useState<StatusKeberlakuan>(
-    (document.status_keberlakuan as StatusKeberlakuan) || 'berlaku'
+    normalisasiStatusKeberlakuan(document.status_keberlakuan) ?? 'tidak_diketahui'
   );
 
   // Search Revoking Document States
@@ -490,7 +714,7 @@ function EditStatusModalContent({
     }
   };
 
-  const statusOptions: StatusKeberlakuan[] = ['berlaku', 'diubah', 'dicabut', 'tidak_diketahui'];
+  const statusOptions: readonly StatusKeberlakuan[] = STATUS_KEBERLAKUAN_OPSI;
   const displayedSearchResults = searchQuery.trim() ? searchResults : [];
 
   return (
@@ -531,16 +755,8 @@ function EditStatusModalContent({
               <div className="grid grid-cols-2 gap-2.5">
                 {statusOptions.map((st) => {
                   const isChecked = selectedStatus === st;
-                  const label = STATUS_KEBERLAKUAN_LABELS[st] || st;
-
-                  const colorClass =
-                    st === 'berlaku'
-                      ? 'border-emerald-500 bg-emerald-50/40 text-emerald-900'
-                      : st === 'diubah'
-                      ? 'border-amber-500 bg-amber-50/40 text-amber-900'
-                      : st === 'dicabut'
-                      ? 'border-red-500 bg-red-50/40 text-red-900'
-                      : 'border-gray-400 bg-gray-50 text-gray-900';
+                  const label = labelStatusKeberlakuan(st);
+                  const colorClass = gayaStatusKeberlakuan(st).pilihan;
 
                   return (
                     <label
@@ -564,6 +780,9 @@ function EditStatusModalContent({
                   );
                 })}
               </div>
+              <p className="mt-2 text-[11px] text-gray-500" data-catatan-status-manual>
+                Status yang diubah manual tidak berubah otomatis saat tanggal berlaku tiba.
+              </p>
             </div>
 
             {/* Field Dokumen Pencabut / Pengubah (TC-20 / G08) */}

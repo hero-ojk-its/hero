@@ -63,22 +63,28 @@ def _seed_doc(
 
 
 def test_b01_patch_extraction_title_too_long(client: TestClient, db_session: Session, test_storage: StorageService):
-    """B01: PATCH extraction dengan judul 298 karakter -> 422 menyebut title/judul dan batas 255; dokumen tidak berubah."""
+    """B01: PATCH extraction dengan judul 298 karakter -> Langkah 35: tidak 422, judul ditolak (terlalu_panjang), judul lama dipertahankan, perlu_koreksi."""
     doc = _seed_doc(db_session, test_storage, title="Judul Dok Asli B01")
 
     long_title = "A" * 298
     resp = client.patch(
         f"/api/v1/internal/documents/{doc.id}/extraction",
         headers=INTERNAL_HEADERS,
-        json={"judul": long_title},
+        json={
+            "judul": long_title,
+            "teks_lengkap": "Teks lengkap ekstraksi B01 berhasil diekstrak.",
+        },
     )
-    assert resp.status_code == 422
-    err_str = str(resp.json()).lower()
-    assert ("title" in err_str or "judul" in err_str)
-    assert "255" in err_str
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["status"] == "perlu_koreksi"
+    assert "judul" in data
+    assert data["judul"]["status"] == "ditolak"
+    assert data["judul"]["alasan"] == "terlalu_panjang"
 
     db_session.refresh(doc)
     assert doc.title == "Judul Dok Asli B01"
+    assert doc.processing_status == StatusPemrosesan.perlu_koreksi
 
 
 def test_b02_patch_extraction_valid_move_fails(

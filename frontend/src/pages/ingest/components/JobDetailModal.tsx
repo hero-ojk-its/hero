@@ -3,7 +3,7 @@ import { X, Clock, FileText, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getIngestJobDetail, type JobDetailResponse } from '../../../lib/ingestApi';
 import { isApiConfigured } from '../../../lib/api';
-import { getJenisJobIngestLabel, getJobStatusBadgeClass, getJenisKegagalanLabel } from '../labels';
+import { getJenisJobIngestLabel, getJobStatusBadgeClass, getJenisKegagalanLabel, alasanTambahanGagal } from '../labels';
 
 interface JobDetailModalProps {
   jobId: number | null;
@@ -276,6 +276,11 @@ export default function JobDetailModal({ jobId, onClose }: JobDetailModalProps) 
                                 {getJenisKegagalanLabel(f.failure_type)}
                               </span>
                             </div>
+                            {alasanTambahanGagal(f.failure_type, f.reason_code) && (
+                              <p className="text-[11px] text-gray-500 mb-0.5">
+                                Alasan: {alasanTambahanGagal(f.failure_type, f.reason_code)}
+                              </p>
+                            )}
                             <p className="text-gray-600 text-[11px]">{f.message}</p>
                             {f.duplicate_of_document_id && (
                               <p className="mt-1 text-[11px] text-amber-800 font-medium">

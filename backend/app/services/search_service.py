@@ -341,6 +341,7 @@ class SearchService:
                 "document_role": doc_obj.document_role,
                 "category_id": doc_obj.category_id,
                 "category_path": cpath,
+                "kategori_manual": bool(getattr(doc_obj, "kategori_manual", False)),
                 "status_keberlakuan": doc_obj.status_keberlakuan,
                 "status_source": getattr(doc_obj, "status_source", None),
                 "processing_status": doc_obj.processing_status,
@@ -367,6 +368,11 @@ class SearchService:
                 "highlight": highlight_val,
                 "created_at": doc_obj.created_at,
                 "updated_at": doc_obj.updated_at,
+                "persetujuan_publik": {
+                    "disetujui_oleh": doc_obj.publik_disetujui_oleh,
+                    "alasan": doc_obj.publik_disetujui_alasan,
+                    "pada": doc_obj.publik_disetujui_pada.isoformat() if doc_obj.publik_disetujui_pada else None,
+                } if (doc_obj.publik_disetujui_oleh or doc_obj.publik_disetujui_alasan or doc_obj.publik_disetujui_pada) else None,
             })
 
         return total_count, items

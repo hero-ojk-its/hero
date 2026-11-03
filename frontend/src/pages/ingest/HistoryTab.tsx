@@ -37,6 +37,7 @@ import {
   getFollowUpStatusBadgeClass,
   JENIS_JOB_INGEST_LABELS,
   JENIS_KEGAGALAN_LABELS,
+  alasanTambahanGagal,
 } from './labels';
 import { mockFailuresList } from './mock';
 import JobDetailModal from './components/JobDetailModal';
@@ -832,6 +833,11 @@ export default function HistoryTab() {
                             >
                               {getJenisKegagalanLabel(f.failure_type)}
                             </span>
+                            {alasanTambahanGagal(f.failure_type, f.reason_code) && (
+                              <span className="block mt-1 text-[11px] text-gray-500 whitespace-normal">
+                                Alasan: {alasanTambahanGagal(f.failure_type, f.reason_code)}
+                              </span>
+                            )}
                           </td>
 
                           {/* Pesan & Alasan (C05: Tampilkan hash & ukuran sama dengan dokumen #X) */}

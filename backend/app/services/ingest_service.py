@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 import enum
 import logging
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from pathlib import Path
 
 from sqlalchemy.exc import IntegrityError
@@ -25,7 +25,7 @@ from app.models.enums import (
     StatusPemrosesan,
 )
 from app.models.job_ingest import JobIngest
-from app.services.audit_service import record_audit, UPLOAD_DOCUMENT
+from app.services.audit_service import record_audit, UPLOAD_DOCUMENT, PUBLIKASI_DRAFT
 from app.services.file_validation import (
     FileFingerprint,
     FileValidationError,
@@ -72,6 +72,7 @@ class IngestOptions:
     metadata: Optional[DocumentMetadataInput] = None
     naming_format: Optional[List[str]] = None
     naming_separator: Optional[str] = None
+    persetujuan_publik: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -221,7 +222,7 @@ class IngestService:
         """
         # 1. Validasi berkas PDF
         try:
-            validate_pdf(item.filename, item.content, self.max_upload_bytes)
+            pdf_info = validate_pdf(item.filename, item.content, self.max_upload_bytes)
         except FileValidationError as val_err:
             result = ItemResult(
                 filename=item.filename,
@@ -251,6 +252,33 @@ class IngestService:
                 f"Dokumen duplikat: hash SHA-256 dan ukuran {fp.size_bytes} byte "
                 f"sama dengan dokumen ID {existing.id} ({ref_label})."
             )
+
+            # Catat audit UPLOAD_DOCUMENT hasil duplikat
+            try:
+                record_audit(
+                    self.db,
+                    action=UPLOAD_DOCUMENT,
+                    user_id=actor_user_id,
+                    target_resource=f"document:{existing.id}",
+                    detail={
+                        "hasil": "duplikat",
+                        "duplikat_dari": existing.id,
+                        "alasan": "hash_dan_ukuran",
+                        "nama_berkas_asli": item.filename,
+                        "sha256": fp.sha256,
+                        "ukuran_byte": fp.size_bytes,
+                        "sumber": {
+                            "jenis": job.job_type.value if hasattr(job.job_type, "value") else str(job.job_type),
+                            "source_id": job.source_id,
+                            "job_id": job.id,
+                        },
+                    },
+                    ip_address=ip_address,
+                    commit=True,
+                )
+            except Exception as audit_err:
+                logger.warning("Gagal mencatat audit UPLOAD_DOCUMENT duplikat: %s", audit_err)
+
             result = ItemResult(
                 filename=item.filename,
                 outcome=ItemOutcome.duplicate,
@@ -367,6 +395,21 @@ class IngestService:
             if is_att:
                 parent_id_key = fallback_identity_key(doc_reg_type, doc_reg_number, doc_regulation_year)
 
+            # Pengaman pusat Langkah 35b: bila options.document_role == draft_kajian DAN options.access_classification == publik
+            # DAN options.persetujuan_publik kosong -> simpan dokumen sebagai non_publik (jangan gagal),
+            # dan tambahkan 'klasifikasi_diturunkan' ke audit UPLOAD_DOCUMENT.
+            role_val = options.document_role.value if hasattr(options.document_role, "value") else str(options.document_role or "")
+            access_val = options.access_classification.value if hasattr(options.access_classification, "value") else str(options.access_classification or "")
+            final_access_classification = options.access_classification
+            klasifikasi_diturunkan = None
+            if role_val == "draft_kajian" and access_val == "publik" and not options.persetujuan_publik:
+                final_access_classification = KlasifikasiAkses.non_publik
+                klasifikasi_diturunkan = {
+                    "dari": "publik",
+                    "ke": "non_publik",
+                    "alasan": "draft_publik_tanpa_persetujuan",
+                }
+
             # Buat instance Document
             doc = Document(
                 title=doc_title,
@@ -383,28 +426,86 @@ class IngestService:
                 standardized_filename=std_filename,
                 file_hash=fp.sha256,
                 file_size_bytes=fp.size_bytes,
-                access_classification=options.access_classification,
+                access_classification=final_access_classification,
                 document_role=options.document_role,
                 status_keberlakuan=doc_status_keberlakuan,
                 processing_status=StatusPemrosesan.diterima,
                 category_id=options.category_id,
+                kategori_manual=options.category_id is not None,
                 job_id=job.id,
                 is_attachment=is_att,
                 attachment_label=att_label if is_att else None,
                 parent_identity_key=parent_id_key,
+                pdf_terproteksi=pdf_info.terproteksi,
+                page_count=pdf_info.jumlah_halaman,
+                publik_disetujui_oleh=options.persetujuan_publik.get("disetujui_oleh") if options.persetujuan_publik else None,
+                publik_disetujui_alasan=options.persetujuan_publik.get("alasan") if options.persetujuan_publik else None,
+                publik_disetujui_pada=options.persetujuan_publik.get("pada") if options.persetujuan_publik else None,
             )
             self.db.add(doc)
             self.db.flush()
 
             # Catat audit log dalam transaksi yang sama (commit=False)
+            tipe_dokumen = (
+                doc.document_role.value
+                if hasattr(doc.document_role, "value")
+                else str(doc.document_role)
+            )
+            klasifikasi = (
+                doc.access_classification.value
+                if hasattr(doc.access_classification, "value")
+                else str(doc.access_classification)
+            )
+            upload_detail = {
+                "document_id": doc.id,
+                "nama_berkas_asli": doc.original_filename,
+                "nama_berkas_baku": doc.standardized_filename,
+                "sha256": doc.file_hash,
+                "ukuran_byte": doc.file_size_bytes,
+                "jumlah_halaman": doc.page_count,
+                "sumber": {
+                    "jenis": job.job_type.value if hasattr(job.job_type, "value") else str(job.job_type),
+                    "source_id": job.source_id,
+                    "job_id": job.id,
+                },
+                "tipe_dokumen": tipe_dokumen,
+                "klasifikasi": klasifikasi,
+                "kategori_manual": doc.kategori_manual,
+                "hasil": "baru",
+            }
+            if klasifikasi_diturunkan:
+                upload_detail["klasifikasi_diturunkan"] = klasifikasi_diturunkan
+            if options.persetujuan_publik:
+                upload_detail["persetujuan_publik"] = {
+                    "disetujui_oleh": doc.publik_disetujui_oleh,
+                    "alasan": doc.publik_disetujui_alasan,
+                    "pada": doc.publik_disetujui_pada.isoformat() if doc.publik_disetujui_pada else None,
+                }
             record_audit(
                 self.db,
                 action=UPLOAD_DOCUMENT,
                 user_id=actor_user_id,
                 target_resource=f"document:{doc.id}",
+                detail=upload_detail,
                 ip_address=ip_address,
                 commit=False,
             )
+
+            if options.persetujuan_publik:
+                record_audit(
+                    self.db,
+                    action=PUBLIKASI_DRAFT,
+                    user_id=actor_user_id,
+                    target_resource=f"document:{doc.id}",
+                    detail={
+                        "document_id": doc.id,
+                        "disetujui_oleh": doc.publik_disetujui_oleh,
+                        "alasan": doc.publik_disetujui_alasan,
+                        "jalur": "unggah",
+                    },
+                    ip_address=ip_address,
+                    commit=False,
+                )
 
             self.db.commit()
             self.db.refresh(doc)
@@ -483,6 +584,32 @@ class IngestService:
                     f"Dokumen duplikat (race condition): hash SHA-256 dan ukuran {fp.size_bytes} byte "
                     f"sama dengan dokumen ID {dup_id} ({ref_label})."
                 )
+
+                try:
+                    record_audit(
+                        self.db,
+                        action=UPLOAD_DOCUMENT,
+                        user_id=actor_user_id,
+                        target_resource=f"document:{dup_id}",
+                        detail={
+                            "hasil": "duplikat",
+                            "duplikat_dari": dup_id,
+                            "alasan": "hash_dan_ukuran",
+                            "nama_berkas_asli": item.filename,
+                            "sha256": fp.sha256,
+                            "ukuran_byte": fp.size_bytes,
+                            "sumber": {
+                                "jenis": job.job_type.value if hasattr(job.job_type, "value") else str(job.job_type),
+                                "source_id": job.source_id,
+                                "job_id": job.id,
+                            },
+                        },
+                        ip_address=ip_address,
+                        commit=True,
+                    )
+                except Exception as audit_err:
+                    logger.warning("Gagal mencatat audit UPLOAD_DOCUMENT duplikat race: %s", audit_err)
+
                 result = ItemResult(
                     filename=item.filename,
                     outcome=ItemOutcome.duplicate,

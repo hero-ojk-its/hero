@@ -153,10 +153,16 @@ Contoh respons sehat (HTTP 200):
 - `protect_non_public`: `true` menandakan proteksi NDA aktif untuk dokumen non-publik.
 
 ### 5.3 Jalankan Smoke Test Jarak Jauh (Dari Laptop Developer)
-Gunakan skrip read-only Fase 2 untuk memastikan semua komponen berjalan tanpa mengubah data di server:
+Gunakan skrip smoke test Fase 2 untuk memvalidasi seluruh fungsionalitas backend (S01–S22):
 ```bash
-# Bila AUTH_ENABLED=false (default):
+# Pengujian standar (bila AUTH_ENABLED=false):
 python scripts/smoke_fase2.py --base-url https://api.hero-regulasi.id
+
+# Menonaktifkan pengujian harmonisasi per pasal (S22):
+python scripts/smoke_fase2.py --base-url https://api.hero-regulasi.id --tanpa-harmonisasi
+
+# Menentukan dokumen uji spesifik (doc_id untuk analisa dan draft_id untuk harmonisasi):
+python scripts/smoke_fase2.py --base-url https://api.hero-regulasi.id --doc-id 12 --draft-id 15
 
 # Bila AUTH_ENABLED=true (gunakan token JWT pengguna, misal peran Analis atau Admin Sistem):
 # PowerShell:
@@ -167,8 +173,98 @@ python scripts/smoke_fase2.py --base-url https://api.hero-regulasi.id
 HERO_SMOKE_TOKEN="<isi_token_jwt_anda>" python scripts/smoke_fase2.py --base-url https://api.hero-regulasi.id
 ```
 
-> **Arti S01 GAGAL (`VPS belum di-deploy versi terbaru: <rev VPS> ≠ <rev diharapkan>`):**
-> Kode atau migrasi skema database pada instance VPS target masih berada pada revisi Alembic lama, belum diperbarui ke revisi head git lokal. Lakukan `git pull` dan `alembic upgrade head` (atau jalankan restart container backend) pada VPS sebelum mengulangi uji smoke.
+#### Catatan Efek Samping dan Metode HTTP
+- **S22 (`POST /api/v1/ml/harmonisasi/{id}`)** adalah **satu-satunya** permintaan non-GET dalam smoke test. Permintaan ini hanya menghitung temuan harmonisasi per pasal draft terhadap korpus regulasi yang diizinkan, dengan efek samping berupa penyimpanan cache/riwayat eksekusi dan pencatatan audit log (`RUN_HARMONIZATION`) yang serupa dengan S06.
+- Pengecualian ini dapat dinonaktifkan sepenuhnya menggunakan flag `--tanpa-harmonisasi` (S22 akan otomatis berstatus `LEWATI "dinonaktifkan"` tanpa melakukan request POST apapun).
+- Selain S22, seluruh pengujian (S01–S21) sepenuhnya bersifat **hanya-baca (read-only)** menggunakan metode `HTTP GET`.
+
+#### Daftar Pengujian Smoke Test (S01–S22)
+| Kode | Endpoint / Cek | Keterangan & Tujuan |
+|---|---|---|
+| **S01** | `GET /health` | Memeriksa status service, DB, dan sinkronisasi revisi Alembic target. |
+| **S02** | `GET /api/v1/auth/me` | Memeriksa ketersediaan konfigurasi autentikasi pengguna. |
+| **S03** | `GET /api/v1/ml/health` | Memeriksa status kesiapan layanan ML gateway. |
+| **S04** | Pilih dokumen uji | Auto-detect dokumen publik aktif berstatus `terindeks` atau `perlu_koreksi`. |
+| **S05** | `GET /documents/{id}/versi` | Memeriksa struktur relasi versi dokumen (induk, diubah, dicabut). |
+| **S06** | `GET /ml/analisa/{id}` (panggilan 1) | Eksekusi analisa pertama (menguji respons ML atau fallback cache/riwayat). |
+| **S07** | `GET /ml/analisa/{id}` (panggilan 2) | Memeriksa mekanisme cache hit (`cache.hit=true`). |
+| **S08** | `GET /documents/{id}/analisa/banding` | Memeriksa ketersediaan analisa deterministik komparasi regulasi. |
+| **S09** | `GET /documents/{id}/analisa/riwayat` | Memeriksa pencatatan riwayat eksekusi analisa append-only. |
+| **S10** | `GET .../riwayat/{run_id}` | Memeriksa detail run analisa beserta parameter reproduksibilitas. |
+| **S11** | `GET .../ekspor?format=json` | Memvalidasi fungsi ekspor analisa dalam format JSON. |
+| **S12** | `GET .../ekspor?format=csv` | Memvalidasi file CSV ekspor analisa (UTF-8 with BOM). |
+| **S13** | `GET .../ekspor?format=docx` | Memvalidasi dokumen Word DOCX hasil ekspor analisa. |
+| **S14** | `GET /api/v1/audit-logs` | Memverifikasi pencatatan audit trail aksi `RUN_ANALYSIS`. |
+| **S15** | Penjaga non-publik | Memastikan dokumen `non_publik` dilindungi HTTP 403 saat auth nonaktif. |
+| **S16** | `GET /api/v1/dashboard/summary` | Memastikan enum status keberlakuan memuat `belum_berlaku` (Langkah 26). |
+| **S17** | `GET /api/v1/dashboard/corong` | Memvalidasi invarian corong scan dan dokumen per sumber (Langkah 27). |
+| **S18** | `GET /dashboard/corong?format=csv` | Memvalidasi ekspor CSV corong ber-BOM, baris `TOTAL`, dan `filename*=`. |
+| **S19** | `GET /ingest/failures (filter)` | Memvalidasi filter `reason_code=pdf_rusak&pdf_terenkripsi` (Langkah 26). |
+| **S20** | `GET /api/v1/categories/tree` | Memastikan tiap node memuat `jumlah_dokumen` & `classification_rule` (Langkah 28). |
+| **S21** | Kategori 'Tanpa Tahun' | Memeriksa akumulasi dokumen salah kamar pada folder "Tanpa Tahun". |
+| **S22** | Harmonisasi per pasal | Memvalidasi hasil `POST /ml/harmonisasi/{id}` dan keabsahan hyperlink dokumen pembanding. |
+
+#### Arti Peringatan (`PERINGATAN`) dan Perintah Tindak Lanjut
+1. **`PERINGATAN: cek analisa/riwayat/ekspor (S05–S13) tidak dijalankan karena tidak ada dokumen uji...`**
+   - **Penyebab**: Belum ada dokumen publik aktif terindeks di database.
+   - **Tindak Lanjut**: Unggah minimal satu dokumen melalui dashboard/API, atau jalankan dengan parameter `--doc-id N`.
+2. **`PERINGATAN: N dokumen di 'Tanpa Tahun' — jalankan scripts/relokasi_kategori.py (dry-run dulu).`**
+   - **Penyebab**: Terdapat dokumen yang terklasifikasi ke kategori "Tanpa Tahun" akibat penempatan historis sebelum perbaikan nomor/tahun.
+   - **Tindak Lanjut**:
+     ```bash
+     docker compose exec backend python scripts/relokasi_kategori.py          # dry-run
+     docker compose exec backend python scripts/relokasi_kategori.py --apply  # eksekusi relokasi
+     ```
+3. **`PERINGATAN: N hasil scan belum ditarik ke KB — Pak Faris meminta semua hasil scan masuk KB (Weekly #7).`**
+   - **Penyebab**: Terdapat kandidat regulasi hasil crawling yang masih berstatus `belum_ditarik`.
+   - **Tindak Lanjut**: Tarik kandidat dokumen scan ke Knowledge Base via antarmuka Frontend atau API `POST /api/v1/scan/{session_id}/pull`.
+4. **`PERINGATAN: N dokumen belum diperiksa proteksi PDF — jalankan scripts/backfill_pdf_info.py --apply.`**
+   - **Penyebab**: Dokumen lama belum memiliki atribut `pdf_terproteksi` (Langkah 27).
+   - **Tindak Lanjut**:
+     ```bash
+     docker compose exec backend python scripts/backfill_pdf_info.py --apply
+     ```
+
+#### Urutan Pasca-Deploy Fase 2
+Setelah kode baru dideploy ke server VPS, jalankan langkah pemeliharaan dan verifikasi berikut secara berurutan:
+1. **Cek Kesehatan Backend**:
+   Pastikan endpoint `/health` mengembalikan HTTP 200 dengan status `ok`, `migrations_up_to_date: true`, dan `alembic_revision` sama dengan revisi head (`f8a9b0c1d2e3`).
+2. **Backfill Proteksi PDF**:
+   Jalankan inspeksi proteksi PDF untuk dokumen yang belum diperiksa:
+   ```bash
+   docker compose exec backend python scripts/backfill_pdf_info.py --apply
+   ```
+3. **Relokasi Kategori Dokumen**:
+   Pindahkan dokumen yang salah kamar (mis. "Tanpa Tahun") ke kategori segmen yang sesuai:
+   ```bash
+   # Langkah a: periksa kandidat dokumen
+   docker compose exec backend python scripts/relokasi_kategori.py
+   # Langkah b: terapkan perubahan
+   docker compose exec backend python scripts/relokasi_kategori.py --apply
+   ```
+4. **Audit Draft Kajian Publik (Langkah 35)**:
+   Periksa dan amankan draft kajian publik yang belum memiliki persetujuan resmi:
+   ```bash
+   # Langkah a: periksa draft publik tanpa persetujuan (dry-run)
+   docker compose exec backend python scripts/periksa_draft_publik.py
+   # Langkah b: amankan menjadi non-publik bila ada temuan
+   docker compose exec backend python scripts/periksa_draft_publik.py --apply
+   ```
+5. **Audit Pengaman Judul Hasil Ekstraksi (Langkah 35)**:
+   Periksa judul hasil ekstraksi yang terpotong atau terindikasi mengandung teks pasal/paragraf:
+   ```bash
+   # Langkah a: periksa anomali judul (dry-run)
+   docker compose exec backend python scripts/periksa_judul.py
+   # Langkah b: tandai perlu_koreksi agar ditinjau kurator
+   docker compose exec backend python scripts/periksa_judul.py --apply
+   ```
+6. **Eksekusi Smoke Test Fase 2**:
+   Jalankan smoke test dari mesin pengembang dengan target **0 GAGAL**:
+   ```bash
+   python scripts/smoke_fase2.py --base-url https://<domain-api>
+   ```
+7. **Tindak Lanjuti Peringatan**:
+   Periksa output setelah baris `RINGKASAN`, lalu jalankan tindak lanjut perbaikan jika ada baris `PERINGATAN` yang muncul.
 
 ### 5.4 Uji Fallback ML Mati (#83)
 Prosedur verifikasi ketahanan sistem ketika layanan ekstraksi/analisa ML tidak tersedia:
@@ -192,6 +288,53 @@ Prosedur verifikasi ketahanan sistem ketika layanan ekstraksi/analisa ML tidak t
 docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f --tail=100 backend
 docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f --tail=100 caddy
 ```
+
+### 5.6 Penarikan Seluruh Hasil Scan ke KB (`tarik_semua.py`)
+Setelah smoke test Fase 2 (S01–S22) lulus dengan **0 GAGAL**, lakukan penarikan dokumen hasil pemindaian (scraping) ke Knowledge Base (KB) menggunakan skrip `scripts/tarik_semua.py`:
+
+0. Jalankan scan ulang untuk setiap sumber (menu Ingest → Pindai, atau POST /api/v1/scans/) dan tunggu status 'siap_dipilih'. tarik_semua.py hanya memakai sesi scan TERBARU per sumber; sumber tanpa sesi siap akan dilewati (contoh: JDIH di data lokal).
+
+```bash
+# 1. DRY-RUN (Default): Hanya membaca kandidat dan menampilkan proyeksi tarikan (hanya metode GET)
+python scripts/tarik_semua.py --base-url https://<domain-api>
+
+# 2. Uji Penarikan Bertahap (Batas 20 kandidat per sumber)
+python scripts/tarik_semua.py --base-url https://<domain-api> --apply --batas 20
+
+# 3. Penarikan Penuh Seluruh Sumber
+python scripts/tarik_semua.py --base-url https://<domain-api> --apply
+
+# Opsi autentikasi bila AUTH_ENABLED=true:
+# HERO_API_TOKEN="<token_jwt_admin_atau_analis>" python scripts/tarik_semua.py --base-url https://<domain-api> --apply
+```
+
+#### Pemantauan & Tindak Lanjut Pasca Tarikan:
+1. **Pantau Corong Reguler**:
+   Periksa pergerakan status corong via API:
+   ```bash
+   curl -s https://<domain-api>/api/v1/dashboard/corong | jq .
+   ```
+   Pastikan metrik `total.dokumen.di_kb` bertambah dan `total.scan.belum_ditarik` menurun.
+2. **Tindak Lanjut Kandidat Gagal**:
+   Bila muncul baris `PERINGATAN: N kandidat gagal ditarik`:
+   - Telusuri log kegagalan via endpoint antrean kegagalan:
+     ```bash
+     curl -s "https://<domain-api>/api/v1/ingest/failures?source_id=<id>" | jq .
+     ```
+   - Lakukan penarikan ulang hanya untuk kandidat yang sempat gagal:
+     ```bash
+     python scripts/tarik_semua.py --base-url https://<domain-api> --apply --ulang-gagal
+     ```
+
+### 5.7 Menyiapkan KB untuk UAT (Skenario 1.480 + 20)
+Sesuai arahan Weekly #7 Pak Faris dan Test Plan PM:
+- **Konsep Ground Truth**: Seluruh dokumen regulasi yang terdeteksi saat scraping ditarik, diunduh ke penyimpanan lokal, dipecah (ekstraksi pasal), dan masuk vektor database. Kumpulan regulasi ini menjadi *ground truth* corpus pengetahuan sistem HERO.
+- **Skenario UAT 1.480 + 20**:
+  1. Dari total ~1.500 dokumen korpus regulasi yang terdeteksi, lakukan penarikan seluruh dokumen ke KB menggunakan `--apply`. Catatan: angka 'belum_ditarik' di corong menghitung kandidat dari SEMUA sesi scan lama, jadi bisa lebih besar dari angka 'perlu ditarik' di tarik_semua.py yang hanya membaca sesi terbaru.
+  2. Tunggu worker ekstraksi data / ML menyelesaikan pemrosesan OCR, ekstraksi pasal, dan pembuatan embedding vektor. Angka `terbaca` pada corong akan bertahap meningkat hingga seluruh dokumen selesai diproses.
+  3. **Penyisihan 20 Dokumen Uji**:
+     > **Catatan untuk Tim QA (Hamdan & Zaky)**:
+     > Sisihkan **20 dokumen regulasi uji** yang mewakili berbagai variasi (PDF Word, PDF pindaian/scanned, PDF terproteksi, POJK lama vs POJK baru) sesuai rincian pada Test Plan PM untuk pengujian manual skenario UAT. 1.480 dokumen lainnya dibiarkan aktif sebagai korpus acuan dasar.
 
 ---
 
@@ -361,3 +504,80 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
    - `INTERNAL_API_KEY` digunakan untuk komunikasi service-to-service (Worker Data/ML). Jangan pernah membagikan kunci ini di kanal publik/grup chat tanpa enkripsi. Gunakan password manager tim yang aman.
 4. **Rotasi Kunci:**
    - Lakukan rotasi berkala untuk `SECRET_KEY` dan `INTERNAL_API_KEY` menjelang rilis Fase 2.
+
+---
+
+## 13. Keamanan Login & Proteksi Endpoint Admin (Langkah 34)
+
+### 13.1 Konfigurasi Proteksi Login & Lockout
+Tersedia variabel konfigurasi baru pada `.env.prod` untuk mencegah brute-force login:
+- `LOGIN_MAKS_GAGAL_PER_AKUN=5`: Batas percobaan gagal per akun (`u:<username>`).
+- `LOGIN_MAKS_GAGAL_PER_IP=30`: Batas percobaan gagal per IP (`ip:<ip>`).
+- `LOGIN_JENDELA_MENIT=15`: Jendela waktu perhitungan akumulasi kegagalan.
+- `LOGIN_KUNCI_MENIT=15`: Durasi lockout (pemblokiran sementara).
+- `ADMIN_BUTUH_KUNCI_SAAT_AUTH_MATI=true`: Melindungi `/api/v1/users` dan `/api/v1/audit-logs` saat `AUTH_ENABLED=false` sehingga tidak dapat diakses publik tanpa kunci internal.
+
+### 13.2 Konfigurasi Reverse Proxy & IP Klien (`FORWARDED_ALLOW_IPS`)
+Di balik reverse proxy (seperti Caddy, Nginx, atau Cloudflare Tunnel), Uvicorn harus membaca IP klien asli via proxy headers.
+Pastikan pengaturan `FORWARDED_ALLOW_IPS` diatur ke alamat IP reverse proxy internal (misal `127.0.0.1`), **BUKAN `*`**.
+> **PENTING:** Jika `FORWARDED_ALLOW_IPS` diatur ke `*` atau tidak dikonfigurasi dengan benar:
+> 1. Semua pengguna akan tampak berasal dari satu alamat IP yang sama (IP proxy), sehingga satu serangan brute-force dapat mengunci seluruh pengguna aplikasi.
+> 2. Penyerang dapat memalsukan IP melalui manipulasi header `X-Forwarded-For`.
+
+### 13.3 Membuka Lockout Login Manual (`scripts/buka_kunci_login.py`)
+Bila akun pengguna atau alamat IP staf terkunci akibat salah ketik berulang:
+```bash
+# 1. Cek status lockout (dry-run):
+docker compose exec backend python scripts/buka_kunci_login.py --username budi_analis
+
+# 2. Buka kunci akun:
+docker compose exec backend python scripts/buka_kunci_login.py --username budi_analis --apply
+
+# 3. Atau buka kunci alamat IP staf:
+docker compose exec backend python scripts/buka_kunci_login.py --ip 192.168.1.50 --apply
+```
+
+### 13.4 Cara Membaca Audit Log Saat Autentikasi Nonaktif (`AUTH_ENABLED=false`)
+Ketika login dinonaktifkan di VPS, endpoint `/api/v1/audit-logs` dan `/api/v1/users` dilindungi oleh `ADMIN_BUTUH_KUNCI_SAAT_AUTH_MATI=true`.
+Untuk keperluan verifikasi dan pengujian QA dari server VPS, panggil endpoint menggunakan `INTERNAL_API_KEY` dari environment tanpa mengetikkan kuncinya secara mentah di terminal:
+```bash
+# Ambil kunci dari file environment dan panggil endpoint ringkasan audit
+curl -s http://localhost:8000/api/v1/audit-logs/ringkasan \
+  -H "X-Internal-API-Key: $(grep '^INTERNAL_API_KEY=' .env.prod | cut -d '=' -f2)"
+```
+Cara ini menjamin kunci rahasia tidak tersimpan dalam riwayat shell (`~/.bash_history`) atau log audit.
+
+---
+
+## 14. Pengamanan Draft Publik & Judul Ekstraksi (Langkah 35)
+
+### 14.1 Kebijakan Persetujuan Draft Publik
+Dokumen dengan peran `draft_kajian` yang memiliki klasifikasi akses `publik` wajib menyertakan persetujuan resmi:
+- `publik_disetujui_oleh`: Nama/pejabat yang menyetujui publikasi. Jika `AUTH_ENABLED=true`, hanya pengguna dengan izin `DRAFT_PUBLIKASI` (peran `admin_kb`) yang diizinkan, dan nama disetujui otomatis diisi dengan username peninjau.
+- `publik_disetujui_alasan`: Alasan/justifikasi publikasi (minimal 10 karakter).
+- `publik_disetujui_pada`: Timestamp UTC saat persetujuan dicatat.
+
+Upaya mengunggah atau mengubah dokumen menjadi draft kajian publik tanpa persetujuan lengkap akan ditolak dengan **HTTP 422** (`draft_publik_butuh_persetujuan`). Demikian pula konfigurasi default sumber scraping dengan kombinasi tersebut akan ditolak (**HTTP 422** `sumber_draft_publik_tidak_diizinkan`).
+
+### 14.2 Pemeriksaan dan Remediasi Draft Publik (`scripts/periksa_draft_publik.py`)
+Bila terdapat draft kajian publik lama yang belum memiliki persetujuan resmi:
+```bash
+# 1. Periksa draft publik tanpa persetujuan (dry-run):
+docker compose exec backend python scripts/periksa_draft_publik.py
+
+# 2. Amankan draft dengan menurunkan klasifikasi menjadi non_publik:
+docker compose exec backend python scripts/periksa_draft_publik.py --apply
+```
+
+### 14.3 Pemeriksaan dan Perlindungan Judul Ekstraksi (`scripts/periksa_judul.py`)
+Sistem melindungi basis data dari judul anomali (terlalu panjang, berbentuk paragraf isi pasal, atau memuat teks pembuka peraturan):
+```bash
+# 1. Pindai anomali judul hasil ekstraksi (dry-run):
+docker compose exec backend python scripts/periksa_judul.py
+
+# 2. Tandai dokumen beranomali menjadi perlu_koreksi agar ditinjau kurator:
+docker compose exec backend python scripts/periksa_judul.py --apply
+```
+> **Catatan:** Perintah `--apply` tidak mengubah teks judul dokumen, melainkan menandai status pemrosesan menjadi `perlu_koreksi` dan mencatat jejak audit `UPDATE_METADATA` dengan alasan `langkah35_judul_mencurigakan` untuk peninjauan manual di antarmuka web.
+
+

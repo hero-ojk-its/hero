@@ -32,8 +32,47 @@ import {
   apiFetch, 
   apiFetchBlob, 
   ApiError, 
-  adaptDocumentToDetail 
+  adaptDocumentToDetail
 } from '../lib/api';
+import {
+  FIELD_PENEMPATAN_DOKUMEN,
+  KETERANGAN_BELUM_BERKATEGORI,
+  gayaStatusKeberlakuan,
+  labelPenempatanDokumen,
+  labelStatusKeberlakuan,
+} from '../lib/labelStatus';
+import { jalurTeks } from '../lib/kategoriApi';
+import type { UpdateMetadataResponse } from '../lib/ingestApi';
+
+interface HasilPenempatan {
+  jenis: 'sukses' | 'info';
+  teks: string;
+}
+
+/**
+ * Ringkasan penempatan setelah koreksi metadata; null bila tidak relevan (mis. hanya judul berubah).
+ * - placed true: "Ditempatkan di …" / "Dipindah ke …"
+ * - placed false (Langkah 32: metadata_belum_cukup eksplisit, juga saat dokumen tetap berkategori):
+ *   tanpa kategori -> "belum berkategori"; tetap berkategori & berkas belum di folder KB -> info netral;
+ *   selain itu tidak ada pesan
+ * - placement null (backend lama): "belum berkategori" bila field penempatan berubah & dokumen tanpa kategori
+ */
+function ringkasPenempatan(res: UpdateMetadataResponse): HasilPenempatan | null {
+  const p = res.placement;
+  const tanpaKategori = res.category_id == null;
+  if (p) {
+    if (p.placed) {
+      const jalur = Array.isArray(p.category_path) && p.category_path.length > 0 ? jalurTeks(p.category_path) : null;
+      return { jenis: 'sukses', teks: labelPenempatanDokumen(p.reason, jalur) };
+    }
+    if (tanpaKategori) return { jenis: 'info', teks: KETERANGAN_BELUM_BERKATEGORI };
+    if (res.is_placed !== true) return { jenis: 'info', teks: labelPenempatanDokumen(p.reason, null) };
+    return null;
+  }
+  const fieldPenempatanBerubah = (res.changed_fields ?? []).some((f) => FIELD_PENEMPATAN_DOKUMEN.includes(f));
+  if (fieldPenempatanBerubah && tanpaKategori) return { jenis: 'info', teks: KETERANGAN_BELUM_BERKATEGORI };
+  return null;
+}
 import type { 
   DocumentItem, 
   AdaptedRegulasiDoc, 
@@ -72,6 +111,7 @@ export default function DetailDokumen() {
   const [isMetadataModalOpen, setIsMetadataModalOpen] = useState<boolean>(false);
   const [isStatusModalOpen, setIsStatusModalOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [hasilPenempatan, setHasilPenempatan] = useState<HasilPenempatan | null>(null);
   const [loading, setLoading] = useState<boolean>(!stateRegulasi && isApiConfigured && Boolean(id));
   const [notFound, setNotFound] = useState<boolean>(false);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -614,16 +654,34 @@ export default function DetailDokumen() {
   };
 
   const sourceInfo = getSourceDisplay(regulasi.sumber);
-  const statusColor = regulasi.status === 'Aktif' ? '#15803d' : regulasi.status === 'Diubah' ? '#b45309' : '#b91c1c';
-  const statusBadge = regulasi.status === 'Aktif' 
-    ? 'bg-green-50 text-green-700 border-green-200/60' 
-    : regulasi.status === 'Diubah' 
-    ? 'bg-amber-50 text-amber-700 border-amber-200/60' 
-    : 'bg-red-50 text-red-700 border-red-200/60';
+  // Warna & label berdasarkan nilai enum (statusKode dari API; data contoh memakai label lama)
+  const statusSumber = ('statusKode' in regulasi && regulasi.statusKode) || regulasi.status;
+  const statusGaya = gayaStatusKeberlakuan(statusSumber);
+  const statusLabel = labelStatusKeberlakuan(statusSumber);
 
   const displayTanggalPublikasi = ('tanggalPublikasi' in regulasi && regulasi.tanggalPublikasi)
     ? regulasi.tanggalPublikasi
     : 'Belum diketahui';
+
+  const displayWaktuPersetujuan = rawDoc?.persetujuan_publik?.pada
+    ? (() => {
+        try {
+          const d = new Date(rawDoc.persetujuan_publik.pada);
+          if (!isNaN(d.getTime())) {
+            return d.toLocaleDateString('id-ID', {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            });
+          }
+        } catch {
+          // ignore
+        }
+        return rawDoc.persetujuan_publik.pada;
+      })()
+    : '-';
 
   const displayUkuran = ('ukuran' in regulasi && regulasi.ukuran && regulasi.ukuran !== '-')
     ? regulasi.ukuran
@@ -1208,15 +1266,44 @@ export default function DetailDokumen() {
           </div>
         )}
 
+        {/* Hasil penempatan berkas setelah koreksi metadata */}
+        {hasilPenempatan && (
+          <div
+            className={`p-3 rounded-xl border flex items-center justify-between text-xs ${
+              hasilPenempatan.jenis === 'sukses'
+                ? 'bg-emerald-50/60 border-emerald-200 text-emerald-900'
+                : 'bg-gray-50 border-gray-200 text-gray-700'
+            }`}
+            data-hasil-penempatan={hasilPenempatan.jenis}
+            role="status"
+          >
+            <div className="flex items-center gap-2">
+              {hasilPenempatan.jenis === 'sukses' ? (
+                <FolderOpen className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <Info className="w-4 h-4 text-gray-500 shrink-0" />
+              )}
+              <span>{hasilPenempatan.teks}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setHasilPenempatan(null)}
+              className="font-bold px-2 py-0.5 rounded cursor-pointer opacity-80 hover:opacity-100"
+            >
+              Tutup
+            </button>
+          </div>
+        )}
+
         {/* 1. Header Card (Nomor, Status, Judul, Metadata Singkat) */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-6 sm:p-7 space-y-3.5">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
               {regulasi.nomor}
             </h1>
-            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${statusBadge}`}>
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: statusColor }}></span>
-              {regulasi.status}
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${statusGaya.badge}`}>
+              <span className={`w-2 h-2 rounded-full shrink-0 ${statusGaya.titik}`}></span>
+              {statusLabel}
             </span>
             {isApiConfigured && Boolean(id) && rawDoc && (
               <button
@@ -1305,9 +1392,9 @@ export default function DetailDokumen() {
             <div className="flex flex-col gap-1.5 items-start min-w-0">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Status Keberlakuan</span>
               <div className="flex items-center gap-2 flex-wrap">
-                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${statusBadge}`}>
-                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: statusColor }}></span>
-                  <span>{regulasi.status}</span>
+                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${statusGaya.badge}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusGaya.titik}`}></span>
+                  <span>{statusLabel}</span>
                 </div>
               </div>
             </div>
@@ -1338,6 +1425,49 @@ export default function DetailDokumen() {
             </div>
           </div>
         </div>
+
+        {/* 2b. Persetujuan Publikasi Draft Kajian (Langkah 35) - Hanya muncul jika ada data persetujuan */}
+        {rawDoc?.persetujuan_publik && (rawDoc.persetujuan_publik.disetujui_oleh || rawDoc.persetujuan_publik.alasan || rawDoc.persetujuan_publik.pada) && (
+          <div
+            id="section-detail-persetujuan-publik"
+            className="bg-amber-50/70 rounded-xl shadow-xs border border-amber-200/90 p-6 sm:p-7 space-y-4 animate-in fade-in duration-200"
+          >
+            <div className="flex items-center gap-2.5 pb-3 border-b border-amber-200/70">
+              <div className="p-1.5 bg-amber-100 text-amber-800 rounded-lg shrink-0">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-bold text-amber-950 text-base">Persetujuan Publikasi Draft Kajian</h3>
+                <p className="text-xs text-amber-800 mt-0.5">
+                  Informasi persetujuan resmi publikasi rancangan peraturan ke klasifikasi publik.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-5 gap-x-8 pt-1">
+              <div className="flex flex-col gap-1 min-w-0">
+                <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">Disetujui Oleh</span>
+                <p className="text-sm font-semibold text-gray-900 truncate" title={rawDoc.persetujuan_publik.disetujui_oleh || '-'}>
+                  {rawDoc.persetujuan_publik.disetujui_oleh || '-'}
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-1 min-w-0">
+                <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">Waktu Persetujuan</span>
+                <p className="text-sm font-medium text-gray-900">
+                  {displayWaktuPersetujuan}
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-1 min-w-0 md:col-span-2 lg:col-span-1">
+                <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">Alasan Persetujuan</span>
+                <p className="text-xs text-gray-800 font-medium leading-relaxed bg-white/80 p-2.5 rounded-lg border border-amber-200/60">
+                  {rawDoc.persetujuan_publik.alasan || '-'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 3. Dokumen Asli (Buka Dokumen, Buka PDF Asli, & Unduh) */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-6 sm:p-7">
@@ -1553,6 +1683,7 @@ export default function DetailDokumen() {
               setRawDoc(updatedDoc);
               setFetchedDoc(adaptDocumentToDetail(updatedDoc));
               setToastMessage('Metadata tersimpan');
+              setHasilPenempatan(ringkasPenempatan(updatedDoc));
             }}
           />
           <EditStatusModal
@@ -1564,6 +1695,7 @@ export default function DetailDokumen() {
               setRawDoc(updated);
               setFetchedDoc(adaptDocumentToDetail(updated));
               setToastMessage(message || 'Status keberlakuan berhasil diperbarui');
+              setHasilPenempatan(null);
             }}
           />
         </>

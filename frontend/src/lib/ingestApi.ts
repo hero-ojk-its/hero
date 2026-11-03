@@ -33,6 +33,7 @@ export type NamingSampleInput = components['schemas']['NamingSampleInput'];
 export type CategoryDetailResponse = components['schemas']['CategoryDetailResponse'];
 
 export type UpdateMetadataIn = components['schemas']['UpdateMetadataIn'];
+export type PersetujuanPublikIn = components['schemas']['PersetujuanPublikIn'];
 export type UpdateDocumentStatusIn = components['schemas']['UpdateDocumentStatusIn'];
 export type UpdateDocumentStatusResponse = components['schemas']['UpdateDocumentStatusResponse'];
 export type StatusKeberlakuan = components['schemas']['StatusKeberlakuan'];
@@ -411,6 +412,16 @@ export interface FailureListResponse {
 export interface IngestFailureQueryParams {
   job_id?: number;
   failure_type?: string;
+  /** Satu atau lebih reason_code (dikirim berulang: ?reason_code=a&reason_code=b) */
+  reason_code?: string[];
+  /** Kegagalan dari sumber ini (via job.source_id atau scan_candidates.failure_id) */
+  source_id?: number;
+  /**
+   * Hanya kegagalan tanpa sumber / unggah manual (Langkah 32). Backend lama MENGABAIKANNYA diam-diam
+   * (mengembalikan semua sumber), jadi pakai hanya setelah kapabilitasnya dipastikan. Tidak boleh
+   * digabung dengan source_id (422).
+   */
+  tanpa_sumber?: boolean;
   follow_up_status?: 'belum_ditangani' | 'diproses_ulang' | 'diabaikan' | 'all';
   include_duplicates?: boolean;
   skip?: number;
@@ -521,6 +532,30 @@ export async function batchRetryIngestFailures(
 // 8. Document Metadata & Status Management API (/api/v1/documents/)
 // ============================================================================
 
+/** Hasil PlacementService.place() pada koreksi metadata (routers/documents.py patch_document_metadata) */
+export interface PenempatanDokumen {
+  /** Tidak dikirim pada placement eksplisit metadata_belum_cukup (Langkah 32) */
+  document_id?: number;
+  placed: boolean;
+  /** "ditempatkan" | "relokasi" | "metadata_belum_cukup" (Langkah 32); nilai lain mungkin muncul */
+  reason: string;
+  old_path?: string | null;
+  new_path?: string | null;
+  category_id?: number | null;
+  /** Bisa [] bila dokumen tanpa kategori */
+  category_path?: string[] | null;
+}
+
+/**
+ * Respons PATCH metadata: dokumen lengkap + info koreksi. `placement` null bila tidak ada field
+ * penempatan yang berubah atau metadata belum cukup untuk ditempatkan.
+ */
+export type UpdateMetadataResponse = DocumentItem & {
+  changed_fields?: string[];
+  placement?: PenempatanDokumen | null;
+  duplikat?: unknown;
+};
+
 /**
  * Memperbarui metadata dokumen via PATCH /api/v1/documents/{id}/metadata
  */
@@ -528,8 +563,8 @@ export async function updateDocumentMetadata(
   id: number,
   body: UpdateMetadataIn,
   signal?: AbortSignal
-): Promise<DocumentItem> {
-  return apiJson<DocumentItem>('PATCH', `/api/v1/documents/${id}/metadata`, body, { signal });
+): Promise<UpdateMetadataResponse> {
+  return apiJson<UpdateMetadataResponse>('PATCH', `/api/v1/documents/${id}/metadata`, body, { signal });
 }
 
 /**

@@ -18,6 +18,7 @@ import pytest
 from datetime import date
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
+from tests.conftest import make_pdf
 
 from app.models.enums import (
     StatusKeberlakuan,
@@ -210,8 +211,7 @@ def test_g04_and_g08_pull_folder_lokal_with_naming_format_and_category(client: T
     db_session.commit()
     db_session.refresh(cat)
 
-    pdf_header = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"
-    content = pdf_header + b"Konten Uji G04 POJK_5_2022"
+    content = make_pdf("Konten Uji G04 POJK_5_2022")
     fpath = root_dir / "Peraturan_OJK_5_2022.pdf"
     fpath.write_bytes(content)
 
@@ -261,8 +261,7 @@ def test_g05_pull_folder_lokal_unduh_folder_rejected(client: TestClient, db_sess
     root_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(settings, "local_source_roots", str(root_dir))
 
-    pdf_header = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"
-    (root_dir / "sample.pdf").write_bytes(pdf_header + b"Sample")
+    (root_dir / "sample.pdf").write_bytes(make_pdf("Sample"))
 
     resp_src = client.post(
         "/api/v1/scraping-sources/",
@@ -339,7 +338,7 @@ def test_g07_pull_category_id_invalid(client: TestClient, db_session: Session, t
     root_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(settings, "local_source_roots", str(root_dir))
 
-    (root_dir / "doc.pdf").write_bytes(b"%PDF-1.4 content")
+    (root_dir / "doc.pdf").write_bytes(make_pdf("content"))
 
     resp_src = client.post(
         "/api/v1/scraping-sources/",

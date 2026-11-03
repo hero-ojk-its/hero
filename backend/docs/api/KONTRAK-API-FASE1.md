@@ -41,6 +41,9 @@
 15. [Layanan Internal Lapisan Data](#15-layanan-internal-lapisan-data)
    - [15.1 Sinkronisasi Relasi Antar Regulasi](#151-sinkronisasi-relasi-antar-regulasi)
    - [15.2 Menandai Cache Analisa Usang](#152-menandai-cache-analisa-usang)
+   - [15.3 Komputasi Ulang Status Keberlakuan Regulasi](#153-komputasi-ulang-status-keberlakuan-regulasi)
+16. [Peran & Hak Akses (US-01)](#16-peran--hak-akses-us-01)
+   - [16.5 Jejak Audit Aktivitas (GET /api/v1/audit-logs/)](#165-jejak-audit-aktivitas-get-apiv1audit-logs)
 
 ---
 
@@ -695,6 +698,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
         "POJK",
         "2026"
       ],
+      "kategori_manual": false,
       "status_keberlakuan": "tidak_diketahui",
       "status_source": null,
       "processing_status": "terindeks",
@@ -709,7 +713,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "deactivated_at": null,
       "deactivated_reason": null,
       "identity_key": null,
-      "page_count": null,
+      "page_count": 1,
       "duplicate_of_id": null,
       "effective_date": null,
       "is_attachment": false,
@@ -720,7 +724,8 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "rank": null,
       "highlight": null,
       "created_at": "2026-10-01T10:00:00Z",
-      "updated_at": "2026-10-01T10:00:00Z"
+      "updated_at": "2026-10-01T10:00:00Z",
+      "persetujuan_publik": null
     }
   ],
   "query": {
@@ -772,6 +777,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
         "POJK",
         "2026"
       ],
+      "kategori_manual": false,
       "status_keberlakuan": "tidak_diketahui",
       "status_source": null,
       "processing_status": "terindeks",
@@ -786,7 +792,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "deactivated_at": null,
       "deactivated_reason": null,
       "identity_key": null,
-      "page_count": null,
+      "page_count": 1,
       "duplicate_of_id": null,
       "effective_date": null,
       "is_attachment": false,
@@ -797,7 +803,8 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "rank": 0.4,
       "highlight": "Bank Umum adalah bank konvensional dan syariah. BAB II <mark>MODAL</mark> <mark>INTI</mark> Pasal 2: <mark>Modal</mark> <mark>inti</mark> minimum bagi Bank Umum ditetapkan sebesar Rp3.000.000.000.000 (tiga triliun rupiah",
       "created_at": "2026-10-01T10:00:00Z",
-      "updated_at": "2026-10-01T10:00:00Z"
+      "updated_at": "2026-10-01T10:00:00Z",
+      "persetujuan_publik": null
     }
   ],
   "query": {
@@ -873,6 +880,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
     "POJK",
     "2026"
   ],
+  "kategori_manual": false,
   "is_placed": true,
   "job_id": 3,
   "pdf_url": "/api/v1/documents/1/pdf",
@@ -894,7 +902,7 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
   "deactivated_at": null,
   "deactivated_reason": null,
   "identity_key": null,
-  "page_count": null,
+  "page_count": 1,
   "duplicate_of_id": null,
   "articles": [
     {
@@ -916,7 +924,8 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
       "page": null
     }
   ],
-  "legal_references": []
+  "legal_references": [],
+  "persetujuan_publik": null
 }
 ```
 <!-- /AUTO:document_detail_response -->
@@ -1007,7 +1016,11 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
 
 #### A. Tanggal Mulai Berlaku (`effective_date`)
 - **Format:** `YYYY-MM-DD` (ISO Date) atau `null`.
-- **Aturan Status Otomatis (Aturan 5a):** Jika suatu dokumen tidak memiliki relasi pencabutan/pengubahan aktif, berstatus sumber `relasi`, `tanggal_berlaku`, atau belum ditentukan (`null`), dan `effective_date <= hari ini`, maka sistem secara otomatis menetapkan `status_keberlakuan = "berlaku"` dengan `status_source = "tanggal_berlaku"`.
+- **Aturan Status Otomatis (Aturan 5a):**
+  - Jika suatu dokumen tidak memiliki relasi pencabutan/pengubahan aktif, berstatus sumber `relasi`, `tanggal_berlaku`, atau belum ditentukan (`null`):
+    - Bila `effective_date > hari ini` (tanggal berlaku di masa depan): sistem menetapkan `status_keberlakuan = "belum_berlaku"` dengan `status_source = "tanggal_berlaku"` dan `rule = "belum_berlaku"`.
+    - Bila `effective_date <= hari ini`: sistem menetapkan `status_keberlakuan = "berlaku"` dengan `status_source = "tanggal_berlaku"`.
+  - Jika terdapat relasi masuk yang cocok (misalnya dicabut atau diubah oleh regulasi lain), aturan relasi tetap diutamakan (menang atas tanggal berlaku).
 - Dokumen dengan status manual (`status_source = "manual"`) atau berasal dari lapisan data (`status_source = "lapisan_data"`) tidak akan ditimpa oleh aturan ini.
 - `recompute_status` dieksekusi secara otomatis saat `effective_date` diperbarui lewat PATCH extraction worker maupun koreksi metadata pengguna.
 
@@ -1202,6 +1215,94 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
 
 ---
 
+### 8.6 Kemiripan Draft Berulang & Perbandingan Per Pasal (Langkah 30)
+- **Method & Path:** `GET /api/v1/documents/{document_id}/kemiripan-draft`
+- **Tujuan:** Mendeteksi draft kajian sebelumnya yang mirip dengan draf yang sedang dikaji, mengukur persentase kemiripan, dan membandingkan perbedaan per pasal antara versi draf terbaru dan draf terdahulu (Weekly #7 Keputusan No. 6).
+- **Parameter Query:**
+  - `ambang` (opsional, float 0–100): Ambang batas kemiripan (persen). Default diambil dari konfigurasi backend (`settings.draft_kemiripan_ambang = 80.0`). Ambang ini dapat diatur sesuai kebutuhan UI/pengguna.
+  - `limit` (opsional, int 1–20, default: 5): Jumlah maksimal draft mirip yang dikembalikan dalam daftar `draft_mirip`.
+- **Hak Akses & Izin:**
+  - Memerlukan izin `KB_BACA` (peran `analis` atau `admin_kb`).
+  - Dokumen target divalidasi dengan `check_non_public_access`. Dokumen non-publik memerlukan otentikasi login aktif (`403 Forbidden`).
+  - Read-only: tidak mengubah basis data dan tidak mencatat entri audit log.
+- **Validasi Dokumen:**
+  - `404 Not Found`: Dokumen tidak ditemukan.
+  - `422 Unprocessable Entity`: Dokumen bukan berperan sebagai `draft_kajian` (`"Kemiripan draft hanya untuk dokumen draft kajian"`).
+  - `409 Conflict`: Dokumen draf belum selesai diekstraksi (`full_text` null atau kosong, `"Draft belum selesai diekstraksi"`).
+- **Cara Perhitungan Kemiripan:**
+  1. **Kandidat Pembanding:** Disaring dari dokumen aktif lain dengan `document_role = draft_kajian` yang memiliki `full_text`, disaring sesuai hak akses pengguna (`allowed_document_ids` / klasifikasi akses publik/non-publik), dan dibatasi maksimal 200 dokumen draf terbaru menurut `created_at`. Dokumen non-publik tidak akan bocor ke pengguna tanpa hak akses.
+  2. **Batas Atas Cepat (Length Pruning):** Dihitung min(|A|,|B|) / max(|A|,|B|) * 100. Bila batas atas teoretis ini kurang dari `ambang`, perhitungan penuh Jaccard shingle dilewati demi efisiensi query dan CPU.
+  3. **Jaccard Shingling (5-gram):** Teks dinormalisasi (huruf kecil, nomor halaman mandiri dibuang, tanda baca dihilangkan, spasi dirapikan). Kata-kata di-hash ke 5-gram `crc32` (atau himpunan kata bila < 5 kata). Kemiripan dihitung:
+     persen = (|A ∩ B| / |A ∪ B|) * 100%
+     dibulatkan ke 1 desimal.
+- **Arti Status Kemiripan:**
+  - `identik`: Persentase kemiripan >= 99.5%.
+  - `sangat_mirip`: Persentase kemiripan >= ambang (default 80.0%).
+- **Perilaku Berkas Byte-Identik (Duplikasi SHA-256):**
+  - Berkas PDF yang byte-nya identik (SHA-256 dan ukuran sama) tetap ditolak pada saat unggah (`duplicate_count = 1`), membawa `duplicate_of_document_id`. Frontend diarahkan membuka analisa draf sebelumnya lewat `duplicate_of_document_id` tersebut.
+  - Endpoint `kemiripan-draft` menangani kasus draf berulang yang teksnya telah mengalami revisi (byte PDF berbeda namun isi substansinya mirip/berkesinambungan).
+- **Kandidat Terdekat & Perbandingan Per Pasal:**
+  - `terdekat`: Selalu memuat kandidat dengan persentase tertinggi (walaupun < ambang) agar UI dapat menginformasikan "paling mirip X%". Bernilai `null` hanya jika tidak ada draf lain sama sekali.
+  - `per_pasal`: Dihitung otomatis terhadap draf `terdekat` apabila persentase kemiripan `terdekat` >= ambang.
+  - Menggunakan tabel `articles` tingkat pasal (`parent_id IS NULL`). Status per pasal:
+    - `sama`: Nomor pasal sama, teks ternormalisasi identik.
+    - `berubah`: Nomor pasal sama, teks berbeda (disertai `persen` kemiripan pasal).
+    - `baru`: Pasal hanya ada di draf baru.
+    - `dihapus`: Pasal hanya ada di draf lama.
+  - Jika salah satu draf belum memiliki ekstraksi pasal di tabel `articles`, field `per_pasal` bernilai `null` disertai `catatan: "perbandingan per pasal belum tersedia (pasal belum dipecah)"`.
+- **Contoh Respons (200 OK):**
+```json
+{
+  "document_id": 210,
+  "ambang": 80.0,
+  "dibandingkan": 37,
+  "draft_mirip": [
+    {
+      "document_id": 198,
+      "judul": "RPOJK Penyelenggaraan Usaha Bank Syariah V1",
+      "diunggah": "2026-10-29T09:12:00Z",
+      "persen": 93.4,
+      "status": "sangat_mirip"
+    }
+  ],
+  "terdekat": {
+    "document_id": 198,
+    "persen": 93.4
+  },
+  "per_pasal": {
+    "dibanding_dengan": 198,
+    "ringkas": {
+      "sama": 30,
+      "berubah": 5,
+      "baru": 2,
+      "dihapus": 1
+    },
+    "pasal": [
+      {
+        "pasal": "Pasal 1",
+        "status": "sama"
+      },
+      {
+        "pasal": "Pasal 2",
+        "status": "berubah",
+        "persen": 71.2
+      },
+      {
+        "pasal": "Pasal 3",
+        "status": "dihapus"
+      },
+      {
+        "pasal": "Pasal 5",
+        "status": "baru"
+      }
+    ]
+  },
+  "catatan": null
+}
+```
+
+---
+
 ## 9. ALUR 8: KURASI & KOREKSI METADATA SERTA ANTREAN PENANGANAN GAGAL
 
 ### 9.1 Koreksi Metadata Dokumen
@@ -1210,6 +1311,12 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
 - **Validasi Khusus Lampiran:**
   - `parent_document_id` harus dokumen yang ada, bukan dirinya sendiri, dan bukan merupakan dokumen lampiran lain (HTTP 422 bila melanggar).
   - Jika `is_attachment = false`, sistem otomatis mengosongkan `parent_document_id`, `parent_identity_key`, dan `attachment_label`.
+- **Penanda `kategori_manual`:** Item daftar/pencarian dokumen, detail dokumen, dan respons PATCH metadata menyertakan atribut boolean `"kategori_manual": true|false`.
+- **Blok `placement` Eksplisit:**
+  - Bila salah satu field penempatan berubah dan metadata lengkap (`is_sufficient: true`): berkas dipindah fisik dan `placement` memuat detail `{placed: true, reason: ..., old_path: ..., new_path: ...}`.
+  - Bila field penempatan berubah tetapi metadata belum cukup (`is_sufficient: false`): berkas tidak dipindah dan menghasilkan status eksplisit:
+    `placement = {"placed": false, "reason": "metadata_belum_cukup", "category_id": <id>, "category_path": [...]}`.
+  - Bila tidak ada field penempatan yang berubah: `placement` bernilai `null`.
 - **Respons (200 OK):**
 <!-- AUTO:document_patch_metadata_response -->
 ```json
@@ -1252,6 +1359,7 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
     "2026"
   ],
   "is_placed": true,
+  "kategori_manual": false,
   "job_id": 3,
   "pdf_url": "/api/v1/documents/1/pdf",
   "text_url": "/api/v1/documents/1/text",
@@ -1272,8 +1380,25 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
   "deactivated_at": null,
   "deactivated_reason": null,
   "identity_key": null,
-  "page_count": null,
+  "page_count": 1,
   "duplicate_of_id": null,
+  "changed_fields": [
+    "title"
+  ],
+  "placement": {
+    "document_id": 1,
+    "placed": true,
+    "reason": "relokasi",
+    "old_path": "kb/POJK/2026/Penyelenggaraan Usaha Bank Umum_POJK_2026_Perbankan.pdf",
+    "new_path": "kb/POJK/2026/Penyelenggaraan Usaha Bank Umum Terkoreksi_POJK_2026_Perbankan.pdf",
+    "category_id": 8,
+    "category_path": [
+      "POJK",
+      "2026"
+    ]
+  },
+  "duplikat": null,
+  "persetujuan_publik": null,
   "articles": [
     {
       "id": 1,
@@ -1294,30 +1419,22 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
       "page": null
     }
   ],
-  "legal_references": [],
-  "changed_fields": [
-    "title"
-  ],
-  "placement": {
-    "document_id": 1,
-    "placed": true,
-    "reason": "ditempatkan",
-    "old_path": "kb/POJK/2026/Penyelenggaraan Usaha Bank Umum_POJK_2026_Perbankan.pdf",
-    "new_path": "kb/POJK/2026/Penyelenggaraan Usaha Bank Umum Terkoreksi_POJK_2026_Perbankan.pdf",
-    "category_id": 8,
-    "category_path": [
-      "POJK",
-      "2026"
-    ]
-  },
-  "duplikat": null
+  "legal_references": []
 }
 ```
 <!-- /AUTO:document_patch_metadata_response -->
 
 ### 9.2 Daftar Antrean Gagal (Ingest Failures)
 - **Method & Path:** `GET /api/v1/ingest/failures`
-- **Query Params:** `job_id`, `failure_type`, `follow_up_status` (`belum_ditangani`, `diproses_ulang`, `diabaikan`, `all`), `include_duplicates` (`false`), `skip` (`0`), `limit` (`50`).
+- **Query Params:** `job_id`, `failure_type`, `reason_code` (opsional, dapat diulang, misal `?reason_code=teks_kosong&reason_code=teks_kosong_ocr`), `source_id` (opsional, filter sumber scraping via job atau scan candidate), `tanpa_sumber` (opsional, boolean: jika `true`, hanya menampilkan kegagalan unggah manual tanpa sumber scraping; mengirim `tanpa_sumber=true` bersama `source_id` menghasilkan HTTP 422), `follow_up_status` (`belum_ditangani`, `diproses_ulang`, `diabaikan`, `all`), `include_duplicates` (`false`), `skip` (`0`), `limit` (`50`).
+- **Daftar Kode Alasan Kegagalan (`reason_code`):**
+  - `format_tidak_didukung`: Berkas bukan format PDF yang valid.
+  - `pdf_rusak`: Berkas PDF rusak, corrupt, stream terputus, atau tidak memiliki halaman valid (`FileRejectCode.pdf_rusak`).
+  - `pdf_terenkripsi`: Berkas PDF dilindungi kata sandi pengguna / user password (`FileRejectCode.pdf_terenkripsi`).
+  - `teks_kosong`: Ekstraksi teks reguler menghasilkan teks kosong atau hanya spasi (perlu tinjauan manual atau proses ulang OCR).
+  - `teks_kosong_ocr`: Ekstraksi OCR tidak menghasilkan teks (kemungkinan hasil pindai buram).
+  - `ocr_timeout`: Batas waktu eksekusi worker OCR terlampaui.
+  - `duplikat`: Berkas terdeteksi identik/duplikat dengan dokumen yang telah ada.
 - **Respons (200 OK):**
 <!-- AUTO:failures_list_response -->
 ```json
@@ -1505,7 +1622,8 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
       "berlaku": 0,
       "diubah": 0,
       "dicabut": 0,
-      "tidak_diketahui": 2
+      "tidak_diketahui": 2,
+      "belum_berlaku": 0
     },
     "by_processing_status": {
       "diterima": 1,
@@ -1623,6 +1741,151 @@ Mendukung penelusuran riwayat analisa dan harmonisasi dokumen (US-10 #56). Setia
 ```
 <!-- /AUTO:dashboard_summary_response -->
 
+### 10.2 Statistik Corong (`/api/v1/dashboard/corong`)
+- **Method & Path:** `GET /api/v1/dashboard/corong`
+- **Izin:** `KB_BACA` (perlu otentikasi)
+- **Query Params:**
+  - `source_id` (opsional, integer): ID sumber spesifik. Bila diisi, hanya sumber tersebut yang muncul di `sumber[]`.
+  - `format` (opsional, string, default `json`): `json` atau `csv`.
+
+#### A. Definisi Tiap Metrik Corong
+1. **`scan` per sumber:** kandidat dari seluruh sesi scan milik sumber tersebut, unik per `url_hash` (menggunakan baris terbaru per `url_hash`):
+   - `ditemukan`: jumlah unik kandidat.
+   - `sudah_ada_di_kb`: `match_status = sudah_ada` dan tidak ditarik.
+   - `ditarik`: `pull_outcome ∈ {success, downloaded, berhasil, diunduh}` dan `document_id` terisi.
+   - `duplikat`: `pull_outcome ∈ {duplicate, duplikat}`.
+   - `gagal_unduh`: `pull_outcome ∈ {failed, gagal}`.
+   - `belum_ditarik`: sisa kandidat yang belum ditarik.
+   - **Invarian:** `ditemukan = sudah_ada_di_kb + ditarik + duplikat + gagal_unduh + belum_ditarik`.
+2. **`dokumen` per sumber:** dokumen **aktif** (`is_active = true`) yang berasal dari sumber tersebut (`documents.job_id → ingest_jobs.source_id`, atau `id` muncul sebagai `document_id`/`match_document_id` pada kandidat scan sumber itu). Dihitung unik per dokumen:
+   - `tersimpan_di_kb`: path `file_path_pdf` berawalan `kb/`.
+   - `menunggu_ekstraksi`: `processing_status` bernilai `diterima` atau `diproses`.
+   - `terbaca`: `processing_status` bernilai `terindeks` atau `perlu_koreksi`, dirinci menurut metode ekstraksi (`terbaca_teks_langsung` vs `terbaca_ocr`; metode kosong dihitung teks langsung). `perlu_koreksi` adalah bagian dari `terbaca`.
+   - `gagal_baca`: `processing_status` bernilai `gagal`.
+   - `lainnya`: status lain (misalnya `ditolak`).
+   - **Invarian:** `di_kb = menunggu_ekstraksi + terbaca + gagal_baca + lainnya`.
+   - `terpecah_pasal`: memiliki ≥ 1 baris di tabel `articles`.
+   - `tervektor`: jumlah **dokumen** aktif yang memiliki ≥ 1 pasal (baris di `articles`) dengan `embedding IS NOT NULL` (dihitung per dokumen unik, bukan jumlah pasal).
+
+> **Cache Respons Corong (60 Detik):**  
+> Endpoint corong dilengkapi cache memori proses dengan TTL 60 detik per `source_id`. Gunakan query parameter `segar=true` untuk melewati cache dan memaksa kalkulasi ulang data corong.
+3. **`pdf`:**
+   - `terproteksi`: `pdf_terproteksi = true` (PDF dilindungi proteksi kata sandi pemilik / copy-protected).
+   - `terproteksi_terbaca`: bagian dokumen terproteksi yang berhasil `terbaca`.
+   - `hasil_pindai_ocr`: sama dengan `terbaca_ocr`.
+   - `ocr_gagal`: kegagalan dengan `reason_code` bernilai `teks_kosong_ocr` atau `ocr_gagal`.
+   - `belum_diperiksa`: `pdf_terproteksi IS NULL` (dokumen warisan sebelum langkah ini dijalankan).
+4. **`gagal_per_alasan`:** jumlah `ingest_failures` yang terkait dengan sumber (lewat `job.source_id` atau `scan_candidates.failure_id`), `follow_up_status ≠ diabaikan`, dikelompokkan per `reason_code`. Duplikat tidak dihitung di sini (sudah masuk di `scan.duplikat`).
+5. **`unggah_manual`:** dokumen dan kegagalan yang job-nya **tanpa** `source_id`, tanpa blok `scan`.
+6. **`persen_terbaca`:** `terbaca / di_kb × 100`, dibulatkan 1 desimal; bernilai `0.0` jika `di_kb = 0`.
+7. **`total`:** penjumlahan seluruh sumber ditambah unggah manual. Dokumen yang terkait ke dua sumber **hanya dihitung sekali** di `total.dokumen` (dihitung ulang secara unik di basis data, bukan sekadar dijumlahkan).
+
+#### B. Contoh Pemanggilan (cURL)
+```bash
+# 1. Mengambil statistik corong lengkap dalam format JSON
+curl -s -H "Authorization: Bearer <token>" \
+  http://localhost:8000/api/v1/dashboard/corong
+
+# 2. Filter satu sumber tertentu
+curl -s -H "Authorization: Bearer <token>" \
+  "http://localhost:8000/api/v1/dashboard/corong?source_id=1"
+
+# 3. Ekspor format CSV dengan BOM UTF-8
+curl -s -O -J -H "Authorization: Bearer <token>" \
+  "http://localhost:8000/api/v1/dashboard/corong?format=csv"
+```
+
+#### C. Drill-Down ke Antrean Kegagalan
+Untuk memeriksa dan menindaklanjuti dokumen yang gagal pada corong tertentu, frontend dapat langsung memfilter antrean kegagalan:
+```bash
+# Contoh: melihat dokumen yang gagal OCR pada sumber ID 1
+curl -s -H "Authorization: Bearer <token>" \
+  "http://localhost:8000/api/v1/ingest/failures?reason_code=teks_kosong_ocr&reason_code=ocr_gagal&source_id=1"
+```
+Setiap entri yang memiliki `document_id` dapat dibuka berkas PDF aslinya melalui `GET /api/v1/documents/{document_id}/pdf`.
+
+---
+
+### 10.3 Kelola Kategori (`/api/v1/categories`)
+
+Manajemen struktur hierarkis folder kategori Knowledge Base (KB), relokasi otomatis berkas dokumen, serta pembaruan nama, induk, dan aturan klasifikasi.
+
+#### A. Otorisasi
+- **Membaca (`GET /`, `GET /tree`, `GET /{id}`):** Memerlukan izin `KB_BACA` (peran `admin_sistem`, `admin_kb`, `analis`, `pilot_user`).
+- **Mengelola (`POST /`, `PATCH /{id}`, `DELETE /{id}`):** Memerlukan izin `KB_KELOLA` (peran `admin_sistem`, `admin_kb`).
+
+#### B. Aturan Relokasi Otomatis vs Kategori Manual (`kategori_manual`)
+1. **Penanda `kategori_manual`:**
+   - Dokumen baru yang ditarik dari pemindaian web atau diunggah tanpa memilih kategori memiliki `kategori_manual: false`. Jalur kategorinya ditentukan secara otomatis dari metadata (`{jenis}/{tahun}`).
+   - Dokumen yang diunggah dengan opsi `category_id` atau diperbarui lewat `PATCH /api/v1/documents/{id}/metadata` dengan `category_id` terisi otomatis ditandai `kategori_manual: true`.
+2. **Koreksi Metadata:**
+   - Pada dokumen `kategori_manual: true`, perubahan jenis regulasi atau tahun tidak akan memindahkan berkas dokumen dari kategori pilihan pengguna.
+   - Pada dokumen `kategori_manual: false`, perubahan metadata yang mempengaruhi hierarki otomatis memindahkan berkas fisik ke folder kategori baru.
+3. **Kembalikan ke Kategori Otomatis:**
+   - Pengguna dapat mengembalikan dokumen ke penempatan otomatis dengan mengirimkan `PATCH /api/v1/documents/{id}/metadata` dengan nilai `category_id: null`.
+   - Sistem akan menyetel `kategori_manual: false` dan langsung merelokasi berkas ke kategori otomatis yang sesuai dengan metadatanya.
+
+#### C. Efek Pembaruan Kategori (Rename & Pindah Induk) terhadap Berkas Fisik
+1. Mengubah `name` atau `parent_id` melalui `PATCH /api/v1/categories/{id}` akan memicu relokasi fisik seluruh berkas dokumen yang berada di dalam kategori tersebut maupun subkategori turunannya.
+2. Respons endpoint memuat jumlah dokumen yang berhasil dipindah serta daftar dokumen yang gagal:
+   ```json
+   {
+     "kategori": {
+       "id": 15,
+       "name": "2026",
+       "parent_id": 12,
+       "auto_created": false,
+       "path": ["POJK", "2026"],
+       "document_count": 5,
+       "jumlah_dokumen": 5,
+       "classification_rule": null
+     },
+     "dokumen_dipindah": 5,
+     "dokumen_gagal": []
+   }
+   ```
+3. Kegagalan memindahkan satu dokumen (misal berkas sumber hilang di filesystem) tidak membatalkan pembaruan kategori di database; dokumen tersebut dicatat pada array `dokumen_gagal` dengan bentuk elemen `{"document_id": <id>, "alasan": "<pesan galat>"}`.
+4. Kategori yang awalnya dibuat otomatis (`auto_created: true`), setelah diubah oleh pengguna akan otomatis berubah status menjadi manual (`auto_created: false`).
+
+#### D. Aturan Penghapusan Kategori (`DELETE /api/v1/categories/{id}`)
+- Kategori hanya dapat dihapus jika kosong (tidak memiliki subkategori turunan dan tidak memiliki dokumen, baik dokumen aktif maupun nonaktif).
+- Jika masih memiliki isi, backend menolak dengan kode HTTP `409 Conflict` dan detail jumlah keterikatan:
+  ```json
+  {
+    "detail": {
+      "subkategori": 2,
+      "dokumen": 3,
+      "dokumen_aktif": 2,
+      "dokumen_nonaktif": 1,
+      "message": "Kategori masih memiliki 2 subkategori dan 3 dokumen (1 di antaranya nonaktif)."
+    }
+  }
+  ```
+- Penghapusan yang berhasil menghasilkan HTTP `204 No Content` dan mencatat jejak audit `DELETE_CATEGORY`.
+
+#### E. Aturan Klasifikasi (`classification_rule`) dan Validasi Hierarki
+- Field `classification_rule` dikirim sebagai **string berisi JSON objek** (stringified JSON dictionary, maksimal 4.000 karakter):
+  - Contoh Valid: `"classification_rule": "{\"keywords\": [\"perbankan\"], \"min_score\": 0.8}"`
+  - Menyerahkan objek JSON langsung (bukan string) akan ditolak dengan **HTTP 422 Unprocessable Content**.
+  - Mengirimkan `null` akan mengosongkan/menghapus aturan klasifikasi.
+- **Pencegahan Siklus Hierarki:** Kategori tidak boleh dipindahkan ke dalam dirinya sendiri atau ke dalam subkategori turunannya. Pelanggaran aturan ini menghasilkan HTTP 422 dengan pesan persis: `"Kategori tidak boleh dipindah ke dalam dirinya sendiri atau turunannya"`.
+- **Status Operasional:** Saat ini field `classification_rule` **hanya disimpan (persisted)** di database dan belum digunakan secara aktif oleh sistem klasifikasi otomatis.
+
+#### F. Kunci Kategori Otomatis (`kunci_otomatis`) dan Ganti Nama Permanen
+1. **Arti `kunci_otomatis`:**
+   - Menyimpan penanda segmen template asli (misal `"POJK"`, `"SEOJK"`, `"2026"`).
+   - Pada kategori otomatis baru, `name` dan `kunci_otomatis` diisi nilai yang sama. Pada kategori manual (dibuat lewat `POST /api/v1/categories/`), `kunci_otomatis` bernilai `null`.
+2. **Ganti Nama Kategori Otomatis Permanen:**
+   - Bila pengguna mengganti nama kategori otomatis (misalnya `POJK` diubah menjadi `Peraturan OJK`), nilai `kunci_otomatis = "POJK"` tetap dipertahankan.
+   - Penempatan dokumen baru yang memiliki segmen template `"POJK"` akan memprioritaskan pencocokan via `kunci_otomatis == "POJK"` ke folder `Peraturan OJK` tersebut. Folder baru tidak akan terbuat ganda di akar.
+3. **Efek Pindah Induk (`parent_id` berubah):**
+   - Nilai `kunci_otomatis` tetap dipertahankan pada kategori yang dipindah.
+   - Pencocokan jalur otomatis selalu bersifat per induk. Jika kategori `2026` dipindahkan dari `POJK` ke `SEOJK`, dokumen POJK 2026 berikutnya akan membuat subkategori `2026` baru di bawah `POJK`. Ini merupakan perilaku yang diharapkan untuk merestrukturisasi folder.
+   - **Pencegahan Bentrok Kunci:** Dua kategori di bawah induk yang sama tidak boleh memiliki `kunci_otomatis` yang sama. Jika pemindahan menyebabkan bentrok kunci di induk baru, permintaan ditolak dengan HTTP `409 Conflict`: `"Induk tujuan sudah punya kategori otomatis dengan kunci '<kunci>'"`.
+4. **Cara Pemulihan Kunci (Backfill):**
+   - Kategori otomatis yang terlanjur diganti nama sebelum Langkah 33 dapat dipulihkan kuncinya menggunakan skrip `scripts/backfill_kunci_kategori.py`.
+   - Skrip membaca riwayat audit `UPDATE_CATEGORY` tertua (`detail.before.name`) untuk mengembalikan `kunci_otomatis`. Mode default `--dry-run`, jalankan dengan flag `--apply` untuk menerapkan ke basis data.
+
 ---
 
 ## 11. GERBANG ANALISA (`/api/v1/ml/*`)
@@ -1673,6 +1936,29 @@ Frontend cukup memanggil satu asal (`API_BASE_URL` backend) tanpa perlu menghubu
   - `k` (opsional): integer `1-20` (default: `5`)
 
 ### 11.5 Harmonisasi Draft Regulasi
+
+#### Otorisasi & Penanganan Akses (HTTP 401 & 403)
+- Memerlukan izin `ANALISA_JALANKAN`. Bila sistem autentikasi aktif:
+  - Tanpa header token Bearer atau token tidak valid: mengembalikan **HTTP 401 Unauthorized** (`{"detail": "Otentikasi diperlukan"}`).
+  - Pengguna dengan peran yang tidak memiliki hak (misal `pilot_user`): mengembalikan **HTTP 403 Forbidden** dengan format detail:
+    ```json
+    {
+      "detail": {
+        "code": "akses_ditolak",
+        "izin": "ANALISA_JALANKAN",
+        "peran": "pilot_user",
+        "message": "Akun Anda tidak memiliki izin ANALISA_JALANKAN untuk aksi ini."
+      }
+    }
+    ```
+- Bila draft berklasifikasi `non_publik` dan pengguna tidak memiliki hak `KB_BACA_NONPUBLIK`: mengembalikan **HTTP 403 Forbidden**.
+
+#### Kontrak Lapisan Data & Nilai Nullable
+- **Field Nullable:** Atribut `temuan[].pembanding`, `pembanding.pdf`, `pembanding.document_id`, dan `ringkasan.rencana_perubahan` dapat bernilai `null` (opsional).
+- **Atribut Pembanding:** Objek `pembanding` memuat atribut opsional `key`, `nomor`, `status`, `judul`, `pdf`, `tautan`, dan `document_id`.
+- **Nilai `badge.tone`:** Nilai warna badge pada temuan mengikuti kode: `success`, `neutral`, `warning`, `info`, atau `danger`.
+- **Rincian Penyaringan (`disaring_rincian`):** Respons harmonisasi memuat objek `disaring_rincian: {"temuan": n, "rujukan": n, "alternatif": n, "lainnya": n}` dan total `disaring_backend` = sum(disaring_rincian).
+- **Hitung Ulang Ringkasan Jenis:** `ringkasan.per_jenis` dihitung ulang secara dinamis dari temuan yang tersisa setelah dokumen yang tidak diizinkan disaring.
 - **Method & Path:** `POST /api/v1/ml/harmonisasi/{document_id}`
 - **Parameter Query:**
   - `segar` (opsional, default: `false`): Jika `true`, memaksa perhitungan ulang harmonisasi ke layanan ML.
@@ -1805,6 +2091,7 @@ Field respons/parameter: `status_keberlakuan`
 | `diubah` | **Diubah** | Sebagian ketentuan peraturan telah diubah. |
 | `dicabut` | **Dicabut** | Peraturan telah dicabut seluruhnya oleh regulasi baru. |
 | `tidak_diketahui` | **Tidak Diketahui** | Status keberlakuan belum dapat dipastikan. |
+| `belum_berlaku` | **Belum Berlaku** | Peraturan telah disahkan tetapi tanggal berlakunya belum tiba. |
 
 
 ### 11.10 Kategori Kegagalan Ingest (`JenisKegagalan`)
@@ -1979,6 +2266,29 @@ curl -X POST "http://localhost:8000/api/v1/internal/analysis-cache/invalidate" \
   - `versi_mesin`: Versi mesin analisa target yang dikirimkan pada permintaan.
   - `kind`: Kategori jenis analisa yang difilter, atau `null` jika mencakup semua jenis.
 
+### 15.3 Komputasi Ulang Status Keberlakuan Regulasi
+
+Endpoint ini digunakan oleh lapisan data/infra untuk melakukan evaluasi ulang status keberlakuan dokumen secara massal (misal melalui timer/cron harian) ketika tanggal berlaku suatu regulasi telah tiba.
+
+- **Method & Path:** `POST /api/v1/internal/documents/status/recompute`
+- **Header Keamanan:** `X-Internal-API-Key: <kunci>` (Wajib). Mengembalikan `401 Unauthorized` jika kunci salah atau tidak disertakan.
+- **Tujuan & Perilaku:**
+  - Memeriksa seluruh dokumen Knowledge Base yang memiliki `effective_date IS NOT NULL` dan `status_source` bernilai `tanggal_berlaku` atau `None`.
+  - Menjalankan fungsi `recompute_status()` untuk mengevaluasi status: dokumen yang tanggal berlakunya telah tiba (`effective_date <= hari ini`) otomatis beralih dari `belum_berlaku` menjadi `berlaku`.
+  - Menghasilkan satu entri jejak audit `STATUS_RECOMPUTED` yang memuat jumlah dokumen diperiksa dan diubah.
+- **Contoh Permintaan (`curl`):**
+```bash
+curl -X POST "http://localhost:8000/api/v1/internal/documents/status/recompute" \
+  -H "X-Internal-API-Key: <kunci>"
+```
+- **Respons (200 OK):**
+```json
+{
+  "diperiksa": 120,
+  "berubah": 2
+}
+```
+
 ---
 
 ## 16. PERAN & HAK AKSES (US-01)
@@ -2024,7 +2334,7 @@ Sistem otorisasi HERO Backend menggunakan kontrol akses berbasis peran (RBAC) ya
      }
      ```
 
-2. **403 Forbidden (`akses_ditolak`):**
+2. **403 Forbidden (`akses_ditolak` atau `butuh_login`):**
    - Pengguna aktif tetapi perannya tidak memiliki izin fitur yang diminta:
      ```json
      {
@@ -2032,6 +2342,15 @@ Sistem otorisasi HERO Backend menggunakan kontrol akses berbasis peran (RBAC) ya
          "code": "akses_ditolak",
          "izin": "AUDIT_BACA",
          "peran": "analis"
+       }
+     }
+     ```
+   - Endpoint administratif (`/users`, `/audit-logs`) diakses saat `AUTH_ENABLED=false` tanpa header kunci internal yang valid:
+     ```json
+     {
+       "detail": {
+         "code": "butuh_login",
+         "message": "Endpoint ini hanya tersedia saat login aktif (AUTH_ENABLED=true) atau dengan kunci internal."
        }
      }
      ```
@@ -2050,6 +2369,15 @@ Sistem otorisasi HERO Backend menggunakan kontrol akses berbasis peran (RBAC) ya
        "detail": "Dokumen non-publik hanya dapat dibuka setelah login diaktifkan."
      }
      ```
+
+3. **429 Too Many Requests (Lockout Login):**
+   - Melebihi batas percobaan login gagal (5 kali per akun atau 30 kali per IP dalam jendela 15 menit):
+     ```json
+     {
+       "detail": "Terlalu banyak percobaan login. Coba lagi dalam 15 menit."
+     }
+     ```
+     Header respons menyertakan `Retry-After: <detik>`.
 
 ### 16.3 Profil Pengguna & Hak Akses Aktif (`/api/v1/auth/me`)
 
@@ -2142,5 +2470,83 @@ Seluruh endpoint di bawah prefix `/api/v1/users` dilindungi oleh izin `PENGGUNA_
 - **Aturan Proteksi Integritas:**
   1. **409 `admin_terakhir`:** Ditolak bila perubahan akan menyebabkan tidak ada lagi Admin Sistem aktif di sistem.
   2. **409 `ubah_diri_sendiri`:** Admin Sistem dilarang menonaktifkan atau menurunkan peran akun miliknya sendiri demi mencegah penguncian akses tak terpulihkan.
+
+### 16.5 Jejak Audit Aktivitas (`GET /api/v1/audit-logs/`)
+
+- **Method & Path:** `GET /api/v1/audit-logs/`
+- **Proteksi Akses:**
+  - Saat `AUTH_ENABLED=true`: Wajib memiliki token dengan izin `AUDIT_BACA` (Admin Sistem).
+  - Saat `AUTH_ENABLED=false`: Jika `ADMIN_BUTUH_KUNCI_SAAT_AUTH_MATI=true` (default), wajib menyertakan header `X-Internal-API-Key` yang cocok dengan `INTERNAL_API_KEY`. Bila tidak ada atau keliru, mengembalikan `403 Forbidden` (`butuh_login`).
+- **Penyembunyian IP saat Autentikasi Nonaktif:** Selama `AUTH_ENABLED=false`, seluruh entri respons mengembalikan `ip_address: null` demi privasi pada akses terbuka, tanpa mengubah data asli alamat IP yang tersimpan di basis data. Saat `AUTH_ENABLED=true`, nilai alamat IP asli yang tersimpan di database dikembalikan pada setiap entri riwayat audit.
+- **Query Parameter (Opsional):**
+  - `action`: Filter kode aksi (mis. `LOGIN`, `UPLOAD_DOCUMENT`, `PLACE_DOCUMENT`).
+  - `user_id`: Filter ID pengguna.
+  - `target_resource`: Filter prefix sumber daya target (mis. `document:12`).
+  - `mode`: Filter mode analisa (`deterministik` | `ai`).
+  - `ada_detail`: Filter ketersediaan detail (boolean). `true` → hanya entri dengan `detail` tidak null dan bukan `{}`; `false` → hanya entri dengan `detail` null/kosong; `null` → seluruh entri.
+  - `dari`: Waktu awal filter rentang timestamp (ISO 8601, inklusif).
+  - `sampai`: Waktu akhir filter rentang timestamp (ISO 8601, inklusif).
+- **Format Detail per Aksi (Standardisasi Langkah 34):**
+  | Aksi | Isi `detail` |
+  |---|---|
+  | `UPLOAD_DOCUMENT` | `document_id`, `nama_berkas_asli`, `nama_berkas_baku`, `sha256`, `ukuran_byte`, `jumlah_halaman`, `sumber` (`jenis`, `source_id`, `job_id`), `tipe_dokumen`, `klasifikasi`, `kategori_manual`, `hasil: "baru"` |
+  | `UPLOAD_DOCUMENT` (Duplikat) | `hasil: "duplikat"`, `duplikat_dari`, `alasan: "hash_dan_ukuran"`, `nama_berkas_asli`, `sha256`, `ukuran_byte`, `sumber` |
+  | `OPEN_PDF` / `DOWNLOAD_PDF` | `document_id`, `judul` (max 200 char), `nama_berkas`, `klasifikasi`, `halaman` (opsional) |
+  | `DELETE_SOURCE` | `source_id`, `nama`, `jenis`, `url`, `klasifikasi`, `jumlah_dokumen_terkait`, `crawl_depth`, `crawler_adapter`, `naming_format`, `naming_separator`, `is_active` |
+  | `UPDATE_DOCUMENT_STATUS` | `before: {status_keberlakuan, status_source}`, `after: {status_keberlakuan, status_source}`, `dokumen_pencabut: {id, label}`, `jenis_rujukan`, `alasan` |
+  | `UPDATE_FAILURE` | `failure_id`, `before: {status, catatan}`, `after: {status, catatan}` |
+  | `RETRY_FAILURE` | `failure_id`, `reason_code`, `source_id`, `percobaan_ke`, `hasil`, `outcome`, `document_id` |
+  | `LOGIN` | `username`, `peran` |
+  | `LOGIN_FAILED` | `username`, `alasan: "kredensial_salah" \| "akun_nonaktif" \| "terkunci"`, `jumlah_gagal` |
+  | `LOGIN_LOCKED` | `username`, `kunci`, `durasi_menit` |
+- **Catatan Historis:** Entri audit sebelum Langkah 34 (dan `PLACE_DOCUMENT` sebelum Langkah 27) memang tersimpan dengan `detail: null` karena dicatat sebelum standardisasi payload audit diperkenalkan.
+
+---
+
+### 16.6 Ringkasan Jejak Audit Aktivitas (`GET /api/v1/audit-logs/ringkasan`)
+
+- **Method & Path:** `GET /api/v1/audit-logs/ringkasan`
+- **Proteksi Akses:** Sama persis dengan `GET /api/v1/audit-logs/` (izin `AUDIT_BACA` saat auth aktif, atau `X-Internal-API-Key` saat auth nonaktif).
+- **Respons (200 OK):**
+  ```json
+  [
+    {
+      "action": "LOGIN",
+      "jumlah": 42,
+      "jumlah_detail_kosong": 0,
+      "terakhir": "2026-11-01T14:30:00Z"
+    },
+    {
+      "action": "UPLOAD_DOCUMENT",
+      "jumlah": 180,
+      "jumlah_detail_kosong": 179,
+      "terakhir": "2026-11-01T15:00:00Z"
+    }
+  ]
+  ```
+
+---
+
+### 16.7 Proteksi Rate Limit & Lockout Login (`POST /api/v1/auth/login`)
+
+- **Batas Kegagalan:**
+  - Maksimal 5 kali kegagalan berturut-turut untuk satu akun (`u:<username>`).
+  - Maksimal 30 kali kegagalan berturut-turut untuk satu alamat IP (`ip:<ip>`).
+  - Jendela perhitungan kegagalan: 15 menit (`LOGIN_JENDELA_MENIT=15`).
+  - Durasi lockout: 15 menit (`LOGIN_KUNCI_MENIT=15`).
+- **Pengecekan Lockout:**
+  - Status lockout diperiksa di database sebelum validasi kata sandi. Jika akun atau IP sedang terkunci, permintaan langsung ditolak `429 Too Many Requests` tanpa memverifikasi password atau mengekspos eksistensi akun.
+- **Respons saat Terkunci (429 Too Many Requests):**
+  - Header: `Retry-After: <detik>` (misal `900`)
+  - Body:
+    ```json
+    {
+      "detail": "Terlalu banyak percobaan login. Coba lagi dalam 15 menit."
+    }
+    ```
+- **Reset Akun:** Login yang berhasil otomatis mereset hitungan kegagalan akun (`u:<username>`), sedangkan pelacak IP tetap berjalan.
+- **Pembukaan Kunci Manual:** Admin dapat membuka status lockout manual di server via skrip `scripts/buka_kunci_login.py --username <username> --apply`.
+
+
 
 

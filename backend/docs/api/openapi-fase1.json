@@ -69,6 +69,66 @@
         }
       }
     },
+    "/api/v1/audit-logs/ringkasan": {
+      "get": {
+        "tags": [
+          "Audit Logs"
+        ],
+        "summary": "Ringkasan Audit Log per Aksi",
+        "description": "Mengembalikan ringkasan statistik audit log per jenis aksi:\n- jumlah: total kemunculan aksi\n- jumlah_detail_kosong: jumlah baris dengan detail null atau kosong\n- terakhir: waktu kejadian terakhir",
+        "operationId": "get_audit_summary_api_v1_audit_logs_ringkasan_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response Get Audit Summary Api V1 Audit Logs Ringkasan Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/audit-logs/": {
       "get": {
         "tags": [
@@ -180,6 +240,78 @@
               "title": "Mode"
             },
             "description": "Filter berdasarkan mode analisa (detail->>'mode_dipakai')"
+          },
+          {
+            "name": "ada_detail",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter ketersediaan detail (true: tidak kosong; false: kosong)",
+              "title": "Ada Detail"
+            },
+            "description": "Filter ketersediaan detail (true: tidak kosong; false: kosong)"
+          },
+          {
+            "name": "dari",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter rentang awal waktu timestamp (inklusif)",
+              "title": "Dari"
+            },
+            "description": "Filter rentang awal waktu timestamp (inklusif)"
+          },
+          {
+            "name": "sampai",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter rentang akhir waktu timestamp (inklusif)",
+              "title": "Sampai"
+            },
+            "description": "Filter rentang akhir waktu timestamp (inklusif)"
+          },
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -250,7 +382,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryDetailResponse"
+                }
               }
             }
           },
@@ -285,7 +419,13 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CategoryTreeNode"
+                  },
+                  "type": "array",
+                  "title": "Response Get Category Tree Api V1 Categories Tree Get"
+                }
               }
             }
           }
@@ -331,6 +471,101 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Categories"
+        ],
+        "summary": "Ubah Kategori (Nama, Induk, Aturan Klasifikasi)",
+        "description": "Memperbarui nama, induk (parent_id), dan/atau classification_rule kategori.\nJika nama atau parent_id berubah, seluruh berkas dokumen terkait dipindahkan.",
+        "operationId": "update_category_api_v1_categories__category_id__patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Category Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryUpdateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Categories"
+        ],
+        "summary": "Hapus Kategori",
+        "description": "Menghapus kategori kosong. Menolak jika masih memiliki subkategori atau dokumen.",
+        "operationId": "delete_category_api_v1_categories__category_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Category Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -590,6 +825,57 @@
               ],
               "title": "Failure Type"
             }
+          },
+          {
+            "name": "reason_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter berdasarkan satu atau lebih reason_code",
+              "title": "Reason Code"
+            },
+            "description": "Filter berdasarkan satu atau lebih reason_code"
+          },
+          {
+            "name": "source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter berdasarkan sumber scraping",
+              "title": "Source Id"
+            },
+            "description": "Filter berdasarkan sumber scraping"
+          },
+          {
+            "name": "tanpa_sumber",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Filter hanya kegagalan tanpa sumber (unggah manual)",
+              "default": false,
+              "title": "Tanpa Sumber"
+            },
+            "description": "Filter hanya kegagalan tanpa sumber (unggah manual)"
           },
           {
             "name": "follow_up_status",
@@ -1664,6 +1950,90 @@
         }
       }
     },
+    "/api/v1/documents/{document_id}/kemiripan-draft": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Kemiripan draft berulang dan perbandingan per pasal",
+        "description": "Menghitung persentase kemiripan teks terhadap draft-draft kajian lain (Jaccard 5-gram shingle)\ndan membandingkan perbedaan per pasal jika kemiripan melampaui ambang.",
+        "operationId": "get_draft_similarity_api_v1_documents__document_id__kemiripan_draft_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "ambang",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 100.0,
+                  "minimum": 0.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Ambang batas kemiripan (0-100 persen)",
+              "title": "Ambang"
+            },
+            "description": "Ambang batas kemiripan (0-100 persen)"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "minimum": 1,
+              "description": "Batas jumlah draft mirip yang ditampilkan",
+              "default": 5,
+              "title": "Limit"
+            },
+            "description": "Batas jumlah draft mirip yang ditampilkan"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftKemiripanResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Akses dokumen non-publik ditolak / izin tidak memadai"
+          },
+          "404": {
+            "description": "Dokumen tidak ditemukan"
+          },
+          "409": {
+            "description": "Draft belum selesai diekstraksi"
+          },
+          "422": {
+            "description": "Dokumen bukan draft kajian"
+          }
+        }
+      }
+    },
     "/api/v1/documents/{document_id}/metadata": {
       "patch": {
         "tags": [
@@ -1703,7 +2073,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentMetadataPatchResponse"
+                }
               }
             }
           },
@@ -2931,6 +3303,54 @@
         }
       }
     },
+    "/api/v1/internal/documents/status/recompute": {
+      "post": {
+        "tags": [
+          "Internal"
+        ],
+        "summary": "[Internal] Hitung ulang status keberlakuan dokumen berdasarkan tanggal berlaku",
+        "description": "Hitung ulang status_keberlakuan untuk dokumen yang:\n- status_source IN ('tanggal_berlaku', None) atau IS NULL\n- effective_date IS NOT NULL\nDipanggil harian oleh timer di server (lapisan data/infra).",
+        "operationId": "recompute_documents_status_api_v1_internal_documents_status_recompute_post",
+        "parameters": [
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/scraping-sources/": {
       "post": {
         "tags": [
@@ -3471,6 +3891,92 @@
             "OAuth2PasswordBearer": []
           }
         ]
+      }
+    },
+    "/api/v1/dashboard/corong": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "summary": "Statistik corong per sumber (scan -> unduh -> simpan -> terbaca)",
+        "description": "[Langkah 27 / Langkah 32] Endpoint statistik corong per sumber: scan -> unduh -> simpan -> terbaca,\ndengan penanda PDF terproteksi, OCR vs teks langsung, dan drill-down kegagalan.\nMendukung format JSON (dengan cache 60 detik) dan CSV (UTF-8 with BOM).",
+        "operationId": "get_dashboard_corong_api_v1_dashboard_corong_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter untuk satu sumber spesifik",
+              "title": "Source Id"
+            },
+            "description": "Filter untuk satu sumber spesifik"
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Format output: json | csv",
+              "default": "json",
+              "title": "Format"
+            },
+            "description": "Format output: json | csv"
+          },
+          {
+            "name": "segar",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Paksa hitung ulang tanpa cache",
+              "default": false,
+              "title": "Segar"
+            },
+            "description": "Paksa hitung ulang tanpa cache"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Statistik corong per sumber (JSON) atau berkas CSV ber-BOM",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorongResponse"
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/scans/": {
@@ -4514,7 +5020,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/HarmonisasiResponse"
+                }
               }
             }
           },
@@ -4755,6 +5263,22 @@
               "title": "Is Active"
             },
             "description": "Filter status aktif"
+          },
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -4794,6 +5318,24 @@
         "security": [
           {
             "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -4851,6 +5393,22 @@
             "schema": {
               "type": "integer",
               "title": "User Id"
+            }
+          },
+          {
+            "name": "X-Internal-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
             }
           }
         ],
@@ -5667,6 +6225,30 @@
             ],
             "title": "Source Url",
             "description": "URL asal dokumen (opsional)"
+          },
+          "persetujuan_publik_oleh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persetujuan Publik Oleh",
+            "description": "Pihak yang menyetujui publikasi draft kajian (wajib jika peran draft_kajian dan akses publik)"
+          },
+          "persetujuan_publik_alasan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persetujuan Publik Alasan",
+            "description": "Alasan persetujuan publikasi draft kajian (wajib minimal 10 karakter jika draft_kajian publik)"
           }
         },
         "type": "object",
@@ -6155,6 +6737,17 @@
               }
             ],
             "title": "Parent Id"
+          },
+          "classification_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification Rule"
           }
         },
         "type": "object",
@@ -6173,6 +6766,17 @@
             "type": "string",
             "title": "Name"
           },
+          "kunci_otomatis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kunci Otomatis"
+          },
           "parent_id": {
             "anyOf": [
               {
@@ -6186,7 +6790,8 @@
           },
           "auto_created": {
             "type": "boolean",
-            "title": "Auto Created"
+            "title": "Auto Created",
+            "default": false
           },
           "path": {
             "items": {
@@ -6194,22 +6799,492 @@
               "format": "binary"
             },
             "type": "array",
-            "title": "Path"
+            "title": "Path",
+            "default": []
           },
           "document_count": {
             "type": "integer",
-            "title": "Document Count"
+            "title": "Document Count",
+            "default": 0
+          },
+          "jumlah_dokumen": {
+            "type": "integer",
+            "title": "Jumlah Dokumen",
+            "default": 0
+          },
+          "jumlah_dokumen_nonaktif": {
+            "type": "integer",
+            "title": "Jumlah Dokumen Nonaktif",
+            "default": 0
+          },
+          "classification_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification Rule"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
           }
         },
+        "additionalProperties": true,
         "type": "object",
         "required": [
           "id",
-          "name",
-          "auto_created",
-          "path",
-          "document_count"
+          "name"
         ],
         "title": "CategoryDetailResponse"
+      },
+      "CategoryTreeNode": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "kunci_otomatis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kunci Otomatis"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "auto_created": {
+            "type": "boolean",
+            "title": "Auto Created",
+            "default": false
+          },
+          "document_count": {
+            "type": "integer",
+            "title": "Document Count",
+            "default": 0
+          },
+          "total_document_count": {
+            "type": "integer",
+            "title": "Total Document Count",
+            "default": 0
+          },
+          "jumlah_dokumen": {
+            "type": "integer",
+            "title": "Jumlah Dokumen",
+            "default": 0
+          },
+          "jumlah_dokumen_nonaktif": {
+            "type": "integer",
+            "title": "Jumlah Dokumen Nonaktif",
+            "default": 0
+          },
+          "classification_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification Rule"
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryTreeNode"
+            },
+            "type": "array",
+            "title": "Children",
+            "default": []
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "CategoryTreeNode"
+      },
+      "CategoryUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "classification_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification Rule"
+          }
+        },
+        "type": "object",
+        "title": "CategoryUpdateRequest"
+      },
+      "CategoryUpdateResponse": {
+        "properties": {
+          "kategori": {
+            "$ref": "#/components/schemas/CategoryDetailResponse"
+          },
+          "dokumen_dipindah": {
+            "type": "integer",
+            "title": "Dokumen Dipindah",
+            "default": 0
+          },
+          "dokumen_gagal": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Dokumen Gagal",
+            "default": []
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "kategori"
+        ],
+        "title": "CategoryUpdateResponse"
+      },
+      "CorongDokumenMetrics": {
+        "properties": {
+          "di_kb": {
+            "type": "integer",
+            "title": "Di Kb",
+            "default": 0
+          },
+          "tersimpan_di_kb": {
+            "type": "integer",
+            "title": "Tersimpan Di Kb",
+            "default": 0
+          },
+          "menunggu_ekstraksi": {
+            "type": "integer",
+            "title": "Menunggu Ekstraksi",
+            "default": 0
+          },
+          "terbaca": {
+            "type": "integer",
+            "title": "Terbaca",
+            "default": 0
+          },
+          "terbaca_teks_langsung": {
+            "type": "integer",
+            "title": "Terbaca Teks Langsung",
+            "default": 0
+          },
+          "terbaca_ocr": {
+            "type": "integer",
+            "title": "Terbaca Ocr",
+            "default": 0
+          },
+          "perlu_koreksi": {
+            "type": "integer",
+            "title": "Perlu Koreksi",
+            "default": 0
+          },
+          "gagal_baca": {
+            "type": "integer",
+            "title": "Gagal Baca",
+            "default": 0
+          },
+          "lainnya": {
+            "type": "integer",
+            "title": "Lainnya",
+            "default": 0
+          },
+          "terpecah_pasal": {
+            "type": "integer",
+            "title": "Terpecah Pasal",
+            "default": 0
+          },
+          "tervektor": {
+            "type": "integer",
+            "title": "Tervektor",
+            "default": 0
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "CorongDokumenMetrics"
+      },
+      "CorongPdfMetrics": {
+        "properties": {
+          "terproteksi": {
+            "type": "integer",
+            "title": "Terproteksi",
+            "default": 0
+          },
+          "terproteksi_terbaca": {
+            "type": "integer",
+            "title": "Terproteksi Terbaca",
+            "default": 0
+          },
+          "hasil_pindai_ocr": {
+            "type": "integer",
+            "title": "Hasil Pindai Ocr",
+            "default": 0
+          },
+          "ocr_gagal": {
+            "type": "integer",
+            "title": "Ocr Gagal",
+            "default": 0
+          },
+          "belum_diperiksa": {
+            "type": "integer",
+            "title": "Belum Diperiksa",
+            "default": 0
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "CorongPdfMetrics"
+      },
+      "CorongResponse": {
+        "properties": {
+          "dihitung_pada": {
+            "type": "string",
+            "title": "Dihitung Pada"
+          },
+          "sumber": {
+            "items": {
+              "$ref": "#/components/schemas/CorongSumberItem"
+            },
+            "type": "array",
+            "title": "Sumber",
+            "default": []
+          },
+          "unggah_manual": {
+            "$ref": "#/components/schemas/CorongUnggahManualItem"
+          },
+          "total": {
+            "$ref": "#/components/schemas/CorongTotalMetrics"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "dihitung_pada",
+          "unggah_manual",
+          "total"
+        ],
+        "title": "CorongResponse"
+      },
+      "CorongScanMetrics": {
+        "properties": {
+          "ditemukan": {
+            "type": "integer",
+            "title": "Ditemukan",
+            "default": 0
+          },
+          "sudah_ada_di_kb": {
+            "type": "integer",
+            "title": "Sudah Ada Di Kb",
+            "default": 0
+          },
+          "ditarik": {
+            "type": "integer",
+            "title": "Ditarik",
+            "default": 0
+          },
+          "duplikat": {
+            "type": "integer",
+            "title": "Duplikat",
+            "default": 0
+          },
+          "gagal_unduh": {
+            "type": "integer",
+            "title": "Gagal Unduh",
+            "default": 0
+          },
+          "belum_ditarik": {
+            "type": "integer",
+            "title": "Belum Ditarik",
+            "default": 0
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "CorongScanMetrics"
+      },
+      "CorongSumberItem": {
+        "properties": {
+          "source_id": {
+            "type": "integer",
+            "title": "Source Id"
+          },
+          "nama": {
+            "type": "string",
+            "title": "Nama"
+          },
+          "jenis": {
+            "type": "string",
+            "title": "Jenis"
+          },
+          "scan": {
+            "$ref": "#/components/schemas/CorongScanMetrics"
+          },
+          "dokumen": {
+            "$ref": "#/components/schemas/CorongDokumenMetrics"
+          },
+          "pdf": {
+            "$ref": "#/components/schemas/CorongPdfMetrics"
+          },
+          "gagal_per_alasan": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Gagal Per Alasan",
+            "default": {}
+          },
+          "persen_terbaca": {
+            "type": "number",
+            "title": "Persen Terbaca",
+            "default": 0.0
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "source_id",
+          "nama",
+          "jenis",
+          "scan",
+          "dokumen",
+          "pdf"
+        ],
+        "title": "CorongSumberItem"
+      },
+      "CorongTotalMetrics": {
+        "properties": {
+          "scan": {
+            "$ref": "#/components/schemas/CorongScanMetrics"
+          },
+          "dokumen": {
+            "$ref": "#/components/schemas/CorongDokumenMetrics"
+          },
+          "pdf": {
+            "$ref": "#/components/schemas/CorongPdfMetrics"
+          },
+          "gagal_per_alasan": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Gagal Per Alasan",
+            "default": {}
+          },
+          "persen_terbaca": {
+            "type": "number",
+            "title": "Persen Terbaca",
+            "default": 0.0
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "scan",
+          "dokumen",
+          "pdf"
+        ],
+        "title": "CorongTotalMetrics"
+      },
+      "CorongUnggahManualItem": {
+        "properties": {
+          "dokumen": {
+            "$ref": "#/components/schemas/CorongDokumenMetrics"
+          },
+          "pdf": {
+            "$ref": "#/components/schemas/CorongPdfMetrics"
+          },
+          "gagal_per_alasan": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Gagal Per Alasan",
+            "default": {}
+          },
+          "persen_terbaca": {
+            "type": "number",
+            "title": "Persen Terbaca",
+            "default": 0.0
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "dokumen",
+          "pdf"
+        ],
+        "title": "CorongUnggahManualItem"
       },
       "DocumentAnalysisComparisonResponse": {
         "properties": {
@@ -6285,6 +7360,555 @@
           "document_id"
         ],
         "title": "DocumentIdentityItemIn"
+      },
+      "DocumentMetadataPatchResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "regulation_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Number"
+          },
+          "regulation_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Type"
+          },
+          "release_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Date"
+          },
+          "effective_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Date"
+          },
+          "regulation_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Year"
+          },
+          "bidang": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bidang"
+          },
+          "naming_format": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Naming Format"
+          },
+          "naming_separator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Naming Separator"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "original_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Filename"
+          },
+          "file_path_pdf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Path Pdf"
+          },
+          "standardized_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standardized Filename"
+          },
+          "access_classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Classification"
+          },
+          "document_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role"
+          },
+          "status_keberlakuan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Keberlakuan"
+          },
+          "status_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Source"
+          },
+          "is_attachment": {
+            "type": "boolean",
+            "title": "Is Attachment",
+            "default": false
+          },
+          "parent_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Document Id"
+          },
+          "parent_identity_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Identity Key"
+          },
+          "attachment_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachment Label"
+          },
+          "lampiran": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lampiran"
+          },
+          "induk": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Induk"
+          },
+          "processing_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Status"
+          },
+          "extraction_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extraction Method"
+          },
+          "extraction_engine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extraction Engine"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "category_path": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Path"
+          },
+          "is_placed": {
+            "type": "boolean",
+            "title": "Is Placed",
+            "default": false
+          },
+          "kategori_manual": {
+            "type": "boolean",
+            "title": "Kategori Manual",
+            "default": false
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "pdf_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf Url"
+          },
+          "text_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Url"
+          },
+          "full_text_length": {
+            "type": "integer",
+            "title": "Full Text Length",
+            "default": 0
+          },
+          "extraction_confidence": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extraction Confidence"
+          },
+          "low_confidence_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low Confidence Fields"
+          },
+          "metadata_corrected_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata Corrected At"
+          },
+          "extracted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted At"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          },
+          "deactivated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deactivated At"
+          },
+          "deactivated_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deactivated Reason"
+          },
+          "identity_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identity Key"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Count"
+          },
+          "duplicate_of_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Of Id"
+          },
+          "changed_fields": {
+            "items": {
+              "type": "string",
+              "format": "binary"
+            },
+            "type": "array",
+            "title": "Changed Fields",
+            "default": []
+          },
+          "placement": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Placement"
+          },
+          "duplikat": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplikat"
+          },
+          "persetujuan_publik": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persetujuan Publik"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "DocumentMetadataPatchResponse"
       },
       "DocumentVersionResponse": {
         "properties": {
@@ -6364,6 +7988,125 @@
           "catatan"
         ],
         "title": "DocumentVersionResponse"
+      },
+      "DraftKemiripanResponse": {
+        "properties": {
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "ambang": {
+            "type": "number",
+            "title": "Ambang"
+          },
+          "dibandingkan": {
+            "type": "integer",
+            "title": "Dibandingkan"
+          },
+          "draft_mirip": {
+            "items": {
+              "$ref": "#/components/schemas/DraftMiripItem"
+            },
+            "type": "array",
+            "title": "Draft Mirip"
+          },
+          "terdekat": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DraftTerdekatItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "per_pasal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PerPasalDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "catatan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catatan"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "ambang",
+          "dibandingkan",
+          "draft_mirip"
+        ],
+        "title": "DraftKemiripanResponse"
+      },
+      "DraftMiripItem": {
+        "properties": {
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "judul": {
+            "type": "string",
+            "title": "Judul"
+          },
+          "diunggah": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diunggah"
+          },
+          "persen": {
+            "type": "number",
+            "title": "Persen"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "judul",
+          "persen",
+          "status"
+        ],
+        "title": "DraftMiripItem"
+      },
+      "DraftTerdekatItem": {
+        "properties": {
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "persen": {
+            "type": "number",
+            "title": "Persen"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "persen"
+        ],
+        "title": "DraftTerdekatItem"
       },
       "DuplicateCheckResponse": {
         "properties": {
@@ -6463,7 +8206,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "maxLength": 255
+                "maxLength": 5000
               },
               {
                 "type": "null"
@@ -7049,6 +8792,372 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HarmonisasiBadge": {
+        "properties": {
+          "tone": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tone"
+          },
+          "label": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "HarmonisasiBadge"
+      },
+      "HarmonisasiCache": {
+        "properties": {
+          "hit": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hit"
+          },
+          "dibuat": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dibuat"
+          },
+          "basi": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basi"
+          },
+          "mode_tersimpan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode Tersimpan"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "HarmonisasiCache"
+      },
+      "HarmonisasiPembanding": {
+        "properties": {
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "key": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "nomor": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nomor"
+          },
+          "status": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "judul": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judul"
+          },
+          "pdf": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf"
+          },
+          "tautan": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tautan"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "HarmonisasiPembanding"
+      },
+      "HarmonisasiResponse": {
+        "properties": {
+          "draft": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft"
+          },
+          "ringkasan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarmonisasiRingkasan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "temuan": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/HarmonisasiTemuan"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temuan"
+          },
+          "disaring_backend": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disaring Backend"
+          },
+          "disaring_rincian": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disaring Rincian"
+          },
+          "cache": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarmonisasiCache"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "versi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Versi"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "HarmonisasiResponse"
+      },
+      "HarmonisasiRingkasan": {
+        "properties": {
+          "total_temuan": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Temuan"
+          },
+          "per_jenis": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Jenis"
+          },
+          "rencana_perubahan": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rencana Perubahan"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "HarmonisasiRingkasan"
+      },
+      "HarmonisasiTemuan": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "jenis": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jenis"
+          },
+          "judul": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judul"
+          },
+          "deskripsi": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deskripsi"
+          },
+          "pasal_draft": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pasal Draft"
+          },
+          "pasal_pembanding": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pasal Pembanding"
+          },
+          "badge": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarmonisasiBadge"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pembanding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarmonisasiPembanding"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "HarmonisasiTemuan"
       },
       "IngestItemDetailResponse": {
         "properties": {
@@ -8254,6 +10363,31 @@
         ],
         "title": "NodeStatusItemIn"
       },
+      "PerPasalDetail": {
+        "properties": {
+          "dibanding_dengan": {
+            "type": "integer",
+            "title": "Dibanding Dengan"
+          },
+          "ringkas": {
+            "$ref": "#/components/schemas/RingkasPasal"
+          },
+          "pasal": {
+            "items": {
+              "$ref": "#/components/schemas/RincianPasal"
+            },
+            "type": "array",
+            "title": "Pasal"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dibanding_dengan",
+          "ringkas",
+          "pasal"
+        ],
+        "title": "PerPasalDetail"
+      },
       "PeranDokumen": {
         "type": "string",
         "enum": [
@@ -8273,6 +10407,34 @@
         ],
         "title": "PeranPengguna",
         "description": "Peran pengguna sistem HERO sesuai dokumen 08 §PERAN."
+      },
+      "PersetujuanPublikIn": {
+        "properties": {
+          "disetujui_oleh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disetujui Oleh"
+          },
+          "alasan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alasan"
+          }
+        },
+        "type": "object",
+        "title": "PersetujuanPublikIn"
       },
       "PullProgress": {
         "properties": {
@@ -8410,6 +10572,61 @@
           "rel"
         ],
         "title": "RelationItemIn"
+      },
+      "RincianPasal": {
+        "properties": {
+          "pasal": {
+            "type": "string",
+            "title": "Pasal"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "persen": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persen"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pasal",
+          "status"
+        ],
+        "title": "RincianPasal"
+      },
+      "RingkasPasal": {
+        "properties": {
+          "sama": {
+            "type": "integer",
+            "title": "Sama",
+            "default": 0
+          },
+          "berubah": {
+            "type": "integer",
+            "title": "Berubah",
+            "default": 0
+          },
+          "baru": {
+            "type": "integer",
+            "title": "Baru",
+            "default": 0
+          },
+          "dihapus": {
+            "type": "integer",
+            "title": "Dihapus",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "RingkasPasal"
       },
       "ScanCreate": {
         "properties": {
@@ -9532,7 +11749,8 @@
           "berlaku",
           "diubah",
           "dicabut",
-          "tidak_diketahui"
+          "tidak_diketahui",
+          "belum_berlaku"
         ],
         "title": "StatusKeberlakuan",
         "description": "Status keberlakuan suatu dokumen regulasi"
@@ -9724,6 +11942,18 @@
             "examples": [
               7
             ]
+          },
+          "alasan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alasan",
+            "description": "Alasan perubahan status dokumen regulasi"
           }
         },
         "type": "object",
@@ -9946,6 +12176,16 @@
               }
             ],
             "title": "Attachment Label"
+          },
+          "persetujuan_publik": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PersetujuanPublikIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

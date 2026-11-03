@@ -7,6 +7,7 @@ class StatusKeberlakuan(str, enum.Enum):
     diubah = "diubah"
     dicabut = "dicabut"
     tidak_diketahui = "tidak_diketahui"
+    belum_berlaku = "belum_berlaku"
 
 
 class KlasifikasiAkses(str, enum.Enum):

@@ -8,8 +8,10 @@ import logging
 from typing import Optional, List, Tuple
 
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, or_, select
 from fastapi import HTTPException, status
+
+from app.config import settings
 
 from app.models.enums import (
     JenisKegagalan,
@@ -66,6 +68,18 @@ REASON_CODE_MAP = {
         StatusTindakLanjut.belum_ditangani,
     ),
     "ukuran_melebihi_batas": (
+        JenisKegagalan.format_tidak_didukung,
+        False,
+        False,
+        StatusTindakLanjut.belum_ditangani,
+    ),
+    "pdf_rusak": (
+        JenisKegagalan.format_tidak_didukung,
+        False,
+        False,
+        StatusTindakLanjut.belum_ditangani,
+    ),
+    "pdf_terenkripsi": (
         JenisKegagalan.format_tidak_didukung,
         False,
         False,
@@ -145,7 +159,7 @@ class FailureService:
                 is_valid_pdf = False
                 try:
                     if item.content:
-                        validate_pdf(item.filename, item.content)
+                        validate_pdf(item.filename, item.content, settings.max_upload_bytes)
                         is_valid_pdf = True
                 except Exception:
                     is_valid_pdf = False
@@ -264,6 +278,9 @@ class FailureService:
         *,
         job_id: Optional[int] = None,
         failure_type: Optional[JenisKegagalan] = None,
+        reason_codes: Optional[List[str]] = None,
+        source_id: Optional[int] = None,
+        tanpa_sumber: bool = False,
         follow_up_status: Optional[str] = None,
         include_duplicates: bool = False,
         skip: int = 0,
@@ -271,6 +288,8 @@ class FailureService:
     ) -> Tuple[int, List[IngestFailure]]:
         """
         Mengambil daftar kegagalan dengan filter dan paginasi.
+        Mendukung filter reason_codes (list), source_id (via job.source_id atau scan_candidates.failure_id),
+        dan tanpa_sumber (kegagalan unggah manual tanpa sumber scraping).
         """
         query = self.db.query(IngestFailure)
 
@@ -281,6 +300,45 @@ class FailureService:
             query = query.filter(IngestFailure.failure_type == failure_type)
         elif not include_duplicates:
             query = query.filter(IngestFailure.failure_type != JenisKegagalan.duplikat)
+
+        if reason_codes:
+            query = query.filter(IngestFailure.reason_code.in_(reason_codes))
+
+        if source_id is not None:
+            from app.models.scan_candidate import ScanCandidate
+            from app.models.scan_session import ScanSession
+            from app.models.job_ingest import JobIngest
+
+            cand_fail_subq = (
+                select(ScanCandidate.failure_id)
+                .join(ScanSession, ScanCandidate.scan_id == ScanSession.id)
+                .where(ScanSession.source_id == source_id, ScanCandidate.failure_id.isnot(None))
+            )
+            job_fail_subq = (
+                select(JobIngest.id)
+                .where(JobIngest.source_id == source_id)
+            )
+            query = query.filter(
+                or_(
+                    IngestFailure.job_id.in_(job_fail_subq),
+                    IngestFailure.id.in_(cand_fail_subq),
+                )
+            )
+
+        if tanpa_sumber:
+            from app.models.scan_candidate import ScanCandidate
+            from app.models.job_ingest import JobIngest
+
+            cand_fail_subq = select(ScanCandidate.failure_id).where(ScanCandidate.failure_id.isnot(None))
+            job_with_source_subq = select(JobIngest.id).where(JobIngest.source_id.isnot(None))
+
+            query = query.filter(
+                or_(
+                    IngestFailure.job_id.is_(None),
+                    ~IngestFailure.job_id.in_(job_with_source_subq),
+                ),
+                ~IngestFailure.id.in_(cand_fail_subq),
+            )
 
         if follow_up_status is not None:
             if follow_up_status != "all":
@@ -317,17 +375,32 @@ class FailureService:
                 detail="Status hanya boleh diubah menjadi 'belum_ditangani' atau 'diabaikan'. Status 'diproses_ulang' hanya dapat diubah melalui proses retry.",
             )
 
+        before_state = {
+            "status": failure.follow_up_status.value if hasattr(failure.follow_up_status, "value") else str(failure.follow_up_status),
+            "catatan": failure.handling_note,
+        }
+
         failure.follow_up_status = status
         if note is not None:
             failure.handling_note = note
         if actor_user_id is not None:
             failure.handled_by_user_id = actor_user_id
 
+        after_state = {
+            "status": failure.follow_up_status.value if hasattr(failure.follow_up_status, "value") else str(failure.follow_up_status),
+            "catatan": failure.handling_note,
+        }
+
         record_audit(
             self.db,
             action=UPDATE_FAILURE,
             user_id=actor_user_id,
             target_resource=f"ingest_failure:{failure.id}",
+            detail={
+                "failure_id": failure.id,
+                "before": before_state,
+                "after": after_state,
+            },
             ip_address=ip_address,
             commit=False,
         )
@@ -416,12 +489,33 @@ class FailureService:
             if is_metadata_sufficient(naming_inp):
                 doc.processing_status = StatusPemrosesan.terindeks
 
+            if (doc.pdf_terproteksi is None or doc.page_count is None) and doc.file_path_pdf:
+                try:
+                    pdf_bytes = self.storage.read_pdf(doc.file_path_pdf)
+                    info = validate_pdf(doc.original_filename or "dokumen.pdf", pdf_bytes, settings.max_upload_bytes)
+                    if doc.pdf_terproteksi is None:
+                        doc.pdf_terproteksi = info.terproteksi
+                    if doc.page_count is None:
+                        doc.page_count = info.jumlah_halaman
+                except Exception:
+                    pass
+
+            source_id = getattr(failure, "source_id", None) or (failure.job.source_id if getattr(failure, "job", None) else None)
             record_audit(
                 self.db,
                 action=RETRY_FAILURE,
                 user_id=actor_user_id,
                 target_resource=f"ingest_failure:{failure.id}",
-                detail={"outcome": "placed", "document_id": doc.id, "reason": place_res.reason},
+                detail={
+                    "failure_id": failure.id,
+                    "reason_code": failure.reason_code,
+                    "source_id": source_id,
+                    "percobaan_ke": failure.attempt_count,
+                    "hasil": "placed",
+                    "outcome": "placed",
+                    "document_id": doc.id,
+                    "reason": place_res.reason,
+                },
                 ip_address=ip_address,
                 commit=False,
             )
@@ -460,12 +554,32 @@ class FailureService:
             if actor_user_id is not None:
                 failure.handled_by_user_id = actor_user_id
 
+            if (doc.pdf_terproteksi is None or doc.page_count is None) and doc.file_path_pdf:
+                try:
+                    pdf_bytes = self.storage.read_pdf(doc.file_path_pdf)
+                    info = validate_pdf(doc.original_filename or "dokumen.pdf", pdf_bytes, settings.max_upload_bytes)
+                    if doc.pdf_terproteksi is None:
+                        doc.pdf_terproteksi = info.terproteksi
+                    if doc.page_count is None:
+                        doc.page_count = info.jumlah_halaman
+                except Exception:
+                    pass
+
+            source_id = getattr(failure, "source_id", None) or (failure.job.source_id if getattr(failure, "job", None) else None)
             record_audit(
                 self.db,
                 action=RETRY_FAILURE,
                 user_id=actor_user_id,
                 target_resource=f"ingest_failure:{failure.id}",
-                detail={"outcome": "requeued", "document_id": doc.id},
+                detail={
+                    "failure_id": failure.id,
+                    "reason_code": failure.reason_code,
+                    "source_id": source_id,
+                    "percobaan_ke": failure.attempt_count,
+                    "hasil": "requeued",
+                    "outcome": "requeued",
+                    "document_id": doc.id,
+                },
                 ip_address=ip_address,
                 commit=False,
             )
@@ -555,6 +669,16 @@ class FailureService:
             if overrides.category_id is not None:
                 cat_id = overrides.category_id
 
+        # Validasi draft kajian + publik saat retry (Langkah 35)
+        if doc_role_val == "draft_kajian" and acc_class_val == "publik":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "draft_publik_butuh_persetujuan",
+                    "message": "Draft kajian hanya boleh publik dengan persetujuan (disetujui_oleh dan alasan wajib diisi).",
+                },
+            )
+
         options = IngestOptions(
             access_classification=KlasifikasiAkses(acc_class_val),
             document_role=PeranDokumen(doc_role_val),
@@ -572,6 +696,7 @@ class FailureService:
             triggered_by="retry",
             source_ref=f"retry:failure:{failure.id}",
             retry_of_failure_id=failure.id,
+            source_id=parent_job.source_id if parent_job else None,
             status=StatusJobIngest.berjalan,
             success_count=0,
             duplicate_count=0,
@@ -626,11 +751,24 @@ class FailureService:
 
         ingest_svc.finish_job(new_job, [result])
 
+        hasil_str = (
+            result.outcome.value
+            if hasattr(result.outcome, "value")
+            else str(result.outcome)
+        )
+        source_id = getattr(failure, "source_id", None) or (failure.job.source_id if getattr(failure, "job", None) else None)
         record_audit(
             self.db,
             action=RETRY_FAILURE,
             user_id=actor_user_id,
             target_resource=f"ingest_failure:{failure.id}",
+            detail={
+                "failure_id": failure.id,
+                "reason_code": failure.reason_code,
+                "source_id": source_id,
+                "percobaan_ke": failure.attempt_count,
+                "hasil": hasil_str,
+            },
             ip_address=ip_address,
             commit=False,
         )

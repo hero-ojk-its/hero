@@ -21,6 +21,8 @@ UPDATE_FAILURE = "UPDATE_FAILURE"
 PLACE_DOCUMENT = "PLACE_DOCUMENT"
 PLACE_DOCUMENT_FAILED = "PLACE_DOCUMENT_FAILED"
 CREATE_CATEGORY = "CREATE_CATEGORY"
+UPDATE_CATEGORY = "UPDATE_CATEGORY"
+DELETE_CATEGORY = "DELETE_CATEGORY"
 OPEN_PDF = "OPEN_PDF"
 DOWNLOAD_PDF = "DOWNLOAD_PDF"
 UPDATE_METADATA = "UPDATE_METADATA"
@@ -42,6 +44,30 @@ STATUS_FROM_RELATION = "STATUS_FROM_RELATION"
 CREATE_USER = "CREATE_USER"
 UPDATE_USER = "UPDATE_USER"
 ANALYSIS_CACHE_INVALIDATED = "ANALYSIS_CACHE_INVALIDATED"
+STATUS_RECOMPUTED = "STATUS_RECOMPUTED"
+LOGIN_FAILED = "LOGIN_FAILED"
+LOGIN_LOCKED = "LOGIN_LOCKED"
+PUBLIKASI_DRAFT = "PUBLIKASI_DRAFT"
+
+
+def ringkas_dokumen(doc: Optional[object]) -> dict:
+    """Helper untuk meringkas dokumen ke dalam format audit detail tanpa teks dokumen."""
+    if not doc:
+        return {}
+    klasifikasi = getattr(doc, "access_classification", None)
+    if hasattr(klasifikasi, "value"):
+        klasifikasi = klasifikasi.value
+    elif klasifikasi is not None:
+        klasifikasi = str(klasifikasi)
+
+    return {
+        "document_id": getattr(doc, "id", None),
+        "nomor": getattr(doc, "regulation_number", None),
+        "judul": (getattr(doc, "title", None) or "")[:200] if getattr(doc, "title", None) else None,
+        "jenis": getattr(doc, "regulation_type", None),
+        "tahun": getattr(doc, "regulation_year", None),
+        "klasifikasi": klasifikasi,
+    }
 
 
 def record_audit(

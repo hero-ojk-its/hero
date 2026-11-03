@@ -29,6 +29,13 @@ class Settings(BaseSettings):
     uvicorn_workers: int = 1
     forwarded_allow_ips: str = "127.0.0.1"
 
+    # Keamanan Login & Lockout (Langkah 34)
+    login_maks_gagal_per_akun: int = 5
+    login_maks_gagal_per_ip: int = 30
+    login_jendela_menit: int = 15
+    login_kunci_menit: int = 15
+    admin_butuh_kunci_saat_auth_mati: bool = True
+
     # Storage & Upload
     storage_path: str = "./storage"
     max_upload_mb: int = 100
@@ -42,10 +49,12 @@ class Settings(BaseSettings):
     category_unknown_year: str = "Tanpa Tahun"
     draft_category_root: str = "Draft Kajian"
 
-    # Ekstraksi Data/ML & Metadata (Langkah 5)
+    # Ekstraksi Data/ML & Metadata (Langkah 5 & 35)
     metadata_confidence_threshold: float = 0.7
     extraction_claim_timeout_minutes: int = 30
     extraction_max_attempts: int = 3
+    judul_maks_karakter: int = 300
+    judul_maks_kata: int = 45
 
     # Sumber Folder Lokal (Langkah 6)
     local_source_roots: str = "./sources"
@@ -70,6 +79,9 @@ class Settings(BaseSettings):
     ml_timeout_seconds: float = 120.0
     ml_default_search_method: str = "lsa"
     ml_cache_enabled: bool = True
+
+    # Kemiripan Draft Berulang (Langkah 30)
+    draft_kemiripan_ambang: float = 80.0
 
     @field_validator("category_path_template")
     @classmethod

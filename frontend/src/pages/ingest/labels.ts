@@ -13,12 +13,12 @@ export const MATCH_STATUS_LABELS: Record<string, string> = {
   mungkin_ada: 'Mungkin Ada',
 };
 
-export const STATUS_KEBERLAKUAN_LABELS: Record<string, string> = {
-  berlaku: 'Berlaku',
-  diubah: 'Diubah',
-  dicabut: 'Dicabut',
-  tidak_diketahui: 'Tidak diketahui',
-};
+// Status keberlakuan: sumber kebenaran di lib/labelStatus.ts (di-re-export agar import lama tetap jalan)
+export {
+  STATUS_KEBERLAKUAN_LABELS,
+  labelStatusKeberlakuan as getStatusKeberlakuanLabel,
+  kelasBadgeStatusKeberlakuan as getStatusKeberlakuanBadgeClass,
+} from '../../lib/labelStatus';
 
 export const DOC_KIND_LABELS: Record<string, string> = {
   utama: 'Peraturan Utama',
@@ -44,15 +44,13 @@ export const STATUS_JOB_INGEST_LABELS: Record<string, string> = {
   gagal: 'Gagal',
 };
 
-export const JENIS_KEGAGALAN_LABELS: Record<string, string> = {
-  format_tidak_didukung: 'Format Tidak Didukung',
-  duplikat: 'Duplikat',
-  ekstraksi_gagal: 'Ekstraksi Gagal',
-  ocr_gagal: 'OCR Gagal',
-  metadata_tidak_lengkap: 'Metadata Tidak Lengkap',
-  sumber_tidak_dapat_diakses: 'Sumber Tidak Dapat Diakses',
-  kesalahan_internal: 'Kesalahan Internal',
-};
+// Jenis & alasan kegagalan: sumber kebenaran di lib/labelStatus.ts
+export {
+  JENIS_KEGAGALAN_LABELS,
+  labelJenisKegagalan as getJenisKegagalanLabel,
+  labelAlasanGagal,
+  alasanTambahanGagal,
+} from '../../lib/labelStatus';
 
 export const JENIS_SUMBER_LABELS: Record<string, string> = {
   situs_web: 'Situs Web',
@@ -91,14 +89,6 @@ export function getMatchStatusLabel(status: string | null | undefined): string {
 }
 
 /**
- * Format label status_keberlakuan dengan fallback aman.
- */
-export function getStatusKeberlakuanLabel(status: string | null | undefined): string {
-  if (!status) return 'Tidak diketahui';
-  return STATUS_KEBERLAKUAN_LABELS[status] || status;
-}
-
-/**
  * Format label doc_kind dengan fallback aman.
  */
 export function getDocKindLabel(kind: string | null | undefined): string {
@@ -112,22 +102,6 @@ export function getDocKindLabel(kind: string | null | undefined): string {
 export function getStatusPindaiLabel(status: string | null | undefined): string {
   if (!status) return '-';
   return STATUS_PINDAI_LABELS[status] || status;
-}
-
-/**
- * Helper kelas warna badge status keberlakuan.
- */
-export function getStatusKeberlakuanBadgeClass(status: string | null | undefined): string {
-  switch (status) {
-    case 'berlaku':
-      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-    case 'diubah':
-      return 'bg-amber-50 text-amber-700 border-amber-200';
-    case 'dicabut':
-      return 'bg-rose-50 text-rose-700 border-rose-200';
-    default:
-      return 'bg-gray-100 text-gray-600 border-gray-200';
-  }
 }
 
 /**
@@ -157,11 +131,6 @@ export const JENIS_JOB_INGEST_LABELS: Record<JenisJobIngest, string> = {
   unggah_manual: 'Unggah Manual',
   sinkron_folder: 'Sinkronisasi Folder',
 };
-
-export function getJenisKegagalanLabel(type: string | null | undefined): string {
-  if (!type) return '-';
-  return JENIS_KEGAGALAN_LABELS[type] || type;
-}
 
 export function getJenisJobIngestLabel(type: string | null | undefined): string {
   if (!type) return '-';

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutGrid, 
   BookOpen, 
@@ -12,7 +12,10 @@ import {
   User,
   PanelLeftClose,
   PanelLeftOpen,
+  History,
+  Users
 } from 'lucide-react';
+import { logout, getMe } from '../lib/authApi';
 
 const STORAGE_KEY = 'hero_sidebar_collapsed';
 
@@ -29,7 +32,33 @@ function readCollapsed(): boolean {
 
 export default function DashboardLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
+  const [currentUser, setCurrentUser] = useState<{ nama_lengkap?: string; role?: string } | null>(null);
+
+  // Ambil profil pengguna jika token tersedia
+  useEffect(() => {
+    let isMounted = true;
+    const controller = new AbortController();
+
+    getMe(controller.signal)
+      .then((profile) => {
+        if (isMounted && profile.auth_enabled && profile.nama_lengkap) {
+          setCurrentUser({
+            nama_lengkap: profile.nama_lengkap,
+            role: profile.role,
+          });
+        }
+      })
+      .catch(() => {
+        // Abaikan jika auth nonaktif atau token tidak ada
+      });
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, []);
 
   // Auto-collapse on narrow screen resize
   useEffect(() => {
@@ -51,13 +80,23 @@ export default function DashboardLayout() {
     }
   }, [collapsed]);
 
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
   const navItems = [
     { name: 'Dashboard', path: '/', icon: <LayoutGrid size={18} aria-hidden="true" /> },
     { name: 'Knowledge Base', path: '/knowledge', icon: <BookOpen size={18} aria-hidden="true" /> },
     { name: 'Ingest Dokumen', path: '/ingest', icon: <FilePlus size={18} aria-hidden="true" /> },
     { name: 'Analisa Regulasi', path: '/analisa', icon: <Search size={18} aria-hidden="true" /> },
     { name: 'Harmonisasi', path: '/harmonisasi', icon: <Scale size={18} aria-hidden="true" /> },
+    { name: 'Audit Log', path: '/audit-logs', icon: <History size={18} aria-hidden="true" /> },
+    { name: 'Kelola Pengguna', path: '/users', icon: <Users size={18} aria-hidden="true" /> },
   ];
+
+  const displayName = currentUser?.nama_lengkap || 'Raditya Pratama';
+  const displayRole = currentUser?.role ? `Peran: ${currentUser.role}` : 'Analis Regulasi OJK';
 
   return (
     <div className="fixed inset-0 flex flex-col bg-[#F9FAFB] font-sans overflow-hidden">
@@ -72,22 +111,26 @@ export default function DashboardLayout() {
         <div className="flex-1"></div>
 
         <div className="flex items-center space-x-6 shrink-0">
-          <button className="relative text-gray-500 hover:text-gray-700 transition-colors">
+          <button className="relative text-gray-500 hover:text-gray-700 transition-colors" aria-label="Notifikasi">
             <Bell size={20} />
             <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-700 text-[9px] font-bold text-white ring-2 ring-white">
               3
             </span>
           </button>
           
-          <div className="flex items-center space-x-3">
+          <Link
+            to="/login"
+            title="Profil Pengguna / Masuk Akun"
+            className="flex items-center space-x-3 text-left hover:opacity-85 transition-opacity"
+          >
             <div className="flex flex-col text-right">
-              <span className="text-sm font-bold text-gray-900 leading-tight">Raditya Pratama</span>
-              <span className="text-[11px] text-gray-600 font-medium leading-tight">Analis Regulasi OJK</span>
+              <span className="text-sm font-bold text-gray-900 leading-tight">{displayName}</span>
+              <span className="text-[11px] text-gray-600 font-medium leading-tight">{displayRole}</span>
             </div>
             <div className="h-9 w-9 rounded-full bg-red-800 flex items-center justify-center text-white shrink-0">
               <User size={18} />
             </div>
-          </div>
+          </Link>
         </div>
       </header>
 
@@ -176,6 +219,7 @@ export default function DashboardLayout() {
             </Link>
             <button
               type="button"
+              onClick={handleLogout}
               aria-label="Keluar"
               title={collapsed ? 'Keluar' : undefined}
               className={`w-full flex items-center rounded-md transition-colors text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium overflow-hidden ${

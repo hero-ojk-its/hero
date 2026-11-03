@@ -54,6 +54,7 @@ from app.services.failure_service import (
 )
 from app.services.naming_service import validate_naming_format, validate_naming_separator
 from app.services.storage_service import StorageService, get_storage_service
+from app.services.klasifikasi_service import periksa_publikasi_draft
 
 router = APIRouter()
 
@@ -155,6 +156,14 @@ def upload_pdf(
         None,
         description="URL asal dokumen (opsional)",
     ),
+    persetujuan_publik_oleh: Optional[str] = Form(
+        None,
+        description="Pihak yang menyetujui publikasi draft kajian (wajib jika peran draft_kajian dan akses publik)",
+    ),
+    persetujuan_publik_alasan: Optional[str] = Form(
+        None,
+        description="Alasan persetujuan publikasi draft kajian (wajib minimal 10 karakter jika draft_kajian publik)",
+    ),
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage_service),
     current_user=Depends(perlu_izin(Izin.DOKUMEN_UNGGAH)),
@@ -168,6 +177,21 @@ def upload_pdf(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Tidak ada file yang diunggah.",
         )
+
+    # 0. Validasi persetujuan publikasi draft kajian (Langkah 35, FR-SCR-04a)
+    # Harus diperiksa sebelum berkas diproses (tidak ada file tersimpan, tidak ada job jika ditolak)
+    persetujuan_inp = None
+    if persetujuan_publik_oleh or persetujuan_publik_alasan:
+        persetujuan_inp = {
+            "disetujui_oleh": persetujuan_publik_oleh,
+            "alasan": persetujuan_publik_alasan,
+        }
+    persetujuan_data = periksa_publikasi_draft(
+        peran=document_role,
+        klasifikasi=access_classification,
+        persetujuan=persetujuan_inp,
+        user=current_user,
+    )
 
     # 1. Validasi metadata per-berkas untuk unggahan jamak
     has_single_doc_meta = any([
@@ -266,6 +290,7 @@ def upload_pdf(
         metadata=meta_input,
         naming_format=parsed_naming_format,
         naming_separator=parsed_naming_separator,
+        persetujuan_publik=persetujuan_data,
     )
 
     actor_user_id = current_user.id if current_user and getattr(current_user, "id", None) else None
@@ -509,6 +534,9 @@ def get_job_detail(
 def list_failures(
     job_id: Optional[int] = None,
     failure_type: Optional[JenisKegagalan] = None,
+    reason_code: Optional[List[str]] = Query(None, description="Filter berdasarkan satu atau lebih reason_code"),
+    source_id: Optional[int] = Query(None, description="Filter berdasarkan sumber scraping"),
+    tanpa_sumber: bool = Query(False, description="Filter hanya kegagalan tanpa sumber (unggah manual)"),
     follow_up_status: Optional[str] = Query("belum_ditangani", description="belum_ditangani | diproses_ulang | diabaikan | all"),
     include_duplicates: bool = Query(False, description="Tampilkan juga duplikat (default: false)"),
     skip: int = Query(0, ge=0),
@@ -520,10 +548,19 @@ def list_failures(
     """
     [US-23 / S-04] Mengambil daftar log kegagalan dan antrian retry.
     """
+    if tanpa_sumber and source_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Parameter tanpa_sumber tidak dapat digabungkan dengan source_id.",
+        )
+
     svc = FailureService(db=db, storage=storage)
     total, items = svc.list_failures(
         job_id=job_id,
         failure_type=failure_type,
+        reason_codes=reason_code,
+        source_id=source_id,
+        tanpa_sumber=tanpa_sumber,
         follow_up_status=follow_up_status,
         include_duplicates=include_duplicates,
         skip=skip,

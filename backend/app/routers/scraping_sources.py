@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.category import Category
+from app.models.document import Document
+from app.models.job_ingest import JobIngest
 from app.models.enums import JenisSumber, KlasifikasiAkses
 from app.models.scraping_source import ScrapingSource
 from app.models.source_file import SourceFile
@@ -186,16 +188,30 @@ def create_scraping_source(
             detail=f"Alamat '{valid_url}' sudah terdaftar pada situs sumber ID {existing.id} ('{existing.name}').",
         )
 
-    # 4. Buat record sumber baru
+    # 4. Validasi default draft kajian + publik (Langkah 35, FR-SCR-04a)
+    target_access = payload.default_access_classification or (
+        KlasifikasiAkses.publik if payload.source_type == JenisSumber.situs_web else KlasifikasiAkses.non_publik
+    )
+    target_role = payload.default_document_role
+    target_role_str = target_role.value if hasattr(target_role, "value") else str(target_role or "")
+    target_access_str = target_access.value if hasattr(target_access, "value") else str(target_access or "")
+    if target_role_str == "draft_kajian" and target_access_str == "publik":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "sumber_draft_publik_tidak_diizinkan",
+                "message": "Default sumber tidak boleh draft_kajian dengan akses publik. Persetujuan publikasi draft hanya dapat diberikan per dokumen.",
+            },
+        )
+
+    # 5. Buat record sumber baru
     source = ScrapingSource(
         name=payload.name.strip(),
         url=valid_url,
         source_type=payload.source_type,
         crawl_depth=payload.crawl_depth,
         recursive=payload.recursive,
-        default_access_classification=payload.default_access_classification or (
-            KlasifikasiAkses.publik if payload.source_type == JenisSumber.situs_web else KlasifikasiAkses.non_publik
-        ),
+        default_access_classification=target_access,
         default_document_role=payload.default_document_role,
         default_naming_format=validate_naming_format(payload.default_naming_format) if payload.default_naming_format is not None else None,
         default_naming_separator=validate_naming_separator(payload.default_naming_separator) if payload.default_naming_separator is not None else None,
@@ -446,6 +462,20 @@ def _process_update(
     if payload.recursive is not None:
         source.recursive = payload.recursive
 
+    # Validasi default draft kajian + publik (Langkah 35, FR-SCR-04a)
+    target_access = payload.default_access_classification if payload.default_access_classification is not None else source.default_access_classification
+    target_role = payload.default_document_role if payload.default_document_role is not None else source.default_document_role
+    target_role_str = target_role.value if hasattr(target_role, "value") else str(target_role or "")
+    target_access_str = target_access.value if hasattr(target_access, "value") else str(target_access or "")
+    if target_role_str == "draft_kajian" and target_access_str == "publik":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "sumber_draft_publik_tidak_diizinkan",
+                "message": "Default sumber tidak boleh draft_kajian dengan akses publik. Persetujuan publikasi draft hanya dapat diberikan per dokumen.",
+            },
+        )
+
     if payload.default_access_classification is not None:
         source.default_access_classification = payload.default_access_classification
 
@@ -541,6 +571,33 @@ def delete_scraping_source(
         )
 
     source_name = source.name
+
+    # Hitung jumlah dokumen terkait sebelum hapus
+    doc_count = (
+        db.query(Document.id)
+        .join(JobIngest, Document.job_id == JobIngest.id)
+        .filter(JobIngest.source_id == source.id)
+        .count()
+    )
+    klasifikasi = (
+        source.default_access_classification.value
+        if hasattr(source.default_access_classification, "value")
+        else str(source.default_access_classification)
+    )
+    source_detail = {
+        "source_id": source.id,
+        "nama": source.name,
+        "jenis": source.source_type.value if hasattr(source.source_type, "value") else str(source.source_type),
+        "url": source.url,
+        "klasifikasi": klasifikasi,
+        "jumlah_dokumen_terkait": doc_count,
+        "crawl_depth": source.crawl_depth,
+        "crawler_adapter": source.crawler_adapter,
+        "naming_format": source.default_naming_format,
+        "naming_separator": source.default_naming_separator,
+        "is_active": source.is_active,
+    }
+
     db.delete(source)
 
     actor_user_id = current_user.id if current_user and getattr(current_user, "id", None) else None
@@ -550,6 +607,7 @@ def delete_scraping_source(
         action=DELETE_SOURCE,
         user_id=actor_user_id,
         target_resource=f"scraping_source:{source_id}",
+        detail=source_detail,
         ip_address=client_ip,
         commit=False,
     )

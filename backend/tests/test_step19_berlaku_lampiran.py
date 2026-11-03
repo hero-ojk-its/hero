@@ -73,6 +73,7 @@ def _seed_test_doc(
         parent_identity_key=parent_identity_key,
         effective_date=effective_date,
         original_filename=original_filename or f"{title.replace(' ', '_').lower()}.pdf",
+        full_text=f"Teks lengkap peraturan {title}.",
     )
     db.add(doc)
     db.commit()
@@ -127,7 +128,7 @@ def test_t02_future_effective_date_keeps_status(
 ):
     """
     T02: tanggal_berlaku = besok.
-    Ekspektasi: status tetap tidak_diketahui.
+    Ekspektasi (Langkah 26): status menjadi belum_berlaku, status_source=tanggal_berlaku.
     """
     doc = _seed_test_doc(
         db_session,
@@ -146,8 +147,8 @@ def test_t02_future_effective_date_keeps_status(
     assert resp.status_code == 200, resp.text
     db_session.refresh(doc)
     assert doc.effective_date == tomorrow
-    assert doc.status_keberlakuan == StatusKeberlakuan.tidak_diketahui
-    assert doc.status_source is None
+    assert doc.status_keberlakuan == StatusKeberlakuan.belum_berlaku
+    assert doc.status_source == "tanggal_berlaku"
 
 
 def test_t03_manual_status_preserved_with_past_effective_date(
