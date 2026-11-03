@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { 
-  LayoutGrid, 
-  BookOpen, 
-  FilePlus, 
-  Search, 
-  Scale, 
+import {
+  LayoutGrid,
+  BookOpen,
+  FilePlus,
+  Search,
+  Scale,
   Settings,
-  Bell,
   LogOut,
-  User,
+  UserRound,
+  ChevronDown,
   PanelLeftClose,
   PanelLeftOpen,
   History,
@@ -35,6 +35,19 @@ export default function DashboardLayout() {
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
   const [currentUser, setCurrentUser] = useState<{ nama_lengkap?: string; role?: string } | null>(null);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState<boolean>(false);
+
+  // Tutup dropdown profil saat klik di luar
+  useEffect(() => {
+    if (!isProfileMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!(e.target as Element).closest('.profile-menu-container')) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [isProfileMenuOpen]);
 
   // Ambil profil pengguna jika token tersedia
   useEffect(() => {
@@ -43,9 +56,9 @@ export default function DashboardLayout() {
 
     getMe(controller.signal)
       .then((profile) => {
-        if (isMounted && profile.auth_enabled && profile.nama_lengkap) {
+        if (isMounted && profile.auth_enabled && (profile.nama_lengkap || profile.username)) {
           setCurrentUser({
-            nama_lengkap: profile.nama_lengkap,
+            nama_lengkap: profile.nama_lengkap || profile.username,
             role: profile.role,
           });
         }
@@ -95,8 +108,8 @@ export default function DashboardLayout() {
     { name: 'Kelola Pengguna', path: '/users', icon: <Users size={18} aria-hidden="true" /> },
   ];
 
-  const displayName = currentUser?.nama_lengkap || 'Raditya Pratama';
-  const displayRole = currentUser?.role ? `Peran: ${currentUser.role}` : 'Analis Regulasi OJK';
+  const displayName = currentUser?.nama_lengkap || 'Pengguna';
+  const displayRole = currentUser?.role ? `Peran: ${currentUser.role}` : 'Pengguna HERO';
 
   return (
     <div className="fixed inset-0 flex flex-col bg-[#F9FAFB] font-sans overflow-hidden">
@@ -107,30 +120,73 @@ export default function DashboardLayout() {
           <span className="mx-3 text-gray-300 font-light">|</span>
           <span className="text-[11px] font-semibold text-gray-500 tracking-wider">REGULASI OTOMATIS OJK</span>
         </div>
-        
+
         <div className="flex-1"></div>
 
-        <div className="flex items-center space-x-6 shrink-0">
-          <button className="relative text-gray-500 hover:text-gray-700 transition-colors" aria-label="Notifikasi">
-            <Bell size={20} />
-            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-700 text-[9px] font-bold text-white ring-2 ring-white">
-              3
-            </span>
-          </button>
-          
-          <Link
-            to="/login"
-            title="Profil Pengguna / Masuk Akun"
-            className="flex items-center space-x-3 text-left hover:opacity-85 transition-opacity"
-          >
-            <div className="flex flex-col text-right">
-              <span className="text-sm font-bold text-gray-900 leading-tight">{displayName}</span>
-              <span className="text-[11px] text-gray-600 font-medium leading-tight">{displayRole}</span>
-            </div>
-            <div className="h-9 w-9 rounded-full bg-red-800 flex items-center justify-center text-white shrink-0">
-              <User size={18} />
-            </div>
-          </Link>
+        <div className="flex items-center shrink-0">
+          {/* Menu Profil Pengguna Interaktif */}
+          <div className="relative profile-menu-container">
+            <button
+              type="button"
+              onClick={() => setIsProfileMenuOpen(prev => !prev)}
+              aria-expanded={isProfileMenuOpen}
+              aria-haspopup="true"
+              className="flex items-center space-x-3 text-left p-1.5 rounded-lg hover:bg-gray-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 cursor-pointer"
+              title="Menu Profil Akun"
+            >
+              <div className="flex flex-col text-right">
+                <span className="text-sm font-bold text-gray-900 leading-tight">{displayName}</span>
+                <span className="text-[11px] text-gray-500 font-medium leading-tight">{displayRole}</span>
+              </div>
+              <div className="h-9 w-9 rounded-full bg-red-700/10 text-red-700 border border-red-200 flex items-center justify-center shrink-0">
+                <UserRound size={18} />
+              </div>
+              <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isProfileMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {/* Dropdown Menu Profil */}
+            {isProfileMenuOpen && (
+              <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50 animate-in fade-in duration-150">
+                <div className="px-4 py-2 border-b border-gray-100">
+                  <p className="text-xs font-semibold text-gray-900 truncate">{displayName}</p>
+                  <p className="text-[11px] text-gray-500 truncate">{displayRole}</p>
+                </div>
+
+                <div className="py-1">
+                  <Link
+                    to="/settings"
+                    onClick={() => setIsProfileMenuOpen(false)}
+                    className="flex items-center px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+                  >
+                    <Settings size={15} className="mr-2.5 text-gray-400" />
+                    Pengaturan
+                  </Link>
+                  <Link
+                    to="/login"
+                    onClick={() => setIsProfileMenuOpen(false)}
+                    className="flex items-center px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+                  >
+                    <UserRound size={15} className="mr-2.5 text-gray-400" />
+                    Ganti Akun / Masuk
+                  </Link>
+                </div>
+
+                <div className="border-t border-gray-100 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsProfileMenuOpen(false);
+                      handleLogout();
+                    }}
+                    className="w-full flex items-center px-4 py-2 text-xs text-red-700 hover:bg-red-50 transition-colors cursor-pointer"
+                  >
+                    <LogOut size={15} className="mr-2.5 text-red-600" />
+                    Keluar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -176,8 +232,8 @@ export default function DashboardLayout() {
                     className={`relative flex items-center rounded-md transition-all overflow-hidden ${
                       collapsed ? 'justify-center px-0 py-2.5' : 'space-x-3 px-3 py-2.5'
                     } ${
-                      isActive 
-                        ? 'bg-red-50 text-red-700 font-semibold' 
+                      isActive
+                        ? 'bg-red-50 text-red-700 font-semibold'
                         : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium'
                     }`}
                   >
@@ -196,7 +252,7 @@ export default function DashboardLayout() {
               }
             </nav>
           </div>
-          
+
           {/* Bottom links */}
           <div className="p-2 space-y-1 shrink-0">
             <Link
@@ -207,7 +263,7 @@ export default function DashboardLayout() {
                 collapsed ? 'justify-center px-0 py-2.5' : 'space-x-3 px-3 py-2.5'
               } ${
                 location.pathname.startsWith('/settings')
-                  ? 'bg-red-50 text-red-700 font-semibold' 
+                  ? 'bg-red-50 text-red-700 font-semibold'
                   : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium'
               }`}
             >

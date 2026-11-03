@@ -1,5 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronRight, Download, Filter, Info, Loader2, RefreshCw } from 'lucide-react';
+import {
+  ChevronRight,
+  Download,
+  Filter,
+  Info,
+  Loader2,
+  RefreshCw,
+  FileText,
+  CheckCircle2,
+  AlertTriangle,
+  Layers,
+  ArrowDownToLine,
+  Database,
+  Binary
+} from 'lucide-react';
 import {
   cekDukunganTanpaSumber,
   formatDihitungPada,
@@ -63,48 +77,6 @@ function kosong(b: BlokTerpilih): boolean {
   return (b.scan?.ditemukan ?? 0) === 0 && b.blok.dokumen.di_kb === 0 && g === 0 && b.blok.pdf.terproteksi === 0;
 }
 
-interface LangkahProps {
-  label: string;
-  nilai: number;
-  /** Persen terhadap tahap sebelumnya; undefined = tahap pertama */
-  persen?: number | null;
-  rincian?: string;
-}
-
-function Langkah({ label, nilai, persen, rincian }: LangkahProps) {
-  const lebar = typeof persen === 'number' ? Math.min(100, Math.max(0, persen)) : 100;
-  return (
-    <li className="space-y-1" data-langkah={label}>
-      <div className="flex items-baseline justify-between gap-2 text-xs">
-        <span className="font-semibold text-gray-700">{label}</span>
-        <span className="flex items-baseline gap-2">
-          <span className="text-sm font-bold text-gray-900" data-nilai>{angka(nilai)}</span>
-          {persen !== undefined && (
-            <span className="text-[11px] font-mono text-gray-500 w-14 text-right" data-persen>
-              {persen === null ? '–' : `${FORMAT_PERSEN.format(persen)}%`}
-            </span>
-          )}
-        </span>
-      </div>
-      <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-        <div className="h-full rounded-full bg-red-700/80" style={{ width: `${lebar}%` }} data-batang={lebar} />
-      </div>
-      {rincian && <p className="text-[10px] text-gray-500">{rincian}</p>}
-    </li>
-  );
-}
-
-function Rincian({ isi }: { isi: Array<[string, number]> }) {
-  return (
-    <div className="flex flex-wrap gap-1.5 pt-1">
-      {isi.map(([label, nilai]) => (
-        <span key={label} className="px-2 py-0.5 rounded-md bg-gray-50 border border-gray-200 text-[11px] text-gray-600">
-          {label}: <strong className="text-gray-800">{angka(nilai)}</strong>
-        </span>
-      ))}
-    </div>
-  );
-}
 
 export default function CorongIngestCard() {
   const [keadaan, setKeadaan] = useState<Keadaan>({ status: 'loading' });
@@ -331,117 +303,317 @@ function ResumeCorong({ terpilih, jumlahSumber, dukungTanpaSumber, onPilihAlasan
   const alasan = Object.entries(blok.gagal_per_alasan).sort((a, b) => b[1] - a[1]);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Kiri: rangkaian */}
-      <div className="lg:col-span-2 space-y-5">
-        {scan && (
-          <div data-rangkaian="scan">
-            <h4 className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-2">Scan</h4>
-            <ol className="space-y-2.5">
-              <Langkah label="Ditemukan" nilai={scan.ditemukan} />
-              <Langkah label="Ditarik" nilai={scan.ditarik} persen={pDitarik} />
-            </ol>
-            <Rincian isi={[
-              ['Sudah ada di KB', scan.sudah_ada_di_kb],
-              ['Duplikat', scan.duplikat],
-              ['Gagal unduh', scan.gagal_unduh],
-              ['Belum ditarik', scan.belum_ditarik],
-            ]} />
-          </div>
-        )}
+    <div className="space-y-6">
+      {/* TIGA KELOMPOK MONITORING UTAMA */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch">
 
-        <div data-rangkaian="dokumen">
-          <h4 className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-2">
-            Dokumen <span className="normal-case font-medium">· persen terbaca {FORMAT_PERSEN.format(blok.persen_terbaca)}%</span>
-          </h4>
-          <ol className="space-y-2.5">
-            <Langkah label="Di KB" nilai={d.di_kb} />
-            <Langkah
-              label="Terbaca"
-              nilai={d.terbaca}
-              persen={pTerbaca}
-              rincian={`Teks langsung ${angka(d.terbaca_teks_langsung)} · OCR ${angka(d.terbaca_ocr)}`}
-            />
-            <Langkah label="Terpecah pasal" nilai={d.terpecah_pasal} persen={pPasal} />
-            <Langkah label="Tervektor" nilai={d.tervektor} persen={pVektor} />
-          </ol>
-          <Rincian isi={[
-            ['Menunggu ekstraksi', d.menunggu_ekstraksi],
-            ['Gagal baca', d.gagal_baca],
-            ['Perlu koreksi', d.perlu_koreksi],
-          ]} />
+        {/* =================================================================== */}
+        {/* KELOMPOK 1: SUMBER & AKUISISI DOKUMEN */}
+        {/* =================================================================== */}
+        <div className="bg-gray-50/60 rounded-xl border border-gray-200/80 p-4 flex flex-col justify-between space-y-4">
+          <div>
+            <div className="flex items-center justify-between pb-2 border-b border-gray-200/70">
+              <span className="text-[11px] font-bold text-gray-700 tracking-wider uppercase flex items-center gap-1.5">
+                <Layers size={13} className="text-gray-500" />
+                1. Sumber & Akuisisi
+              </span>
+              {scan && typeof pDitarik === 'number' && (
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                  {FORMAT_PERSEN.format(pDitarik)}% Ditarik
+                </span>
+              )}
+            </div>
+
+            {scan ? (
+              <div className="mt-3.5 space-y-3.5">
+                {/* Metrik Utama yang Menonjol: Ditemukan & Ditarik */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-white p-3 rounded-lg border border-gray-200/90 shadow-2xs">
+                    <span className="text-[11px] font-medium text-gray-500 block">Ditemukan</span>
+                    <span className="text-2xl font-bold text-gray-900 tracking-tight mt-0.5 block" data-nilai>
+                      {angka(scan.ditemukan)}
+                    </span>
+                    <span className="text-[10px] text-gray-400">Total terdeteksi</span>
+                  </div>
+                  <div className="bg-white p-3 rounded-lg border border-gray-200/90 shadow-2xs">
+                    <span className="text-[11px] font-medium text-blue-700 block">Ditarik</span>
+                    <span className="text-2xl font-bold text-blue-700 tracking-tight mt-0.5 block" data-nilai>
+                      {angka(scan.ditarik)}
+                    </span>
+                    <span className="text-[10px] text-gray-400">Berhasil diunduh</span>
+                  </div>
+                </div>
+
+                {/* Status Tambahan Akuisisi */}
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-md bg-white border border-gray-200/70">
+                    <span className="text-gray-600 font-medium">Sudah ada di KB</span>
+                    <span className="font-semibold text-gray-800">{angka(scan.sudah_ada_di_kb)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-md bg-white border border-gray-200/70">
+                    <span className="text-gray-600 font-medium">Duplikat</span>
+                    <span className="font-semibold text-gray-800">{angka(scan.duplikat)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-md bg-white border border-gray-200/70">
+                    <span className="text-gray-600 font-medium">Belum ditarik</span>
+                    <span className={`font-semibold ${scan.belum_ditarik > 0 ? 'text-amber-700' : 'text-gray-700'}`}>
+                      {angka(scan.belum_ditarik)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-md bg-white border border-gray-200/70">
+                    <span className="text-gray-600 font-medium">Gagal unduh</span>
+                    <span className={`font-semibold ${scan.gagal_unduh > 0 ? 'text-rose-700' : 'text-gray-700'}`}>
+                      {angka(scan.gagal_unduh)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 p-4 rounded-lg bg-white border border-gray-200 text-center space-y-1.5">
+                <ArrowDownToLine size={20} className="text-gray-400 mx-auto" />
+                <p className="text-xs font-semibold text-gray-800">Unggah Manual Langsung</p>
+                <p className="text-[11px] text-gray-500 leading-relaxed">
+                  Dokumen dimasukkan langsung oleh analis tanpa melalui proses pemindaian crawler.
+                </p>
+                <div className="pt-2">
+                  <span className="inline-block px-2.5 py-1 rounded-md bg-gray-100 text-gray-700 text-xs font-medium border border-gray-200">
+                    {angka(d.di_kb)} Dokumen Masuk
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="space-y-1 text-[10px] text-gray-500">
-          {adaLebih100 && (
-            <p className="flex items-center gap-1"><Info size={11} /> Persen tiap tahap dihitung terpisah, bisa melebihi 100%.</p>
-          )}
-          {terpilih.jenis === 'total' && jumlahSumber > 0 && (
-            <p className="flex items-center gap-1">
-              <Info size={11} /> Jumlah semua sumber tidak sama dengan Total: satu dokumen bisa tercatat di beberapa sumber.
-            </p>
-          )}
+        {/* =================================================================== */}
+        {/* KELOMPOK 2: PENGOLAHAN DOKUMEN */}
+        {/* =================================================================== */}
+        <div className="bg-gray-50/60 rounded-xl border border-gray-200/80 p-4 flex flex-col justify-between space-y-4">
+          <div>
+            <div className="flex items-center justify-between pb-2 border-b border-gray-200/70">
+              <span className="text-[11px] font-bold text-gray-700 tracking-wider uppercase flex items-center gap-1.5">
+                <Database size={13} className="text-gray-500" />
+                2. Pengolahan Dokumen
+              </span>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                {FORMAT_PERSEN.format(blok.persen_terbaca)}% Terbaca
+              </span>
+            </div>
+
+            <div className="mt-3.5 space-y-2.5">
+              {/* Metrik 1: Di KB */}
+              <div className="bg-white p-3 rounded-lg border border-gray-200/90 shadow-2xs flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-semibold text-gray-700 block">Di Knowledge Base</span>
+                  <span className="text-[11px] text-gray-500">Tersimpan di pangkalan data</span>
+                </div>
+                <span className="text-xl font-bold text-gray-900 tracking-tight" data-nilai>
+                  {angka(d.di_kb)}
+                </span>
+              </div>
+
+              {/* Metrik 2: Terbaca */}
+              <div className="bg-white p-3 rounded-lg border border-gray-200/90 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span className="text-xs font-semibold text-gray-900">Terbaca</span>
+                  </div>
+                  <span className="text-xl font-bold text-emerald-700 tracking-tight" data-nilai>
+                    {angka(d.terbaca)}
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500 pt-1 border-t border-gray-100">
+                  <span>Teks langsung: <strong className="text-gray-700">{angka(d.terbaca_teks_langsung)}</strong></span>
+                  <span>OCR: <strong className="text-gray-700">{angka(d.terbaca_ocr)}</strong></span>
+                </div>
+              </div>
+
+              {/* Metrik 3: Terpecah Pasal */}
+              <div className="bg-white p-3 rounded-lg border border-gray-200/90 shadow-2xs flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-semibold text-gray-700 block">Terpecah Pasal</span>
+                  <span className="text-[11px] text-gray-500">Struktur batang tubuh siap</span>
+                </div>
+                <span className="text-xl font-bold text-gray-900 tracking-tight" data-nilai>
+                  {angka(d.terpecah_pasal)}
+                </span>
+              </div>
+
+              {/* Metrik 4: Tervektor */}
+              <div className="bg-white p-3 rounded-lg border border-gray-200/90 shadow-2xs flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Binary size={14} className="text-indigo-600" />
+                  <div>
+                    <span className="text-xs font-semibold text-gray-900 block">Tervektor</span>
+                    <span className="text-[11px] text-gray-500">Embedding semantik</span>
+                  </div>
+                </div>
+                <span className="text-xl font-bold text-indigo-700 tracking-tight" data-nilai>
+                  {angka(d.tervektor)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* =================================================================== */}
+        {/* KELOMPOK 3: STATUS & PENGECUALIAN */}
+        {/* =================================================================== */}
+        <div className="bg-gray-50/60 rounded-xl border border-gray-200/80 p-4 flex flex-col justify-between space-y-4">
+          <div>
+            <div className="flex items-center justify-between pb-2 border-b border-gray-200/70">
+              <span className="text-[11px] font-bold text-gray-700 tracking-wider uppercase flex items-center gap-1.5">
+                <AlertTriangle size={13} className="text-gray-500" />
+                3. Status & Pengecualian
+              </span>
+              {alasan.length > 0 && (
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                  {alasan.length} Kategori Galat
+                </span>
+              )}
+            </div>
+
+            <div className="mt-3.5 space-y-2">
+              {/* Ringkasan Status Dokumen */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-white p-2.5 rounded-lg border border-amber-200/80 shadow-2xs text-center">
+                  <span className="text-[10px] font-medium text-amber-700 block truncate">Menunggu</span>
+                  <span className="text-base font-bold text-amber-800 tracking-tight mt-0.5 block">
+                    {angka(d.menunggu_ekstraksi)}
+                  </span>
+                </div>
+                <div className="bg-white p-2.5 rounded-lg border border-amber-200/80 shadow-2xs text-center">
+                  <span className="text-[10px] font-medium text-amber-700 block truncate">Koreksi</span>
+                  <span className="text-base font-bold text-amber-800 tracking-tight mt-0.5 block">
+                    {angka(d.perlu_koreksi)}
+                  </span>
+                </div>
+                <div className="bg-white p-2.5 rounded-lg border border-rose-200/80 shadow-2xs text-center">
+                  <span className="text-[10px] font-medium text-rose-700 block truncate">Gagal Baca</span>
+                  <span className="text-base font-bold text-rose-800 tracking-tight mt-0.5 block">
+                    {angka(d.gagal_baca)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Rincian Gagal Per Alasan (Drilldown) */}
+              <div className="pt-2">
+                <span className="text-[11px] font-bold text-gray-500 tracking-wider uppercase block mb-1.5">
+                  Gagal Per Alasan
+                </span>
+                {alasan.length === 0 ? (
+                  <div className="p-3 bg-white rounded-lg border border-gray-200/70 text-center">
+                    <CheckCircle2 size={16} className="text-emerald-600 mx-auto mb-1" />
+                    <p className="text-xs font-semibold text-gray-800">Tidak ada kegagalan aktif</p>
+                    <p className="text-[11px] text-gray-400">Seluruh dokumen terproses tanpa kendala</p>
+                  </div>
+                ) : (
+                  <ul className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
+                    {alasan.map(([kode, jumlah]) => (
+                      <li key={kode} data-alasan={kode}>
+                        {bisaDitelusuri ? (
+                          <button
+                            type="button"
+                            onClick={() => onPilihAlasan(kode)}
+                            className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-white border border-gray-200 text-xs text-left hover:border-red-300 hover:bg-red-50/40 transition group cursor-pointer shadow-2xs"
+                            title="Klik untuk meninjau rincian dokumen gagal"
+                          >
+                            <span className="text-gray-700 group-hover:text-red-800 truncate font-medium">
+                              {labelAlasanGagal(kode)}
+                            </span>
+                            <span className="flex items-center gap-1 font-bold text-gray-900 group-hover:text-red-700 shrink-0" data-jumlah>
+                              {angka(jumlah)}
+                              <ChevronRight size={13} className="text-gray-400 group-hover:text-red-700" />
+                            </span>
+                          </button>
+                        ) : (
+                          <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-white border border-gray-200 text-xs shadow-2xs">
+                            <span className="text-gray-700 truncate font-medium">{labelAlasanGagal(kode)}</span>
+                            <span className="font-bold text-gray-900 shrink-0" data-jumlah>{angka(jumlah)}</span>
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {!bisaDitelusuri && alasan.length > 0 && (
+                  <p className="mt-2 text-[10px] text-gray-500" data-keterangan-manual>
+                    Rincian kegagalan unggah manual dapat ditinjau langsung pada Antrean Kegagalan di tab Ingest.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Kanan: gagal per alasan + PDF */}
-      <div className="space-y-5">
-        <div data-panel="gagal">
-          <h4 className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-2">Gagal per alasan</h4>
-          {alasan.length === 0 ? (
-            <p className="text-xs text-gray-500">Tidak ada kegagalan aktif.</p>
-          ) : (
-            <ul className="space-y-1">
-              {alasan.map(([kode, jumlah]) => (
-                <li key={kode} data-alasan={kode}>
-                  {bisaDitelusuri ? (
-                    <button
-                      type="button"
-                      onClick={() => onPilihAlasan(kode)}
-                      className="w-full flex items-center justify-between gap-2 px-2 py-1 -mx-2 rounded-md text-xs text-left hover:bg-red-50 transition group"
-                      title="Lihat daftar kegagalan"
-                    >
-                      <span className="text-gray-700 group-hover:text-red-800">{labelAlasanGagal(kode)}</span>
-                      <span className="flex items-center gap-0.5 font-bold text-gray-900 group-hover:text-red-800" data-jumlah>
-                        {angka(jumlah)}
-                        <ChevronRight size={12} className="text-gray-400 group-hover:text-red-700" />
-                      </span>
-                    </button>
-                  ) : (
-                    <div className="flex items-center justify-between gap-2 py-1 text-xs">
-                      <span className="text-gray-700">{labelAlasanGagal(kode)}</span>
-                      <span className="font-bold text-gray-900" data-jumlah>{angka(jumlah)}</span>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-          {!bisaDitelusuri && alasan.length > 0 && (
-            <p className="mt-2 text-[10px] text-gray-500" data-keterangan-manual>
-              Rincian kegagalan unggah manual belum bisa dibuka dari sini karena antrean kegagalan belum
-              bisa disaring untuk unggahan tanpa sumber. Lihat di Antrean Kegagalan.
-            </p>
-          )}
+      {/* =================================================================== */}
+      {/* BAGIAN BAWAH: DETAIL PEMERIKSAAN PDF (INLINE) */}
+      {/* =================================================================== */}
+      <div className="bg-gray-50/70 border border-gray-200/80 rounded-xl p-4 space-y-3" data-panel="pdf">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-bold text-gray-800 tracking-tight flex items-center gap-1.5 uppercase">
+            <FileText size={14} className="text-red-700" />
+            Detail Pemeriksaan PDF
+          </h4>
+          <span className="text-[11px] text-gray-500 font-medium">
+            Status inspeksi berkas & kesiapan OCR
+          </span>
         </div>
 
-        <div data-panel="pdf">
-          <h4 className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-2">PDF</h4>
-          <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
-            {([
-              ['Terproteksi', blok.pdf.terproteksi],
-              ['Terproteksi terbaca', blok.pdf.terproteksi_terbaca],
-              ['Belum diperiksa', blok.pdf.belum_diperiksa],
-              ['Hasil pindai (OCR)', blok.pdf.hasil_pindai_ocr],
-              ['OCR gagal', blok.pdf.ocr_gagal],
-            ] as const).map(([label, nilai]) => (
-              <div key={label} className="contents">
-                <dt className="text-gray-600">{label}</dt>
-                <dd className="text-right font-semibold text-gray-900">{angka(nilai)}</dd>
-              </div>
-            ))}
-          </dl>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="bg-white p-2.5 rounded-lg border border-gray-200/70 shadow-2xs">
+            <span className="text-[11px] text-gray-500 block truncate">Terproteksi</span>
+            <span className="text-lg font-bold text-gray-900 tracking-tight block mt-0.5">
+              {angka(blok.pdf.terproteksi)}
+            </span>
+          </div>
+
+          <div className="bg-white p-2.5 rounded-lg border border-gray-200/70 shadow-2xs">
+            <span className="text-[11px] text-gray-500 block truncate">Terproteksi Terbaca</span>
+            <span className={`text-lg font-bold tracking-tight block mt-0.5 ${blok.pdf.terproteksi_terbaca > 0 ? 'text-emerald-700' : 'text-gray-900'}`}>
+              {angka(blok.pdf.terproteksi_terbaca)}
+            </span>
+          </div>
+
+          <div className="bg-white p-2.5 rounded-lg border border-gray-200/70 shadow-2xs">
+            <span className="text-[11px] text-gray-500 block truncate">Belum Diperiksa</span>
+            <span className="text-lg font-bold text-gray-900 tracking-tight block mt-0.5">
+              {angka(blok.pdf.belum_diperiksa)}
+            </span>
+          </div>
+
+          <div className="bg-white p-2.5 rounded-lg border border-gray-200/70 shadow-2xs">
+            <span className="text-[11px] text-gray-500 block truncate">Hasil Pindai (OCR)</span>
+            <span className="text-lg font-bold text-blue-700 tracking-tight block mt-0.5">
+              {angka(blok.pdf.hasil_pindai_ocr)}
+            </span>
+          </div>
+
+          <div className="bg-white p-2.5 rounded-lg border border-gray-200/70 shadow-2xs">
+            <span className="text-[11px] text-gray-500 block truncate">OCR Gagal</span>
+            <span className={`text-lg font-bold tracking-tight block mt-0.5 ${blok.pdf.ocr_gagal > 0 ? 'text-rose-700' : 'text-gray-900'}`}>
+              {angka(blok.pdf.ocr_gagal)}
+            </span>
+          </div>
         </div>
+      </div>
+
+      {/* CATATAN DAN KETERANGAN PERHITUNGAN */}
+      <div className="space-y-1 text-[11px] text-gray-500 pt-1">
+        {adaLebih100 && (
+          <p className="flex items-center gap-1.5">
+            <Info size={12} className="shrink-0 text-gray-400" />
+            Persen tiap tahap dihitung terpisah, bisa melebihi 100%.
+          </p>
+        )}
+        {terpilih.jenis === 'total' && jumlahSumber > 0 && (
+          <p className="flex items-center gap-1.5">
+            <Info size={12} className="shrink-0 text-gray-400" />
+            Jumlah semua sumber tidak sama dengan Total: satu dokumen bisa tercatat di beberapa sumber.
+          </p>
+        )}
       </div>
     </div>
   );

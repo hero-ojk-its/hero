@@ -228,103 +228,88 @@ export default function Dashboard() {
       {(!loading || summary) && !error && (
         <>
           {/* Top 4 Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
             {/* Card 1: TOTAL REGULASI */}
-            <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-between">
-              <div className="flex justify-between items-start">
-                <h3 className="text-[11px] font-bold text-gray-500 tracking-wider uppercase">
+            <div className="bg-white p-5 rounded-xl border border-gray-200/80 shadow-2xs flex flex-col justify-between h-full transition-all">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-[11px] font-bold text-gray-500 tracking-wider uppercase truncate">
                   TOTAL REGULASI
                 </h3>
-                <div className="text-gray-400 bg-gray-100/50 p-1.5 rounded-lg border border-gray-100">
-                  <Layers size={16} />
+                <div className="w-9 h-9 rounded-lg bg-red-50 text-red-700 border border-red-100 flex items-center justify-center shrink-0">
+                  <Layers size={18} />
                 </div>
               </div>
-              <div className="mt-4">
-                <span className="text-3xl font-bold text-gray-900">
+              <div className="mt-4 space-y-1">
+                <span className="text-3xl font-bold tracking-tight text-gray-900 block">
                   {isApiConfigured && summary ? summary.kb.corpus_documents : 128}
                 </span>
-                {isApiConfigured && summary ? (
-                  <p className="text-[11px] text-gray-500 mt-1 font-medium">
-                    Target Fase 1: ≥ {summary.kb.target_fase1} —{' '}
-                    <span
-                      className={
-                        summary.kb.target_met
-                          ? 'text-emerald-700 font-semibold'
-                          : 'text-amber-700 font-semibold'
-                      }
-                    >
-                      {summary.kb.target_met ? 'Tercapai' : 'Belum'}
-                    </span>
-                  </p>
-                ) : (
-                  <p className="text-[11px] text-gray-500 mt-1 font-medium">
-                    Seluruh regulasi dalam sistem
-                  </p>
-                )}
+                <p className="text-xs text-gray-500 font-medium leading-normal">
+                  Seluruh regulasi dalam sistem
+                </p>
               </div>
             </div>
 
             {/* Card 2: REGULASI BERLAKU */}
-            <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-between">
-              <div className="flex justify-between items-start">
-                <h3 className="text-[11px] font-bold text-gray-500 tracking-wider uppercase">
+            <div className="bg-white p-5 rounded-xl border border-gray-200/80 shadow-2xs flex flex-col justify-between h-full transition-all">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-[11px] font-bold text-gray-500 tracking-wider uppercase truncate">
                   REGULASI BERLAKU
                 </h3>
-                <div className="text-green-600 bg-green-50 p-1.5 rounded-lg border border-green-100">
-                  <CheckCircle size={16} />
+                <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center justify-center shrink-0">
+                  <CheckCircle size={18} />
                 </div>
               </div>
-              <div className="mt-4">
-                <span className="text-3xl font-bold text-green-600">
+              <div className="mt-4 space-y-1">
+                <span className="text-3xl font-bold tracking-tight text-emerald-700 block">
                   {isApiConfigured && summary
                     ? summary.kb.by_status_keberlakuan.berlaku ?? 0
                     : 96}
                 </span>
-                <p className="text-[11px] text-gray-500 mt-1 font-medium">
+                <p className="text-xs text-gray-500 font-medium leading-normal">
                   Regulasi yang masih berlaku
                 </p>
               </div>
             </div>
 
             {/* Card 3: DICABUT / TIDAK BERLAKU */}
-            <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-between">
-              <div className="flex justify-between items-start">
-                <h3 className="text-[11px] font-bold text-gray-500 tracking-wider uppercase">
+            <div className="bg-white p-5 rounded-xl border border-gray-200/80 shadow-2xs flex flex-col justify-between h-full transition-all">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-[11px] font-bold text-gray-500 tracking-wider uppercase truncate">
                   DICABUT / TIDAK BERLAKU
                 </h3>
-                <div className="text-gray-500 bg-gray-100 p-1.5 rounded-lg border border-gray-200">
-                  <Ban size={16} />
+                <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-600 border border-gray-200 flex items-center justify-center shrink-0">
+                  <Ban size={18} />
                 </div>
               </div>
-              <div className="mt-4">
-                <span className="text-3xl font-bold text-gray-900">
+              <div className="mt-4 space-y-1">
+                <span className="text-3xl font-bold tracking-tight text-gray-700 block">
                   {isApiConfigured && summary
                     ? summary.kb.by_status_keberlakuan.dicabut ?? 0
                     : 12}
                 </span>
-                <p className="text-[11px] text-gray-500 mt-1 font-medium">
+                <p className="text-xs text-gray-500 font-medium leading-normal">
                   Regulasi tidak lagi berlaku
                 </p>
               </div>
             </div>
 
             {/* Card 4: REGULASI DIUBAH */}
-            <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-between">
-              <div className="flex justify-between items-start">
-                <h3 className="text-[11px] font-bold text-gray-500 tracking-wider uppercase">
+            <div className="bg-white p-5 rounded-xl border border-gray-200/80 shadow-2xs flex flex-col justify-between h-full transition-all">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-[11px] font-bold text-gray-500 tracking-wider uppercase truncate">
                   REGULASI DIUBAH
                 </h3>
-                <div className="text-amber-600 bg-amber-50 p-1.5 rounded-lg border border-amber-100">
-                  <ArrowRightLeft size={16} />
+                <div className="w-9 h-9 rounded-lg bg-amber-50 text-amber-700 border border-amber-100 flex items-center justify-center shrink-0">
+                  <ArrowRightLeft size={18} />
                 </div>
               </div>
-              <div className="mt-4">
-                <span className="text-3xl font-bold text-amber-600">
+              <div className="mt-4 space-y-1">
+                <span className="text-3xl font-bold tracking-tight text-amber-700 block">
                   {isApiConfigured && summary
                     ? summary.kb.by_status_keberlakuan.diubah ?? 0
                     : 20}
                 </span>
-                <p className="text-[11px] text-gray-500 mt-1 font-medium">
+                <p className="text-xs text-gray-500 font-medium leading-normal">
                   Regulasi yang memiliki perubahan
                 </p>
               </div>
@@ -456,77 +441,85 @@ export default function Dashboard() {
 
             {isApiConfigured && summary ? (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
                   {/* Kartu 1: Perlu Ditinjau */}
-                  <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex flex-col">
+                  <div className="bg-white p-5 rounded-xl border border-gray-200/80 shadow-2xs flex flex-col justify-between h-full transition-all">
                     <div className="flex justify-between items-center mb-3">
                       <span className="text-sm font-semibold text-gray-800">Perlu Ditinjau</span>
-                      <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
                     </div>
-                    <span className="text-3xl font-bold text-gray-900">
-                      {summary.ingest.needs_review ?? 0}
-                    </span>
-                    <p className="text-[11px] text-gray-500 mt-2 font-medium">
-                      Dokumen memerlukan peninjauan manual
-                    </p>
+                    <div>
+                      <span className="text-3xl font-bold tracking-tight text-gray-900 block">
+                        {summary.ingest.needs_review ?? 0}
+                      </span>
+                      <p className="text-xs text-gray-500 mt-2 font-medium leading-normal">
+                        Dokumen menunggu pemeriksaan petugas.
+                      </p>
+                    </div>
                   </div>
 
                   {/* Kartu 2: Kegagalan Belum Ditangani (Link: /ingest?tab=riwayat) */}
                   <Link
                     to="/ingest?tab=riwayat"
-                    className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex flex-col hover:border-red-200 hover:bg-red-50/20 transition-all group"
+                    className="bg-white p-5 rounded-xl border border-gray-200/80 shadow-2xs flex flex-col justify-between h-full hover:border-red-200 hover:bg-red-50/20 transition-all group"
                   >
                     <div className="flex justify-between items-center mb-3">
                       <span className="text-sm font-semibold text-gray-800 group-hover:text-red-700 transition-colors">
                         Kegagalan Belum Ditangani
                       </span>
-                      <div className="flex items-center space-x-1.5">
+                      <div className="flex items-center space-x-1.5 shrink-0">
                         <div className="w-2.5 h-2.5 rounded-full bg-rose-600" />
                         <ExternalLink size={12} className="text-gray-400 group-hover:text-red-700" />
                       </div>
                     </div>
-                    <span className="text-3xl font-bold text-rose-600">
-                      {summary.ingest.open_failures ?? 0}
-                    </span>
-                    <p className="text-[11px] text-gray-500 mt-2 font-medium">
-                      Antrean dokumen gagal diproses
-                    </p>
+                    <div>
+                      <span className="text-3xl font-bold tracking-tight text-rose-600 block">
+                        {summary.ingest.open_failures ?? 0}
+                      </span>
+                      <p className="text-xs text-gray-500 mt-2 font-medium leading-normal">
+                        Dokumen mengalami kegagalan pemrosesan.
+                      </p>
+                    </div>
                   </Link>
 
                   {/* Kartu 3: Pemindaian Aktif (Link: /ingest) */}
                   <Link
                     to="/ingest"
-                    className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex flex-col hover:border-red-200 hover:bg-red-50/20 transition-all group"
+                    className="bg-white p-5 rounded-xl border border-gray-200/80 shadow-2xs flex flex-col justify-between h-full hover:border-red-200 hover:bg-red-50/20 transition-all group"
                   >
                     <div className="flex justify-between items-center mb-3">
                       <span className="text-sm font-semibold text-gray-800 group-hover:text-red-700 transition-colors">
                         Pemindaian Aktif
                       </span>
-                      <div className="flex items-center space-x-1.5">
+                      <div className="flex items-center space-x-1.5 shrink-0">
                         <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />
                         <ExternalLink size={12} className="text-gray-400 group-hover:text-red-700" />
                       </div>
                     </div>
-                    <span className="text-3xl font-bold text-gray-900">
-                      {summary.ingest.active_scans ?? 0}
-                    </span>
-                    <p className="text-[11px] text-gray-500 mt-2 font-medium">
-                      Sesi scraping / pemindaian aktif
-                    </p>
+                    <div>
+                      <span className="text-3xl font-bold tracking-tight text-gray-900 block">
+                        {summary.ingest.active_scans ?? 0}
+                      </span>
+                      <p className="text-xs text-gray-500 mt-2 font-medium leading-normal">
+                        Proses pengambilan dokumen yang sedang berjalan.
+                      </p>
+                    </div>
                   </Link>
 
                   {/* Kartu 4: Menunggu Ekstraksi */}
-                  <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex flex-col">
+                  <div className="bg-white p-5 rounded-xl border border-gray-200/80 shadow-2xs flex flex-col justify-between h-full transition-all">
                     <div className="flex justify-between items-center mb-3">
                       <span className="text-sm font-semibold text-gray-800">Menunggu Ekstraksi</span>
-                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-600 shrink-0" />
                     </div>
-                    <span className="text-3xl font-bold text-gray-900">
-                      {summary.kb.by_processing_status.diterima ?? 0}
-                    </span>
-                    <p className="text-[11px] text-gray-500 mt-2 font-medium">
-                      Dokumen dalam antrean pemrosesan
-                    </p>
+                    <div>
+                      <span className="text-3xl font-bold tracking-tight text-gray-900 block">
+                        {summary.kb.by_processing_status.diterima ?? 0}
+                      </span>
+                      <p className="text-xs text-gray-500 mt-2 font-medium leading-normal">
+                        Dokumen menunggu proses ekstraksi isi dan pasal.
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -601,49 +594,57 @@ export default function Dashboard() {
               </>
             ) : (
               /* Mode Contoh (Fallback bila API tidak aktif) */
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex flex-col">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
+                <div className="bg-white p-5 rounded-xl border border-gray-200/80 shadow-2xs flex flex-col justify-between h-full transition-all">
                   <div className="flex justify-between items-center mb-3">
                     <span className="text-sm font-semibold text-gray-800">Perlu Ditinjau</span>
-                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
                   </div>
-                  <span className="text-3xl font-bold text-gray-900">24</span>
-                  <p className="text-[11px] text-gray-500 mt-2 font-medium">
-                    Menunggu telaah analis hukum
-                  </p>
+                  <div>
+                    <span className="text-3xl font-bold tracking-tight text-gray-900 block">24</span>
+                    <p className="text-xs text-gray-500 mt-2 font-medium leading-normal">
+                      Dokumen menunggu pemeriksaan petugas.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex flex-col">
+                <div className="bg-white p-5 rounded-xl border border-gray-200/80 shadow-2xs flex flex-col justify-between h-full transition-all">
                   <div className="flex justify-between items-center mb-3">
-                    <span className="text-sm font-semibold text-gray-800">Sedang Diproses</span>
-                    <div className="w-2.5 h-2.5 rounded-full bg-blue-700" />
+                    <span className="text-sm font-semibold text-gray-800">Kegagalan Belum Ditangani</span>
+                    <div className="w-2.5 h-2.5 rounded-full bg-rose-600 shrink-0" />
                   </div>
-                  <span className="text-3xl font-bold text-gray-900">20</span>
-                  <p className="text-[11px] text-gray-500 mt-2 font-medium">
-                    Dalam antrean ekstraksi & parsing
-                  </p>
+                  <div>
+                    <span className="text-3xl font-bold tracking-tight text-rose-600 block">0</span>
+                    <p className="text-xs text-gray-500 mt-2 font-medium leading-normal">
+                      Dokumen mengalami kegagalan pemrosesan.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex flex-col">
+                <div className="bg-white p-5 rounded-xl border border-gray-200/80 shadow-2xs flex flex-col justify-between h-full transition-all">
                   <div className="flex justify-between items-center mb-3">
-                    <span className="text-sm font-semibold text-gray-800">Harmonisasi Aktif</span>
-                    <div className="w-2.5 h-2.5 rounded-full bg-green-600" />
+                    <span className="text-sm font-semibold text-gray-800">Pemindaian Aktif</span>
+                    <div className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0" />
                   </div>
-                  <span className="text-3xl font-bold text-gray-900">20</span>
-                  <p className="text-[11px] text-gray-500 mt-2 font-medium">
-                    Komparasi pasal lintas regulasi
-                  </p>
+                  <div>
+                    <span className="text-3xl font-bold tracking-tight text-gray-900 block">0</span>
+                    <p className="text-xs text-gray-500 mt-2 font-medium leading-normal">
+                      Proses pengambilan dokumen yang sedang berjalan.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex flex-col">
+                <div className="bg-white p-5 rounded-xl border border-gray-200/80 shadow-2xs flex flex-col justify-between h-full transition-all">
                   <div className="flex justify-between items-center mb-3">
-                    <span className="text-sm font-semibold text-gray-800">Analisa Regulasi</span>
-                    <div className="w-2.5 h-2.5 rounded-full bg-red-700" />
+                    <span className="text-sm font-semibold text-gray-800">Menunggu Ekstraksi</span>
+                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-600 shrink-0" />
                   </div>
-                  <span className="text-3xl font-bold text-gray-900">12</span>
-                  <p className="text-[11px] text-gray-500 mt-2 font-medium">
-                    Telaah analisa & tanggapan regulasi
-                  </p>
+                  <div>
+                    <span className="text-3xl font-bold tracking-tight text-gray-900 block">2</span>
+                    <p className="text-xs text-gray-500 mt-2 font-medium leading-normal">
+                      Dokumen menunggu proses ekstraksi isi dan pasal.
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
