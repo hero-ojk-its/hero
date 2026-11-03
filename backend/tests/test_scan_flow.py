@@ -436,3 +436,50 @@ def test_k20_recover_stuck_scan_sessions(db_session: Session):
     db_session.refresh(stuck_session)
     assert stuck_session.status == StatusPindai.gagal
     assert "Dihentikan karena server dimulai ulang." in stuck_session.error_message
+
+
+def test_select_all_new_tidak_memilih_abstrak_faq_lampiran(db_session: Session):
+    """
+    Regresi produksi: "Pilih Semua Baru" menarik Abstrak/FAQ ke KB sebagai dokumen
+    sendiri karena hanya menyaring match_status, tidak doc_kind. Kandidat non-'utama'
+    harus tetap tidak terpilih meski match_status='baru' (belum ada di KB).
+    """
+    from app.services.scan_service import ScanService
+    from app.schemas.scan import ScanSelectionUpdate
+
+    sess = ScanSession(start_url="https://jdih.ojk.go.id/x", status=StatusPindai.siap_dipilih)
+    db_session.add(sess)
+    db_session.flush()
+
+    c_utama = ScanCandidate(scan_id=sess.id, url="https://jdih.ojk.go.id/u.pdf", url_hash="hu",
+                            filename="u.pdf", doc_kind="utama", match_status=StatusKandidat.baru)
+    c_abstrak = ScanCandidate(scan_id=sess.id, url="https://jdih.ojk.go.id/a.pdf", url_hash="ha",
+                              filename="Abstrak POJK 1.pdf", doc_kind="abstrak", match_status=StatusKandidat.baru)
+    c_faq = ScanCandidate(scan_id=sess.id, url="https://jdih.ojk.go.id/f.pdf", url_hash="hf",
+                          filename="FAQ POJK 1.pdf", doc_kind="faq", match_status=StatusKandidat.baru)
+    c_lampiran = ScanCandidate(scan_id=sess.id, url="https://jdih.ojk.go.id/l.pdf", url_hash="hl",
+                               filename="lampiran1pojktrust.pdf", doc_kind="lampiran",
+                               match_status=StatusKandidat.baru)
+    # doc_kind NULL (baris lama sebelum kolom ada) harus tetap diperlakukan sebagai 'utama'.
+    c_kind_null = ScanCandidate(scan_id=sess.id, url="https://jdih.ojk.go.id/n.pdf", url_hash="hn",
+                                filename="n.pdf", doc_kind=None, match_status=StatusKandidat.baru)
+    c_sudah_ada = ScanCandidate(scan_id=sess.id, url="https://jdih.ojk.go.id/s.pdf", url_hash="hs",
+                                filename="s.pdf", doc_kind="utama", match_status=StatusKandidat.sudah_ada)
+    db_session.add_all([c_utama, c_abstrak, c_faq, c_lampiran, c_kind_null, c_sudah_ada])
+    db_session.commit()
+
+    ScanService(db_session).update_selection(sess.id, ScanSelectionUpdate(action="select_all_new"))
+
+    db_session.refresh(c_utama)
+    db_session.refresh(c_abstrak)
+    db_session.refresh(c_faq)
+    db_session.refresh(c_lampiran)
+    db_session.refresh(c_kind_null)
+    db_session.refresh(c_sudah_ada)
+
+    assert c_utama.selected is True
+    assert c_kind_null.selected is True
+    assert c_abstrak.selected is False
+    assert c_faq.selected is False
+    assert c_lampiran.selected is False
+    assert c_sudah_ada.selected is False
