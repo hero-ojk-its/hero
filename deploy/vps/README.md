@@ -1,5 +1,11 @@
 # Deploy otomatis ke VPS
 
+> [!IMPORTANT]
+> **STATUS LINGKUNGAN: AKTIF (PRODUKSI FASE 2 / MVP)**  
+> VPS ini adalah server operasional utama yang melayani backend API, database PostgreSQL, dan pipeline penyerapan regulasi HERO.  
+> Seluruh alamat IP mentah dan rahasia SSH telah disanitasi menggunakan placeholder `<IP_VPS>` / GitHub Secrets demi memenuhi standar keamanan ADR-11.
+
+
 Setelah CI hijau di `main`, GitHub Actions menerapkan perubahan ke VPS **tanpa Anda mengubah apa pun
 secara manual**. Frontend tetap lewat Vercel dan GitHub Pages (tidak diubah).
 
@@ -62,7 +68,7 @@ ssh myvps "echo 'restrict,command=\"/opt/hero/ci/ci-entry.sh\" $PUB' >> ~/.ssh/a
 Uji bahwa batasannya bekerja (harus **ditolak**, bukan membuka shell):
 
 ```bash
-ssh -i ~/.ssh/hero_deploy_gha -o IdentitiesOnly=yes ubuntu@43.128.102.71 'whoami'
+ssh -i ~/.ssh/hero_deploy_gha -o IdentitiesOnly=yes ubuntu@<IP_VPS> 'whoami'
 # ditolak: perintah tidak dikenal atau argumen tidak valid
 ```
 
@@ -80,18 +86,18 @@ Kalau nanti mau gerbang persetujuan lagi: minta admin repo buat Environment `vps
 
 | Secret | Isi |
 |---|---|
-| `VPS_HOST` | IP VPS |
-| `VPS_USER` | user SSH di VPS |
+| `VPS_HOST` | `<IP_VPS>` |
+| `VPS_USER` | user SSH di VPS (`ubuntu`) |
 | `VPS_SSH_KEY` | isi berkas **privat** kunci deploy (lihat langkah 2) |
-| `VPS_KNOWN_HOSTS` | keluaran `ssh-keyscan -t ed25519 <IP VPS>` (menyematkan sidik jari server; mencegah penyadapan) |
+| `VPS_KNOWN_HOSTS` | keluaran `ssh-keyscan -t ed25519 <IP_VPS>` (menyematkan sidik jari server; mencegah penyadapan) |
 
 Lewat `gh` (ganti `<IP>`, `<user>`, `<kunci>` sesuai VPS Anda):
 
 ```bash
-gh secret set VPS_HOST       --body "<IP>"
+gh secret set VPS_HOST       --body "<IP_VPS>"
 gh secret set VPS_USER       --body "<user>"
 gh secret set VPS_SSH_KEY    < ~/.ssh/<kunci>
-ssh-keyscan -t ed25519 <IP> 2>/dev/null | gh secret set VPS_KNOWN_HOSTS
+ssh-keyscan -t ed25519 <IP_VPS> 2>/dev/null | gh secret set VPS_KNOWN_HOSTS
 ```
 
 ### 4. Isi `ML_SERVICE_URL` di backend VPS (sekali)
