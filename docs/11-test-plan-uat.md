@@ -164,8 +164,8 @@ Format: **ID · Deskripsi · Prakondisi · Langkah · Hasil Diharapkan · FR**
 | TC-56 | Autentikasi | Akses fitur tanpa login | Seluruh akses ditolak | FR-SYS-08, NFR-06 |
 | TC-57 | Otorisasi peran | Login sebagai Analis → coba akses fitur Admin Sistem | Akses ditolak | FR-SYS-08, NFR-07 |
 | TC-58 | Kepatuhan aliran data (NDA) | Telaah aliran data saat AI-Assisted aktif | Tidak ada pengiriman dokumen berklasifikasi non-publik ke pihak ketiga tanpa persetujuan tertulis | NFR-08 |
-| TC-59 | Usability alur utama | Pengguna baru menjalankan unggah → analisa → lihat hasil → ekspor | Selesai dengan panduan singkat, tanpa bantuan teknis | NFR-12 |
-| TC-60 | Kelengkapan dokumentasi | Review dokumentasi teknis & panduan pengguna | Lengkap 100%; **M-11 terpenuhi** | NFR-18 |
+| TC-59 | Usability alur utama | Pengguna baru menjalankan unggah → analisa → lihat hasil → ekspor berpedoman pada [Panduan Pengguna](PANDUAN-PENGGUNA.md) | Selesai dengan panduan singkat, tanpa bantuan teknis | NFR-12 |
+| TC-60 | Kelengkapan dokumentasi | Review dokumentasi teknis & [Panduan Pengguna (User Guide & FAQ)](PANDUAN-PENGGUNA.md) | Lengkap 100%; **M-11 terpenuhi** | NFR-18 |
 
 ---
 

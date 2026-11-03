@@ -1,5 +1,11 @@
 # HERO di server lokal — dari `adduser` sampai deploy otomatis
 
+> [!NOTE]
+> **STATUS LINGKUNGAN: EKSPERIMENTAL / RENCANA MIGRASI MANDIRI (BELUM AKTIF DI PRODUKSI)**  
+> Panduan ini disiapkan sebagai alternatif infrastruktur *on-premise* menggunakan Cloudflare Tunnel untuk kebutuhan riset dan ekspansi masa depan.  
+> **Server yang aktif saat ini tetap VPS Produksi (`deploy/vps/`).** Pemindahan data dan DNS produksi tidak dilakukan tanpa persetujuan tertulis dari Product Owner (Pak Faris / DPEA) sesuai NFR-08 dan ADR-11.
+
+
 Panduan memindahkan backend dan lapisan data HERO dari VPS Tencent ke **server Ubuntu/Debian
 milik Anda sendiri**, lengkap dengan akses dari internet dan deploy otomatis.
 
@@ -240,7 +246,7 @@ URL-nya sama, isinya yang berpindah.
 
 > **Catatan:** selama langkah 6a–6b, `api.mirzafathir.com` masih menunjuk VPS. Setelah
 > `tunnel route dns` dibuat, Cloudflare mengarahkannya ke tunnel. Lakukan saat lalu lintas sepi,
-> dan siapkan rencana kembali: hapus CNAME tunnel lalu buat A record ke `43.128.102.71`.
+> dan siapkan rencana kembali: hapus CNAME tunnel lalu buat A record ke `<IP_VPS>`.
 
 ## 7. Lapisan data (layanan analisa + worker)
 
@@ -286,7 +292,7 @@ Di VPS: `docker exec hero_db sh -c 'pg_dump -U $POSTGRES_USER $POSTGRES_DB' | gz
 Lalu salin ke server lokal dan pulihkan:
 
 ```bash
-scp ubuntu@43.128.102.71:~/pindah.sql.gz /tmp/
+scp ubuntu@<IP_VPS>:~/pindah.sql.gz /tmp/
 sudo docker compose stop backend
 gunzip -c /tmp/pindah.sql.gz | sudo docker exec -i hero_db psql -U hero_user -d hero_db
 sudo docker compose start backend
