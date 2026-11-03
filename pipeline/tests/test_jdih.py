@@ -203,3 +203,52 @@ def test_explicit_adapter_overrides_host_detection():
     site = SiteSource(name="t", url="https://jdih.ojk.go.id/anything",
                       adapter="generic")
     assert site.resolved_adapter() == "generic"
+
+
+# ---------------------------------------------------------------------------
+# harvest_jdih: regresi "Abstrak/Lampiran tertarik, bukan Peraturan"
+# ---------------------------------------------------------------------------
+# Sama seperti MULTI_DOC di test_inventory.py: baris "Abstrak" muncul di DOM
+# SEBELUM baris "Peraturan". ``find_document_link`` (DOM-order, match pertama)
+# akan menarik yang salah; ``parse_detail``+``primary_document`` (label-aware)
+# yang benar.
+_DETAIL_ABSTRAK_DULU = """
+<table>
+ <tr><td>Abstrak</td><td>:</td><td><a href="/Web/ViewPeraturan/PreviewDokumen/a1">2026absX.pdf</a>
+   <a href="/Web/ViewPeraturan/DownloadDokumen/a1">Unduh</a></td></tr>
+ <tr><td>Peraturan</td><td>:</td><td><a href="/Web/ViewPeraturan/PreviewDokumen/p1">2026X.pdf</a>
+   <a href="/Web/ViewPeraturan/DownloadDokumen/p1">Unduh</a></td></tr>
+</table>
+"""
+
+
+class _FakeScraperJdih:
+    """Cukup untuk ``harvest_jdih``: satu entri listing, satu halaman detail."""
+
+    def __init__(self, detail_html: str):
+        self.detail_html = detail_html
+        self.downloaded: list[str] = []
+
+    def request_json(self, url):
+        return {"aaData": [REAL_ROW]}
+
+    def get_html(self, url, cache=None):
+        return self.detail_html, False
+
+    def download_pdf(self, link, dest_dir, accept_zip=False):
+        from hero.ingest.web import FetchResult
+
+        self.downloaded.append(link.url)
+        return FetchResult(link, True, path=dest_dir / "x.pdf", sha256="x", size_bytes=1)
+
+
+def test_harvest_jdih_mengunduh_peraturan_bukan_abstrak(tmp_path):
+    from hero.ingest.jdih import harvest_jdih
+
+    site = SiteSource(name="jdih", url="https://jdih.ojk.go.id/Web/ViewPeraturan/Index",
+                      sektor=["02"], jenis_peraturan=["06"], max_documents=5)
+    scraper = _FakeScraperJdih(_DETAIL_ABSTRAK_DULU)
+    report, entries = harvest_jdih(scraper, site, tmp_path)
+    assert report.fetched and report.fetched[0].ok
+    assert scraper.downloaded == ["https://jdih.ojk.go.id/Web/ViewPeraturan/DownloadDokumen/p1"], (
+        "harus menarik baris 'Peraturan', bukan 'Abstrak' yang lebih dulu di DOM")
