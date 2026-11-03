@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import {
   getMlAnalisa,
+  getMlAnalisaViaJob,
+  ANALISA_AI_INFO_LAMA_MS,
   getDocumentStatus,
   checkMlHealth,
   isDocumentReadyForAnalysis,
@@ -102,6 +104,8 @@ export default function AnalisaState2Workspace({
   const [loadingStatusText, setLoadingStatusText] = useState<string>('Memeriksa kesiapan dokumen...');
   const [retryCount, setRetryCount] = useState<number>(0);
   const [showProcessingBanner, setShowProcessingBanner] = useState<boolean>(true);
+  // Analisis AI sudah berjalan lebih dari 5 menit — hanya informasi, pemollan terus berlanjut
+  const [aiMelebihiLimaMenit, setAiMelebihiLimaMenit] = useState<boolean>(false);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const retryStartTimeRef = useRef<number | null>(null);
@@ -361,9 +365,27 @@ export default function AnalisaState2Workspace({
           ? 'Memuat struktur regulasi dan mengambil hasil analisis AI...'
           : 'Memuat struktur regulasi dan mengambil hasil analisis deterministik...'
       );
+      setAiMelebihiLimaMenit(false);
+
+      // Mode AI: lewat job + poll, bukan satu permintaan sinkron. Panggilan Gemini
+      // bisa lebih lama dari batas proxy Cloudflare (~100 d) di depan domain
+      // publik; pemollan tidak pernah menyerah menunggu, hanya menampilkan info
+      // setelah 5 menit.
+      const mlPromise = requestedMode === 'ai'
+        ? getMlAnalisaViaJob(documentId, 'ai', forceFresh, controller.signal, (detikBerjalan) => {
+            if (!isMountedRef.current) return;
+            const lama = detikBerjalan * 1000 >= ANALISA_AI_INFO_LAMA_MS;
+            setAiMelebihiLimaMenit(lama);
+            setLoadingStatusText(
+              lama
+                ? `Analisis AI masih berjalan (${Math.floor(detikBerjalan / 60)} menit) — ini normal untuk dokumen besar, tetap menunggu tanpa batas waktu...`
+                : 'Memuat struktur regulasi dan mengambil hasil analisis AI...'
+            );
+          })
+        : getMlAnalisa(documentId, requestedMode, forceFresh, controller.signal);
 
       const [mlRes, statusRes] = await Promise.allSettled([
-        getMlAnalisa(documentId, requestedMode, forceFresh, controller.signal),
+        mlPromise,
         getDocumentStatus(documentId, controller.signal),
       ]);
 
@@ -1158,13 +1180,19 @@ export default function AnalisaState2Workspace({
               />
             </div>
             <div className="flex items-center justify-between text-[11px] font-mono">
-              <span className={retryCount > 0 ? 'text-amber-700 font-semibold animate-pulse' : 'text-gray-500'}>
+              <span className={retryCount > 0 || aiMelebihiLimaMenit ? 'text-amber-700 font-semibold animate-pulse' : 'text-gray-500'}>
                 {loadingStatusText}
               </span>
               <span className="text-gray-500 font-medium">
                 {retryCount > 0 ? `Percobaan Sinkronisasi #${retryCount}` : 'Sedang diproses...'}
               </span>
             </div>
+            {aiMelebihiLimaMenit && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                <span>Proses ini sudah berjalan lebih dari 5 menit. Dokumen panjang/kompleks memang butuh waktu lebih lama untuk dianalisa AI — proses tidak akan dibatalkan otomatis dan hasilnya tetap akan muncul begitu selesai.</span>
+              </div>
+            )}
           </div>
 
           {/* 4 Pipeline Step Pills */}

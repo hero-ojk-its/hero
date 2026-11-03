@@ -61,7 +61,7 @@ analysis:
   # izin NFR-08/TD-03 ada sebelum dipakai atas dokumen produksi sungguhan.
   ai_enabled: true
   ai_provider: gemini
-  ai_model: gemini-2.5-pro      # pastikan nama model ini masih tersedia di Google AI
+  ai_model: gemini-3.6-flash  # dites & berhasil 2026-11-03; 2.5-flash/-pro & gemini-flash-latest 404/503 di key ini
   # kredensial: GOOGLE_API_KEY (lihat deploy/systemd/hero-ml.service: EnvironmentFile)
   # pip install -e ".[ai-gemini]" di .venv server sebelum menyalakan
   ai_effort: medium              # tidak dipakai jalur Gemini (ai_effort khusus Anthropic); dibiarkan utk jalur balik ke Claude
