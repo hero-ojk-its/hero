@@ -11,6 +11,11 @@ Group=hero
 WorkingDirectory=/opt/hero
 Environment=HOME=/opt/hero
 Environment=HERO_CONFIG=/opt/hero/config/sources.yaml
+# Kredensial AI-Assisted (GOOGLE_API_KEY / ANTHROPIC_API_KEY): berkas terpisah,
+# bukan ditulis di unit ini (systemctl show mencetak Environment= apa adanya,
+# EnvironmentFile tidak). "-" di depan path = opsional, layanan tetap menyala
+# tanpa AI (mode_ai: false) kalau berkasnya belum dibuat.
+EnvironmentFile=-/opt/hero/secrets/ai.env
 # Terikat ke gateway jaringan Docker INTERNAL backend (bukan bridge default
 # 172.17.0.1 — itu cuma benar bila backend TIDAK pakai jaringan kustom
 # docker-compose; cek `docker network inspect <jaringan backend>`). Hanya

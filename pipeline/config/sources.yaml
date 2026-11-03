@@ -55,18 +55,16 @@ bridge:
 # dan kembali ke Deterministik bila gagal. Butuh kredensial Claude
 # (ANTHROPIC_API_KEY atau `ant auth login`) dan: pip install -e ".[ai]"
 analysis:
-  ai_enabled: false
-  # Penyedia: kosongkan agar ditebak dari ai_model ("gemini-…" -> Google AI,
-  # "claude-…" -> Anthropic), atau sebut eksplisit: anthropic | gemini.
-  #   Google AI (Gemini) : ai_provider: gemini  + ai_model: gemini-2.5-pro
-  #                        kredensial GOOGLE_API_KEY, pip install -e ".[ai-gemini]"
-  #                        (pastikan nama modelnya masih tersedia di Google AI)
-  #   Anthropic (Claude) : ai_provider: anthropic + ai_model: claude-opus-5
-  #                        kredensial ANTHROPIC_API_KEY, pip install -e ".[ai]"
-  # ai_effort hanya dipakai jalur Anthropic; Gemini memakai temperature 0.
-  ai_provider: ""
-  ai_model: claude-opus-5
-  ai_effort: medium
+  # Mekanisme (saklar, fallback, verifikasi, penyaringan dokumen internal) sudah
+  # diuji offline. Menyalakan ini sungguhan — memanggil Google AI dengan kunci
+  # nyata — adalah keputusan terpisah dari menyiapkan konfigurasinya; pastikan
+  # izin NFR-08/TD-03 ada sebelum dipakai atas dokumen produksi sungguhan.
+  ai_enabled: true
+  ai_provider: gemini
+  ai_model: gemini-2.5-pro      # pastikan nama model ini masih tersedia di Google AI
+  # kredensial: GOOGLE_API_KEY (lihat deploy/systemd/hero-ml.service: EnvironmentFile)
+  # pip install -e ".[ai-gemini]" di .venv server sebelum menyalakan
+  ai_effort: medium              # tidak dipakai jalur Gemini (ai_effort khusus Anthropic); dibiarkan utk jalur balik ke Claude
   ai_allow_internal: false      # dokumen berklasifikasi internal tidak dikirim ke layanan AI
   ai_max_facts: 24
   ai_timeout: 0             # detik menunggu model; 0 = tanpa batas (jatuh ke Deterministik hanya bila galat nyata)
