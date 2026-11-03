@@ -11,7 +11,7 @@
  *    - GET /api/v1/documents/{document_id}: Pengecekan status ekstraksi dan ketersediaan pasal
  */
 
-import { apiFetch, apiFetchBlob, API_BASE_URL, buildQueryString } from './api';
+import { apiFetch, apiJson, apiFetchBlob, API_BASE_URL, buildQueryString } from './api';
 import type { DocumentsResponse, DocumentItem, DocumentBlob } from './api';
 import { uploadManualPdf, type IngestUploadResponse, type UploadProgressEvent } from './ingestApi';
 import { labelAlasanGagal } from './labelStatus';
@@ -431,6 +431,95 @@ export async function getMlAnalisa(
     return { ...res, kerangka: normalisasiKerangka(res.kerangka) };
   }
   return res;
+}
+
+// ============================================================================
+// 7b. Analisa via Job Latar Belakang (POST .../mulai + GET .../analisa-job/{id})
+// ============================================================================
+//
+// Mode AI bisa butuh waktu lebih lama dari batas proxy Cloudflare (~100 d) di
+// depan domain publik, yang akan memutus permintaan sinkron sebelum model
+// selesai menjawab. Jalur ini memulai analisa sebagai job dan memoll
+// statusnya lewat permintaan pendek berulang — tidak pernah kena limit itu,
+// dan tidak pernah menyerah/timeout menunggu job selesai.
+
+export interface MlAnalisaJobStart {
+  job_id: string;
+  status: 'berjalan';
+}
+
+export interface MlAnalisaJobStatus {
+  job_id: string;
+  status: 'berjalan' | 'selesai' | 'gagal';
+  berjalan_detik: number;
+  hasil?: MlAnalisaResponse;
+  error?: { status_code: number; detail: unknown };
+}
+
+/** Ambang tampilan info "masih berjalan" di UI — bukan batas tunggu, pemollan tetap berlanjut setelahnya. */
+export const ANALISA_AI_INFO_LAMA_MS = 5 * 60 * 1000;
+
+const ANALISA_JOB_POLL_MS = 3000;
+
+function tunda(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => {
+      clearTimeout(timer);
+      reject(new DOMException('Dibatalkan', 'AbortError'));
+    }, { once: true });
+  });
+}
+
+/**
+ * Menjalankan analisa sebagai job latar belakang dan memoll sampai selesai.
+ *
+ * `onProgress` dipanggil setiap kali status dipoll (termasuk saat masih
+ * berjalan) dengan detik berjalan sejauh ini, supaya UI bisa menampilkan
+ * info "lebih dari 5 menit" tanpa membatalkan apa pun.
+ */
+export async function getMlAnalisaViaJob(
+  documentId: number,
+  mode: 'deterministik' | 'ai' = 'ai',
+  segar: boolean = false,
+  signal?: AbortSignal,
+  onProgress?: (detikBerjalan: number) => void
+): Promise<MlAnalisaResponse> {
+  const query = new URLSearchParams();
+  query.append('mode', mode);
+  if (segar) query.append('segar', 'true');
+
+  const mulai = await apiJson<MlAnalisaJobStart>(
+    'POST',
+    `${ML_API_BASE_URL}/analisa/${documentId}/mulai?${query.toString()}`,
+    undefined,
+    { signal }
+  );
+
+  for (;;) {
+    const job = await apiFetch<MlAnalisaJobStatus>(
+      `${ML_API_BASE_URL}/analisa-job/${mulai.job_id}`,
+      { signal }
+    );
+    onProgress?.(job.berjalan_detik);
+
+    if (job.status === 'selesai' && job.hasil) {
+      const res = job.hasil;
+      if (res && typeof res === 'object' && res.kerangka !== undefined && res.kerangka !== null) {
+        return { ...res, kerangka: normalisasiKerangka(res.kerangka) };
+      }
+      return res;
+    }
+    if (job.status === 'gagal') {
+      const detail = job.error?.detail;
+      const pesan = typeof detail === 'object' && detail && 'message' in (detail as Record<string, unknown>)
+        ? String((detail as Record<string, unknown>).message)
+        : typeof detail === 'string' ? detail : 'Analisa gagal di layanan ML.';
+      throw new Error(pesan);
+    }
+
+    await tunda(ANALISA_JOB_POLL_MS, signal);
+  }
 }
 
 /**
