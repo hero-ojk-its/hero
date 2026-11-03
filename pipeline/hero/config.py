@@ -128,8 +128,10 @@ class OcrSettings:
     dpi: int = 300
     # Below this many characters on a page, the page is treated as image-only.
     min_chars_per_page: int = 120
-    # If more than this fraction of pages is image-only, OCR the whole document.
-    max_pages: int = 60
+    # Anggaran halaman OCR per dokumen. 0 (bawaan) = tanpa batas: semua halaman
+    # pindai dibaca, jadi dokumen tebal tidak terpotong diam-diam. Isi angka > 0
+    # hanya bila server perlu dilindungi dari satu dokumen yang sangat besar.
+    max_pages: int = 0
     # Image-quality pipeline run before Tesseract (orientation fix, deskew,
     # binarize). Turn off only to reproduce the raw-Tesseract baseline.
     preprocess: bool = True
@@ -175,12 +177,20 @@ class AnalysisSettings:
     """URD 3.1: AI-Assisted is optional and off by default; Deterministic always runs."""
 
     ai_enabled: bool = False
+    # Penyedia layanan AI: "anthropic" (Claude) atau "gemini" (Google AI).
+    # Dibiarkan kosong = ditebak dari nama model, supaya mengganti ai_model saja
+    # sudah cukup dan tidak ada kombinasi penyedia/model yang saling bertentangan.
+    ai_provider: str = ""
     ai_model: str = "claude-opus-5"
     ai_effort: str = "medium"          # low | medium | high — narration is not a hard reasoning task
     # Documents classified internal/rahasia never leave the server unless this
     # is explicitly turned on (Project Charter: data DPEA confidential).
     ai_allow_internal: bool = False
     ai_max_facts: int = 24
+    # Detik menunggu jawaban model; 0 = tanpa batas (bawaan). Dokumen tebal
+    # tidak boleh dipotong di tengah narasi; kegagalan nyata (auth, laju,
+    # koneksi) tetap kembali ke hasil Deterministik tanpa menunggu.
+    ai_timeout: float = 0.0
 
 
 @dataclass

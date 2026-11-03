@@ -219,8 +219,11 @@ def _extract_subject(text: str) -> str | None:
             continue
         # A section marker can also sit mid-line once the PDF's columns are
         # flattened, e.g. "... RAKYAT SYARIAH ABSTRAK : - POJK mengenai ...".
-        cut = re.search(r"\b(ABSTRAK|ABSTRACT|RINGKASAN)\b\s*:?", line,
-                        re.IGNORECASE)
+        # Same for the preamble itself: when the text layer drops the newline
+        # before "Menimbang"/"Mengingat", the line-start check above never
+        # fires and the whole considerans paragraph gets read as the title.
+        cut = re.search(r"\b(ABSTRAK|ABSTRACT|RINGKASAN|MENIMBANG|MENGINGAT|bahwa)\b\s*:?",
+                        line, re.IGNORECASE)
         if cut and cut.start() > 0:
             lines.append(line[: cut.start()].strip())
             break

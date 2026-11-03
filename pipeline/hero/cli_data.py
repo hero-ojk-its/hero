@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Optional
 
 import typer
 import yaml
@@ -22,6 +23,7 @@ CONFIG_OPT = typer.Option("config/sources.yaml", "--config", "-c")
 akses_app = typer.Typer(help="Klasifikasi akses dokumen: publik harus terbukti, bukan diasumsikan.")
 harmonisasi_app = typer.Typer(help="Harmonisasi draft vs Knowledge Base, per pasal (URD 3.4).")
 scan_app = typer.Typer(help="Indeks hasil scan tanpa unduh: ukuran berkas & kriteria penerimaan (MoM #4).")
+uat_app = typer.Typer(help="Set uji UAT Fase 2: skenario 1.480 + 20 dokumen (MoM #7).")
 
 
 @scan_app.command("ukur")
@@ -264,3 +266,55 @@ def ekstrak_ulang_cmd(
         rep = sync(conn, full=True)
     console.print(f"[green]✓[/] read model dibangun ulang ({rep.rebuilt}). Lanjutkan dengan "
                   "`hero graph build`, `hero analisa --semua`, dan `hero vector build`.")
+
+
+@uat_app.command("siapkan")
+def uat_siapkan(
+    sisihkan: int = typer.Option(20, "--sisihkan", "-n",
+                                 help="Jumlah dokumen yang disisihkan sebagai test case."),
+    seed: str = typer.Option("uat-fase2", "--seed",
+                             help="Benih pemilihan; sama benih = sama pilihan."),
+    out: Optional[Path] = typer.Option(None, "--out", "-o", help="Tulis manifes JSON."),
+    config: Path = CONFIG_OPT,
+) -> None:
+    """Skenario uji Pak Faris: sisihkan N dokumen, sisanya ke KB (MoM #7)."""
+    import sqlite3
+
+    from hero.dq.uat import siapkan
+
+    settings = load_settings(config)
+    with sqlite3.connect(settings.catalog_db, timeout=60) as conn:
+        hasil = siapkan(conn, sisihkan=sisihkan, seed=seed)
+
+    if not hasil["cukup"]:
+        console.print(f"[yellow]Korpus belum cukup:[/] {hasil['alasan']}")
+        raise typer.Exit(1)
+
+    console.print(f"[bold]Skenario UAT[/] · benih '{hasil['seed']}' · "
+                  f"{hasil['total_dokumen']} dokumen terindeks")
+    console.print(f"  muat ke KB lebih dulu : {hasil['muat_ke_kb']}")
+    console.print(f"  disisihkan (fase A)   : {hasil['disisihkan']} "
+                  f"({hasil['kasus_sulit_disisihkan']} kasus sulit: hasil pindai/OCR)")
+    console.print(f"  uji duplikat (fase B) : {len(hasil['fase_b_duplikat'])}")
+    console.print(f"  sebaran jenis         : {hasil['sebaran_jenis_disisihkan']}")
+    if hasil["harapan_tidak_lengkap"]:
+        console.print(f"  [yellow]harapan tak lengkap  : {hasil['harapan_tidak_lengkap']} "
+                      "dokumen identitasnya belum terbaca — pakai sebagai kasus koreksi "
+                      "manual (US-20), bukan kriteria lulus[/]")
+
+    t = Table(title="Fase A — 'terbaca atau tidak?'", header_style="bold cyan")
+    for col in ("Dokumen", "Harapan jenis/nomor/tahun", "Hal", "Sulit", "Kriteria"):
+        t.add_column(col, overflow="fold")
+    for k in hasil["fase_a_keterbacaan"]:
+        h = k["harapan"]
+        t.add_row(k["doc_id"][:12], f"{h['jenis']} {h['nomor']} / {h['tahun']}",
+                  str(h["jumlah_halaman"]), "ya" if k["sulit"] else "",
+                  "lulus/gagal" if k["harapan_lengkap"] else "koreksi manual")
+    console.print(t)
+
+    if out:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(hasil, ensure_ascii=False, indent=2), encoding="utf-8")
+        console.print(f"[green]✓[/] manifes ditulis: {out}")
+    else:
+        console.print("[dim]Tambahkan --out data/export/uat-fase2.json untuk menyimpan manifes.[/]")

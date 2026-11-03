@@ -370,26 +370,37 @@ def extract_pdf(
                         len(ocr_todo), path.name,
                     )
                 else:
-                    budget = ocr_todo[: ocr_cfg.max_pages]
+                    # max_pages <= 0 = semua halaman dibaca (tanpa anggaran).
+                    limit = ocr_cfg.max_pages if ocr_cfg.max_pages and ocr_cfg.max_pages > 0 else None
+                    budget = ocr_todo if limit is None else ocr_todo[:limit]
                     if len(ocr_todo) > len(budget):
                         log.warning(
                             "%s: OCR budget %d pages, %d needed — truncating",
                             path.name, ocr_cfg.max_pages, len(ocr_todo),
                         )
-                    rendered = [
-                        (i, doc[i].get_pixmap(dpi=ocr_cfg.dpi).tobytes("png"))
-                        for i in budget
-                    ]
+                    # Render per jendela, bukan seluruh dokumen sekaligus: 345
+                    # halaman pada 300 dpi sebagai PNG ±1 GB di memori, lebih
+                    # dari RAM VPS. pymupdf tidak aman lintas utas, jadi render
+                    # tetap di utas ini; hanya OCR (proses tesseract) yang paralel.
+                    window = max(1, max_workers * 2)
+
+                    def _ocr(item):
+                        return ocr_pixmap_bytes(
+                            item[1], ocr_cfg.languages,
+                            preprocess=ocr_cfg.preprocess,
+                            deskew=ocr_cfg.deskew,
+                            adaptive_retry=ocr_cfg.adaptive_retry,
+                        )
+
+                    rendered, outputs = [], []
                     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-                        outputs = list(pool.map(
-                            lambda item: ocr_pixmap_bytes(
-                                item[1], ocr_cfg.languages,
-                                preprocess=ocr_cfg.preprocess,
-                                deskew=ocr_cfg.deskew,
-                                adaptive_retry=ocr_cfg.adaptive_retry,
-                            ),
-                            rendered,
-                        ))
+                        for start in range(0, len(budget), window):
+                            chunk = [
+                                (i, doc[i].get_pixmap(dpi=ocr_cfg.dpi).tobytes("png"))
+                                for i in budget[start:start + window]
+                            ]
+                            outputs.extend(pool.map(_ocr, chunk))
+                            rendered.extend((i, None) for i, _ in chunk)
                     for (i, _), out in zip(rendered, outputs):
                         text = reflow_paragraphs(clean_text(out["text"]))
                         # Keep whichever layer actually produced content; for a

@@ -27,8 +27,8 @@ export type StatusDraftMirip = 'identik' | 'sangat_mirip';
 /** Nilai status per pasal dari banding_pasal() */
 export type StatusPasal = 'sama' | 'berubah' | 'baru' | 'dihapus';
 
-/** Perbandingan Jaccard terhadap hingga 200 draft bisa lebih lama dari batas bawaan 15 detik */
-export const KEMIRIPAN_TIMEOUT_MS = 60000;
+/** Perbandingan Jaccard terhadap hingga 200 draft bisa lama; 0 = tanpa batas waktu */
+export const KEMIRIPAN_TIMEOUT_MS = 0;
 
 export interface GetKemiripanDraftOptions {
   /** Tanpa ambang, backend memakai ambang bawaannya (dikembalikan di respons) */

@@ -164,9 +164,53 @@ def _facts_hash(facts: list[dict[str, Any]]) -> str:
     return hashlib.sha256(json.dumps(facts, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:20]
 
 
-def credentials_hint() -> str | None:
+ANTHROPIC, GEMINI = "anthropic", "gemini"
+_ALIAS = {"anthropic": ANTHROPIC, "claude": ANTHROPIC,
+          "gemini": GEMINI, "google": GEMINI, "google-genai": GEMINI, "google-ai": GEMINI}
+_SDK = {ANTHROPIC: ("anthropic", 'pip install -e ".[ai]"'),
+        GEMINI: ("google.genai", 'pip install -e ".[ai-gemini]"')}
+
+
+def provider_of(settings: AnalysisSettings) -> str:
+    """Penyedia yang dipakai: dari ``ai_provider``, atau ditebak dari nama model.
+
+    Menebak dari nama model membuat "ganti ai_model ke gemini-…" cukup dengan
+    satu baris konfigurasi, dan menghindari keadaan tak masuk akal seperti
+    provider anthropic dengan model gemini.
+    """
+    raw = (getattr(settings, "ai_provider", "") or "").strip().lower()
+    if raw:
+        if raw not in _ALIAS:
+            raise ValueError(f"analysis.ai_provider '{raw}' tidak dikenal "
+                             f"(pilih: anthropic, gemini)")
+        return _ALIAS[raw]
+    return GEMINI if (settings.ai_model or "").lower().startswith("gemini") else ANTHROPIC
+
+
+def _tanpa_additional_properties(node: Any) -> Any:
+    """Skema untuk Gemini: ``additionalProperties`` tidak didukung di sana.
+
+    Skema yang sama dipakai dua penyedia supaya kontrak keluaran tidak bercabang;
+    yang berbeda hanya kata kunci yang tidak dikenal Gemini dan akan membuat
+    permintaannya ditolak sebelum model dipanggil.
+    """
+    if isinstance(node, dict):
+        return {k: _tanpa_additional_properties(v) for k, v in node.items()
+                if k != "additionalProperties"}
+    if isinstance(node, list):
+        return [_tanpa_additional_properties(v) for v in node]
+    return node
+
+
+def credentials_hint(provider: str = ANTHROPIC) -> str | None:
     """Best local guess; the SDK also reads `ant auth login` profiles, which we
     cannot see here, so absence of env vars is reported as 'belum terlihat'."""
+    if provider == GEMINI:
+        if os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"):
+            return "variabel lingkungan"
+        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+            return "kredensial akun layanan Google"
+        return None
     if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"):
         return "variabel lingkungan"
     if os.path.isdir(os.path.expanduser("~/.config/anthropic")):
@@ -178,16 +222,28 @@ class _TidakPernahTerjadi(Exception):
     """Penampung ``except`` saat SDK tidak terpasang: tidak ada yang melemparnya."""
 
 
-def _sdk_errors() -> dict[str, type[BaseException] | tuple[type[BaseException], ...]]:
+_KOSONG = dict.fromkeys(("auth", "izin", "laju", "status", "koneksi"), _TidakPernahTerjadi)
+
+
+def _sdk_errors(provider: str = ANTHROPIC) -> dict[str, type[BaseException] | tuple[type[BaseException], ...]]:
     """Kelas galat SDK bila ada; penampung yang tidak pernah terpicu bila tidak.
 
     Tanpa SDK, galat apa pun dari klien yang disuntikkan akan naik ke pemanggil
     apa adanya — itu memang yang benar: kita tidak tahu artinya, jadi jangan
     menyamarkannya sebagai "layanan AI tidak tersedia"."""
+    if provider == GEMINI:
+        # google-genai menyatukan galat HTTP di APIError (ClientError/ServerError
+        # turunannya), tanpa kelas terpisah per sebab. Jadi semuanya ditangkap di
+        # satu pintu dan dipilah dari kode statusnya di ``_pilah_galat_gemini``.
+        try:
+            from google.genai import errors
+        except ImportError:
+            return dict(_KOSONG)
+        return dict(_KOSONG, status=errors.APIError)
     try:
         import anthropic
     except ImportError:
-        return dict.fromkeys(("auth", "izin", "laju", "status", "koneksi"), _TidakPernahTerjadi)
+        return dict(_KOSONG)
     return {"auth": anthropic.AuthenticationError,
             "izin": anthropic.PermissionDeniedError,
             "laju": anthropic.RateLimitError,
@@ -195,34 +251,80 @@ def _sdk_errors() -> dict[str, type[BaseException] | tuple[type[BaseException], 
             "koneksi": anthropic.APIConnectionError}
 
 
+def _pilah_galat_gemini(exc: BaseException) -> str:
+    """Pesan yang bisa dibaca manusia dari satu APIError Google.
+
+    Kodenya dibaca dari atribut, bukan dari teks pesan: 401/403 berarti
+    kredensial atau izin, 429 berarti kuota — pembedaan yang menentukan apakah
+    operator perlu memperbaiki kunci atau sekadar menunggu.
+    """
+    kode = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+    try:
+        kode = int(kode)
+    except (TypeError, ValueError):
+        kode = None
+    if kode in (401, 403):
+        return "Kredensial Google AI tidak valid atau tidak punya izin untuk model ini"
+    if kode == 429:
+        return "Kuota/batas laju Google AI tercapai — coba lagi nanti"
+    if kode == 404:
+        return "Model Gemini tidak ditemukan — periksa analysis.ai_model"
+    if kode and 500 <= kode < 600:
+        return f"Layanan Google AI sedang bermasalah (galat {kode})"
+    return f"Galat API Google AI {kode or '?'}"
+
+
 class AiNarrator:
     def __init__(self, settings: AnalysisSettings, client: Any | None = None):
         self.settings = settings
         self._client = client
 
+    @property
+    def provider(self) -> str:
+        return provider_of(self.settings)
+
     def status(self) -> dict[str, Any]:
+        import importlib
+
+        prov = self.provider
+        modul, pasang = _SDK[prov]
         try:
-            import anthropic  # noqa: F401
+            importlib.import_module(modul)
             sdk = True
         except ImportError:
             sdk = False
-        cred = credentials_hint() if self._client is None else "klien disuntikkan"
+        cred = credentials_hint(prov) if self._client is None else "klien disuntikkan"
         ready = self.settings.ai_enabled and sdk and cred is not None
+        nama = "Claude" if prov == ANTHROPIC else "Google AI"
         if not self.settings.ai_enabled:
             summary = "tersedia, dinonaktifkan di konfigurasi (analysis.ai_enabled: false)"
         elif not sdk:
-            summary = "diaktifkan, tetapi SDK anthropic belum terpasang (pip install -e \".[ai]\")"
+            summary = f"diaktifkan, tetapi SDK {modul} belum terpasang ({pasang})"
         elif cred is None:
-            summary = "diaktifkan, tetapi kredensial Claude belum terlihat"
+            summary = f"diaktifkan, tetapi kredensial {nama} belum terlihat"
         else:
-            summary = f"aktif ({self.settings.ai_model}, kredensial: {cred})"
-        return {"aktif": ready, "sdk": sdk, "kredensial": cred, "model": self.settings.ai_model,
-                "ringkas": summary}
+            summary = f"aktif ({prov}/{self.settings.ai_model}, kredensial: {cred})"
+        return {"aktif": ready, "sdk": sdk, "kredensial": cred, "penyedia": prov,
+                "model": self.settings.ai_model, "ringkas": summary}
+
+    def _timeout(self):
+        """Batas klien AI. ``ai_timeout`` <= 0 = tanpa batas baca: narasi dokumen
+        tebal tidak dipotong di tengah. Menyambung tetap dibatasi 15 s agar
+        layanan yang mati gagal cepat dan jatuh ke hasil Deterministik."""
+        batas = getattr(self.settings, "ai_timeout", 0) or 0
+        if batas > 0:
+            return float(batas)
+        import httpx
+        return httpx.Timeout(None, connect=15.0)
 
     def _get_client(self):
         if self._client is None:
-            import anthropic
-            self._client = anthropic.Anthropic(max_retries=2, timeout=120.0)
+            if self.provider == GEMINI:
+                from google import genai
+                self._client = genai.Client()
+            else:
+                import anthropic
+                self._client = anthropic.Anthropic(max_retries=2, timeout=self._timeout())
         return self._client
 
     def narrate(self, a: AnalysisV2, *, akses: str = "publik", conn: sqlite3.Connection | None = None,
@@ -247,7 +349,8 @@ class AiNarrator:
         try:
             client = self._get_client()
         except ImportError:
-            return AiResult("deterministik", "SDK anthropic belum terpasang — pip install -e \".[ai]\"")
+            modul, pasang = _SDK[self.provider]
+            return AiResult("deterministik", f"SDK {modul} belum terpasang — {pasang}")
         result = self._call(client, a, facts)
         if conn is not None:
             with conn:
@@ -259,15 +362,31 @@ class AiNarrator:
         return result
 
     def _call(self, client, a: AnalysisV2, facts: list[dict[str, Any]]) -> AiResult:
+        """Panggil penyedia, lalu verifikasi hasilnya dengan aturan yang sama.
+
+        Hanya bentuk panggilan dan pembacaan galat yang berbeda antar penyedia.
+        ``build_facts`` dan ``verify`` tidak bercabang: jaminan "model hanya
+        boleh memakai fakta yang diberikan" harus identik di Claude maupun
+        Gemini, kalau tidak jaminannya bukan jaminan.
+        """
+        user = ("FAKTA (JSON):\n" + json.dumps(facts, ensure_ascii=False, indent=1)
+                + "\n\nTulis ringkasan dan poin_kunci sesuai aturan.")
+        if self.provider == GEMINI:
+            text, usage, model, gagal = self._minta_gemini(client, user)
+        else:
+            text, usage, model, gagal = self._minta_anthropic(client, user)
+        if gagal is not None:
+            return AiResult("deterministik", gagal, model=model, usage=usage)
+        return self._periksa(text, usage, model, a, facts)
+
+    def _minta_anthropic(self, client, user: str):
         # Kelas galat SDK diambil lewat ``_sdk_errors`` dan bukan lewat
         # ``import anthropic`` di sini: klien boleh disuntikkan (uji, atau
         # gateway lain), dan menuntut SDK hanya untuk membaca nama galatnya
         # akan menjatuhkan jalur yang justru dirancang untuk tetap jalan tanpa
         # layanan AI (NFR-04).
-        err = _sdk_errors()
+        err = _sdk_errors(ANTHROPIC)
         s = self.settings
-        user = ("FAKTA (JSON):\n" + json.dumps(facts, ensure_ascii=False, indent=1)
-                + "\n\nTulis ringkasan dan poin_kunci sesuai aturan.")
         try:
             response = client.beta.messages.create(
                 model=s.ai_model,
@@ -280,24 +399,62 @@ class AiNarrator:
                                "format": {"type": "json_schema", "schema": OUTPUT_SCHEMA}},
             )
         except err["auth"]:
-            return AiResult("deterministik", "Kredensial Claude tidak valid atau belum diatur")
+            return None, {}, None, "Kredensial Claude tidak valid atau belum diatur"
         except err["izin"]:
-            return AiResult("deterministik", "Kredensial tidak memiliki izin untuk model ini")
+            return None, {}, None, "Kredensial tidak memiliki izin untuk model ini"
         except err["laju"]:
-            return AiResult("deterministik", "Batas laju API tercapai — coba lagi nanti")
+            return None, {}, None, "Batas laju API tercapai — coba lagi nanti"
         except err["status"] as exc:
-            return AiResult("deterministik", f"Galat API {getattr(exc, 'status_code', '?')}")
+            return None, {}, None, f"Galat API {getattr(exc, 'status_code', '?')}"
         except err["koneksi"]:
-            return AiResult("deterministik", "Tidak dapat terhubung ke layanan AI")
+            return None, {}, None, "Tidak dapat terhubung ke layanan AI"
 
         usage = {k: getattr(response.usage, k, None) for k in
                  ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")}
+        model = getattr(response, "model", s.ai_model)
         if response.stop_reason == "refusal":
             cat = getattr(getattr(response, "stop_details", None), "category", None)
-            return AiResult("deterministik", f"Model menolak permintaan (kategori: {cat})", usage=usage)
+            return None, usage, model, f"Model menolak permintaan (kategori: {cat})"
         if response.stop_reason == "max_tokens":
-            return AiResult("deterministik", "Keluaran model terpotong (max_tokens)", usage=usage)
+            return None, usage, model, "Keluaran model terpotong (max_tokens)"
         text = next((b.text for b in response.content if getattr(b, "type", None) == "text"), None)
+        return text, usage, model, None
+
+    def _minta_gemini(self, client, user: str):
+        err = _sdk_errors(GEMINI)
+        s = self.settings
+        try:
+            response = client.models.generate_content(
+                model=s.ai_model,
+                contents=user,
+                config={
+                    "system_instruction": SYSTEM_PROMPT,
+                    "response_mime_type": "application/json",
+                    # Gemini menolak 'additionalProperties', jadi dibuang di sini.
+                    "response_schema": _tanpa_additional_properties(OUTPUT_SCHEMA),
+                    # Parafrase fakta, bukan karangan: jangan beri ruang kreatif.
+                    "temperature": 0,
+                },
+            )
+        except err["status"] as exc:
+            return None, {}, None, _pilah_galat_gemini(exc)
+
+        meta = getattr(response, "usage_metadata", None)
+        usage = {
+            "input_tokens": getattr(meta, "prompt_token_count", None),
+            "output_tokens": getattr(meta, "candidates_token_count", None),
+            "cache_read_input_tokens": getattr(meta, "cached_content_token_count", None),
+            "cache_creation_input_tokens": None,
+        }
+        model = getattr(response, "model_version", None) or s.ai_model
+        alasan = _finish_reason_gemini(response)
+        if alasan is not None:
+            return None, usage, model, alasan
+        return getattr(response, "text", None), usage, model, None
+
+    def _periksa(self, text: str | None, usage: dict[str, Any], model: str | None,
+                 a: AnalysisV2, facts: list[dict[str, Any]]) -> AiResult:
+        s = self.settings
         try:
             output = json.loads(text or "")
         except ValueError:
@@ -306,10 +463,34 @@ class AiNarrator:
         if problems:
             log.warning("AI output rejected for %s: %s", a.doc_id, problems)
             return AiResult("deterministik", "Keluaran AI ditolak verifikasi — menampilkan hasil Deterministik",
-                            model=getattr(response, "model", s.ai_model), pelanggaran=problems, usage=usage)
+                            model=model or s.ai_model, pelanggaran=problems, usage=usage)
         pasal = {f["id"]: f.get("pasal") for f in facts}
         ringkasan = [{"kalimat": x["kalimat"], "fakta": x["fakta"],
                       "rujukan": sorted({pasal[i] for i in x["fakta"] if pasal.get(i)})}
                      for x in output["ringkasan"]]
         return AiResult("ai", None, ringkasan, {x["fakta"]: x["parafrase"] for x in output["poin_kunci"]},
-                        getattr(response, "model", s.ai_model), usage=usage)
+                        model or s.ai_model, usage=usage)
+
+
+def _finish_reason_gemini(response: Any) -> str | None:
+    """Alasan berhenti yang membuat keluaran tak terpakai, atau None bila wajar.
+
+    Kandidat kosong juga dihitung gagal: itu yang terjadi saat filter keamanan
+    Google memblokir permintaan, dan tanpa pemeriksaan ini ``response.text``
+    bernilai None lalu muncul sebagai "bukan JSON yang valid" — pesan yang
+    menyesatkan operator.
+    """
+    kandidat = getattr(response, "candidates", None) or []
+    if not kandidat:
+        blokir = getattr(getattr(response, "prompt_feedback", None), "block_reason", None)
+        return f"Permintaan diblokir filter Google AI (alasan: {blokir or '?'})"
+    alasan = getattr(kandidat[0], "finish_reason", None)
+    nama = getattr(alasan, "name", None) or (str(alasan) if alasan is not None else "")
+    nama = nama.upper()
+    if nama in ("", "STOP", "FINISH_REASON_STOP"):
+        return None
+    if "MAX_TOKEN" in nama:
+        return "Keluaran model terpotong (max_tokens)"
+    if "SAFETY" in nama or "BLOCK" in nama or "RECITATION" in nama:
+        return f"Model menolak permintaan (kategori: {nama})"
+    return f"Model berhenti tidak wajar ({nama})"

@@ -278,7 +278,7 @@ export async function checkDuplicate(
 /**
  * Mengunggah berkas PDF secara manual via POST /api/v1/ingest/upload-pdf (multipart/form-data)
  * Menggunakan apiUpload (XHR) agar event kemajuan byte unggah aktual dapat dipantau secara riil.
- * Timeout diatur 120 detik (120.000 ms) sesuai spesifikasi.
+ * Tanpa batas waktu: berkas besar tetap terunggah sampai selesai (dapat dibatalkan lewat `signal`).
  */
 export async function uploadManualPdf(
   formData: FormData,
@@ -286,7 +286,7 @@ export async function uploadManualPdf(
   onProgress?: (progress: UploadProgressEvent) => void
 ): Promise<IngestUploadResponse> {
   return apiUpload<IngestUploadResponse>('/api/v1/ingest/upload-pdf', formData, {
-    timeout: 120000,
+    timeout: 0,
     signal,
     onProgress,
   });
@@ -510,7 +510,7 @@ export async function retryIngestFailure(
   signal?: AbortSignal
 ): Promise<FailureRetryResponse> {
   return apiJson<FailureRetryResponse>('POST', `/api/v1/ingest/failures/${failureId}/retry`, body || {}, {
-    timeout: 120000,
+    timeout: 0,
     signal,
   });
 }
@@ -523,7 +523,7 @@ export async function batchRetryIngestFailures(
   signal?: AbortSignal
 ): Promise<BatchRetryResponse> {
   return apiJson<BatchRetryResponse>('POST', '/api/v1/ingest/failures/retry', body, {
-    timeout: 180000,
+    timeout: 0,
     signal,
   });
 }

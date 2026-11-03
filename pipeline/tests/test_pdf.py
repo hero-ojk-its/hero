@@ -132,3 +132,46 @@ def test_leading_page_number_is_stripped_from_page_start():
                     text="-2Indonesia Nomor 106/OJK);\nlanjutan teks.")]
     strip_repeated_lines(pgs)
     assert pgs[0].text.startswith("Indonesia Nomor")
+
+
+# ---------------------------------------------------------------------------
+# Anggaran OCR & render per jendela (tanpa Tesseract: OCR ditiru)
+# ---------------------------------------------------------------------------
+def _ocr_tiruan(monkeypatch, dipanggil):
+    import hero.extract.pdf as pdfmod
+
+    def palsu(png, languages, **kw):
+        dipanggil.append(len(png))
+        return {"text": "Pasal 1 isi hasil pembacaan halaman pindai " * 5, "confidence": 90.0,
+                "rotation_applied": 0, "preprocessed": True, "attempts": 1}
+
+    monkeypatch.setattr(pdfmod, "tesseract_available", lambda: True)
+    monkeypatch.setattr(pdfmod, "ocr_pixmap_bytes", palsu)
+
+
+def _pdf_kosong(path, halaman):
+    doc = pymupdf.open()
+    for _ in range(halaman):
+        doc.new_page()
+    doc.save(path)
+    doc.close()
+    return path
+
+
+def test_ocr_tanpa_batas_halaman_membaca_semua(tmp_path, monkeypatch):
+    """max_pages=0 (bawaan): 7 halaman pindai semuanya dibaca, melewati jendela render."""
+    dipanggil: list[int] = []
+    _ocr_tiruan(monkeypatch, dipanggil)
+    pdf = _pdf_kosong(tmp_path / "pindai.pdf", 7)
+    res = extract_pdf(pdf, OcrSettings(enabled=True, dpi=50, max_pages=0), max_workers=2)
+    assert res.page_count == 7 and res.ocr_pages == 7
+    assert len(dipanggil) == 7
+    assert [p.number for p in res.pages] == list(range(1, 8)), "urutan halaman harus terjaga"
+
+
+def test_ocr_dengan_anggaran_tetap_memotong(tmp_path, monkeypatch):
+    dipanggil: list[int] = []
+    _ocr_tiruan(monkeypatch, dipanggil)
+    pdf = _pdf_kosong(tmp_path / "pindai.pdf", 7)
+    res = extract_pdf(pdf, OcrSettings(enabled=True, dpi=50, max_pages=3), max_workers=2)
+    assert res.ocr_pages == 3 and len(dipanggil) == 3

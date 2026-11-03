@@ -159,6 +159,27 @@ class BridgeState:
             return 0
         return int(row["articles"])
 
+    def dokumen_selesai(self) -> list[int]:
+        """Dokumen yang pernah selesai diekstraksi dan punya pasal terkirim."""
+        return [int(r["document_id"]) for r in self.conn.execute(
+            "SELECT document_id FROM extraction WHERE status = 'selesai' AND articles > 0 "
+            "ORDER BY document_id")]
+
+    def lupakan_kiriman(self, document_ids: "Iterable[int]") -> int:
+        """Hapus catatan 'pasal sudah terkirim' agar ekstraksi berikutnya mengirim ulang.
+
+        Dipakai untuk melengkapi halaman PDF pasal pada dokumen yang diekstraksi
+        sebelum kontrak Langkah 13. Aman diulang: pada backend berkontrak baru
+        kiriman memakai ``replace_document_ids`` (ganti-bersih), jadi tidak
+        menggandakan pasal.
+        """
+        ids = [(int(i),) for i in document_ids]
+        self.conn.executemany(
+            "UPDATE extraction SET articles = 0, vectors = 0, articles_hash = NULL, "
+            "status = 'antre-ulang' WHERE document_id = ?", ids)
+        self.conn.commit()
+        return len(ids)
+
     def begin_extraction(self, document_id: int, *, file_hash: str | None, attempt: int) -> None:
         self.conn.execute(
             "INSERT INTO extraction (document_id, file_hash, status, attempt, started_at) "

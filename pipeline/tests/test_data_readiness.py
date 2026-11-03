@@ -258,3 +258,98 @@ def test_garbled_text_layer_is_detected_but_lists_are_not():
     listing = "\n".join([f"{n}." if n % 2 else "Bank wajib menyampaikan laporan bulanan."
                          for n in range(30)])
     assert garbled_text_layer(garbled) and not garbled_text_layer(listing)
+
+
+# ------------------------------------------------------------------- UAT Fase 2
+def _katalog_uat(tmp_path, n=60, scan_idx=(3, 7)):
+    """Katalog sintetis: n dokumen, beberapa di antaranya hasil pindai."""
+    db = tmp_path / "uat.db"
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE documents (doc_id TEXT PRIMARY KEY, sha256 TEXT, doc_type TEXT, "
+        "number TEXT, year INTEGER, title TEXT, stored_path TEXT, page_count INTEGER, "
+        "ocr_pages INTEGER, is_scanned INTEGER, size_bytes INTEGER, access_class TEXT, "
+        "status TEXT)")
+    jenis = ["POJK", "SEOJK", "PADK", "PBI"]
+    for i in range(n):
+        conn.execute("INSERT INTO documents VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (
+            f"doc{i:04d}", f"{i:064d}", jenis[i % len(jenis)], f"{i} Tahun 2026", 2026,
+            f"Judul {i}", f"kb/{i}.pdf", 10 + i, 5 if i in scan_idx else 0,
+            1 if i in scan_idx else 0, 1000 + i, "publik", "ingested"))
+    conn.commit()
+    return conn
+
+
+def test_uat_split_deterministik_dan_dapat_diulang(tmp_path):
+    from hero.dq.uat import siapkan
+
+    conn = _katalog_uat(tmp_path)
+    a = siapkan(conn, sisihkan=20)
+    b = siapkan(conn, sisihkan=20)
+    ids_a = [k["doc_id"] for k in a["fase_a_keterbacaan"]]
+    ids_b = [k["doc_id"] for k in b["fase_a_keterbacaan"]]
+    # Benih sama -> pilihan sama. Tanpa ini UAT tidak bisa diulang.
+    assert ids_a == ids_b
+    # Benih beda -> pilihan beda (bukan 20 baris pertama tabel).
+    lain = [k["doc_id"] for k in siapkan(conn, sisihkan=20, seed="lain")["fase_a_keterbacaan"]]
+    assert lain != ids_a
+
+
+def test_uat_memisahkan_yang_dimuat_dan_yang_disisihkan(tmp_path):
+    from hero.dq.uat import siapkan
+
+    conn = _katalog_uat(tmp_path, n=60)
+    h = siapkan(conn, sisihkan=20)
+    assert h["total_dokumen"] == 60
+    assert h["muat_ke_kb"] == 40 and h["disisihkan"] == 20
+    disisihkan = {k["doc_id"] for k in h["fase_a_keterbacaan"]}
+    duplikat = {k["doc_id"] for k in h["fase_b_duplikat"]}
+    # Fase B harus memakai dokumen yang SUDAH di KB, bukan yang disisihkan —
+    # kalau bertabrakan, uji duplikatnya menguji hal yang salah.
+    assert not (disisihkan & duplikat)
+
+
+def test_uat_mendahulukan_kasus_sulit_hasil_pindai(tmp_path):
+    from hero.dq.uat import siapkan
+
+    conn = _katalog_uat(tmp_path, n=60, scan_idx=(3, 7, 11))
+    h = siapkan(conn, sisihkan=20)
+    # MoM #7 menyebut PDF hasil pindai sebagai skenario yang harus diuji.
+    assert h["kasus_sulit_disisihkan"] == 3
+
+
+def test_uat_sebaran_jenis_tidak_didominasi_satu_jenis(tmp_path):
+    from hero.dq.uat import siapkan
+
+    conn = _katalog_uat(tmp_path, n=60)
+    h = siapkan(conn, sisihkan=20)
+    assert len(h["sebaran_jenis_disisihkan"]) >= 4
+
+
+def test_uat_identitas_belum_terbaca_ditandai_bukan_dijadikan_kriteria(tmp_path):
+    from hero.dq.uat import siapkan
+
+    conn = _katalog_uat(tmp_path, n=60)
+    conn.execute("UPDATE documents SET doc_type=NULL, number=NULL WHERE doc_id='doc0003'")
+    conn.commit()
+    h = siapkan(conn, sisihkan=20)
+    kasus = {k["doc_id"]: k for k in h["fase_a_keterbacaan"]}
+    assert kasus["doc0003"]["harapan_lengkap"] is False
+    assert h["harapan_tidak_lengkap"] >= 1
+
+
+def test_uat_korpus_terlalu_kecil_dilaporkan_bukan_dipaksa(tmp_path):
+    from hero.dq.uat import siapkan
+
+    conn = _katalog_uat(tmp_path, n=10)
+    h = siapkan(conn, sisihkan=20)
+    assert h["cukup"] is False and "10" in h["alasan"]
+
+
+def test_uat_kasus_duplikat_membawa_hash_dan_ukuran(tmp_path):
+    from hero.dq.uat import siapkan
+
+    conn = _katalog_uat(tmp_path, n=60)
+    h = siapkan(conn, sisihkan=20)
+    # Duplikat dinilai dari hash DAN ukuran bersama-sama (KEP-06/ADR-05).
+    assert all(k["sha256"] and k["ukuran_bytes"] for k in h["fase_b_duplikat"])

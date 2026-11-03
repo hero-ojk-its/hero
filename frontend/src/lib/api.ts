@@ -77,6 +77,7 @@ export const API_BASE_URL = rawBaseUrl.replace(/\/+$/, '');
 export const isApiConfigured: boolean = Boolean(rawBaseUrl && rawBaseUrl.trim() !== '');
 
 export interface FetchOptions extends RequestInit {
+  /** Batas waktu (ms). `0` = tanpa batas (dipakai ingest & analisis agar tidak terpotong). */
   timeout?: number;
 }
 
@@ -149,9 +150,11 @@ async function prepareAndFetchResponse(
 
   // Pengaturan Timeout dengan AbortController
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    controller.abort(new Error(`Permintaan ke ${url} melebihi batas waktu (${timeout} ms)`));
-  }, timeout);
+  const timeoutId = timeout > 0
+    ? setTimeout(() => {
+        controller.abort(new Error(`Permintaan ke ${url} melebihi batas waktu (${timeout} ms)`));
+      }, timeout)
+    : undefined;
 
   const onExternalAbort = () => {
     clearTimeout(timeoutId);
@@ -295,7 +298,9 @@ export function apiUpload<T>(
   formData: FormData,
   options: UploadOptions = {}
 ): Promise<T> {
-  const { timeout = 120000, signal, headers: customHeaders, onProgress } = options;
+  // Unggah tanpa batas waktu secara bawaan: berkas besar di jaringan lambat
+  // tidak boleh gagal hanya karena lama. Kirim `timeout` > 0 untuk membatasi.
+  const { timeout = 0, signal, headers: customHeaders, onProgress } = options;
 
   const url = endpoint.startsWith('http://') || endpoint.startsWith('https://')
     ? endpoint

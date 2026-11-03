@@ -59,7 +59,7 @@ class BackendClient:
     def _request(self, method: str, path: str, *, retries: int = 3,
                  backoff: float = 1.0, stream: bool = False, **kw) -> requests.Response:
         url = self.s.url(path)
-        kw.setdefault("timeout", self.s.timeout)
+        kw.setdefault("timeout", self.s.request_timeout)
         kw.setdefault("verify", self.s.verify_tls)
         last: Exception | None = None
         for attempt in range(1, retries + 1):

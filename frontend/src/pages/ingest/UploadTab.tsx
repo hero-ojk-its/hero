@@ -32,6 +32,13 @@ import { labelAlasanGagal } from '../../lib/labelStatus';
 import NamingFormatPicker from './components/NamingFormatPicker';
 import ManualUploadJobHistory from './components/ManualUploadJobHistory';
 
+// Harus sama dengan MAX_UPLOAD_MB backend (app/config.py: max_upload_mb, dan
+// `request_body max_size` di deploy/Caddyfile). Backend belum mengekspos angka
+// ini lewat API, jadi untuk sekarang disalin — dan dipakai BERSAMA oleh teks
+// bantuan dan validasinya supaya keduanya tidak bisa lagi berbeda.
+const MAX_UPLOAD_MB = 100;
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
+
 interface QueuedFileItem {
   id: string;
   file: File;
@@ -212,6 +219,21 @@ export default function UploadTab() {
 
       const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
       const sizeStr = file.size > 1024 * 1024 ? `${sizeMB} MB` : `${Math.max(1, Math.round(file.size / 1024))} KB`;
+
+      // Ditolak di sini, sebelum satu byte pun diunggah: tanpa cek ini berkas
+      // berukuran ratusan MB terkirim penuh dulu, baru ditolak backend.
+      if (file.size > MAX_UPLOAD_BYTES) {
+        newErrors.push(
+          `Berkas "${file.name}" ditolak. Ukurannya ${sizeStr}, melebihi batas ${MAX_UPLOAD_MB}MB per berkas.`
+        );
+        return;
+      }
+
+      // Berkas 0 byte tidak akan pernah lolos validasi backend (berkas_kosong).
+      if (file.size === 0) {
+        newErrors.push(`Berkas "${file.name}" ditolak karena kosong (0 byte).`);
+        return;
+      }
 
       const item: QueuedFileItem = {
         id: `file-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -702,7 +724,7 @@ export default function UploadTab() {
                   <div className="inline-flex items-center gap-2 text-xs text-gray-500 bg-gray-50 px-3.5 py-1.5 rounded-full border border-gray-200">
                     <span className="font-semibold text-gray-700">Hanya berkas PDF yang diterima.</span>
                     <span>•</span>
-                    <span>Maksimal 25MB per berkas</span>
+                    <span>Maksimal {MAX_UPLOAD_MB}MB per berkas</span>
                   </div>
                 </div>
               </div>

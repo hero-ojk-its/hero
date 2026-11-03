@@ -81,12 +81,11 @@ export default function AnalisaRegulasi() {
   const [isPollingActive, setIsPollingActive] = useState<boolean>(false);
   const [pollingTimeoutOccurred, setPollingTimeoutOccurred] = useState<boolean>(false);
 
-  // Hook Polling Status Dokumen Backend (Interval 2s, Batas waktu ~5 menit / 300.000 ms)
+  // Hook Polling Status Dokumen Backend (Interval 2s, tanpa batas waktu: dokumen tebal tetap dipantau sampai selesai)
   const documentPolling = usePolling<DocumentStatusResponse>({
     fn: (signal) => getDocumentStatus(uploadedDocumentId!, signal),
     isTerminal: (doc) => isDocumentReadyForAnalysis(doc) || isDocumentProcessingFailed(doc),
     interval: 2000,
-    maxDuration: 300000,
     enabled: isPollingActive && uploadedDocumentId !== null && uploadedDocumentId > 0,
     onSuccess: (doc) => {
       setIsPollingActive(false);

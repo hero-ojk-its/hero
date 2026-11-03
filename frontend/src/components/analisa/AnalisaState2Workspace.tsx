@@ -36,6 +36,7 @@ import { DraftLabel } from '../DraftLabel';
 import RingkasanAiPanel from './RingkasanAiPanel';
 import HarmonisasiPanel from './HarmonisasiPanel';
 import KemiripanDraftBanner from './KemiripanDraftBanner';
+import StatusPasalKb from './StatusPasalKb';
 import type { HarmonisasiPanelState } from './HarmonisasiPanel';
 import { postHarmonisasi, pesanGalatHarmonisasi } from '../../lib/harmonisasiApi';
 import type {
@@ -223,6 +224,16 @@ export default function AnalisaState2Workspace({
       harmonisasiDimintaRef.current = null;
     };
   }, [documentId]);
+
+  // Status pasal terhadap KB (definisi analisa Pak Faris) tampil di tab Ringkasan, jadi
+  // perbandingannya dijalankan otomatis begitu dokumen dibuka (sekali per dokumen).
+  useEffect(() => {
+    if (harmonisasiDimintaRef.current === documentId) return;
+    const t = setTimeout(() => {
+      if (harmonisasiDimintaRef.current !== documentId) void muatHarmonisasi(false);
+    }, 0);
+    return () => clearTimeout(t);
+  }, [documentId, muatHarmonisasi]);
 
   // Buka tab Harmonisasi; jalankan otomatis sekali per dokumen (dari event, bukan effect, agar tidak ganda di StrictMode)
   const bukaTabHarmonisasi = useCallback(() => {
@@ -1768,6 +1779,12 @@ export default function AnalisaState2Workspace({
               {/* TAB 1: RINGKASAN */}
               {activeTab === 'ringkasan' && (
                 <div className="space-y-4">
+                  <StatusPasalKb
+                    state={harmonisasi}
+                    onLihatPerPasal={bukaTabHarmonisasi}
+                    onCobaLagi={() => void muatHarmonisasi(true)}
+                  />
+
                   {/* RINGKASAN EKSEKUTIF */}
                   <div className="bg-red-50/40 border border-red-100 rounded-xl p-4 space-y-3">
                     <div className="flex items-center justify-between pb-1 border-b border-red-100/60">

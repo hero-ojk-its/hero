@@ -7,7 +7,7 @@ export interface UsePollingOptions<T> {
   isTerminal: (data: T) => boolean;
   /** Interval polling dalam milidetik (default: 2000 ms) */
   interval?: number;
-  /** Batas durasi maksimum polling dalam milidetik (default: 600.000 ms / 10 menit) */
+  /** Batas durasi maksimum polling dalam milidetik (default: tanpa batas — proses tetap dipantau sampai selesai) */
   maxDuration?: number;
   /** Apakah polling sedang aktif (default: true) */
   enabled?: boolean;
@@ -34,7 +34,7 @@ export function usePolling<T>({
   fn,
   isTerminal,
   interval = 2000,
-  maxDuration = 600000,
+  maxDuration = Number.POSITIVE_INFINITY,
   enabled = true,
   onSuccess,
   onError,

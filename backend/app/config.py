@@ -76,7 +76,12 @@ class Settings(BaseSettings):
 
     # Gerbang Analisa / Layanan ML (Langkah 16 & 20)
     ml_service_url: str = ""
-    ml_timeout_seconds: float = 120.0
+    # Detik menunggu layanan analisa menjawab; <= 0 = tanpa batas baca (bawaan),
+    # supaya analisa dokumen tebal/AI-Assisted tidak dipotong jadi 504.
+    # Menyambung tetap dibatasi ml_connect_timeout_seconds: layanan yang mati
+    # harus gagal cepat (503), bukan menggantung.
+    ml_timeout_seconds: float = 0.0
+    ml_connect_timeout_seconds: float = 10.0
     ml_default_search_method: str = "lsa"
     ml_cache_enabled: bool = True
 

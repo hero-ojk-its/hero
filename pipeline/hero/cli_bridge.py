@@ -173,12 +173,15 @@ def ekstraksi(
     batch: Optional[int] = typer.Option(None, "--batch", help="Jumlah batch sebelum berhenti."),
     limit: Optional[int] = typer.Option(None, "--limit", help="Dokumen diklaim per putaran (1-50)."),
     embedder: Optional[str] = typer.Option(None, "--embedder", help="lsa | semantic | none."),
+    workers: Optional[int] = typer.Option(None, "--workers", "-w", min=1,
+                                          help="Dokumen diekstraksi bersamaan (bawaan: bridge.extract_workers)."),
     config: Path = CONFIG_OPT,
 ) -> None:
     """Ambil antrian ekstraksi backend: OCR → metadata → pasal → vektor → kirim balik."""
     from hero.bridge.extract_worker import ExtractionWorker
 
-    settings, bridge = _ctx(config, claim_documents=limit, embedder=embedder)
+    settings, bridge = _ctx(config, claim_documents=limit, embedder=embedder,
+                            extract_workers=workers)
     w = ExtractionWorker(settings, bridge)
     try:
         rep = (w.run_forever(max_batches=batch, progress=_say) if loop
@@ -191,6 +194,50 @@ def ekstraksi(
         return
     console.print(f"[bold]{d['diklaim']} dokumen[/] · {d['per_status']} · "
                   f"{d['pasal']} pasal · {d['vektor']} vektor · {d['detik']} s")
+
+
+# ---------------------------------------------------------------------------
+@bridge_app.command("ulang-ekstraksi")
+def ulang_ekstraksi(
+    dokumen: Optional[list[int]] = typer.Option(None, "--dokumen", "-d",
+                                                help="ID dokumen backend (boleh berulang)."),
+    semua: bool = typer.Option(False, "--semua",
+                               help="Semua dokumen yang pernah selesai diekstraksi di worker ini."),
+    yakin: bool = typer.Option(False, "--yakin", help="Jalankan; tanpa ini hanya menampilkan rencana."),
+    config: Path = CONFIG_OPT,
+) -> None:
+    """Antre-ulang dokumen lama agar pasalnya dikirim lagi lengkap dengan halaman PDF.
+
+    Untuk dokumen yang diekstraksi sebelum kontrak pasal Langkah 13 (halaman belum
+    tersimpan di backend). Pasal diganti-bersih, bukan digandakan. Lalu jalankan
+    `hero bridge ekstraksi --loop` seperti biasa."""
+    from hero.bridge.client import BackendClient, BackendError
+    from hero.bridge.state import BridgeState, default_path
+
+    if not dokumen and not semua:
+        console.print("[red]sebutkan --dokumen ID atau --semua[/]")
+        raise typer.Exit(2)
+    settings, bridge = _ctx(config)
+    st = BridgeState(default_path(settings))
+    try:
+        ids = sorted(set(dokumen or [])) if dokumen else st.dokumen_selesai()
+        console.print(f"{len(ids)} dokumen akan diantre ulang"
+                      + ("" if yakin else " [dim](rencana saja; tambahkan --yakin)[/]"))
+        if not yakin or not ids:
+            return
+        ok = 0
+        with BackendClient(bridge) as c:
+            for i in ids:
+                try:
+                    c.requeue(i)
+                except BackendError as exc:
+                    console.print(f"[yellow]•[/] dokumen {i}: {exc}")
+                    continue
+                st.lupakan_kiriman([i])
+                ok += 1
+        console.print(f"[green]✓[/] {ok} dokumen kembali ke antrean ekstraksi")
+    finally:
+        st.close()
 
 
 # ---------------------------------------------------------------------------
