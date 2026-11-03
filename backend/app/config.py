@@ -72,7 +72,13 @@ class Settings(BaseSettings):
     crawl_respect_robots: bool = True
     crawl_allow_private_networks: bool = False
     crawl_head_for_size: bool = True
-    scan_stuck_minutes: int = 15
+    # Ambang "sesi macet": hanya untuk mendeteksi sesi yang benar-benar mati
+    # (proses/server berhenti di tengah jalan), BUKAN batas waktu pemindaian.
+    # 15 menit terlalu ketat untuk pemindaian kedalaman/halaman maksimal —
+    # fase listing (banyak sektor/jenis JDIH, atau banyak halaman situs) bisa
+    # berjalan lama sebelum progress callback pertama tercatat, sehingga
+    # pemindaian yang sehat pun bisa salah terdeteksi macet dan dihentikan.
+    scan_stuck_minutes: int = 360
 
     # Gerbang Analisa / Layanan ML (Langkah 16 & 20)
     ml_service_url: str = ""
