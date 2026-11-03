@@ -66,27 +66,32 @@ ssh -i ~/.ssh/hero_deploy_gha -o IdentitiesOnly=yes ubuntu@43.128.102.71 'whoami
 # ditolak: perintah tidak dikenal atau argumen tidak valid
 ```
 
-### 3. Siapkan GitHub Environment `vps-production`
+### 3. Isi 4 secret repo (Settings → Secrets and variables → Actions → Secrets)
 
-Repo → **Settings → Environments → New environment → `vps-production`**, lalu:
+**Keputusan sadar:** ini secret tingkat **repo**, bukan Environment — tidak ada gerbang
+persetujuan manual sebelum deploy produksi. Push ke `main` yang lolos CI men-deploy langsung.
+Dipilih begini karena secret Environment butuh akses **admin** repo untuk membuat Environment-nya
+(role `write`/`maintain` tidak cukup), sedangkan secret repo cukup akses `write`.
 
-- **Required reviewers**: tambahkan diri Anda (sangat disarankan, lihat "Keamanan" di bawah).
-- **Environment secrets**:
+Kalau nanti mau gerbang persetujuan lagi: minta admin repo buat Environment `vps-production`
+(Settings → Environments → New environment), aktifkan **Required reviewers** di sana, pindahkan
+4 secret ke situ, lalu tambahkan `environment: vps-production` kembali ke job `deploy-backend` dan
+`deploy-pipeline` di [`deploy-vps.yml`](../../.github/workflows/deploy-vps.yml).
 
 | Secret | Isi |
 |---|---|
-| `VPS_HOST` | `43.128.102.71` |
-| `VPS_USER` | `ubuntu` |
-| `VPS_SSH_KEY` | isi berkas **privat** `~/.ssh/hero_deploy_gha` |
-| `VPS_KNOWN_HOSTS` | keluaran `ssh-keyscan -t ed25519 43.128.102.71` (menyematkan sidik jari server; mencegah penyadapan) |
+| `VPS_HOST` | IP VPS |
+| `VPS_USER` | user SSH di VPS |
+| `VPS_SSH_KEY` | isi berkas **privat** kunci deploy (lihat langkah 2) |
+| `VPS_KNOWN_HOSTS` | keluaran `ssh-keyscan -t ed25519 <IP VPS>` (menyematkan sidik jari server; mencegah penyadapan) |
 
-Atau lewat `gh`:
+Lewat `gh` (ganti `<IP>`, `<user>`, `<kunci>` sesuai VPS Anda):
 
 ```bash
-gh secret set VPS_HOST       --env vps-production --body "43.128.102.71"
-gh secret set VPS_USER       --env vps-production --body "ubuntu"
-gh secret set VPS_SSH_KEY    --env vps-production < ~/.ssh/hero_deploy_gha
-ssh-keyscan -t ed25519 43.128.102.71 2>/dev/null | gh secret set VPS_KNOWN_HOSTS --env vps-production
+gh secret set VPS_HOST       --body "<IP>"
+gh secret set VPS_USER       --body "<user>"
+gh secret set VPS_SSH_KEY    < ~/.ssh/<kunci>
+ssh-keyscan -t ed25519 <IP> 2>/dev/null | gh secret set VPS_KNOWN_HOSTS
 ```
 
 ### 4. Isi `ML_SERVICE_URL` di backend VPS (sekali)
@@ -146,10 +151,11 @@ kode di `hero-kode-*.tar.gz` (5 terakhir).
    lama dipasang kembali tetapi skema tetap yang baru. Migrasi proyek ini aditif sehingga kode lama biasanya tetap
    jalan, dan **gladi** di langkah 4 skrip menangkap sebagian besar masalah *sebelum* produksi disentuh. Namun ini
    bukan jaminan: gladi memakai data yang sama, bukan beban nyata.
-2. **`main` tidak diproteksi** (cek 26 Okt: tidak ada aturan proteksi). Siapa pun dengan akses tulis bisa push langsung,
-   dan push itu akan men-deploy ke produksi. Aktifkan *Branch protection* (wajib PR dan status check) **dan**
-   *Required reviewers* di environment `vps-production` — keduanya, karena yang pertama mencegah push langsung dan
-   yang kedua memberi satu klik persetujuan sebelum produksi diubah.
+2. **`main` tidak diproteksi** (cek 26 Okt: tidak ada aturan proteksi), dan sejak langkah 3 di atas **tidak ada
+   gerbang persetujuan lain pun**. Siapa pun dengan akses tulis yang push ke `main` dan lolos CI men-deploy ke
+   produksi, langsung, tanpa klik approve siapa pun — ini keputusan sadar (lihat langkah 3), bukan kelalaian.
+   Minimal aktifkan *Branch protection* (wajib PR dan status check lolos) supaya tidak ada push langsung tanpa
+   review kode; itu satu-satunya penahan yang tersisa sampai ada yang berakses admin memasang Environment.
 3. **SSH VPS masih menerima login kata sandi dan root** (`PasswordAuthentication yes`, `PermitRootLogin yes` pada
    `sshd -T`). Itu terbuka bagi seluruh internet. Setelah kunci Anda terbukti jalan, matikan keduanya di
    `/etc/ssh/sshd_config` dan `sudo systemctl reload ssh` (uji dari sesi kedua dulu agar tidak terkunci). Tidak
