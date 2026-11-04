@@ -1,31 +1,32 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { 
-  UploadCloud, 
-  FileText, 
-  Sparkles, 
-  AlertCircle, 
-  CheckCircle2, 
-  Clock, 
-  ArrowRight, 
-  RefreshCw, 
-  X,
+import {
+  UploadCloud,
+  FileText,
+  Sparkles,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  ArrowRight,
+  RefreshCw,
   Activity,
-  Copy
+  Copy,
+  RotateCcw,
+  Trash2
 } from 'lucide-react';
 
-import { 
-  uploadDraftPdf, 
-  getDocumentStatus, 
-  checkMlHealth, 
-  isDocumentReadyForAnalysis, 
+import {
+  uploadDraftPdf,
+  getDocumentStatus,
+  checkMlHealth,
+  isDocumentReadyForAnalysis,
   isDocumentProcessingFailed,
   getStoredAnalisaWorkspace,
   saveStoredAnalisaWorkspace,
-  clearStoredAnalisaWorkspace 
+  clearStoredAnalisaWorkspace
 } from '../lib/analisaApi';
-import type { 
-  DocumentStatusResponse, 
+import type {
+  DocumentStatusResponse,
   DraftUploadMetadata,
   MlHealthResponse,
   UploadProgressEvent
@@ -61,7 +62,7 @@ export default function AnalisaRegulasi() {
   const [title, setTitle] = useState<string>('');
   const [regulationNumber, setRegulationNumber] = useState<string>('');
   const [regulationType, setRegulationType] = useState<string>('POJK');
-  const [bidang, setBidang] = useState<string>('Perbankan');
+  const [bidang, setBidang] = useState<string>('');
   const [releaseDate, setReleaseDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
@@ -89,8 +90,19 @@ export default function AnalisaRegulasi() {
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef<boolean>(true);
   const isExplicitCancelRef = useRef<boolean>(false);
-  // Hasil unggah berupa duplikat byte-identik: tidak di-polling, tidak pindah otomatis
-  const [duplikat, setDuplikat] = useState<{ documentId: number; judul: string | null } | null>(null);
+  // Tipe & state hasil unggah berupa duplikat byte-identik
+  interface DuplikatInfo {
+    documentId: number;
+    judul: string | null;
+    filename?: string | null;
+    regulationNumber?: string | null;
+    fileSizeBytes?: number | null;
+  }
+  const [duplikat, setDuplikat] = useState<DuplikatInfo | null>(null);
+
+  // Ref elemen untuk auto-scroll yang nyaman saat duplikat atau kegagalan
+  const duplicateAlertRef = useRef<HTMLDivElement | null>(null);
+  const uploadErrorAlertRef = useRef<HTMLDivElement | null>(null);
 
   // 5. State Polling Kesiapan Dokumen
   const [isPollingActive, setIsPollingActive] = useState<boolean>(false);
@@ -336,10 +348,16 @@ export default function AnalisaRegulasi() {
     e.preventDefault();
     if (!selectedFile) {
       setUploadError('Pilih berkas PDF draf regulasi terlebih dahulu.');
+      setTimeout(() => {
+        uploadErrorAlertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
       return;
     }
     if (!title.trim()) {
       setUploadError('Judul draf regulasi wajib diisi.');
+      setTimeout(() => {
+        uploadErrorAlertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
       return;
     }
 
@@ -347,12 +365,12 @@ export default function AnalisaRegulasi() {
       setPersetujuanTouched(true);
       if (!persetujuanPublikOleh.trim()) {
         setUploadError('Nama pihak yang menyetujui (Disetujui oleh) wajib diisi untuk draft kajian publik.');
-        return;
-      }
-      if (persetujuanPublikAlasan.trim().length < 10) {
+      } else if (persetujuanPublikAlasan.trim().length < 10) {
         setUploadError('Alasan persetujuan wajib diisi minimal 10 karakter untuk draft kajian publik.');
-        return;
       }
+      setTimeout(() => {
+        uploadErrorAlertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
       return;
     }
 
@@ -395,7 +413,7 @@ export default function AnalisaRegulasi() {
 
       if (!isMountedRef.current) return;
 
-      // Duplikat byte-identik: tampilkan kartu di State 1, tanpa polling dan tanpa pindah otomatis
+      // Duplikat byte-identik: tampilkan kartu peringatan di State 1 dan lakukan auto-scroll terarah
       if (result.isDuplicate) {
         setIsUploading(false);
         setUploadProgress(null);
@@ -403,7 +421,16 @@ export default function AnalisaRegulasi() {
         setDuplikat({
           documentId: result.duplicateOfDocumentId ?? result.documentId,
           judul: result.duplicateTitle ?? null,
+          filename: result.filename,
+          regulationNumber: result.duplicateRegulationNumber ?? null,
+          fileSizeBytes: result.fileSizeBytes ?? null,
         });
+        setTimeout(() => {
+          duplicateAlertRef.current?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+          });
+        }, 100);
         return;
       }
 
@@ -451,6 +478,12 @@ export default function AnalisaRegulasi() {
         msg = err.message;
       }
       setUploadError(msg);
+      setTimeout(() => {
+        uploadErrorAlertRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+      }, 100);
     }
   };
 
@@ -553,7 +586,7 @@ export default function AnalisaRegulasi() {
               <span>Memeriksa layanan...</span>
             </div>
           ) : mlHealth?.status === 'siap' ? (
-            <div 
+            <div
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs"
               title={`Korpus: ${mlHealth.korpus.dokumen} dokumen, ${mlHealth.korpus.pasal} pasal. Mode AI: ${mlHealth.mode_ai ? 'Aktif' : 'Non-aktif'}`}
             >
@@ -561,7 +594,7 @@ export default function AnalisaRegulasi() {
               <span>Layanan ML Siap</span>
             </div>
           ) : (
-            <div 
+            <div
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs"
               title="Layanan ML Lapisan Data belum aktif. Analisis otomatis memerlukan jembatan 'hero bridge serve'."
             >
@@ -592,37 +625,80 @@ export default function AnalisaRegulasi() {
         </div>
       )}
 
-      {/* 2b. Hasil unggah duplikat byte-identik */}
+      {/* 2b. Hasil unggah duplikat byte-identik (Inline alert dengan role="alert" dan auto-scroll) */}
       {duplikat && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 shadow-sm space-y-3" role="status">
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-              <Copy size={18} />
+        <div
+          ref={duplicateAlertRef}
+          role="alert"
+          className="bg-amber-50/95 border-2 border-amber-300 rounded-xl p-5 shadow-sm space-y-4 animate-in fade-in duration-200"
+        >
+          <div className="flex items-start gap-3.5">
+            <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-800 border border-amber-200 flex items-center justify-center shrink-0">
+              <Copy size={20} />
             </div>
-            <div className="min-w-0">
-              <h3 className="text-sm font-bold text-amber-900">Berkas sudah pernah diunggah</h3>
-              <p className="text-xs text-amber-900 mt-0.5 leading-relaxed">
-                {duplikat.judul
-                  ? `Berkas ini identik dengan draft #${duplikat.documentId} '${potongJudul(duplikat.judul)}' yang sudah pernah diunggah, jadi tidak diunggah ulang.`
-                  : `Berkas ini identik dengan draft #${duplikat.documentId} yang sudah pernah diunggah, jadi tidak diunggah ulang.`}
+            <div className="min-w-0 space-y-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-amber-950">Dokumen Terdeteksi Duplikat</h3>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200/80 text-amber-900">
+                  Sudah Terdaftar
+                </span>
+              </div>
+              <p className="text-xs text-amber-900 leading-relaxed">
+                Sistem mendeteksi berkas ini memiliki hash identik secara digital dengan dokumen draf regulasi yang sudah pernah diunggah sebelumnya. Berkas tidak diunggah ulang untuk mencegah redundansi pangkalan data.
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 pl-12">
+
+          {/* Rincian Dokumen Terdaftar */}
+          <div className="bg-white/80 border border-amber-200 rounded-lg p-3.5 space-y-2 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-gray-700">
+              <div>
+                <span className="text-[11px] text-gray-500 block">Berkas Baru yang Diuji:</span>
+                <span className="font-semibold text-gray-900 truncate block">
+                  {duplikat.filename || selectedFile?.name || 'Berkas PDF'}
+                </span>
+              </div>
+              <div>
+                <span className="text-[11px] text-gray-500 block">Dokumen Pembanding di Sistem:</span>
+                <span className="font-semibold text-red-700 block font-mono">
+                  Draft #{duplikat.documentId}
+                </span>
+              </div>
+            </div>
+
+            {duplikat.judul && (
+              <div className="pt-1 border-t border-amber-100">
+                <span className="text-[11px] text-gray-500 block">Judul Dokumen Terdaftar:</span>
+                <p className="font-medium text-gray-900 italic">
+                  "{potongJudul(duplikat.judul)}"
+                </p>
+              </div>
+            )}
+
+            {duplikat.regulationNumber && (
+              <div>
+                <span className="text-[11px] text-gray-500 block">Nomor Regulasi:</span>
+                <span className="font-semibold text-gray-800">{duplikat.regulationNumber}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5 pt-1">
             <button
               type="button"
               onClick={() => handleOpenWorkspace(duplikat.documentId)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-red-700 hover:bg-red-800 text-white rounded-md text-xs font-semibold cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-700 hover:bg-red-800 text-white rounded-lg text-xs font-semibold cursor-pointer shadow-xs transition"
             >
-              <span>Buka hasil draft sebelumnya</span>
-              <ArrowRight size={13} />
+              <span>Buka Hasil Draf Sebelumnya</span>
+              <ArrowRight size={14} />
             </button>
             <button
               type="button"
               onClick={handleUnggahBerkasLain}
-              className="px-3.5 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-md text-xs font-semibold cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-semibold cursor-pointer transition shadow-2xs"
             >
-              Unggah berkas lain
+              <RotateCcw size={13} className="text-gray-500" />
+              <span>Unggah Berkas Lain</span>
             </button>
           </div>
         </div>
@@ -631,28 +707,50 @@ export default function AnalisaRegulasi() {
       {/* 3. MODUL PROGRES & POLLING UNGGAH DRAF (Aktif saat proses upload & ekstraksi berlangsung) */}
       {(isUploading || isPollingActive || pollingTimeoutOccurred) && (
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-gray-100">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-red-50 text-red-700 border border-red-100 flex items-center justify-center shrink-0">
-                <Clock size={20} className="animate-spin text-red-700" />
+                {isUploading ? (
+                  <UploadCloud size={20} className="text-red-700 animate-pulse" />
+                ) : (
+                  <Clock size={20} className="animate-spin text-red-700" />
+                )}
               </div>
-              <div>
+              <div className="min-w-0">
                 <h3 className="text-sm font-bold text-gray-900">
                   {isUploading
                     ? 'Mengunggah Berkas Draf Regulasi ke Peladen...'
                     : 'Memproses Ekstraksi Naskah di Peladen...'}
                 </h3>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {isUploading && selectedFile
-                    ? `${selectedFile.name} • ${(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • Klasifikasi: ${accessClassification === 'non_publik' ? 'Non-Publik (Draf Kajian)' : 'Publik'}`
-                    : `Dokumen ID: #${uploadedDocumentId || '-'} • Klasifikasi: ${accessClassification === 'non_publik' ? 'Non-Publik (Draf Kajian)' : 'Publik'}`}
+                <p className="text-xs text-gray-500 mt-0.5 truncate">
+                  {selectedFile ? `${selectedFile.name} • ${(selectedFile.size / (1024 * 1024)).toFixed(2)} MB` : ''}
+                  {uploadedDocumentId ? ` • ID Dokumen: #${uploadedDocumentId}` : ''}
+                  {` • Klasifikasi: ${accessClassification === 'non_publik' ? 'Non-Publik (Draf Kajian)' : 'Publik (Terbuka)'}`}
                 </p>
               </div>
             </div>
 
             {uploadedDocumentId && !isUploading && (
-              <span className="px-2.5 py-1 rounded-md bg-gray-100 text-gray-700 text-xs font-mono font-bold">
-                Status: {documentPolling.data?.processing_status || 'diproses'}
+              <span className={`px-2.5 py-1 rounded-md text-xs font-semibold shrink-0 self-start sm:self-auto border ${
+                documentPolling.data?.processing_status === 'terindeks' || documentPolling.data?.processing_status === 'perlu_koreksi'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : documentPolling.data?.processing_status === 'diproses'
+                  ? 'bg-amber-50 text-amber-800 border-amber-200'
+                  : documentPolling.data?.processing_status === 'gagal' || documentPolling.data?.processing_status === 'ditolak'
+                  ? 'bg-rose-50 text-rose-800 border-rose-200'
+                  : 'bg-gray-100 text-gray-700 border-gray-200'
+              }`}>
+                Status: {
+                  documentPolling.data?.processing_status === 'diterima'
+                    ? 'Dalam Antrean'
+                    : documentPolling.data?.processing_status === 'diproses'
+                    ? 'Sedang Diproses'
+                    : documentPolling.data?.processing_status === 'terindeks' || documentPolling.data?.processing_status === 'perlu_koreksi'
+                    ? 'Ekstraksi Selesai'
+                    : documentPolling.data?.processing_status === 'gagal' || documentPolling.data?.processing_status === 'ditolak'
+                    ? 'Gagal'
+                    : 'Memuat...'
+                }
               </span>
             )}
           </div>
@@ -709,8 +807,8 @@ export default function AnalisaRegulasi() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
             {/* Tahap 1: Unggah PDF */}
             <div className={`p-3 rounded-lg border flex items-center gap-2.5 ${
-              uploadedDocumentId 
-                ? 'border-emerald-200 bg-emerald-50/50 text-emerald-800' 
+              uploadedDocumentId
+                ? 'border-emerald-200 bg-emerald-50/50 text-emerald-800'
                 : isUploading
                 ? 'border-red-200 bg-red-50/40 text-red-800 font-semibold'
                 : 'border-gray-200 bg-gray-50 text-gray-400'
@@ -728,22 +826,30 @@ export default function AnalisaRegulasi() {
             <div className={`p-3 rounded-lg border flex items-center gap-2.5 ${
               documentPolling.data?.processing_status === 'terindeks' || documentPolling.data?.processing_status === 'perlu_koreksi'
                 ? 'border-emerald-200 bg-emerald-50/50 text-emerald-800'
+                : documentPolling.data?.processing_status === 'gagal' || documentPolling.data?.processing_status === 'ditolak'
+                ? 'border-rose-200 bg-rose-50/50 text-rose-800'
+                : documentPolling.data?.processing_status === 'diproses'
+                ? 'border-amber-200 bg-amber-50/40 text-amber-900 font-semibold'
                 : uploadedDocumentId && isPollingActive
-                ? 'border-red-200 bg-red-50/40 text-red-800 font-semibold'
+                ? 'border-blue-200 bg-blue-50/30 text-blue-800'
                 : 'border-gray-200 bg-gray-50 text-gray-400'
             }`}>
-              <Clock size={16} className={
-                documentPolling.data?.processing_status === 'terindeks' || documentPolling.data?.processing_status === 'perlu_koreksi'
-                  ? 'text-emerald-600'
-                  : uploadedDocumentId
-                  ? 'text-red-700 animate-spin'
-                  : 'text-gray-400'
-              } />
+              {documentPolling.data?.processing_status === 'terindeks' || documentPolling.data?.processing_status === 'perlu_koreksi' ? (
+                <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+              ) : documentPolling.data?.processing_status === 'gagal' || documentPolling.data?.processing_status === 'ditolak' ? (
+                <AlertCircle size={16} className="text-rose-600 shrink-0" />
+              ) : documentPolling.data?.processing_status === 'diproses' ? (
+                <Clock size={16} className="text-amber-700 animate-spin shrink-0" />
+              ) : (
+                <Clock size={16} className={uploadedDocumentId ? 'text-blue-600 shrink-0' : 'text-gray-400 shrink-0'} />
+              )}
               <div>
                 <span className="block font-semibold">2. Ekstraksi Naskah</span>
                 <span className="text-[11px] opacity-80 block">
                   {documentPolling.data?.processing_status === 'terindeks' || documentPolling.data?.processing_status === 'perlu_koreksi'
                     ? 'Ekstraksi naskah selesai'
+                    : documentPolling.data?.processing_status === 'gagal' || documentPolling.data?.processing_status === 'ditolak'
+                    ? 'Ekstraksi gagal di peladen'
                     : documentPolling.data?.processing_status === 'diproses'
                     ? 'Worker sedang mengekstrak...'
                     : uploadedDocumentId
@@ -761,8 +867,8 @@ export default function AnalisaRegulasi() {
             }`}>
               <Sparkles size={16} className={
                 documentPolling.data && isDocumentReadyForAnalysis(documentPolling.data)
-                  ? 'text-emerald-600'
-                  : 'text-gray-400'
+                  ? 'text-emerald-600 shrink-0'
+                  : 'text-gray-400 shrink-0'
               } />
               <div>
                 <span className="block font-semibold">3. Kesiapan Analisis</span>
@@ -786,23 +892,30 @@ export default function AnalisaRegulasi() {
             </button>
           </div>
 
-          {/* Detail Ekstraksi Terkini Berdasarkan processing_status Backend */}
+          {/* Detail Ekstraksi Terkini Berdasarkan processing_status Backend (Live Region role="status") */}
           {documentPolling.data && isPollingActive && (
-            <div className="p-3 bg-gray-50 border border-gray-100 rounded-lg text-xs text-gray-600 flex flex-wrap items-center justify-between gap-2">
-              <span>
-                {documentPolling.data.processing_status === 'diterima' && (
-                  <span>Naskah tersimpan di peladen (status: diterima). Menunggu giliran worker ekstraksi...</span>
-                )}
-                {documentPolling.data.processing_status === 'diproses' && (
-                  <span>Peladen sedang memproses ekstraksi teks, pasal, dan OCR...</span>
-                )}
-                {(documentPolling.data.processing_status === 'terindeks' || documentPolling.data.processing_status === 'perlu_koreksi') && (
-                  <span>
-                    Ekstraksi tuntas: <strong>{documentPolling.data.articles?.length || 0} pasal</strong> terdeteksi •
-                    Teks lengkap: <strong>{documentPolling.data.full_text_length || 0} karakter</strong>
-                  </span>
-                )}
-              </span>
+            <div
+              role="status"
+              aria-live="polite"
+              className="p-3 bg-gray-50 border border-gray-100 rounded-lg text-xs text-gray-600 flex flex-wrap items-center justify-between gap-2"
+            >
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-red-700 animate-pulse" />
+                <span>
+                  {documentPolling.data.processing_status === 'diterima' && (
+                    <span>Naskah tersimpan di peladen (status: diterima). Menunggu giliran worker ekstraksi...</span>
+                  )}
+                  {documentPolling.data.processing_status === 'diproses' && (
+                    <span>Peladen sedang memproses ekstraksi teks, pasal, dan OCR...</span>
+                  )}
+                  {(documentPolling.data.processing_status === 'terindeks' || documentPolling.data.processing_status === 'perlu_koreksi') && (
+                    <span>
+                      Ekstraksi tuntas: <strong>{documentPolling.data.articles?.length || 0} pasal</strong> terdeteksi •
+                      Teks lengkap: <strong>{documentPolling.data.full_text_length || 0} karakter</strong>
+                    </span>
+                  )}
+                </span>
+              </div>
               <span className="font-mono text-[11px] text-gray-500">
                 Memperbarui status setiap 2 detik...
               </span>
@@ -881,58 +994,79 @@ export default function AnalisaRegulasi() {
           </div>
 
           {/* Dropzone File */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,application/pdf"
+            onChange={handleFileInputChange}
+            className="hidden"
+          />
+
           {!selectedFile ? (
             <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-xl p-8 text-center transition cursor-pointer flex flex-col items-center justify-center space-y-3 ${
-                isDragging 
-                  ? 'border-red-600 bg-red-50/60' 
-                  : 'border-red-200 bg-red-50/15 hover:border-red-400 hover:bg-red-50/30'
+              className={`border-2 border-dashed rounded-xl p-8 text-center transition cursor-pointer flex flex-col items-center justify-center space-y-3.5 ${
+                isDragging
+                  ? 'border-red-600 bg-red-50/60 ring-2 ring-red-400/40'
+                  : 'border-red-200/90 bg-red-50/15 hover:border-red-400 hover:bg-red-50/30 shadow-2xs'
               }`}
             >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,application/pdf"
-                onChange={handleFileInputChange}
-                className="hidden"
-              />
-              <div className="w-12 h-12 rounded-full bg-red-100 text-red-700 flex items-center justify-center">
-                <UploadCloud size={24} />
+              <div className="w-13 h-13 rounded-full bg-red-100 text-red-700 flex items-center justify-center shadow-2xs">
+                <UploadCloud size={26} />
               </div>
-              <div>
+              <div className="space-y-1">
                 <p className="text-xs font-bold text-gray-800">
-                  Tarik dan lepaskan berkas PDF draf regulasi ke sini, atau <span className="text-red-700 underline font-semibold">pilih dari komputer</span>
+                  Tarik dan lepaskan berkas PDF draf regulasi ke sini, atau{' '}
+                  <span className="text-red-700 underline font-semibold hover:text-red-800">pilih dari komputer</span>
                 </p>
-                <p className="text-[11px] text-gray-400 mt-1">
+                <p className="text-[11px] text-gray-500">
                   Format wajib: Dokumen PDF (.pdf) • Batas maksimum ukuran: 100 MB
                 </p>
               </div>
             </div>
           ) : (
-            <div className="p-4 rounded-xl border border-red-200 bg-red-50/30 flex items-center justify-between">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-lg bg-red-100 text-red-700 flex items-center justify-center shrink-0">
-                  <FileText size={20} />
+            <div className="p-4 rounded-xl border border-red-200 bg-red-50/25 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="w-11 h-11 rounded-lg bg-red-100 text-red-700 flex items-center justify-center shrink-0 border border-red-200/80 shadow-2xs">
+                  <FileText size={22} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-gray-900 truncate">{selectedFile.name}</p>
-                  <p className="text-[11px] text-gray-500">
-                    {(selectedFile.size / 1024 / 1024).toFixed(2)} MB • Dokumen PDF Terverifikasi
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-bold text-gray-900 truncate max-w-[280px] sm:max-w-md" title={selectedFile.name}>
+                      {selectedFile.name}
+                    </p>
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0">
+                      PDF Siap
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-0.5">
+                    {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • Berkas PDF Terverifikasi
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={handleRemoveFile}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-red-700 hover:bg-red-100/60 transition cursor-pointer"
-                title="Ganti berkas"
-              >
-                <X size={16} />
-              </button>
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-xs font-semibold text-gray-700 transition cursor-pointer shadow-2xs"
+                  title="Pilih berkas PDF lain"
+                >
+                  <RotateCcw size={13} className="text-gray-500" />
+                  <span>Ganti Berkas</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRemoveFile}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 bg-red-50/60 hover:bg-red-100/80 text-xs font-semibold text-red-700 transition cursor-pointer shadow-2xs"
+                  title="Hapus berkas ini"
+                >
+                  <Trash2 size={13} className="text-red-700" />
+                  <span>Hapus</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -987,14 +1121,15 @@ export default function AnalisaRegulasi() {
 
             {/* Bidang / Sektor */}
             <div className="space-y-1">
-              <label className="text-xs font-bold text-gray-700">
-                Sektor / Bidang Regulasi
+              <label className="text-xs font-bold text-gray-700 flex items-center justify-between">
+                <span>Sektor / Bidang Regulasi (Opsional)</span>
               </label>
               <select
                 value={bidang}
                 onChange={(e) => setBidang(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700 transition"
+                className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700 transition text-gray-800"
               >
+                <option value="">-- Pilih Sektor / Bidang Regulasi (Opsional) --</option>
                 <option value="Perbankan">Perbankan</option>
                 <option value="Pasar Modal">Pasar Modal</option>
                 <option value="Asuransi">Perasuransian &amp; Dana Pensiun</option>
@@ -1224,11 +1359,18 @@ export default function AnalisaRegulasi() {
           </div>
         </div>
 
-        {/* Error Message Box */}
+        {/* Error Message Box (role="alert" dan auto-scroll) */}
         {uploadError && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-start gap-2">
-            <AlertCircle size={15} className="shrink-0 mt-0.5" />
-            <span>{uploadError}</span>
+          <div
+            ref={uploadErrorAlertRef}
+            role="alert"
+            className="p-3.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-start gap-2.5 animate-in fade-in"
+          >
+            <AlertCircle size={16} className="shrink-0 mt-0.5 text-red-700" />
+            <div className="space-y-0.5">
+              <span className="font-semibold block">Gagal Memproses Permintaan</span>
+              <span>{uploadError}</span>
+            </div>
           </div>
         )}
 

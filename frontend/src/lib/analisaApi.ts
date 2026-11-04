@@ -273,6 +273,10 @@ export interface UploadDraftResult {
   duplicateOfDocumentId?: number | null;
   /** Judul dokumen lama bila hasil unggah adalah duplikat byte-identik (bisa null) */
   duplicateTitle?: string | null;
+  /** Nomor regulasi dokumen lama bila tersedia dari backend */
+  duplicateRegulationNumber?: string | null;
+  /** Ukuran berkas dalam byte bila tersedia dari backend */
+  fileSizeBytes?: number | null;
   failureId?: number | null;
   jobId: number;
   originalResponse: IngestUploadResponse;
@@ -375,6 +379,10 @@ export async function uploadDraftPdf(
     duplicateTitle: detail.status === 'duplicate' && typeof detail.title === 'string' && detail.title.trim() !== ''
       ? detail.title.trim()
       : null,
+    duplicateRegulationNumber: detail.status === 'duplicate' && typeof detail.regulation_number === 'string' && detail.regulation_number.trim() !== ''
+      ? detail.regulation_number.trim()
+      : null,
+    fileSizeBytes: typeof detail.file_size_bytes === 'number' ? detail.file_size_bytes : null,
     failureId: detail.failure_id ?? null,
     jobId: uploadRes.job_id,
     originalResponse: uploadRes,
