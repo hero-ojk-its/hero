@@ -1,25 +1,30 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { 
-  FileText, 
-  ExternalLink, 
-  Check, 
-  ChevronDown, 
-  ChevronRight, 
-  ZoomIn, 
-  ZoomOut, 
-  Scale, 
-  ArrowRight, 
-  Download, 
-  RefreshCw, 
-  FileCode, 
-  AlertCircle, 
-  Loader2, 
-  Building2, 
-  ShieldAlert, 
+import {
+  FileText,
+  ExternalLink,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ZoomIn,
+  ZoomOut,
+  Scale,
+  ArrowRight,
+  Download,
+  RefreshCw,
+  FileCode,
+  AlertCircle,
+  Loader2,
+  Building2,
+  ShieldAlert,
   Paperclip,
   Clock,
   Info,
-  X
+  X,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
+  Search
 } from 'lucide-react';
 import {
   getMlAnalisa,
@@ -192,6 +197,37 @@ export default function AnalisaState2Workspace({
 
   // State Workspace Panel 3: Hasil Analisis Tabs (dipulihkan dari storage jika ada)
   const [activeTab, setActiveTab] = useState<'ringkasan' | 'poin_utama' | 'dasar_hukum' | 'info_tambahan' | 'harmonisasi'>(initialTab);
+
+  // State Collapse Manual Panel Kiri (Struktur) & Kanan (Hasil Analisis)
+  const [isLeftCollapsed, setIsLeftCollapsed] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem('hero_ws_left_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [isRightCollapsed, setIsRightCollapsed] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem('hero_ws_right_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  // State Tab Aktif untuk Tampilan Adaptif Layar Kecil / Mobile / Tablet (< 1024px)
+  const [mobileActivePanel, setMobileActivePanel] = useState<'struktur' | 'naskah' | 'hasil'>('naskah');
+
+  // Persistensi status collapse di sesi pengguna
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('hero_ws_left_collapsed', String(isLeftCollapsed));
+    } catch {}
+  }, [isLeftCollapsed]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('hero_ws_right_collapsed', String(isRightCollapsed));
+    } catch {}
+  }, [isRightCollapsed]);
   const [kategoriFilter, setKategoriFilter] = useState<string>('Semua');
   const panelHasilRef = useRef<HTMLDivElement>(null);
 
@@ -780,6 +816,7 @@ export default function AnalisaState2Workspace({
 
   // Tombol "Lanjut ke Harmonisasi": buka tab Harmonisasi di panel kanan
   const handleGoToHarmonisasi = () => {
+    setMobileActivePanel('hasil');
     bukaTabHarmonisasi();
     panelHasilRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -1011,7 +1048,7 @@ export default function AnalisaState2Workspace({
   }, [data?.poin_utama]);
 
   return (
-    <div className="max-w-[1360px] mx-auto space-y-4 pb-16 font-sans">
+    <div className="w-full max-w-[1600px] mx-auto space-y-4 pb-16 font-sans">
       {/* 1. Header Workspace Breadcrumb */}
       <div className="flex items-center text-xs font-semibold tracking-wider text-gray-500">
         <button 
@@ -1295,43 +1332,121 @@ export default function AnalisaState2Workspace({
 
       {/* WORKSPACE 3-PANEL (Struktur Dokumen | Naskah Regulasi | Hasil Analisis) */}
       {data && !loading && (
-        <div className="grid grid-cols-12 gap-4 items-stretch min-h-[720px]">
-          {/* =================================================================== */}
-          {/* PANEL KIRI: STRUKTUR DOKUMEN (Col-span 3) */}
-          {/* =================================================================== */}
-          <PanelErrorBoundary
-            nama="Struktur Dokumen"
-            className="col-span-12 lg:col-span-3 bg-white rounded-xl border border-gray-200 shadow-2xs h-[720px] p-4"
-            onCobaLagi={() => loadAnalysis(false, false)}
+        <div className="space-y-3">
+          {/* Kontrol Navigasi Adaptif Layar Mobile / Tablet */}
+          <div className="flex lg:hidden bg-gray-100 p-1 rounded-xl text-xs font-semibold mb-3 shadow-2xs">
+          <button
+            type="button"
+            onClick={() => setMobileActivePanel('struktur')}
+            className={`flex-1 py-1.5 text-center rounded-lg transition cursor-pointer ${
+              mobileActivePanel === 'struktur'
+                ? 'bg-white text-gray-900 shadow-2xs font-bold'
+                : 'text-gray-500 hover:text-gray-800'
+            }`}
           >
-          <div className="col-span-12 lg:col-span-3 bg-white rounded-xl border border-gray-200 flex flex-col shadow-2xs overflow-hidden h-[720px]">
-            {/* Header Panel Kiri */}
-            <div className="p-4 border-b border-gray-100 shrink-0">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                    STRUKTUR DOKUMEN
-                  </h3>
-                </div>
-                <span className="text-[11px] font-semibold text-gray-500">
-                  {displayJumlahBab} Bab, {displayJumlahPasal} Pasal
+            Struktur ({displayJumlahPasal}P)
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileActivePanel('naskah')}
+            className={`flex-1 py-1.5 text-center rounded-lg transition cursor-pointer ${
+              mobileActivePanel === 'naskah'
+                ? 'bg-white text-gray-900 shadow-2xs font-bold'
+                : 'text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            Naskah Regulasi
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileActivePanel('hasil')}
+            className={`flex-1 py-1.5 text-center rounded-lg transition cursor-pointer ${
+              mobileActivePanel === 'hasil'
+                ? 'bg-white text-gray-900 shadow-2xs font-bold'
+                : 'text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            Hasil Analisis
+          </button>
+        </div>
+
+        {/* WORKSPACE 3-PANEL DENGAN MANUAL COLLAPSE */}
+        <div className="flex items-stretch gap-3.5 h-[calc(100vh-215px)] min-h-[640px] max-h-[880px] w-full">
+          {/* =================================================================== */}
+          {/* PANEL KIRI: STRUKTUR DOKUMEN */}
+          {/* =================================================================== */}
+          {isLeftCollapsed ? (
+            <div className="hidden lg:flex w-11 bg-white rounded-xl border border-gray-200 flex-col items-center py-3.5 shadow-2xs shrink-0 transition-all duration-300">
+              <button
+                type="button"
+                onClick={() => setIsLeftCollapsed(false)}
+                title="Buka Panel Struktur Dokumen (Bab & Pasal)"
+                className="p-1.5 rounded-lg text-gray-500 hover:text-red-700 hover:bg-red-50 transition cursor-pointer"
+              >
+                <PanelLeftOpen size={18} />
+              </button>
+              <div className="mt-4 flex-1 flex items-center justify-center">
+                <span className="[writing-mode:vertical-lr] rotate-180 text-[10px] font-bold text-gray-400 tracking-wider uppercase select-none">
+                  Struktur Dokumen
                 </span>
+              </div>
+              <span className="text-[9px] font-mono font-bold text-gray-400 py-1">
+                {displayJumlahPasal}P
+              </span>
+            </div>
+          ) : (
+            <PanelErrorBoundary
+              nama="Struktur Dokumen"
+              className={`${mobileActivePanel === 'struktur' ? 'flex' : 'hidden'} lg:flex w-full lg:w-[260px] xl:w-[280px] shrink-0 bg-white rounded-xl border border-gray-200 h-full p-4`}
+              onCobaLagi={() => loadAnalysis(false, false)}
+            >
+            <div className={`${mobileActivePanel === 'struktur' ? 'flex' : 'hidden'} lg:flex w-full lg:w-[260px] xl:w-[280px] shrink-0 bg-white rounded-xl border border-gray-200 flex-col shadow-2xs overflow-hidden h-full transition-all duration-300`}>
+              {/* Header Panel Kiri */}
+              <div className="p-3.5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-white">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                    Struktur Dokumen
+                  </h3>
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                    {displayJumlahBab}B • {displayJumlahPasal}P
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsLeftCollapsed(true)}
+                  title="Ciutkan Panel Struktur Dokumen"
+                  className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition cursor-pointer"
+                >
+                  <PanelLeftClose size={15} />
+                </button>
               </div>
 
               {/* Filter Cepat Pasal */}
-              <div className="mt-2.5 relative">
-                <input
-                  type="text"
-                  value={structureSearch}
-                  onChange={(e) => setStructureSearch(e.target.value)}
-                  placeholder="Cari bab atau pasal..."
-                  className="w-full px-2.5 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-md focus:outline-none focus:border-red-700 focus:bg-white transition"
-                />
+              <div className="p-2.5 border-b border-gray-100 bg-gray-50/50 shrink-0">
+                <div className="relative">
+                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={structureSearch}
+                    onChange={(e) => setStructureSearch(e.target.value)}
+                    placeholder="Cari bab atau pasal..."
+                    className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700 transition"
+                  />
+                  {structureSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setStructureSearch('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
+                      title="Hapus pencarian"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* Tree View Bab & Pasal */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-1.5 text-xs text-gray-700">
+              {/* Tree View Bab & Pasal */}
+              <div className="flex-1 overflow-y-auto min-h-0 p-2.5 space-y-1.5 text-xs text-gray-700">
               {filteredKerangka.length === 0 && (
                 <div className="py-8 text-center text-xs text-gray-400">
                   Tidak ada bab atau pasal yang cocok dengan &quot;{structureSearch}&quot;.
@@ -1391,21 +1506,33 @@ export default function AnalisaState2Workspace({
                 );
               })}
             </div>
-          </div>
-          </PanelErrorBoundary>
+            </div>
+            </PanelErrorBoundary>
+          )}
 
           {/* =================================================================== */}
-          {/* PANEL TENGAH: NASKAH REGULASI (HASIL EKSTRAKSI) & PDF (Col-span 5) */}
+          {/* PANEL TENGAH: NASKAH REGULASI (HASIL EKSTRAKSI) & PDF */}
           {/* =================================================================== */}
           <PanelErrorBoundary
             nama="Naskah Regulasi"
-            className="col-span-12 lg:col-span-5 bg-white rounded-xl border border-gray-200 shadow-2xs h-[720px] p-4"
+            className={`${mobileActivePanel === 'naskah' ? 'flex' : 'hidden'} lg:flex flex-1 min-w-0 bg-white rounded-xl border border-gray-200 h-full p-4`}
             onCobaLagi={() => loadAnalysis(false, false)}
           >
-          <div className="col-span-12 lg:col-span-5 bg-white rounded-xl border border-gray-200 flex flex-col shadow-2xs overflow-hidden h-[720px]">
+          <div className={`${mobileActivePanel === 'naskah' ? 'flex' : 'hidden'} lg:flex flex-1 min-w-0 bg-white rounded-xl border border-gray-200 flex-col shadow-2xs overflow-hidden h-full transition-all duration-300`}>
             {/* Header Panel Tengah */}
-            <div className="p-3.5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-white">
+            <div className="p-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2.5 shrink-0 bg-white">
               <div className="flex items-center gap-2 text-xs">
+                {isLeftCollapsed && (
+                  <button
+                    type="button"
+                    onClick={() => setIsLeftCollapsed(false)}
+                    className="hidden lg:inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-gray-600 hover:text-red-700 hover:bg-red-50 rounded-lg border border-gray-200 transition cursor-pointer shadow-2xs"
+                    title="Buka kembali panel Struktur Dokumen"
+                  >
+                    <PanelLeftOpen size={13} />
+                    <span>Struktur</span>
+                  </button>
+                )}
                 <span className="font-bold text-gray-900 uppercase tracking-wide">
                   NASKAH REGULASI
                 </span>
@@ -1436,7 +1563,7 @@ export default function AnalisaState2Workspace({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2">
                 <a
                   href={resolvedPdfUrl}
                   target="_blank"
@@ -1467,8 +1594,20 @@ export default function AnalisaState2Workspace({
                 )}
 
                 <span className="text-[11px] text-gray-400 font-mono">
-                  Halaman {currentPage} dari {totalPages}
+                  Hal. {currentPage} / {totalPages}
                 </span>
+
+                {isRightCollapsed && (
+                  <button
+                    type="button"
+                    onClick={() => setIsRightCollapsed(false)}
+                    className="hidden lg:inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-gray-600 hover:text-red-700 hover:bg-red-50 rounded-lg border border-gray-200 transition cursor-pointer shadow-2xs ml-1"
+                    title="Buka kembali panel Hasil Analisis"
+                  >
+                    <span>Analisis</span>
+                    <PanelRightOpen size={13} />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1500,7 +1639,7 @@ export default function AnalisaState2Workspace({
 
             {/* Konten Naskah: PDF Asli atau naskah hasil ekstraksi */}
             {viewMode === 'pdf' ? (
-              <div className="flex-1 bg-gray-100 flex flex-col items-center justify-center p-2 relative overflow-hidden">
+              <div className="flex-1 bg-gray-100 flex flex-col items-center justify-center p-2 relative overflow-hidden min-h-0">
                 {pdfLoading ? (
                   <div className="flex flex-col items-center justify-center gap-2.5 p-8 text-gray-500">
                     <Loader2 size={24} className="animate-spin text-red-700" />
@@ -1542,11 +1681,11 @@ export default function AnalisaState2Workspace({
             ) : (
               <div 
                 ref={naskahContainerRef}
-                className="flex-1 overflow-y-auto px-6 py-6 bg-gray-50/50 select-text scroll-smooth"
+                className="flex-1 overflow-y-auto min-h-0 px-6 py-6 bg-gray-50/40 select-text scroll-smooth"
               >
                 <div 
                   style={{ fontSize: `${(zoomLevel / 100) * 12.5}px` }}
-                  className="max-w-[560px] mx-auto space-y-6 text-gray-800 leading-relaxed transition-all"
+                  className="max-w-[760px] mx-auto space-y-6 text-gray-800 leading-relaxed transition-all"
                 >
                   {/* Header Naskah Hasil Ekstraksi (bukan salinan resmi) */}
                   <div className="text-center space-y-2 pb-5 border-b border-gray-200">
@@ -1787,89 +1926,122 @@ export default function AnalisaState2Workspace({
           </PanelErrorBoundary>
 
           {/* =================================================================== */}
-          {/* PANEL KANAN: HASIL ANALISIS (Col-span 4) */}
+          {/* PANEL KANAN: HASIL ANALISIS */}
           {/* =================================================================== */}
-          <PanelErrorBoundary
-            nama="Hasil Analisis"
-            className="col-span-12 lg:col-span-4 bg-white rounded-xl border border-gray-200 shadow-2xs h-[720px] p-4"
-            onCobaLagi={() => loadAnalysis(false, false)}
-          >
-          <div ref={panelHasilRef} className="col-span-12 lg:col-span-4 bg-white rounded-xl border border-gray-200 flex flex-col shadow-2xs overflow-hidden h-[720px]">
-            {/* Header Panel Kanan */}
-            <div className="p-3.5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2 shrink-0">
-              <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                HASIL ANALISIS
-              </h3>
-              <div className="flex flex-wrap items-center gap-2">
-                <DraftLabel />
-                <div className="flex items-center gap-1 text-emerald-700 font-bold text-xs shrink-0">
-                  <Check size={14} className="text-emerald-600" />
-                  <span>Selesai</span>
+          {isRightCollapsed ? (
+            <div className="hidden lg:flex w-11 bg-white rounded-xl border border-gray-200 flex-col items-center py-3.5 shadow-2xs shrink-0 transition-all duration-300">
+              <button
+                type="button"
+                onClick={() => setIsRightCollapsed(false)}
+                title="Buka Panel Hasil Analisis"
+                className="p-1.5 rounded-lg text-gray-500 hover:text-red-700 hover:bg-red-50 transition cursor-pointer"
+              >
+                <PanelRightOpen size={18} />
+              </button>
+              <div className="mt-4 flex-1 flex items-center justify-center">
+                <span className="[writing-mode:vertical-lr] text-[10px] font-bold text-gray-400 tracking-wider uppercase select-none">
+                  Hasil Analisis
+                </span>
+              </div>
+              <DraftLabel ukuran="kecil" />
+            </div>
+          ) : (
+            <PanelErrorBoundary
+              nama="Hasil Analisis"
+              className={`${mobileActivePanel === 'hasil' ? 'flex' : 'hidden'} lg:flex w-full lg:w-[380px] xl:w-[420px] 2xl:w-[460px] shrink-0 bg-white rounded-xl border border-gray-200 h-full p-4`}
+              onCobaLagi={() => loadAnalysis(false, false)}
+            >
+            <div ref={panelHasilRef} className={`${mobileActivePanel === 'hasil' ? 'flex' : 'hidden'} lg:flex w-full lg:w-[380px] xl:w-[420px] 2xl:w-[460px] shrink-0 bg-white rounded-xl border border-gray-200 flex-col shadow-2xs overflow-hidden h-full transition-all duration-300`}>
+              {/* Header Panel Kanan */}
+              <div className="p-3.5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-white">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsRightCollapsed(true)}
+                    title="Ciutkan Panel Hasil Analisis"
+                    className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition cursor-pointer"
+                  >
+                    <PanelRightClose size={15} />
+                  </button>
+                  <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                    Hasil Analisis
+                  </h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  <DraftLabel />
+                  <div className="flex items-center gap-1 text-emerald-700 font-bold text-xs shrink-0">
+                    <Check size={14} className="text-emerald-600" />
+                    <span>Selesai</span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Tab Bar: Ringkasan | Poin Utama | Dasar Hukum | Informasi Tambahan | Harmonisasi */}
-            <div className="flex border-b border-gray-200 px-2 bg-gray-50/50 text-xs shrink-0 overflow-x-auto">
-              <button
-                type="button"
-                onClick={() => setActiveTab('ringkasan')}
-                className={`py-2.5 px-3 font-semibold transition border-b-2 shrink-0 cursor-pointer ${
-                  activeTab === 'ringkasan'
-                    ? 'border-red-700 text-red-700'
-                    : 'border-transparent text-gray-500 hover:text-gray-800'
-                }`}
-              >
-                Ringkasan
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('poin_utama')}
-                className={`py-2.5 px-3 font-semibold transition border-b-2 shrink-0 cursor-pointer ${
-                  activeTab === 'poin_utama'
-                    ? 'border-red-700 text-red-700'
-                    : 'border-transparent text-gray-500 hover:text-gray-800'
-                }`}
-              >
-                Poin Utama
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('dasar_hukum')}
-                className={`py-2.5 px-3 font-semibold transition border-b-2 shrink-0 cursor-pointer ${
-                  activeTab === 'dasar_hukum'
-                    ? 'border-red-700 text-red-700'
-                    : 'border-transparent text-gray-500 hover:text-gray-800'
-                }`}
-              >
-                Dasar Hukum
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('info_tambahan')}
-                className={`py-2.5 px-3 font-semibold transition border-b-2 shrink-0 cursor-pointer ${
-                  activeTab === 'info_tambahan'
-                    ? 'border-red-700 text-red-700'
-                    : 'border-transparent text-gray-500 hover:text-gray-800'
-                }`}
-              >
-                Informasi Tambahan
-              </button>
-              <button
-                type="button"
-                onClick={bukaTabHarmonisasi}
-                className={`py-2.5 px-3 font-semibold transition border-b-2 shrink-0 cursor-pointer ${
-                  activeTab === 'harmonisasi'
-                    ? 'border-red-700 text-red-700'
-                    : 'border-transparent text-gray-500 hover:text-gray-800'
-                }`}
-              >
-                Harmonisasi
-              </button>
-            </div>
+              {/* Tab Bar: 5 Tab Rapi Tanpa Horizontal Scrollbar */}
+              <div className="grid grid-cols-5 border-b border-gray-200 bg-gray-50/70 text-xs shrink-0 select-none">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('ringkasan')}
+                  className={`py-2.5 px-1 text-center font-semibold transition border-b-2 cursor-pointer truncate text-[11px] ${
+                    activeTab === 'ringkasan'
+                      ? 'border-red-700 text-red-700 bg-white font-bold'
+                      : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-100/50'
+                  }`}
+                  title="Ringkasan Eksekutif & Status Pasal"
+                >
+                  Ringkasan
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('poin_utama')}
+                  className={`py-2.5 px-1 text-center font-semibold transition border-b-2 cursor-pointer truncate text-[11px] ${
+                    activeTab === 'poin_utama'
+                      ? 'border-red-700 text-red-700 bg-white font-bold'
+                      : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-100/50'
+                  }`}
+                  title="Poin Utama & Klausul Regulasi"
+                >
+                  Poin Utama
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('dasar_hukum')}
+                  className={`py-2.5 px-1 text-center font-semibold transition border-b-2 cursor-pointer truncate text-[11px] ${
+                    activeTab === 'dasar_hukum'
+                      ? 'border-red-700 text-red-700 bg-white font-bold'
+                      : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-100/50'
+                  }`}
+                  title="Dasar Hukum & Konsiderans Mengingat"
+                >
+                  Dasar Hukum
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('info_tambahan')}
+                  className={`py-2.5 px-1 text-center font-semibold transition border-b-2 cursor-pointer truncate text-[11px] ${
+                    activeTab === 'info_tambahan'
+                      ? 'border-red-700 text-red-700 bg-white font-bold'
+                      : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-100/50'
+                  }`}
+                  title="Informasi Tambahan (Subjek, Sanksi, Lampiran)"
+                >
+                  Info Tambahan
+                </button>
+                <button
+                  type="button"
+                  onClick={bukaTabHarmonisasi}
+                  className={`py-2.5 px-1 text-center font-semibold transition border-b-2 cursor-pointer truncate text-[11px] ${
+                    activeTab === 'harmonisasi'
+                      ? 'border-red-700 text-red-700 bg-white font-bold'
+                      : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-100/50'
+                  }`}
+                  title="Harmonisasi Draft vs Regulasi Eksisting"
+                >
+                  Harmonisasi
+                </button>
+              </div>
 
-            {/* Tab Contents */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+              {/* Tab Contents */}
+              <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4 text-xs">
               {/* TAB 1: RINGKASAN */}
               {activeTab === 'ringkasan' && (
                 <div className="space-y-4">
@@ -2208,7 +2380,7 @@ export default function AnalisaState2Workspace({
             </div>
 
             {/* Catatan Disclaimer */}
-            <div className="p-3 border-t border-gray-100 bg-gray-50/50 text-[10px] text-gray-500 leading-tight">
+            <div className="p-3 border-t border-gray-100 bg-gray-50/50 text-[10px] text-gray-500 leading-tight shrink-0">
               {typeof data.catatan === 'string' && data.catatan.trim() !== '' && (
                 <p className="mb-1.5 font-semibold text-amber-800">{data.catatan}</p>
               )}
@@ -2216,11 +2388,13 @@ export default function AnalisaState2Workspace({
             </div>
           </div>
           </PanelErrorBoundary>
+          )}
+        </div>
         </div>
       )}
 
       {/* 5. STICKY BOTTOM BAR */}
-      <div className="bg-white border border-gray-200 rounded-xl px-5 py-3 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="sticky bottom-4 z-20 bg-white/95 backdrop-blur-xs border border-gray-200 rounded-xl px-5 py-3 shadow-md flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-3">
         <div className="flex items-center gap-2 text-xs text-gray-700">
           {loading ? (
             <>
