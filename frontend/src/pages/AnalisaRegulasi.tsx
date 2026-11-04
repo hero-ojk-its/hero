@@ -12,7 +12,8 @@ import {
   Activity,
   Copy,
   RotateCcw,
-  Trash2
+  Trash2,
+  Loader2
 } from 'lucide-react';
 
 import {
@@ -100,9 +101,11 @@ export default function AnalisaRegulasi() {
   }
   const [duplikat, setDuplikat] = useState<DuplikatInfo | null>(null);
 
-  // Ref elemen untuk auto-scroll yang nyaman saat duplikat atau kegagalan
+  // Ref elemen untuk auto-scroll yang nyaman saat duplikat, progres ekstraksi, atau kegagalan
   const duplicateAlertRef = useRef<HTMLDivElement | null>(null);
   const uploadErrorAlertRef = useRef<HTMLDivElement | null>(null);
+  const progressCardRef = useRef<HTMLDivElement | null>(null);
+  const lastScrolledDocIdRef = useRef<number | null>(null);
 
   // 5. State Polling Kesiapan Dokumen
   const [isPollingActive, setIsPollingActive] = useState<boolean>(false);
@@ -161,6 +164,20 @@ export default function AnalisaRegulasi() {
       }
     };
   }, []);
+
+  // Efek auto-scroll ke kartu progres ekstraksi (dijaga agar hanya berjalan SATU KALI per docId)
+  useEffect(() => {
+    if (uploadedDocumentId && isPollingActive && lastScrolledDocIdRef.current !== uploadedDocumentId) {
+      lastScrolledDocIdRef.current = uploadedDocumentId;
+      const timer = setTimeout(() => {
+        if (progressCardRef.current) {
+          progressCardRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          progressCardRef.current.focus({ preventScroll: true });
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [uploadedDocumentId, isPollingActive]);
 
   // Pengecekan Kesiapan Layanan ML Lapisan Data saat inisialisasi
   const checkHealthStatus = useCallback(async () => {
@@ -327,6 +344,7 @@ export default function AnalisaRegulasi() {
   const handleUnggahBerkasLain = () => {
     clearStoredAnalisaWorkspace();
     setUploadedDocumentId(null);
+    lastScrolledDocIdRef.current = null;
     setIsPollingActive(false);
     documentPolling.stop();
     setRestoreError(null);
@@ -441,8 +459,19 @@ export default function AnalisaRegulasi() {
       setUploadProgress(null);
       uploadAbortControllerRef.current = null;
 
+      // Catat docId agar auto-scroll hanya dijalankan satu kali (mencegah scroll berulang saat polling)
+      lastScrolledDocIdRef.current = docId;
+
       // Mulai polling status pemrosesan dokumen di backend
       setIsPollingActive(true);
+
+      // Jadwalkan auto-scroll ke kartu progres ekstraksi setelah komponen ter-mount di DOM
+      setTimeout(() => {
+        if (progressCardRef.current) {
+          progressCardRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          progressCardRef.current.focus({ preventScroll: true });
+        }
+      }, 100);
     } catch (err: unknown) {
       if (!isMountedRef.current) {
         return;
@@ -518,6 +547,7 @@ export default function AnalisaRegulasi() {
     setIsUploading(false);
     setUploadProgress(null);
     setUploadedDocumentId(null);
+    lastScrolledDocIdRef.current = null;
     setPollingTimeoutOccurred(false);
     setDuplikat(null);
     setSelectedFile(null);
@@ -706,7 +736,13 @@ export default function AnalisaRegulasi() {
 
       {/* 3. MODUL PROGRES & POLLING UNGGAH DRAF (Aktif saat proses upload & ekstraksi berlangsung) */}
       {(isUploading || isPollingActive || pollingTimeoutOccurred) && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm space-y-4">
+        <div
+          ref={progressCardRef}
+          tabIndex={-1}
+          role="region"
+          aria-label="Progres Ekstraksi Regulasi"
+          className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm space-y-4 focus:outline-none scroll-mt-6"
+        >
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-gray-100">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-red-50 text-red-700 border border-red-100 flex items-center justify-center shrink-0">
@@ -1389,14 +1425,28 @@ export default function AnalisaRegulasi() {
           <button
             type="submit"
             disabled={!selectedFile || isUploading || isPollingActive || (isDraftPublik && !isPersetujuanValid)}
-            className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer ${
+            className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-lg text-xs font-semibold shadow-xs transition ${
               selectedFile && !isUploading && !isPollingActive && (!isDraftPublik || isPersetujuanValid)
-                ? 'bg-red-700 hover:bg-red-800 text-white'
-                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                ? 'bg-red-700 hover:bg-red-800 text-white cursor-pointer'
+                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
             }`}
           >
-            <span>Mulai Analisis Regulasi</span>
-            <ArrowRight size={14} />
+            {isUploading ? (
+              <>
+                <Loader2 size={14} className="animate-spin text-gray-500" />
+                <span>Mengunggah Berkas...</span>
+              </>
+            ) : isPollingActive ? (
+              <>
+                <Loader2 size={14} className="animate-spin text-gray-500" />
+                <span>Memproses Ekstraksi...</span>
+              </>
+            ) : (
+              <>
+                <span>Mulai Analisis Regulasi</span>
+                <ArrowRight size={14} />
+              </>
+            )}
           </button>
         </div>
       </form>
