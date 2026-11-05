@@ -480,9 +480,15 @@ class ScanService:
                     return
 
                 # 5. Simpan kandidat PDF ke database
+                # (PDF yang sama bisa tertaut dari beberapa regulasi dalam satu scan; unique
+                # constraint (scan_id, url_hash) menolak duplikat, jadi simpan sekali saja.)
+                seen_hashes: set = set()
                 for cand in scan_res.candidates:
                     norm_url = normalize_url(cand.url)
                     url_hash = hashlib.sha256(norm_url.encode("utf-8")).hexdigest()
+                    if url_hash in seen_hashes:
+                        continue
+                    seen_hashes.add(url_hash)
                     cand_reg_year = getattr(cand, "regulation_year", None) or extract_regulation_year(
                         regulation_number=cand.regulation_number,
                         title=cand.document_title,
@@ -547,7 +553,9 @@ class ScanService:
                 logger.info(f"[Scan] Sesi #{session.id} selesai dipindai: {session.candidates_total} kandidat ditemukan.")
 
             except Exception as exc:
-                logger.exception(f"[Scan] Kesalahan tak terduga saat pemindaian sesi #{session.id}: {exc}")
+                # Jangan menyentuh atribut ORM (mis. session.id) sebelum rollback: pada sesi
+                # yang "menunggu rollback" itu sendiri melempar PendingRollbackError.
+                logger.exception(f"[Scan] Kesalahan tak terduga saat pemindaian sesi #{scan_id}: {exc}")
                 # Setelah flush/INSERT gagal, sesi SQLAlchemy "menunggu rollback": commit
                 # langsung akan melempar PendingRollbackError sehingga status gagal tidak
                 # pernah tersimpan dan sesi menggantung di 'memindai' selamanya.
@@ -561,7 +569,7 @@ class ScanService:
                         source.last_run_message = f"Gagal: {str(exc)[:500]}"
                     db.commit()
                 except Exception as exc2:  # noqa: BLE001
-                    logger.exception(f"[Scan] Gagal mencatat kegagalan sesi #{session.id}: {exc2}")
+                    logger.exception(f"[Scan] Gagal mencatat kegagalan sesi #{scan_id}: {exc2}")
                     db.rollback()
 
             finally:
