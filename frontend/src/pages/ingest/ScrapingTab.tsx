@@ -43,6 +43,14 @@ import { ErrorState } from '../../components/ErrorState';
 import { getStatusPindaiLabel } from './labels';
 import { mockScrapedDocs, type MockScrapedDoc } from './mock';
 
+// "Semua Halaman (Penuh)" harus benar-benar berarti "tanpa batas buatan", bukan
+// angka tetap yang bisa jadi usang begitu register sumber bertambah halaman.
+// Samakan dengan langit-langit backend (CRAWL_MAX_PAGES, default 200 — lihat
+// backend/app/config.py) supaya memilih opsi ini tidak diam-diam terpotong
+// sebelum halaman terakhir yang sesungguhnya (register OJK Regulasi sendiri
+// sudah mencapai 159 halaman per 2026-11-05, pernah melebihi batas lama 100).
+const MAX_PAGES_PENUH = 200;
+
 export default function ScrapingTab() {
   // Step: 1 (Config) -> 2 (Scanning & Candidate Selection) -> 3 (Pulling) -> 4 (Result)
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
@@ -677,7 +685,7 @@ export default function ScrapingTab() {
                   onChange={(e) => {
                     const val = Number(e.target.value);
                     setMaxPages(val);
-                    setAllPagesWarning(val >= 100);
+                    setAllPagesWarning(val >= MAX_PAGES_PENUH);
                   }}
                   className="block w-full py-2.5 px-3 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                 >
@@ -685,7 +693,7 @@ export default function ScrapingTab() {
                   <option value={3}>3 Halaman (Standar - 3 halaman)</option>
                   <option value={5}>5 Halaman (Luas)</option>
                   <option value={10}>10 Halaman (Banyak)</option>
-                  <option value={100}>Semua Halaman (Penuh)</option>
+                  <option value={MAX_PAGES_PENUH}>Semua Halaman (Penuh)</option>
                 </select>
                 <p className="text-[11px] text-gray-500 mt-1">
                   Membatasi jumlah halaman perambatan crawler.
