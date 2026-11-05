@@ -13,7 +13,9 @@ import logging
 import posixpath
 import re
 import ssl
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from typing import Callable, Optional, List, Dict, Set, Tuple, Any
 from urllib.parse import urlsplit, urljoin, unquote
@@ -114,6 +116,7 @@ class SharepointPostbackCrawler:
         respect_robots: bool = True,
         allow_private: bool = False,
         head_for_size: bool = True,
+        detail_workers: int = 1,
     ):
         self.user_agent = user_agent
         self.delay_seconds = delay_seconds
@@ -123,6 +126,16 @@ class SharepointPostbackCrawler:
         self.head_for_size = head_for_size
         self._last_request_time: Dict[str, float] = {}
         self.requests_count = 0
+        # Halaman detail tiap regulasi diambil paralel sebanyak ini (1 = berurutan,
+        # perilaku lama). Pembatas laju per-host di bawah tetap dipakai bersama oleh
+        # semua pekerja, jadi laju permintaan ke ojk.go.id tidak ikut naik.
+        self.detail_workers = max(1, int(detail_workers or 1))
+        self._rate_lock = threading.Lock()
+        self._count_lock = threading.Lock()
+
+    def _count_request(self) -> None:
+        with self._count_lock:
+            self.requests_count += 1
 
     def _get_ssl_context(self) -> ssl.SSLContext:
         ctx = ssl.create_default_context()
@@ -133,14 +146,21 @@ class SharepointPostbackCrawler:
         return ctx
 
     def _rate_limit(self, host: str):
+        """Pesan slot waktu per-host di bawah kunci, lalu tidur di luar kunci.
+
+        Aman dipakai banyak thread: setiap permintaan mendapat slot sekurang-kurangnya
+        ``delay_seconds`` setelah slot sebelumnya, sehingga laju total ke satu host
+        tetap sama seperti saat berurutan.
+        """
         if not host or self.delay_seconds <= 0:
             return
-        last_t = self._last_request_time.get(host, 0.0)
-        now = time.time()
-        elapsed = now - last_t
-        if elapsed < self.delay_seconds:
-            time.sleep(self.delay_seconds - elapsed)
-        self._last_request_time[host] = time.time()
+        with self._rate_lock:
+            now = time.time()
+            slot = max(now, self._last_request_time.get(host, 0.0) + self.delay_seconds)
+            self._last_request_time[host] = slot
+        wait = slot - time.time()
+        if wait > 0:
+            time.sleep(wait)
 
     def _safe_request(
         self,
@@ -163,7 +183,7 @@ class SharepointPostbackCrawler:
         }
 
         for attempt in range(max_attempts):
-            self.requests_count += 1
+            self._count_request()
             try:
                 if method.upper() == "GET":
                     resp = client.get(url, headers=headers, timeout=self.timeout_seconds)
@@ -220,7 +240,7 @@ class SharepointPostbackCrawler:
         """Menentukan ukuran berkas via HEAD / Range tanpa unduh penuh."""
         try:
             head_resp = client.head(pdf_url, headers={"User-Agent": self.user_agent}, timeout=self.timeout_seconds)
-            self.requests_count += 1
+            self._count_request()
             if head_resp.status_code == 200:
                 cd_name = extract_filename_from_cd(head_resp.headers.get("content-disposition"))
                 cl = head_resp.headers.get("content-length")
@@ -235,7 +255,7 @@ class SharepointPostbackCrawler:
                 headers={"User-Agent": self.user_agent, "Range": "bytes=0-0"},
                 timeout=self.timeout_seconds,
             )
-            self.requests_count += 1
+            self._count_request()
             cd_name = extract_filename_from_cd(range_resp.headers.get("content-disposition"))
             if range_resp.status_code == 206:
                 cr = range_resp.headers.get("content-range", "")
@@ -506,25 +526,63 @@ class SharepointPostbackCrawler:
                     break
 
                 # 3. Proses tiap halaman detail regulasi
-                for a_link in unique_article_links:
-                    if should_cancel and should_cancel():
-                        break
-                    if len(candidates_map) >= max_candidates:
-                        truncated = True
-                        break
+                if self.detail_workers > 1 and len(unique_article_links) > 1:
+                    # Paralel: hanya thread utama yang menyentuh should_cancel/progress
+                    # (keduanya memakai sesi database yang tidak aman lintas-thread).
+                    stop = threading.Event()
 
-                    full_detail_url = urljoin(current_url, a_link)
-                    try:
-                        cands = self._parse_detail_page(client, full_detail_url, page_depth=1)
-                        regulations_count += 1
-                        for c in cands:
-                            if c.url not in candidates_map:
-                                candidates_map[c.url] = c
-                    except Exception as det_err:
-                        logger.debug(f"Gagal parse detail {full_detail_url}: {det_err}")
+                    def _work(link: str, base: str = current_url):
+                        if stop.is_set():
+                            return None
+                        return self._parse_detail_page(client, urljoin(base, link), page_depth=1)
 
-                    if progress:
-                        progress(len(visited_pages), len(candidates_map))
+                    with ThreadPoolExecutor(max_workers=self.detail_workers) as pool:
+                        futures = [pool.submit(_work, lk) for lk in unique_article_links]
+                        for fut in as_completed(futures):
+                            if should_cancel and should_cancel():
+                                stop.set()
+                                for f in futures:
+                                    f.cancel()
+                                break
+                            try:
+                                cands = fut.result()
+                            except Exception as det_err:
+                                logger.debug(f"Gagal parse detail: {det_err}")
+                                continue
+                            if cands is None:
+                                continue
+                            regulations_count += 1
+                            for c in cands:
+                                if c.url not in candidates_map:
+                                    candidates_map[c.url] = c
+                            if progress:
+                                progress(len(visited_pages), len(candidates_map))
+                            if len(candidates_map) >= max_candidates:
+                                truncated = True
+                                stop.set()
+                                for f in futures:
+                                    f.cancel()
+                                break
+                else:
+                    for a_link in unique_article_links:
+                        if should_cancel and should_cancel():
+                            break
+                        if len(candidates_map) >= max_candidates:
+                            truncated = True
+                            break
+
+                        full_detail_url = urljoin(current_url, a_link)
+                        try:
+                            cands = self._parse_detail_page(client, full_detail_url, page_depth=1)
+                            regulations_count += 1
+                            for c in cands:
+                                if c.url not in candidates_map:
+                                    candidates_map[c.url] = c
+                        except Exception as det_err:
+                            logger.debug(f"Gagal parse detail {full_detail_url}: {det_err}")
+
+                        if progress:
+                            progress(len(visited_pages), len(candidates_map))
 
                 if truncated or len(visited_pages) >= max_pages:
                     break
