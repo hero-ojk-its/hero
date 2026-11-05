@@ -3,6 +3,8 @@ from pathlib import Path
 
 import pymupdf
 
+from hero.config import SiteSource
+from hero.ingest.sharepoint import ListingRow
 from hero.pipeline import IngestPipeline
 
 REGULATION = """SALINAN
@@ -168,6 +170,62 @@ def test_restructure_moves_legacy_layout_and_is_idempotent(tmp_path, tmp_setting
 
     second = restructure(tmp_settings)
     assert second.moved == 0 and second.unchanged == 1
+
+
+def test_pending_sharepoint_rows_resumes_past_an_already_known_run(
+    tmp_settings, monkeypatch,
+):
+    """Repeated incremental `hero scrape` runs must reach further each time.
+
+    A client target such as "1.500 file di knowledge base" is reached by
+    running `hero scrape` more than once (raising ``want``/--limit as
+    needed) rather than in one sitting. The walk must therefore NOT give up
+    just because the first few pages — read on an earlier run — are already
+    in the catalog: it has to keep going until it finds the fresh page.
+    Both OJK listings are bounded (confirmed live: ≤160 pages even read in
+    full), so there is no need to cut this walk short for performance.
+    """
+    from hero import inventory as inv
+    from hero.ingest import sharepoint as sp
+
+    site = SiteSource(
+        name="OJK — Regulasi (uji)",
+        url="https://ojk.go.id/id/regulasi/default.aspx",
+        adapter="ojk_sharepoint", max_documents=50,
+    )
+
+    # 10 pages of 10 rows; only page 9 and 10 carry anything new — exactly
+    # the shape of "I already scraped the first 8 pages, now I want more".
+    pages = [
+        [ListingRow(url=f"https://ojk.go.id/x/p{page}-{i}.aspx",
+                    title=f"Regulasi {page}-{i}", page=page)
+         for i in range(10)]
+        for page in range(1, 11)
+    ]
+
+    def fake_iter_listing(scraper, url, kind=None, max_pages=None, errors=None):
+        for page, rows in enumerate(pages, start=1):
+            yield page, rows
+
+    monkeypatch.setattr(sp, "iter_listing", fake_iter_listing)
+
+    pipeline = IngestPipeline(tmp_settings, analyze=False)
+    # Pre-seed pages 1–8 (eight in a row — more than the old quiet-pages
+    # heuristic would have tolerated) as "already harvested on an earlier run".
+    for page_rows in pages[:8]:
+        for row in page_rows:
+            pipeline.catalog.upsert_inventory(
+                inv.record_from_sharepoint_row(row, "ojk-regulasi"))
+            pipeline.catalog.link_inventory_document(row.url, "already-have")
+
+    keys, skipped, pages_read, errors = pipeline._pending_sharepoint_rows(
+        scraper=None, site=site, want=50,
+    )
+    pipeline.close()
+
+    assert pages_read == 10           # walked all the way to the fresh pages
+    assert len(keys) == 20            # pages 9 and 10, never seen before
+    assert skipped == 80              # pages 1–8, correctly recognised as known
 
 
 def test_source_override_beats_parsed_year():

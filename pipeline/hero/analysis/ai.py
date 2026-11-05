@@ -119,6 +119,8 @@ def build_facts(a: AnalysisV2, max_points: int = 24) -> list[dict[str, Any]]:
     if a.lampiran.get("berat_lampiran"):
         add("K4", "Substansi utama berada di Lampiran, bukan di batang tubuh. Judul bagian Lampiran: "
             + ("; ".join(a.lampiran["judul_bagian"][:8]) or "tidak terbaca"))
+        for i, sec in enumerate(a.lampiran.get("isi_bagian") or [], start=1):
+            add(f"K4L{i}", f"Isi bagian Lampiran \"{sec['judul']}\": {sec['ringkasan']}")
     for p in a.poin_utama(max_points):
         add(p.id, f"[{p.kategori}] {p.teks}", p.pasal)
     return facts
