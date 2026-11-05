@@ -70,6 +70,11 @@ class Settings(BaseSettings):
     # Jumlah halaman detail regulasi yang diambil paralel (crawler SharePoint OJK).
     # 1 = berurutan. Laju permintaan per-host tetap dibatasi crawl_delay_seconds.
     crawl_detail_workers: int = 4
+    # Batas "tanpa kemajuan" (detik) untuk crawler SharePoint OJK: pemindaian dihentikan
+    # (hasil sebagian tetap disimpan) hanya jika TIDAK ADA regulasi yang selesai diproses
+    # selama selang ini. Selama masih ada kemajuan, selambat apa pun, tidak dibatasi.
+    # Harus lebih besar dari waktu terburuk satu regulasi (±5 menit). 0 = nonaktif.
+    crawl_stall_seconds: int = 600
     crawl_timeout_seconds: int = 20
     crawl_user_agent: str = "HERO-Capstone-Crawler/0.7 (+kontak: tim HERO)"
     crawl_respect_robots: bool = True
