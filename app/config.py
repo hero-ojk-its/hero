@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     crawl_max_pages: int = 200
     crawl_max_candidates: int = 5000
     crawl_delay_seconds: float = 0.5
+    # Jumlah halaman detail regulasi yang diambil paralel (crawler SharePoint OJK).
+    # 1 = berurutan. Laju permintaan per-host tetap dibatasi crawl_delay_seconds.
+    crawl_detail_workers: int = 4
     crawl_timeout_seconds: int = 20
     crawl_user_agent: str = "HERO-Capstone-Crawler/0.7 (+kontak: tim HERO)"
     crawl_respect_robots: bool = True
