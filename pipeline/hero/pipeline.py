@@ -380,12 +380,23 @@ class IngestPipeline:
 
     def _pending_sharepoint_rows(
         self, scraper: WebScraper, site, want: int,
+        progress: ProgressFn | None = None,
     ) -> tuple[list[str], int, int, list[str]]:
         """Walk an ojk.go.id listing until ``want`` rows lack a document.
 
         Returns (record keys to harvest, rows skipped as already held, pages
-        read, errors). Every row seen is recorded in the inventory on the way.
+        read, errors). Every row seen is recorded in the inventory on the
+        way. Always walks from page 1 and skips rows already in the catalog
+        — safe and cheap to call repeatedly across separate runs to build up
+        the knowledge base incrementally (both OJK listings are bounded,
+        confirmed live: ≤160 pages even read in full), so a run that found
+        fewer than ``want`` rows on one call can simply be run again later
+        to reach further into the listing. There is deliberately no
+        early-stop on "several quiet pages in a row": that would risk
+        ending a run right before the page it was about to need, which is
+        exactly the resume-to-a-target workflow this is for.
         """
+        say = progress or (lambda kind, msg: None)
         source = inv.source_key_for_site(site)
         kind = "rancangan" if source == inv.SOURCE_RANCANGAN else "regulasi"
         keys: list[str] = []
@@ -403,7 +414,12 @@ class IngestPipeline:
                     continue   # read before, nothing downloadable (e.g. .docx only)
                 keys.append(row.url)
                 if len(keys) >= want:
+                    say("list", f"{site.name}: halaman {page} — {len(keys)} dokumen "
+                                f"baru ditemukan, berhenti")
                     return keys, skipped, pages, errors
+            if page == 1 or page % 5 == 0:
+                say("list", f"{site.name}: halaman {page} dibaca "
+                            f"({len(keys)} baru, {skipped} sudah ada)")
         return keys, skipped, pages, errors
 
     @staticmethod
@@ -489,7 +505,7 @@ class IngestPipeline:
                 if adapter == "ojk_sharepoint":
                     want = limit if limit is not None else site.max_documents
                     keys, skipped, pages, errors = self._pending_sharepoint_rows(
-                        scraper, site, want)
+                        scraper, site, want, progress)
                     run.errors.extend(f"[{site.name}] {e}" for e in errors)
                     if skipped:
                         run.errors.append(

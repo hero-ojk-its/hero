@@ -72,6 +72,37 @@ def _is_heading_like(line: str) -> bool:
     return sum(c.isupper() for c in letters) / len(letters) > 0.7
 
 
+# Connectors that stay lower-case inside an otherwise Title-Case heading.
+_HEADING_CONNECTORS = {"dan", "atau", "yang", "dari", "untuk", "pada", "di",
+                       "ke", "oleh", "dengan", "serta", "dalam", "bagi",
+                       "tentang", "antara", "atas"}
+
+
+def _is_heading_titlecase(line: str) -> bool:
+    """Second heading test, for "Bagian"/"Paragraf" lines ``_is_heading_like``
+    misses (Fase 2 finding T5).
+
+    BAB headings print in full caps ("BAB II KETENTUAN UMUM"); Bagian and
+    Paragraf headings are routinely printed Title Case instead ("Paragraf 2
+    Bidang Tugas Pengawasan Perbankan"). Without this, such a line fails the
+    all-caps gate, is never recognised as a heading, and leaks into the
+    ayat text right after it instead of being skipped.
+
+    Guarded two ways against matching an ordinary sentence that merely
+    starts a printed line with "Bagian"/"Paragraf" after a PDF line wrap:
+    every non-connector word must start with a capital letter, and the line
+    must not end the way a prose sentence does (".", ",", ";", ":").
+    """
+    stripped = line.strip()
+    if not stripped or len(stripped) > _MAX_HEADING_LEN or stripped[-1] in ".,;:":
+        return False
+    words = [w for w in re.split(r"\s+", stripped) if any(c.isalpha() for c in w)]
+    major = [w for w in words if w.lower() not in _HEADING_CONNECTORS]
+    if not major:
+        return False
+    return all(w[0].isupper() for w in major if w[0].isalpha())
+
+
 def _split_ayat(body: str) -> list[tuple[str, str]]:
     """Split a pasal into its ayat.
 
@@ -108,6 +139,11 @@ def parse_structure(pages: list[PageText]) -> DocumentStructure:
     cur_bagian: str | None = None
     cur_paragraf: str | None = None
     pending_bab: str | None = None   # BAB number awaiting its title line
+    # Same wrapped-title problem as BAB, for Bagian/Paragraf (Fase 2 finding
+    # T5): "Paragraf 2" prints on its own line, its title on the next. Each
+    # holds the heading text seen so far while it waits for that next line.
+    pending_bagian: str | None = None
+    pending_paragraf: str | None = None
     in_attachment = False
     sections_done = False   # body sections finished, lampiran forms follow
 
@@ -136,6 +172,20 @@ def parse_structure(pages: list[PageText]) -> DocumentStructure:
             in_attachment=in_attachment,
         )
 
+    def _take_pending_title(pending: str, stripped: str) -> tuple[str, bool]:
+        """Does ``stripped`` continue a pending Bagian/Paragraf heading?
+
+        Only when it reads like a heading itself and isn't the start of
+        something else (a new Pasal, BAB, Bagian or Paragraf) — otherwise
+        the pending heading simply had no separate title.
+        """
+        if stripped and (_is_heading_like(stripped) or _is_heading_titlecase(stripped)) \
+                and not RE_PASAL_INLINE.match(stripped) \
+                and not RE_BAB.match(stripped) and not RE_BAGIAN.match(stripped) \
+                and not RE_PARAGRAF.match(stripped):
+            return f"{pending} {stripped.title()}".strip(), True
+        return pending, False
+
     for page in pages:
         for raw in page.text.split("\n"):
             line = raw.rstrip()
@@ -154,6 +204,18 @@ def parse_structure(pages: list[PageText]) -> DocumentStructure:
                         struct.babs[-1].get("title") == stripped.title():
                     continue
 
+            if pending_bagian is not None:
+                cur_bagian, taken = _take_pending_title(pending_bagian, stripped)
+                pending_bagian = None
+                if taken:
+                    continue
+
+            if pending_paragraf is not None:
+                cur_paragraf, taken = _take_pending_title(pending_paragraf, stripped)
+                pending_paragraf = None
+                if taken:
+                    continue
+
             m = RE_BAB.match(stripped)
             if m and len(stripped) < _MAX_HEADING_LEN:
                 close_current()
@@ -169,17 +231,22 @@ def parse_structure(pages: list[PageText]) -> DocumentStructure:
                 else:
                     pending_bab = number
                 cur_bagian = cur_paragraf = None
+                pending_bagian = pending_paragraf = None
                 continue
 
             m = RE_BAGIAN.match(stripped)
-            if m and _is_heading_like(stripped):
+            if m and (_is_heading_like(stripped) or _is_heading_titlecase(stripped)):
                 cur_bagian = stripped.title()
-                cur_paragraf = None
+                cur_paragraf = pending_paragraf = None
+                if not m.group(2).strip():   # title, if any, is on the next line
+                    pending_bagian = cur_bagian
                 continue
 
             m = RE_PARAGRAF.match(stripped)
-            if m and _is_heading_like(stripped):
+            if m and (_is_heading_like(stripped) or _is_heading_titlecase(stripped)):
                 cur_paragraf = stripped.title()
+                if not m.group(2).strip():
+                    pending_paragraf = cur_paragraf
                 continue
 
             m = RE_PASAL.match(stripped)
