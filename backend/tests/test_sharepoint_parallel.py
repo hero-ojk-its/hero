@@ -99,3 +99,55 @@ def test_pembatas_laju_aman_antar_thread():
     stamps.sort()
     gaps = [b - a for a, b in zip(stamps, stamps[1:])]
     assert min(gaps) >= 0.035  # toleransi jitter; tanpa kunci jarak ~0
+
+
+# ---------------------------------------------------------------- batas "tanpa kemajuan"
+def _stub_candidate(url: str):
+    from app.crawlers.base import PdfCandidate
+    return PdfCandidate(url=url + ".pdf", filename="x.pdf")
+
+
+def test_macet_total_dihentikan_dan_hasil_sebagian_disimpan(monkeypatch):
+    """Satu regulasi tak pernah selesai: scan berhenti setelah selang tanpa kemajuan."""
+    state = {"lock": threading.Lock(), "active": 0, "peak": 0}
+    _install(monkeypatch, state)
+    release = threading.Event()
+    c = sp.SharepointPostbackCrawler(delay_seconds=0, head_for_size=False,
+                                     detail_workers=2, stall_seconds=1)
+
+    def stub(client, url, page_depth):
+        if url.endswith("reg-1-0.aspx"):
+            release.wait(30)          # macet, tidak pernah selesai sendiri
+            return []
+        return [_stub_candidate(url)]
+
+    c._parse_detail_page = stub
+    t0 = time.time()
+    try:
+        res = c.scan("https://ojk.go.id/id/regulasi/default.aspx", 1, max_pages=10)
+    finally:
+        release.set()
+    assert time.time() - t0 < 10
+    assert res.truncated is True
+    assert any("tidak ada kemajuan" in e for e in res.errors)
+    assert len(res.candidates) == PER_PAGE - 1   # yang selesai tetap tersimpan
+
+
+def test_lambat_tapi_masih_bergerak_tidak_dibatasi(monkeypatch):
+    """Total waktu jauh melebihi batas, tetapi selalu ada yang selesai: harus tuntas."""
+    state = {"lock": threading.Lock(), "active": 0, "peak": 0}
+    _install(monkeypatch, state)
+    c = sp.SharepointPostbackCrawler(delay_seconds=0, head_for_size=False,
+                                     detail_workers=2, stall_seconds=1)
+
+    def slow(client, url, page_depth):
+        time.sleep(0.25)              # 18 regulasi x 0,25 dtk / 2 pekerja ≈ 2,2 dtk > batas 1 dtk
+        return [_stub_candidate(url)]
+
+    c._parse_detail_page = slow
+    t0 = time.time()
+    res = c.scan("https://ojk.go.id/id/regulasi/default.aspx", 1, max_pages=10)
+    assert time.time() - t0 > 1.5
+    assert not any("tidak ada kemajuan" in e for e in res.errors)
+    assert res.truncated is False
+    assert len(res.candidates) == N_PAGES * PER_PAGE

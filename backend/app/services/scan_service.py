@@ -43,6 +43,7 @@ from app.models.ingest_failure import IngestFailure
 from app.crawlers.base import BlockedUrlError, FetchTooLargeError, CrawlerError, FetchedFile
 from app.crawlers.generic_html import SimpleHttpCrawler
 from app.crawlers.registry import get_crawler
+from app.services.column_fit import clip_to_columns
 from app.crawlers.url_utils import (
     normalize_url,
     guard_url,
@@ -512,11 +513,16 @@ class ScanService:
                         size_source=cand.size_source or "unknown",
                         source_path=cand.source_path,
                     )
+                    # Nilai dari situs sumber bisa lebih panjang dari kolom (mis. daftar
+                    # "Sub Sektor"); tanpa dipangkas, INSERT gagal dan seluruh sesi macet.
+                    clip_to_columns(candidate_row)
                     db.add(candidate_row)
 
+                logger.info(f"[Scan] Sesi #{session.id}: crawling selesai, menyimpan {len(scan_res.candidates)} kandidat.")
                 db.flush()
 
                 # 6. Jalankan perbandingan terhadap Knowledge Base (§3.4)
+                logger.info(f"[Scan] Sesi #{session.id}: kandidat tersimpan, membandingkan dengan Knowledge Base.")
                 self._compare_candidates_with_kb(session, db)
 
                 # 7. Selesaikan pemindaian dan ubah status ke siap_dipilih
@@ -542,13 +548,21 @@ class ScanService:
 
             except Exception as exc:
                 logger.exception(f"[Scan] Kesalahan tak terduga saat pemindaian sesi #{session.id}: {exc}")
-                session.status = StatusPindai.gagal
-                session.error_message = str(exc)
-                session.finished_at = datetime.now(timezone.utc)
-                if source:
-                    source.last_run_status = "gagal"
-                    source.last_run_message = f"Gagal: {exc}"
-                db.commit()
+                # Setelah flush/INSERT gagal, sesi SQLAlchemy "menunggu rollback": commit
+                # langsung akan melempar PendingRollbackError sehingga status gagal tidak
+                # pernah tersimpan dan sesi menggantung di 'memindai' selamanya.
+                try:
+                    db.rollback()
+                    session.status = StatusPindai.gagal
+                    session.error_message = str(exc)[:1000]
+                    session.finished_at = datetime.now(timezone.utc)
+                    if source:
+                        source.last_run_status = "gagal"
+                        source.last_run_message = f"Gagal: {str(exc)[:500]}"
+                    db.commit()
+                except Exception as exc2:  # noqa: BLE001
+                    logger.exception(f"[Scan] Gagal mencatat kegagalan sesi #{session.id}: {exc2}")
+                    db.rollback()
 
             finally:
                 if lock_conn is not None:
@@ -1427,6 +1441,7 @@ class ScanService:
                 existing.status_keberlakuan = getattr(cand_in, "status_keberlakuan", "tidak_diketahui") or "tidak_diketahui"
                 existing.size_source = cand_in.size_source or "unknown"
                 existing.source_path = cand_in.source_path
+                clip_to_columns(existing)
             else:
                 c_yr = getattr(cand_in, "regulation_year", None) or extract_regulation_year(
                     regulation_number=cand_in.regulation_number,
@@ -1458,6 +1473,7 @@ class ScanService:
                     size_source=cand_in.size_source or "unknown",
                     source_path=cand_in.source_path,
                 )
+                clip_to_columns(new_cand)
                 self.db.add(new_cand)
 
         self.db.flush()

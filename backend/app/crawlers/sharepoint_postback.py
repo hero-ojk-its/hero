@@ -15,7 +15,7 @@ import re
 import ssl
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import date
 from typing import Callable, Optional, List, Dict, Set, Tuple, Any
 from urllib.parse import urlsplit, urljoin, unquote
@@ -117,6 +117,7 @@ class SharepointPostbackCrawler:
         allow_private: bool = False,
         head_for_size: bool = True,
         detail_workers: int = 1,
+        stall_seconds: int = 0,
     ):
         self.user_agent = user_agent
         self.delay_seconds = delay_seconds
@@ -130,6 +131,10 @@ class SharepointPostbackCrawler:
         # perilaku lama). Pembatas laju per-host di bawah tetap dipakai bersama oleh
         # semua pekerja, jadi laju permintaan ke ojk.go.id tidak ikut naik.
         self.detail_workers = max(1, int(detail_workers or 1))
+        # Batas "tanpa kemajuan" (detik): scan dihentikan HANYA bila tidak satu pun
+        # regulasi selesai diproses selama selang ini. Selama masih ada yang selesai,
+        # selambat apa pun, scan tidak dibatasi. 0 = nonaktif.
+        self.stall_seconds = max(0, int(stall_seconds or 0))
         self._rate_lock = threading.Lock()
         self._count_lock = threading.Lock()
 
@@ -470,6 +475,7 @@ class SharepointPostbackCrawler:
         regulations_count = 0
         errors: List[str] = []
         truncated = False
+        stalled = False
         blocked = False
         non_pdf_links = 0
 
@@ -526,7 +532,7 @@ class SharepointPostbackCrawler:
                     break
 
                 # 3. Proses tiap halaman detail regulasi
-                if self.detail_workers > 1 and len(unique_article_links) > 1:
+                if (self.detail_workers > 1 or self.stall_seconds > 0) and unique_article_links:
                     # Paralel: hanya thread utama yang menyentuh should_cancel/progress
                     # (keduanya memakai sesi database yang tidak aman lintas-thread).
                     stop = threading.Event()
@@ -536,33 +542,51 @@ class SharepointPostbackCrawler:
                             return None
                         return self._parse_detail_page(client, urljoin(base, link), page_depth=1)
 
-                    with ThreadPoolExecutor(max_workers=self.detail_workers) as pool:
-                        futures = [pool.submit(_work, lk) for lk in unique_article_links]
-                        for fut in as_completed(futures):
-                            if should_cancel and should_cancel():
-                                stop.set()
-                                for f in futures:
-                                    f.cancel()
+                    pool = ThreadPoolExecutor(max_workers=self.detail_workers)
+                    try:
+                        pending = {pool.submit(_work, lk) for lk in unique_article_links}
+                        while pending:
+                            # Tunggu yang pertama selesai; timeout dihitung dari
+                            # penyelesaian terakhir, bukan dari awal halaman.
+                            done, pending = wait(
+                                pending,
+                                timeout=self.stall_seconds or None,
+                                return_when=FIRST_COMPLETED,
+                            )
+                            if not done:
+                                errors.append(
+                                    f"Dihentikan: tidak ada kemajuan selama {self.stall_seconds} detik "
+                                    f"pada halaman daftar ke-{page_num} "
+                                    f"({len(candidates_map)} PDF yang sudah terkumpul tetap disimpan)."
+                                )
+                                stalled = True
+                                truncated = True
                                 break
-                            try:
-                                cands = fut.result()
-                            except Exception as det_err:
-                                logger.debug(f"Gagal parse detail: {det_err}")
-                                continue
-                            if cands is None:
-                                continue
-                            regulations_count += 1
-                            for c in cands:
-                                if c.url not in candidates_map:
-                                    candidates_map[c.url] = c
-                            if progress:
-                                progress(len(visited_pages), len(candidates_map))
+                            for fut in done:
+                                try:
+                                    cands = fut.result()
+                                except Exception as det_err:
+                                    logger.debug(f"Gagal parse detail: {det_err}")
+                                    continue
+                                if cands is None:
+                                    continue
+                                regulations_count += 1
+                                for c in cands:
+                                    if c.url not in candidates_map:
+                                        candidates_map[c.url] = c
+                                if progress:
+                                    progress(len(visited_pages), len(candidates_map))
+                            if should_cancel and should_cancel():
+                                break
                             if len(candidates_map) >= max_candidates:
                                 truncated = True
-                                stop.set()
-                                for f in futures:
-                                    f.cancel()
                                 break
+                    finally:
+                        # Jangan menunggu pekerja yang mungkin macet; tugas belum jalan dibatalkan.
+                        stop.set()
+                        pool.shutdown(wait=False, cancel_futures=True)
+                    if stalled:
+                        break
                 else:
                     for a_link in unique_article_links:
                         if should_cancel and should_cancel():
