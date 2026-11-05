@@ -96,6 +96,7 @@ def get_crawler(
             respect_robots=respect_robots,
             allow_private=allow_private,
             head_for_size=head_for_size,
+            detail_workers=getattr(settings, "crawl_detail_workers", 1),
         )
 
     if adapter in ("generic_html", "simple_http", "html"):
