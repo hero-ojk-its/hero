@@ -406,6 +406,8 @@ def get_versioning_details(
         return {
             "document_id": doc.id,
             "identity_key": None,
+            "access_classification": doc.access_classification.value if hasattr(doc.access_classification, "value") else str(doc.access_classification) if doc.access_classification else None,
+            "document_role": doc.document_role.value if hasattr(doc.document_role, "value") else str(doc.document_role) if doc.document_role else None,
             "status_keberlakuan": doc.status_keberlakuan.value if doc.status_keberlakuan else "tidak_diketahui",
             "status_source": doc.status_source,
             "induk": [],
@@ -473,22 +475,26 @@ def get_versioning_details(
             if d.identity_key:
                 doc_map[d.identity_key] = d
 
-    def resolve_doc(k: str) -> Tuple[Optional[int], Optional[str]]:
+    def resolve_doc(k: str) -> Tuple[Optional[int], Optional[str], Optional[str], Optional[str]]:
         d = doc_map.get(k)
         if d and is_doc_accessible(d, current_user):
-            return d.id, d.title
-        return None, None
+            ac = d.access_classification.value if hasattr(d.access_classification, "value") else str(d.access_classification) if d.access_classification else None
+            dr = d.document_role.value if hasattr(d.document_role, "value") else str(d.document_role) if d.document_role else None
+            return d.id, d.title, ac, dr
+        return None, None, None, None
 
     # Hitung diubah_oleh: urutkan dari tahun lalu nomor yang paling lama (perubahan ke-1, ke-2, ...)
     sorted_in_amends = sorted(in_amends, key=lambda r: parse_identity_key_sort(r.source_key))
     diubah_oleh_list = []
     for idx, r in enumerate(sorted_in_amends, start=1):
-        d_id, judul = resolve_doc(r.source_key)
+        d_id, judul, ac, dr = resolve_doc(r.source_key)
         diubah_oleh_list.append({
             "key": r.source_key,
             "perubahan_ke": idx,
             "document_id": d_id,
             "judul": judul,
+            "access_classification": ac,
+            "document_role": dr,
             "pasal_terkait": r.articles_text,
         })
 
@@ -496,12 +502,14 @@ def get_versioning_details(
     dicabut_oleh_list = []
     sorted_in_repeals = sorted(in_repeals, key=lambda r: parse_identity_key_sort(r.source_key))
     for r in sorted_in_repeals:
-        d_id, judul = resolve_doc(r.source_key)
+        d_id, judul, ac, dr = resolve_doc(r.source_key)
         dicabut_oleh_list.append({
             "key": r.source_key,
             "sebagian": r.partial,
             "document_id": d_id,
             "judul": judul,
+            "access_classification": ac,
+            "document_role": dr,
             "pasal_terkait": r.articles_text,
         })
 
@@ -509,12 +517,14 @@ def get_versioning_details(
     mencabut_list = []
     sorted_out_repeals = sorted(out_repeals, key=lambda r: parse_identity_key_sort(r.target_key))
     for r in sorted_out_repeals:
-        d_id, judul = resolve_doc(r.target_key)
+        d_id, judul, ac, dr = resolve_doc(r.target_key)
         mencabut_list.append({
             "key": r.target_key,
             "sebagian": r.partial,
             "document_id": d_id,
             "judul": judul,
+            "access_classification": ac,
+            "document_role": dr,
             "pasal_terkait": r.articles_text,
         })
 
@@ -538,7 +548,7 @@ def get_versioning_details(
                 perubahan_ke = m_idx
                 break
 
-        d_id, judul = resolve_doc(parent_key)
+        d_id, judul, ac, dr = resolve_doc(parent_key)
         induk_list.append({
             "key": parent_key,
             "relasi": "mengubah",
@@ -546,12 +556,16 @@ def get_versioning_details(
             "perubahan_ke": perubahan_ke,
             "document_id": d_id,
             "judul": judul,
+            "access_classification": ac,
+            "document_role": dr,
             "pasal_terkait": r.articles_text,
         })
 
     return {
         "document_id": doc.id,
         "identity_key": my_key,
+        "access_classification": doc.access_classification.value if hasattr(doc.access_classification, "value") else str(doc.access_classification) if doc.access_classification else None,
+        "document_role": doc.document_role.value if hasattr(doc.document_role, "value") else str(doc.document_role) if doc.document_role else None,
         "status_keberlakuan": doc.status_keberlakuan.value if doc.status_keberlakuan else "tidak_diketahui",
         "status_source": doc.status_source,
         "induk": induk_list,
