@@ -342,6 +342,43 @@ python scripts/tarik_semua.py --base-url https://<domain-api> --apply
 ### 5.7 Menyiapkan KB untuk UAT (Skenario 1.480 + 20)
 Sesuai arahan Weekly #7 Pak Faris dan Test Plan PM:
 - **Konsep Ground Truth**: Seluruh dokumen regulasi yang terdeteksi saat scraping ditarik, diunduh ke penyimpanan lokal, dipecah (ekstraksi pasal), dan masuk vektor database. Kumpulan regulasi ini menjadi *ground truth* corpus pengetahuan sistem HERO.
+- **Tahapan Pembersihan & Penyiapan KB (Langkah 37)**:
+  Sebelum dan sesudah penarikan massal, jalankan skrip pembersih agar angka KB mencerminkan dokumen regulasi utama yang valid:
+
+  1. **Pembersihan Dokumen Non-Utama yang Telanjur Masuk KB**:
+     Pindai dokumen aktif di KB yang merupakan Abstrak, FAQ, Lampiran, atau Non-Regulasi:
+     ```bash
+     # Dry-run untuk memeriksa daftar temuan:
+     docker compose exec backend python scripts/periksa_dokumen_non_utama.py
+
+     # Nonaktifkan dokumen non-utama yang ditemukan:
+     docker compose exec backend python scripts/periksa_dokumen_non_utama.py --apply
+     ```
+
+  2. **Pemeriksaan Konsistensi PDF - Pasal (Menggantikan Hapus Manual DB)**:
+     Periksa dokumen aktif tanpa berkas fisik PDF dan dokumen ber-PDF tanpa pasal:
+     ```bash
+     # Dry-run laporan konsistensi (Kelompok A, B, C):
+     docker compose exec backend python scripts/periksa_konsistensi_pasal.py
+
+     # Tindakan perbaikan yang aman:
+     # - Nonaktifkan dokumen Kelompok A (berkas fisik PDF tidak ada di storage):
+     docker compose exec backend python scripts/periksa_konsistensi_pasal.py --nonaktifkan-tanpa-pdf
+
+     # - Kembalikan dokumen Kelompok B (ber-PDF tanpa pasal) ke antrean ekstraksi ulang:
+     docker compose exec backend python scripts/periksa_konsistensi_pasal.py --antrekan-ulang-tanpa-pasal
+     ```
+
+  3. **Penarikan Massal Hanya Dokumen Utama (`tarik_semua.py`)**:
+     Secara default, penarikan kini **hanya menarik dokumen utama** dan secara otomatis melewati kandidat Abstrak, FAQ, Lampiran, dan Non-Regulasi:
+     ```bash
+     # Dry-run:
+     python scripts/tarik_semua.py --base-url https://<domain-api>
+
+     # Eksekusi penarikan:
+     python scripts/tarik_semua.py --base-url https://<domain-api> --apply
+     ```
+
 - **Skenario UAT 1.480 + 20**:
   1. Dari total ~1.500 dokumen korpus regulasi yang terdeteksi, lakukan penarikan seluruh dokumen ke KB menggunakan `--apply`. Catatan: angka 'belum_ditarik' di corong menghitung kandidat dari SEMUA sesi scan lama, jadi bisa lebih besar dari angka 'perlu ditarik' di tarik_semua.py yang hanya membaca sesi terbaru.
   2. Tunggu worker ekstraksi data / ML menyelesaikan pemrosesan OCR, ekstraksi pasal, dan pembuatan embedding vektor. Angka `terbaca` pada corong akan bertahap meningkat hingga seluruh dokumen selesai diproses.
