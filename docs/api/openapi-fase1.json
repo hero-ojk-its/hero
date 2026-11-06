@@ -4816,7 +4816,7 @@
           "Analisa (ML)"
         ],
         "summary": "Analisa Regulasi",
-        "description": "Ringkasan terstruktur dan poin kunci berbasis pasal.",
+        "description": "Ringkasan terstruktur dan poin kunci berbasis pasal.\n\nMenunggu penuh dalam satu permintaan — cocok untuk mode deterministik\n(cepat). Untuk mode AI gunakan ``POST .../mulai`` + ``GET .../analisa-job/{id}``\n(lihat di bawah): panggilan Gemini bisa lebih lama dari batas proxy\nCloudflare (~100 d) di depan domain publik, dan permintaan sinkron ini\nakan diputus oleh Cloudflare sebelum model selesai menjawab.",
         "operationId": "get_ml_analisa_api_v1_ml_analisa__document_id__get",
         "security": [
           {
@@ -4865,6 +4865,133 @@
               "title": "Segar"
             },
             "description": "Paksa hitung ulang tanpa cache"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ml/analisa/{document_id}/mulai": {
+      "post": {
+        "tags": [
+          "Analisa (ML)",
+          "Analisa (ML)"
+        ],
+        "summary": "Mulai Analisa (job latar belakang)",
+        "description": "Mulai analisa di latar belakang; kembalikan ``job_id`` untuk dipoll via\n``GET /analisa-job/{job_id}``. Dipakai untuk mode AI agar tidak kena batas\nproxy Cloudflare (~100 d) seperti endpoint sinkron di atas.",
+        "operationId": "post_ml_analisa_mulai_api_v1_ml_analisa__document_id__mulai_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "deterministik",
+                    "ai"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "ai",
+              "title": "Mode"
+            }
+          },
+          {
+            "name": "segar",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Paksa hitung ulang tanpa cache",
+              "default": false,
+              "title": "Segar"
+            },
+            "description": "Paksa hitung ulang tanpa cache"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ml/analisa-job/{job_id}": {
+      "get": {
+        "tags": [
+          "Analisa (ML)",
+          "Analisa (ML)"
+        ],
+        "summary": "Status Job Analisa",
+        "description": "Status job yang dimulai lewat ``POST /analisa/{document_id}/mulai``.",
+        "operationId": "get_ml_analisa_job_api_v1_ml_analisa_job__job_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
           }
         ],
         "responses": {
@@ -6389,6 +6516,28 @@
             "type": "boolean",
             "title": "Is Active",
             "default": true
+          },
+          "access_classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Classification"
+          },
+          "document_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role"
           }
         },
         "type": "object",
@@ -7927,6 +8076,28 @@
             ],
             "title": "Identity Key"
           },
+          "access_classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Classification"
+          },
+          "document_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role"
+          },
           "status_keberlakuan": {
             "anyOf": [
               {
@@ -8061,6 +8232,28 @@
             "type": "string",
             "title": "Judul"
           },
+          "access_classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Classification"
+          },
+          "document_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role"
+          },
           "diunggah": {
             "anyOf": [
               {
@@ -8173,6 +8366,28 @@
             "type": "boolean",
             "title": "Is Active",
             "default": true
+          },
+          "access_classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Classification"
+          },
+          "document_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role"
           }
         },
         "type": "object",
@@ -9955,6 +10170,28 @@
           "file_path_pdf": {
             "type": "string",
             "title": "File Path Pdf"
+          },
+          "access_classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Classification"
+          },
+          "document_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role"
           }
         },
         "type": "object",
@@ -12482,6 +12719,28 @@
               }
             ],
             "title": "Judul"
+          },
+          "access_classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Classification"
+          },
+          "document_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role"
           },
           "pasal_terkait": {
             "anyOf": [
