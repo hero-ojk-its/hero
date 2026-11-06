@@ -287,13 +287,30 @@ def determine_doc_kind(filename_or_title: Optional[str], label: Optional[str] = 
     if re.search(r'(?:^|[\W_])(?:nda|project[-_ ]*charter|user[-_ ]*requirement|surat[-_ ]*perjanjian|curriculum[-_ ]*vitae)(?:[\W_]|$)|^cv_', combined):
         return "non_regulasi"
 
-    # 1. Lampiran (prioritas tinggi bila diawali Lampiran, mis. 'Lampiran SP - FAQ ...').
-    # Alternatif kedua menangani nama bergandeng tanpa pemisah ('lampiran1pojktrust.pdf',
-    # ditemukan di produksi — 'lampiran' + nomor lampiran + nama, tanpa spasi/underscore
-    # sama sekali), sama seperti pola 'faqpbi101708' / 'abspbi101708' di aturan FAQ/Abstrak
-    # di bawah: digit atau kode jenis regulasi langsung setelah kata kunci sudah cukup.
-    if re.search(r'^(?:lampiran|lamp)[\W_]|'
-                r'(?:^|[\W_0-9])(?:lampiran|lamp)(?:pojk|seojk|padk|pdk|kdk|pbi|se|\d|[_ \-])', combined):
+    # 1. Lampiran:
+    # - Tetap lampiran bila label situs bernilai lampiran, teks diawali lampiran/lamp + pemisah,
+    #   atau bentuk kompak tanpa pemisah: lampiran/lamp langsung diikuti digit atau kode jenis
+    #   (mis. 'lampiran1pojktrust.pdf', 'lamppojk12.pdf', '2024lampiranseojk3.pdf' - kasus nyata #178).
+    # - BUKAN lampiran bila kata lampiran muncul di tengah teks judul peraturan utama, khususnya:
+    #   * didahului 'atas' (mis. 'Perubahan atas Lampiran ...', 'perubahan-atas-lampiran-pojk-5-2024.pdf')
+    #   * teks diawali penanda peraturan utama: peraturan, pojk, seojk, surat edaran, undang-undang, uu, pp, salinan, sal
+    #     (mis. 'SEOJK tentang Pedoman Pengisian Lampiran Laporan Bulanan', 'POJK Nomor 3 Tahun 2023 ...').
+    #   Di PR #178, alternatif kedua menyertakan [_ \-] sehingga mencocokkan 'lampiran ' di tengah judul peraturan utama.
+    label_clean = (label or "").lower().strip()
+    is_label_lampiran = bool(label_clean and re.search(r'^(?:lampiran|lamp)(?:[\W_]|$)', label_clean))
+    if is_label_lampiran:
+        return "lampiran"
+
+    fn_text = (filename_or_title or "").lower().strip()
+    has_atas = bool(re.search(r'(?:^|[\W_])atas[\W_]+(?:lampiran|lamp)(?:[\W_]|$)', fn_text))
+    starts_with_reg = bool(re.search(r'^(?:peraturan|pojk|seojk|surat[\W_]+edaran|undang[\W_]+undang|uu|pp|salinan|sal)(?:[\W_]|$)', fn_text))
+    starts_with_lamp = bool(re.search(r'^(?:lampiran|lamp)[\W_]', fn_text) or re.search(r'^(?:lampiran|lamp)[\W_]', combined))
+    compact_lamp = bool(re.search(r'(?:^|[\W_0-9])(?:lampiran|lamp)(?:pojk|seojk|padk|pdk|kdk|pbi|se|\d)', fn_text))
+
+    if not has_atas and not starts_with_reg:
+        if starts_with_lamp or compact_lamp:
+            return "lampiran"
+    elif starts_with_lamp:
         return "lampiran"
 
     # 2. FAQ / Tanya Jawab (termasuk faq_, tanya jawab, faqpbi, dll.)
@@ -304,11 +321,7 @@ def determine_doc_kind(filename_or_title: Optional[str], label: Optional[str] = 
     if re.search(r'(?:^|[\W_])(?:abstrak|abs|ringkasan|summary)(?:[\W_]|$)|(?:^|[\W_0-9])(?:abs|abstrak)(?:pojk|seojk|padk|pdk|kdk|pbi|se|\d|[_ \-])|(?:\d{4})(?:abs|abstrak|ringkasan|summary)|ringkasan|summary', combined):
         return "abstrak"
 
-    # 4. Lampiran umum
-    if re.search(r'(?:^|[\W_])(?:lampiran|lamp)(?:[\W_]|$)', combined):
-        return "lampiran"
-
-    # 5. Salinan / Dokumen Utama: 'salinan', 'sal ' -> utama
+    # 4. Salinan / Dokumen Utama: 'salinan', 'sal ' -> utama
     if re.search(r'(?:^|[\W_])salinan(?:[\W_]|$)|(?:^|[\W_])sal[-_\s]', combined):
         return "utama"
 
