@@ -32,6 +32,11 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
+# Disalin dari app.services.scan_service.NON_UTAMA_DOC_KINDS
+# Skrip ini adalah klien HTTP mandiri dan tidak boleh mengimpor modul app secara langsung.
+NON_UTAMA_DOC_KINDS = {"abstrak", "faq", "lampiran", "non_regulasi"}
+
+
 @dataclass
 class OpsiTarik:
     source_ids: Optional[List[int]] = None
@@ -40,6 +45,7 @@ class OpsiTarik:
     batas: Optional[int] = None
     interval: int = 15
     timeout_menit: int = 120
+    termasuk_non_utama: bool = False
 
 
 @dataclass
@@ -56,6 +62,9 @@ class HasilSumber:
     ditarik: int = 0
     duplikat: int = 0
     gagal: int = 0
+    utama_count: int = 0
+    dilewati_non_utama_count: int = 0
+    non_utama_breakdown: Dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -74,6 +83,8 @@ class Ringkasan:
     total_ditarik: int = 0
     total_duplikat: int = 0
     total_gagal: int = 0
+    total_dilewati_non_utama: int = 0
+    total_non_utama_breakdown: Dict[str, int] = field(default_factory=dict)
     exit_code: int = 0
     pesan_peringatan: Optional[str] = None
 
@@ -149,10 +160,12 @@ def kumpulkan_kandidat(
     scan_id: int,
     ulang_gagal: bool,
     batas: Optional[int],
-) -> Tuple[List[int], int, int, int, Optional[str]]:
+    termasuk_non_utama: bool = False,
+) -> Tuple[List[int], int, int, int, int, Dict[str, int], Optional[str]]:
     """
     Mengumpulkan kandidat berkas yang perlu ditarik dengan paging hingga selesai.
-    Mengembalikan (terpilih_ids, baru_count, ulang_gagal_count, sudah_ada_count, error).
+    Secara bawaan menyaring dokumen non-utama (abstrak, faq, lampiran, non_regulasi).
+    Mengembalikan (terpilih_ids, baru_count, ulang_gagal_count, sudah_ada_count, dilewati_non_utama, non_utama_breakdown, error).
     """
     semua_kandidat = []
     skip = 0
@@ -162,7 +175,7 @@ def kumpulkan_kandidat(
         try:
             resp = client.get(f"/api/v1/scans/{scan_id}/candidates?skip={skip}&limit={limit}")
             if resp.status_code != 200:
-                return [], 0, 0, 0, f"HTTP {resp.status_code} saat membaca kandidat: {resp.text}"
+                return [], 0, 0, 0, 0, {}, f"HTTP {resp.status_code} saat membaca kandidat: {resp.text}"
             data = resp.json()
             items = data.get("items", [])
             total = data.get("total", 0)
@@ -172,17 +185,25 @@ def kumpulkan_kandidat(
             if skip >= total or not items:
                 break
         except Exception as exc:
-            return [], 0, 0, 0, f"Kesalahan koneksi paging kandidat: {exc}"
+            return [], 0, 0, 0, 0, {}, f"Kesalahan koneksi paging kandidat: {exc}"
 
     sudah_ada_di_kb = 0
     baru_ids: List[int] = []
     ulang_gagal_ids: List[int] = []
+    dilewati_non_utama_count = 0
+    non_utama_breakdown: Dict[str, int] = {
+        "abstrak": 0,
+        "faq": 0,
+        "lampiran": 0,
+        "non_regulasi": 0,
+    }
 
     # Filter kandidat sesuai kriteria
     for c in semua_kandidat:
         cid = c.get("id")
         m_status = c.get("match_status")
         outcome = (c.get("pull_outcome") or "").strip().lower()
+        kind = (c.get("doc_kind") or "").strip().lower() or "utama"
 
         if m_status == "sudah_ada":
             sudah_ada_di_kb += 1
@@ -192,11 +213,22 @@ def kumpulkan_kandidat(
         if outcome in ("success", "berhasil", "downloaded", "diunduh", "duplicate", "duplikat"):
             continue
 
-        if not outcome:
+        is_calon_baru = not outcome
+        is_calon_ulang = outcome in ("failed", "gagal") and ulang_gagal
+
+        if not is_calon_baru and not is_calon_ulang:
+            continue
+
+        # Saring kandidat non-utama bila tidak diaktifkan via --termasuk-non-utama
+        if not termasuk_non_utama and kind in NON_UTAMA_DOC_KINDS:
+            dilewati_non_utama_count += 1
+            non_utama_breakdown[kind] = non_utama_breakdown.get(kind, 0) + 1
+            continue
+
+        if is_calon_baru:
             baru_ids.append(cid)
-        elif outcome in ("failed", "gagal"):
-            if ulang_gagal:
-                ulang_gagal_ids.append(cid)
+        elif is_calon_ulang:
+            ulang_gagal_ids.append(cid)
 
     # Gabungkan kandidat terurut berdasarkan id
     gabungan_kandidat: List[Tuple[int, bool]] = [(cid, True) for cid in baru_ids] + [
@@ -211,7 +243,15 @@ def kumpulkan_kandidat(
     terpilih_baru = sum(1 for item in gabungan_kandidat if item[1])
     terpilih_ulang = sum(1 for item in gabungan_kandidat if not item[1])
 
-    return terpilih_ids, terpilih_baru, terpilih_ulang, sudah_ada_di_kb, None
+    return (
+        terpilih_ids,
+        terpilih_baru,
+        terpilih_ulang,
+        sudah_ada_di_kb,
+        dilewati_non_utama_count,
+        non_utama_breakdown,
+        None,
+    )
 
 
 def hitung_hasil_penarikan(
@@ -319,11 +359,12 @@ def jalankan(client: httpx.Client, opsi: OpsiTarik) -> Ringkasan:
         hasil_sumber.session_id = scan_id
 
         # Kumpulkan kandidat
-        ids, n_baru, n_ulang, n_sudah_ada, err_cand = kumpulkan_kandidat(
+        ids, n_baru, n_ulang, n_sudah_ada, n_dilewati, nu_breakdown, err_cand = kumpulkan_kandidat(
             client=client,
             scan_id=scan_id,
             ulang_gagal=opsi.ulang_gagal,
             batas=opsi.batas,
+            termasuk_non_utama=opsi.termasuk_non_utama,
         )
 
         if err_cand:
@@ -338,15 +379,27 @@ def jalankan(client: httpx.Client, opsi: OpsiTarik) -> Ringkasan:
         hasil_sumber.baru_count = n_baru
         hasil_sumber.ulang_gagal_count = n_ulang
         hasil_sumber.sudah_ada_di_kb = n_sudah_ada
+        hasil_sumber.utama_count = len(ids)
+        hasil_sumber.dilewati_non_utama_count = n_dilewati
+        hasil_sumber.non_utama_breakdown = nu_breakdown
+
         ringkasan.total_perlu_ditarik += len(ids)
+        ringkasan.total_dilewati_non_utama += n_dilewati
+        for k, v in nu_breakdown.items():
+            ringkasan.total_non_utama_breakdown[k] = ringkasan.total_non_utama_breakdown.get(k, 0) + v
 
         # Mode DRY-RUN
         if not opsi.apply:
             hasil_sumber.catatan = "dry-run"
             ringkasan.sumber_list.append(hasil_sumber)
+            a = nu_breakdown.get("abstrak", 0)
+            b = nu_breakdown.get("faq", 0)
+            c = nu_breakdown.get("lampiran", 0)
+            d = nu_breakdown.get("non_regulasi", 0)
             print(
                 f"{s_nama} | sesi #{scan_id} | perlu ditarik: {len(ids)} "
-                f"(baru {n_baru}, ulang-gagal {n_ulang}) | sudah ada di KB: {n_sudah_ada}"
+                f"(utama {len(ids)}, dilewati non-utama {n_dilewati}: abstrak {a}, faq {b}, lampiran {c}, non_regulasi {d}) "
+                f"| sudah ada di KB: {n_sudah_ada}"
             )
             continue
 
@@ -528,11 +581,13 @@ def cetak_laporan(ringkasan: Ringkasan):
     if opsi.apply:
         print(
             f"RINGKASAN: {len(ringkasan.sumber_list)} sumber diproses | Perlu Ditarik: {ringkasan.total_perlu_ditarik} "
+            f"| Dilewati Non-Utama: {ringkasan.total_dilewati_non_utama} "
             f"| Berhasil Ditarik: {ringkasan.total_ditarik} | Duplikat: {ringkasan.total_duplikat} | Gagal: {ringkasan.total_gagal}"
         )
     else:
         print(
             f"RINGKASAN: {len(ringkasan.sumber_list)} sumber diproses | Perlu Ditarik: {ringkasan.total_perlu_ditarik} "
+            f"| Dilewati Non-Utama: {ringkasan.total_dilewati_non_utama} "
             f"| Mode: DRY-RUN (tidak ada berkas ditarik)"
         )
 
@@ -587,6 +642,12 @@ def main() -> int:
         default=120,
         help="Batas waktu maksimum polling sesi penarikan per sumber dalam menit (default: 120)",
     )
+    parser.add_argument(
+        "--termasuk-non-utama",
+        action="store_true",
+        default=False,
+        help="Sertakan juga kandidat non-utama (abstrak, faq, lampiran, non_regulasi) untuk ditarik ke KB",
+    )
 
     args = parser.parse_args()
 
@@ -613,6 +674,7 @@ def main() -> int:
         batas=args.batas,
         interval=args.interval,
         timeout_menit=args.timeout_menit,
+        termasuk_non_utama=args.termasuk_non_utama,
     )
 
     try:
