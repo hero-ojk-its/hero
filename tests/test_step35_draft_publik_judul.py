@@ -606,7 +606,7 @@ def test_d15_skrip_periksa_draft_publik_sumber(db: Session):
     # Periksa audit UPDATE_SOURCE
     audit = (
         db.query(AuditLog)
-        .filter(AuditLog.target_resource == f"source:{src.id}", AuditLog.action == "UPDATE_SOURCE")
+        .filter(AuditLog.target_resource == f"scraping_source:{src.id}", AuditLog.action == "UPDATE_SOURCE")
         .order_by(AuditLog.id.desc())
         .first()
     )

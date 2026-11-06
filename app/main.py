@@ -99,6 +99,15 @@ async def lifespan(app: FastAPI):
                 settings.app_env,
             )
 
+    # Peringatan multi-worker untuk job analisa in-memory (Langkah 36)
+    if settings.uvicorn_workers > 1:
+        logger.warning(
+            "UVICORN_WORKERS diatur ke %d (> 1). Antrian job analisa disimpan dalam memori per worker, "
+            "sehingga polling GET /ml/analisa-job/{id} dapat mendarat di worker berbeda dan menghasilkan 404. "
+            "Disarankan menggunakan UVICORN_WORKERS=1 selama job store masih berbasis in-memory.",
+            settings.uvicorn_workers,
+        )
+
     db = SessionLocal()
     try:
         try:
