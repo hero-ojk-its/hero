@@ -97,7 +97,20 @@ DOCS_BASIC_AUTH_HASH=<hash_dari_langkah_3.3>
 LOCAL_SOURCE_ROOTS=/app/sources
 PROTECT_NON_PUBLIC_WHEN_AUTH_DISABLED=true
 CRAWL_ALLOW_PRIVATE_NETWORKS=false
+
+# Worker Uvicorn & Timeout Gerbang Analisa (Langkah 36)
+UVICORN_WORKERS=1
+ML_SERVICE_URL=http://172.17.0.1:8100
+ML_TIMEOUT_SECONDS=300
+ML_JOB_TIMEOUT_SECONDS=900
 ```
+
+> [!IMPORTANT]
+> **Peringatan Multi-Worker & Pengaturan Timeout ML (Langkah 36):**
+> 1. `UVICORN_WORKERS=1` **WAJIB** dipertahankan selama antrian job analisa (`/ml/analisa/{id}/mulai`) masih disimpan dalam memori proses worker backend. Jika `UVICORN_WORKERS > 1`, permintaan polling status job (`GET /ml/analisa-job/{job_id}`) dapat dirutekan oleh reverse proxy/load balancer ke worker yang berbeda dan menghasilkan galat HTTP `404 job_tidak_ditemukan`.
+> 2. `ML_TIMEOUT_SECONDS=300` (5 menit) adalah batas waktu baca yang disarankan untuk panggilan analisa sinkron.
+> 3. `ML_JOB_TIMEOUT_SECONDS=900` (15 menit) adalah batas waktu baca yang disarankan untuk eksekusi di dalam job analisa latar belakang.
+> 4. Mengatur nilai timeout `<= 0` (tanpa batas baca) **TIDAK DISARANKAN** di lingkungan produksi, karena meniadakan batas waktu HTTP sehingga **mekanisme fallback otomatis ke cache basi (skenario #55) tidak pernah terpicu** bila layanan AI macet/hang.
 
 ---
 

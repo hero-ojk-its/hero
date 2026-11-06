@@ -1111,31 +1111,106 @@ Frontend cukup memanggil satu asal (`API_BASE_URL` backend) tanpa perlu menghubu
   - `limit` (opsional): integer `1-500` (default: `50`)
 - **Penyaringan Backend:** Dokumen nonaktif dan non-publik (saat mode proteksi aktif) otomatis disaring. Respons memuat `disaring_backend` yang mencatat jumlah dokumen yang disaring.
 
-### 11.3 Analisa Struktur & Poin Kunci Dokumen
+### 11.3 Analisa Struktur & Poin Kunci Dokumen (Sinkron)
 - **Method & Path:** `GET /api/v1/ml/analisa/{{document_id}}`
 - **Parameter Path:** `document_id` (integer ID dokumen backend)
-- **Parameter Query:** `mode` (opsional): `deterministik` (default) | `ai`
+- **Parameter Query:**
+  - `mode` (opsional): `deterministik` (default) | `ai`
+  - `segar` (opsional): boolean (default: `false`)
 - **Proteksi Akses:** Mengembalikan `404` jika dokumen tidak ditemukan atau telah dinonaktifkan (`dokumen_nonaktif`), dan `403` jika dokumen non-publik diakses saat login belum aktif.
 
-### 11.4 Pencarian Klausul Relevan Regulasi
+### 11.4 Memulai Analisa di Latar Belakang (Asynchronous Job)
+- **Method & Path:** `POST /api/v1/ml/analisa/{{document_id}}/mulai`
+- **Tujuan:** Menjalankan analisa AI sebagai job latar belakang agar tidak terputus oleh batas waktu proxy Cloudflare (~100 detik).
+- **Parameter Query:**
+  - `mode` (opsional): `ai` (default) | `deterministik`
+  - `segar` (opsional): boolean (default: `false`)
+- **Proteksi Akses:** Memvalidasi hak akses dokumen (404/403) dan ketersediaan layanan ML (503) **sebelum** job dibuat. Bila validasi gagal, tidak ada job yang dibuat.
+- **Respons (200 OK):**
+```json
+{{
+  "job_id": "a1b2c3d4e5f67890abcdef1234567890",
+  "status": "berjalan"
+}}
+```
+
+### 11.5 Polling Status Job Analisa
+- **Method & Path:** `GET /api/v1/ml/analisa-job/{{job_id}}`
+- **Parameter Path:** `job_id` (string hex identifikasi job)
+- **Anjuran Polling:** Frontend disarankan melakukan polling setiap **3 detik**.
+- **Kepemilikan Job:** Saat autentikasi aktif (`AUTH_ENABLED=true`), hanya pengguna pembuat job yang berhak membaca status/hasil job. Permintaan dari pengguna lain akan menghasilkan galat `404 job_tidak_ditemukan`.
+- **Status Respons:**
+  - **Status `berjalan`:**
+```json
+{{
+  "job_id": "a1b2c3d4e5f67890abcdef1234567890",
+  "status": "berjalan",
+  "document_id": 42,
+  "mode": "ai",
+  "berjalan_detik": 6.2
+}}
+```
+  - **Status `selesai`:**
+```json
+{{
+  "job_id": "a1b2c3d4e5f67890abcdef1234567890",
+  "status": "selesai",
+  "document_id": 42,
+  "mode": "ai",
+  "berjalan_detik": 18.5,
+  "hasil": {{
+    "skor_validitas": 85.0,
+    "struktur": {{ ... }},
+    "cache": {{ "hit": false, "basi": false }}
+  }}
+}}
+```
+  - **Status `gagal`:**
+```json
+{{
+  "job_id": "a1b2c3d4e5f67890abcdef1234567890",
+  "status": "gagal",
+  "document_id": 42,
+  "mode": "ai",
+  "berjalan_detik": 960.0,
+  "error": {{
+    "status_code": 504,
+    "detail": {{
+      "code": "analisa_terlalu_lama",
+      "message": "Analisa melebihi batas waktu maksimal."
+    }}
+  }}
+}}
+```
+- **Kode Galat Spesifik:**
+  - `404 Not Found` (`code: job_tidak_ditemukan`): Job tidak ada, telah dibersihkan setelah TTL 1 jam, atau bukan milik pengguna saat ini.
+  - `504 Gateway Timeout` (`code: analisa_terlalu_lama`): Eksekusi job melampaui batas waktu maksimal (`ML_JOB_TIMEOUT_SECONDS + 60` detik).
+
+> [!NOTE]
+> **Batas Waktu Layanan ML & Hubungannya dengan Fallback Cache Basi:**
+> - `ML_TIMEOUT_SECONDS`: batas waktu tunggu untuk panggilan sinkron (default: 300.0 detik / 5 menit).
+> - `ML_JOB_TIMEOUT_SECONDS`: batas waktu tunggu untuk panggilan di dalam job (default: 900.0 detik / 15 menit).
+> - Nilai `<= 0` berarti tanpa batas tunggu. Namun, menonaktifkan batas tunggu akan **mematikan fallback otomatis ke cache basi (skenario #55)** saat layanan AI mengalami gangguan/stuck, karena timeout HTTP (504) tidak pernah terpicu.
+
+### 11.6 Pencarian Klausul Relevan Regulasi
 - **Method & Path:** `GET /api/v1/ml/analisa/{{document_id}}/klausul`
 - **Parameter Query:**
   - `kebutuhan` (wajib): string minimal 3 karakter
   - `k` (opsional): integer `1-20` (default: `5`)
 
-### 11.5 Harmonisasi Draft Regulasi
+### 11.7 Harmonisasi Draft Regulasi
 - **Method & Path:** `POST /api/v1/ml/harmonisasi/{{document_id}}`
 - **Body:** `null` (membandingkan terhadap seluruh korpus yang diizinkan) atau daftar array ID dokumen pembanding `[id1, id2, ...]`.
 - **Penyaringan & Audit:** Backend membatasi korpus pembanding pada dokumen aktif dan diizinkan, membuang temuan/kandidat dokumen nonaktif, mengosongkan ID rujukan di luar korpus, serta mencatat jejak audit `RUN_HARMONIZATION`.
 
-### 11.6 Pencarian Semantik Regulasi
+### 11.8 Pencarian Semantik Regulasi
 - **Method & Path:** `GET /api/v1/ml/cari`
 - **Parameter Query:**
   - `q` (wajib): kata kunci minimal 2 karakter
   - `metode` (opsional): `lexical` | `lsa` (default jika kosong) | `semantic` | `hybrid` | `pgvector`
   - `k` (opsional): `1-50` (default: `10`)
 
-### 11.7 Pencarian Pasal Serupa
+### 11.9 Pencarian Pasal Serupa
 - **Method & Path:** `GET /api/v1/ml/pasal-mirip`
 - **Parameter Query:**
   - `teks` (wajib): kutipan teks pasal minimal 20 karakter

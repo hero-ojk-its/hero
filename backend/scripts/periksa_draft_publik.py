@@ -181,7 +181,7 @@ def run_periksa_draft_publik(
                 db,
                 action=UPDATE_SOURCE,
                 user_id=None,
-                target_resource=f"source:{src.id}",
+                target_resource=f"scraping_source:{src.id}",
                 detail={
                     "alasan": "langkah35_sumber_draft_publik",
                     "before": {"default_access_classification": before_val},

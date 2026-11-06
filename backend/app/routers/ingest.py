@@ -63,11 +63,27 @@ def _format_failure_response(f: IngestFailure) -> FailureResponse:
     """Helper untuk format IngestFailure model ke FailureResponse schema."""
     dup_doc = None
     if f.duplicate_of_document:
+        d_ac = (
+            f.duplicate_of_document.access_classification.value
+            if hasattr(f.duplicate_of_document.access_classification, "value")
+            else str(f.duplicate_of_document.access_classification)
+            if f.duplicate_of_document.access_classification
+            else None
+        )
+        d_dr = (
+            f.duplicate_of_document.document_role.value
+            if hasattr(f.duplicate_of_document.document_role, "value")
+            else str(f.duplicate_of_document.document_role)
+            if f.duplicate_of_document.document_role
+            else None
+        )
         dup_doc = DuplicateDocumentInfo(
             id=f.duplicate_of_document.id,
             title=f.duplicate_of_document.title,
             regulation_number=f.duplicate_of_document.regulation_number,
             is_active=f.duplicate_of_document.is_active,
+            access_classification=d_ac,
+            document_role=d_dr,
         )
 
     return FailureResponse(
@@ -461,6 +477,8 @@ def get_job_detail(
             title=d.title,
             regulation_number=d.regulation_number,
             file_path_pdf=d.file_path_pdf,
+            access_classification=d.access_classification.value if hasattr(d.access_classification, "value") else str(d.access_classification) if d.access_classification else None,
+            document_role=d.document_role.value if hasattr(d.document_role, "value") else str(d.document_role) if d.document_role else None,
         )
         for d in job.documents
     ]
@@ -469,11 +487,27 @@ def get_job_detail(
     for f in job.failures:
         dup_doc = None
         if f.duplicate_of_document:
+            d_ac = (
+                f.duplicate_of_document.access_classification.value
+                if hasattr(f.duplicate_of_document.access_classification, "value")
+                else str(f.duplicate_of_document.access_classification)
+                if f.duplicate_of_document.access_classification
+                else None
+            )
+            d_dr = (
+                f.duplicate_of_document.document_role.value
+                if hasattr(f.duplicate_of_document.document_role, "value")
+                else str(f.duplicate_of_document.document_role)
+                if f.duplicate_of_document.document_role
+                else None
+            )
             dup_doc = DuplicateDocumentInfo(
                 id=f.duplicate_of_document.id,
                 title=f.duplicate_of_document.title,
                 regulation_number=f.duplicate_of_document.regulation_number,
                 is_active=f.duplicate_of_document.is_active,
+                access_classification=d_ac,
+                document_role=d_dr,
             )
         failure_summaries.append(
             JobFailureSummary(
