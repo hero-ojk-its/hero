@@ -4,7 +4,7 @@ Pengujian unit dan integrasi untuk Langkah 37:
 - T01 s.d. T05: tarik_semua.py hanya menarik dokumen utama & opsi --termasuk-non-utama.
 - L01 s.d. L09: Pengenal lampiran tepat (determine_doc_kind).
 - N01 s.d. N02: periksa_dokumen_non_utama.py dry-run & apply & filter jenis.
-- K01 s.d. K05: periksa_konsistensi_pasal.py dry-run, nonaktifkan, antrekan ulang, & default storage.
+- K01 s.d. K06: periksa_konsistensi_pasal.py dry-run, nonaktifkan, antrekan ulang, default storage, & reset attempts.
 """
 
 from datetime import datetime, timezone
@@ -631,6 +631,7 @@ def test_k03_konsistensi_pasal_antrekan_ulang_tanpa_pasal(db_session: Session):
     db_session.refresh(doc_b)
     assert doc_b.processing_status == StatusPemrosesan.diterima
     assert doc_b.extraction_claimed_at is None
+    assert doc_b.extraction_attempts == 0
 
     # Verifikasi audit log
     audit = (
@@ -639,6 +640,8 @@ def test_k03_konsistensi_pasal_antrekan_ulang_tanpa_pasal(db_session: Session):
         .first()
     )
     assert audit is not None
+    assert audit.detail.get("reason") == "antrekan_ulang_tanpa_pasal"
+    assert audit.detail.get("attempt_sebelumnya") == 0
 
 
 def test_k04_konsistensi_pasal_tanpa_opsi_tindakan_db_utuh(db_session: Session):
@@ -699,4 +702,59 @@ def test_k05_konsistensi_pasal_default_storage_service(db_session: Session, tmp_
     assert doc_a.id in res["kelompok_a_ids"]
     assert res["kelompok_b_count"] >= 1
     assert doc_b.id in res["kelompok_b_ids"]
+
+
+def test_k06_konsistensi_pasal_antrekan_ulang_reset_attempts_bisa_diklaim(
+    client: TestClient,
+    db_session: Session,
+):
+    """
+    K06: Dokumen kelompok B dengan extraction_attempts = settings.extraction_max_attempts
+    setelah --antrekan-ulang-tanpa-pasal, status diterima, extraction_attempts 0,
+    dan dokumen itu muncul di hasil klaim endpoint internal ekstraksi (POST /api/v1/internal/extraction/claim).
+    """
+    from app.config import settings
+
+    mock_storage = MockStorageService(existing_paths={"regulasi/doc_k06.pdf"})
+
+    doc = _seed_doc(
+        db_session,
+        "Doc K06 Max Attempts",
+        "k06.pdf",
+        file_path_pdf="regulasi/doc_k06.pdf",
+        processing_status=StatusPemrosesan.terindeks,
+    )
+    doc.extraction_attempts = settings.extraction_max_attempts
+    doc.extraction_claimed_at = datetime.now(timezone.utc)
+    db_session.commit()
+
+    res = periksa_konsistensi_pasal(
+        db=db_session,
+        storage=mock_storage,
+        antrekan_ulang_tanpa_pasal=True,
+    )
+    assert res["b_requeued"] >= 1
+
+    db_session.refresh(doc)
+    assert doc.processing_status == StatusPemrosesan.diterima
+    assert doc.extraction_attempts == 0
+    assert doc.extraction_claimed_at is None
+
+    # Verifikasi audit log memuat attempt_sebelumnya
+    audit = (
+        db_session.query(AuditLog)
+        .filter(AuditLog.action == EXTRACTION_REQUEUED, AuditLog.target_resource == f"document:{doc.id}")
+        .first()
+    )
+    assert audit is not None
+    assert audit.detail.get("reason") == "antrekan_ulang_tanpa_pasal"
+    assert audit.detail.get("attempt_sebelumnya") == settings.extraction_max_attempts
+
+    # Panggil endpoint internal klaim ekstraksi yang dipakai worker
+    headers = {"X-Internal-API-Key": settings.internal_api_key}
+    resp = client.post("/api/v1/internal/extraction/claim?limit=10", headers=headers)
+    assert resp.status_code == 200
+    claimed_ids = [item["document_id"] for item in resp.json()]
+    assert doc.id in claimed_ids
+
 

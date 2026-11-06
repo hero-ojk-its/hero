@@ -347,6 +347,7 @@ Sesuai arahan Weekly #7 Pak Faris dan Test Plan PM:
 
   1. **Pembersihan Dokumen Non-Utama yang Telanjur Masuk KB**:
      Pindai dokumen aktif di KB yang merupakan Abstrak, FAQ, Lampiran, atau Non-Regulasi:
+     > Sebelum `--apply` periksa_dokumen_non_utama.py, baca daftar dry-run. Aturan abstrak menganggap judul yang memuat 'ringkasan'/'summary' sebagai abstrak; bila ada peraturan utama yang ikut terdaftar, jangan `--apply`, laporkan ke backend.
      ```bash
      # Dry-run untuk memeriksa daftar temuan:
      docker compose exec backend python scripts/periksa_dokumen_non_utama.py

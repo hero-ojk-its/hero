@@ -206,13 +206,15 @@ def periksa_konsistensi_pasal(
         b_ids = [it.document_id for it in kelompok_b]
         target_docs = db.query(Document).filter(Document.id.in_(b_ids)).all()
         for doc in target_docs:
+            old_attempts = doc.extraction_attempts or 0
             doc.processing_status = StatusPemrosesan.diterima
             doc.extraction_claimed_at = None
+            doc.extraction_attempts = 0
             record_audit(
                 db,
                 action=EXTRACTION_REQUEUED,
                 target_resource=f"document:{doc.id}",
-                detail={"reason": "antrekan_ulang_tanpa_pasal", "attempt": doc.extraction_attempts},
+                detail={"reason": "antrekan_ulang_tanpa_pasal", "attempt_sebelumnya": old_attempts},
                 commit=False,
             )
             b_requeued += 1
