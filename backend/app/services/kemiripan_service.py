@@ -239,6 +239,8 @@ def cari_kemiripan_draft(
         db.query(
             Document.id,
             Document.title,
+            Document.access_classification,
+            Document.document_role,
             Document.created_at,
             func.length(Document.full_text).label("teks_len"),
         )
@@ -300,9 +302,14 @@ def cari_kemiripan_draft(
             else:
                 diunggah_str = str(created_val) if created_val else None
 
+            cand_ac = cand.access_classification.value if hasattr(cand.access_classification, "value") else str(cand.access_classification) if cand.access_classification else None
+            cand_dr = cand.document_role.value if hasattr(cand.document_role, "value") else str(cand.document_role) if cand.document_role else None
+
             draft_mirip_list.append({
                 "document_id": cand_id,
                 "judul": cand.title or "",
+                "access_classification": cand_ac,
+                "document_role": cand_dr,
                 "diunggah": diunggah_str,
                 "persen": persen,
                 "status": status_str,
@@ -326,9 +333,14 @@ def cari_kemiripan_draft(
                 else:
                     diunggah_str = str(created_val) if created_val else None
 
+                best_ac = best_cand.access_classification.value if hasattr(best_cand.access_classification, "value") else str(best_cand.access_classification) if best_cand.access_classification else None
+                best_dr = best_cand.document_role.value if hasattr(best_cand.document_role, "value") else str(best_cand.document_role) if best_cand.document_role else None
+
                 draft_mirip_list.append({
                     "document_id": best_cand_id,
                     "judul": best_cand.title or "",
+                    "access_classification": best_ac,
+                    "document_role": best_dr,
                     "diunggah": diunggah_str,
                     "persen": persen,
                     "status": status_str,

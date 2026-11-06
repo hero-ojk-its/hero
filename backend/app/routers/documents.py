@@ -103,6 +103,8 @@ class VersionRelationItem(BaseModel):
     perubahan_ke: Optional[int] = None
     document_id: Optional[int] = None
     judul: Optional[str] = None
+    access_classification: Optional[str] = None
+    document_role: Optional[str] = None
     pasal_terkait: Optional[str] = None
     restricted: Optional[bool] = None
 
@@ -110,6 +112,8 @@ class VersionRelationItem(BaseModel):
 class DocumentVersionResponse(BaseModel):
     document_id: int
     identity_key: Optional[str] = None
+    access_classification: Optional[str] = None
+    document_role: Optional[str] = None
     status_keberlakuan: Optional[str] = None
     status_source: Optional[str] = None
     induk: List[VersionRelationItem] = Field(default_factory=list)
@@ -353,6 +357,8 @@ def get_documents_needing_review(
                 "id": doc.id,
                 "title": doc.title,
                 "regulation_number": doc.regulation_number,
+                "access_classification": doc.access_classification.value if hasattr(doc.access_classification, "value") else str(doc.access_classification) if doc.access_classification else None,
+                "document_role": doc.document_role.value if hasattr(doc.document_role, "value") else str(doc.document_role) if doc.document_role else None,
                 "low_confidence_fields": low_conf,
                 "extraction_confidence": doc.extraction_confidence,
                 "pdf_url": f"/api/v1/documents/{doc.id}/pdf",
@@ -414,6 +420,8 @@ def _format_single_document_response(doc: Document, db: Session, current_user: O
             "document_id": c.id,
             "title": c.title,
             "attachment_label": c.attachment_label,
+            "access_classification": c.access_classification.value if hasattr(c.access_classification, "value") else str(c.access_classification) if c.access_classification else None,
+            "document_role": c.document_role.value if hasattr(c.document_role, "value") else str(c.document_role) if c.document_role else None,
         }
         for c in lampiran_docs
         if is_accessible(c, current_user)
@@ -431,6 +439,8 @@ def _format_single_document_response(doc: Document, db: Session, current_user: O
                 "document_id": p_doc.id,
                 "title": p_doc.title,
                 "status_keberlakuan": p_doc.status_keberlakuan.value if hasattr(p_doc.status_keberlakuan, "value") else str(p_doc.status_keberlakuan),
+                "access_classification": p_doc.access_classification.value if hasattr(p_doc.access_classification, "value") else str(p_doc.access_classification) if p_doc.access_classification else None,
+                "document_role": p_doc.document_role.value if hasattr(p_doc.document_role, "value") else str(p_doc.document_role) if p_doc.document_role else None,
             }
 
     return {
@@ -656,6 +666,8 @@ def get_document_text(
 class DraftMiripItem(BaseModel):
     document_id: int
     judul: str
+    access_classification: Optional[str] = None
+    document_role: Optional[str] = None
     diunggah: Optional[str] = None
     persen: float
     status: str
