@@ -8,8 +8,10 @@ Tanggung jawab gerbang:
 3. Menyeragamkan kode dan format galat (503 bila belum dikonfigurasi / tidak tersedia, 504 saat timeout, 422 bila pembanding kosong).
 4. Mencatat jejak audit ringkas RUN_HARMONIZATION saat harmonisasi dijalankan.
 """
+import asyncio
 import logging
 import time
+import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
@@ -43,7 +45,9 @@ SENSITIVE_REF_KEYS = {"kutipan", "pdf", "halaman", "pasal", "pasal_mirip", "skor
 
 async def get_ml_client() -> AsyncIterator[httpx.AsyncClient]:
     """Dependency klien HTTP untuk komunikasi dengan layanan analisa ML."""
-    async with httpx.AsyncClient(timeout=settings.ml_timeout_seconds) as client:
+    baca = settings.ml_timeout_seconds if settings.ml_timeout_seconds > 0 else None
+    timeout = httpx.Timeout(baca, connect=settings.ml_connect_timeout_seconds)
+    async with httpx.AsyncClient(timeout=timeout) as client:
         yield client
 
 
@@ -268,7 +272,7 @@ async def forward_ml_request(
             params=params,
             json=json_data,
         )
-    except httpx.ConnectError as exc:
+    except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
         logger.warning("Gagal terhubung ke layanan analisa: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -357,7 +361,27 @@ async def get_ml_analisa(
     client: httpx.AsyncClient = Depends(get_ml_client),
     current_user=Depends(perlu_izin(Izin.ANALISA_JALANKAN)),
 ):
-    """Ringkasan terstruktur dan poin kunci berbasis pasal."""
+    """Ringkasan terstruktur dan poin kunci berbasis pasal.
+
+    Menunggu penuh dalam satu permintaan — cocok untuk mode deterministik
+    (cepat). Untuk mode AI gunakan ``POST .../mulai`` + ``GET .../analisa-job/{id}``
+    (lihat di bawah): panggilan Gemini bisa lebih lama dari batas proxy
+    Cloudflare (~100 d) di depan domain publik, dan permintaan sinkron ini
+    akan diputus oleh Cloudflare sebelum model selesai menjawab.
+    """
+    return await _jalankan_analisa(document_id, request, mode, segar, db, client, current_user)
+
+
+async def _jalankan_analisa(
+    document_id: int,
+    request: Request,
+    mode: Optional[Literal["deterministik", "ai"]],
+    segar: bool,
+    db: Session,
+    client: httpx.AsyncClient,
+    current_user,
+):
+    """Logika analisa (cache, panggil ML, audit, saring) — dipakai oleh endpoint sinkron dan job latar belakang."""
     doc = check_document_access(db, document_id, user=current_user)
     allowed_ids = allowed_document_ids(db, user=current_user)
 
@@ -686,6 +710,115 @@ async def get_ml_analisa(
             "run_id": run_id,
         }
     return filtered_data
+
+
+class _AnalisaJobStore:
+    """Antrian job analisa di memori — hilang saat restart backend (dapat dipicu ulang oleh pengguna).
+
+    Dibutuhkan karena Cloudflare memutus proxy HTTP sinkron pada ~100 d; mode
+    AI yang bisa lebih lama dari itu harus berjalan di latar belakang dan
+    dipoll, bukan ditunggu dalam satu permintaan.
+    """
+
+    _TTL_DETIK = 3600  # job yang sudah selesai dibuang setelah 1 jam agar memori tidak bocor
+
+    def __init__(self) -> None:
+        self._jobs: dict[str, dict[str, Any]] = {}
+        self._lock = asyncio.Lock()
+
+    async def mulai(self, coro_fn) -> str:
+        job_id = uuid.uuid4().hex
+        async with self._lock:
+            self._jobs[job_id] = {"status": "berjalan", "mulai": time.time(), "hasil": None, "error": None}
+
+        async def runner() -> None:
+            try:
+                hasil = await coro_fn()
+                async with self._lock:
+                    self._jobs[job_id]["status"] = "selesai"
+                    self._jobs[job_id]["hasil"] = hasil
+            except HTTPException as exc:
+                async with self._lock:
+                    self._jobs[job_id]["status"] = "gagal"
+                    self._jobs[job_id]["error"] = {"status_code": exc.status_code, "detail": exc.detail}
+            except Exception as exc:                                       # noqa: BLE001
+                logger.exception("Job analisa %s gagal tak terduga", job_id)
+                async with self._lock:
+                    self._jobs[job_id]["status"] = "gagal"
+                    self._jobs[job_id]["error"] = {"status_code": 500, "detail": str(exc)}
+
+        asyncio.create_task(runner())
+        await self._bersihkan()
+        return job_id
+
+    async def get(self, job_id: str) -> Optional[dict[str, Any]]:
+        async with self._lock:
+            job = self._jobs.get(job_id)
+            return dict(job) if job else None
+
+    async def _bersihkan(self) -> None:
+        cutoff = time.time() - self._TTL_DETIK
+        async with self._lock:
+            stale = [jid for jid, j in self._jobs.items() if j["status"] != "berjalan" and j["mulai"] < cutoff]
+            for jid in stale:
+                del self._jobs[jid]
+
+
+_analisa_jobs = _AnalisaJobStore()
+
+
+@router.post("/analisa/{document_id}/mulai", summary="Mulai Analisa (job latar belakang)")
+async def post_ml_analisa_mulai(
+    document_id: int,
+    request: Request,
+    mode: Optional[Literal["deterministik", "ai"]] = Query("ai"),
+    segar: bool = Query(False, description="Paksa hitung ulang tanpa cache"),
+    current_user=Depends(perlu_izin(Izin.ANALISA_JALANKAN)),
+):
+    """Mulai analisa di latar belakang; kembalikan ``job_id`` untuk dipoll via
+    ``GET /analisa-job/{job_id}``. Dipakai untuk mode AI agar tidak kena batas
+    proxy Cloudflare (~100 d) seperti endpoint sinkron di atas."""
+    from app.database import SessionLocal
+
+    async def jalankan() -> Any:
+        baca = settings.ml_timeout_seconds if settings.ml_timeout_seconds > 0 else None
+        timeout = httpx.Timeout(baca, connect=settings.ml_connect_timeout_seconds)
+        db2 = SessionLocal()
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client2:
+                return await _jalankan_analisa(document_id, request, mode, segar, db2, client2, current_user)
+        finally:
+            db2.close()
+
+    job_id = await _analisa_jobs.mulai(jalankan)
+    return {"job_id": job_id, "status": "berjalan"}
+
+
+@router.get("/analisa-job/{job_id}", summary="Status Job Analisa")
+async def get_ml_analisa_job(
+    job_id: str,
+    current_user=Depends(perlu_izin(Izin.ANALISA_JALANKAN)),
+):
+    """Status job yang dimulai lewat ``POST /analisa/{document_id}/mulai``."""
+    job = await _analisa_jobs.get(job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "job_tidak_ditemukan",
+                "message": f"Job {job_id} tidak ditemukan (sudah dibersihkan setelah 1 jam, atau id salah).",
+            },
+        )
+    out: dict[str, Any] = {
+        "job_id": job_id,
+        "status": job["status"],
+        "berjalan_detik": round(time.time() - job["mulai"], 1),
+    }
+    if job["status"] == "selesai":
+        out["hasil"] = job["hasil"]
+    elif job["status"] == "gagal":
+        out["error"] = job["error"]
+    return out
 
 
 @router.get("/analisa/{document_id}/klausul", summary="Pencarian Klausul Relevan")

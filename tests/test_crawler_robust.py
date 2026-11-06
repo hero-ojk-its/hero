@@ -1073,6 +1073,13 @@ def test_t03_doc_kind_detection():
     assert determine_doc_kind("ringkasanpojk14.pdf") == "abstrak"
     assert determine_doc_kind("summary_pojk_22.pdf") == "abstrak"
     assert determine_doc_kind("summarypojk22.pdf") == "abstrak"
+    # Regresi: "lampiran" + nomor langsung tanpa pemisah (ditemukan di produksi —
+    # dua lampiran POJK 27/POJK.03/2015 tertarik sebagai dokumen 'utama' tersendiri
+    # karena regex sebelumnya mensyaratkan karakter non-huruf/digit tepat setelah
+    # kata "lampiran", sehingga "lampiran1pojktrust" lolos ke default "utama").
+    assert determine_doc_kind("lampiran1pojktrust.pdf") == "lampiran"
+    assert determine_doc_kind("lampiran2pojktrust.pdf") == "lampiran"
+    assert determine_doc_kind("lampiran3ketentuanumum.pdf") == "lampiran"
 
 
 def test_t04_regulation_type_normalization():

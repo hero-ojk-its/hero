@@ -67,16 +67,35 @@ class Settings(BaseSettings):
     crawl_max_pages: int = 200
     crawl_max_candidates: int = 5000
     crawl_delay_seconds: float = 0.5
+    # Jumlah halaman detail regulasi yang diambil paralel (crawler SharePoint OJK).
+    # 1 = berurutan. Laju permintaan per-host tetap dibatasi crawl_delay_seconds.
+    crawl_detail_workers: int = 4
+    # Batas "tanpa kemajuan" (detik) untuk crawler SharePoint OJK: pemindaian dihentikan
+    # (hasil sebagian tetap disimpan) hanya jika TIDAK ADA regulasi yang selesai diproses
+    # selama selang ini. Selama masih ada kemajuan, selambat apa pun, tidak dibatasi.
+    # Harus lebih besar dari waktu terburuk satu regulasi (±5 menit). 0 = nonaktif.
+    crawl_stall_seconds: int = 600
     crawl_timeout_seconds: int = 20
     crawl_user_agent: str = "HERO-Capstone-Crawler/0.7 (+kontak: tim HERO)"
     crawl_respect_robots: bool = True
     crawl_allow_private_networks: bool = False
     crawl_head_for_size: bool = True
-    scan_stuck_minutes: int = 15
+    # Ambang "sesi macet": hanya untuk mendeteksi sesi yang benar-benar mati
+    # (proses/server berhenti di tengah jalan), BUKAN batas waktu pemindaian.
+    # 15 menit terlalu ketat untuk pemindaian kedalaman/halaman maksimal —
+    # fase listing (banyak sektor/jenis JDIH, atau banyak halaman situs) bisa
+    # berjalan lama sebelum progress callback pertama tercatat, sehingga
+    # pemindaian yang sehat pun bisa salah terdeteksi macet dan dihentikan.
+    scan_stuck_minutes: int = 360
 
     # Gerbang Analisa / Layanan ML (Langkah 16 & 20)
     ml_service_url: str = ""
-    ml_timeout_seconds: float = 120.0
+    # Detik menunggu layanan analisa menjawab; <= 0 = tanpa batas baca (bawaan),
+    # supaya analisa dokumen tebal/AI-Assisted tidak dipotong jadi 504.
+    # Menyambung tetap dibatasi ml_connect_timeout_seconds: layanan yang mati
+    # harus gagal cepat (503), bukan menggantung.
+    ml_timeout_seconds: float = 0.0
+    ml_connect_timeout_seconds: float = 10.0
     ml_default_search_method: str = "lsa"
     ml_cache_enabled: bool = True
 

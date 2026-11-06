@@ -287,8 +287,13 @@ def determine_doc_kind(filename_or_title: Optional[str], label: Optional[str] = 
     if re.search(r'(?:^|[\W_])(?:nda|project[-_ ]*charter|user[-_ ]*requirement|surat[-_ ]*perjanjian|curriculum[-_ ]*vitae)(?:[\W_]|$)|^cv_', combined):
         return "non_regulasi"
 
-    # 1. Lampiran (prioritas tinggi bila diawali Lampiran, mis. 'Lampiran SP - FAQ ...')
-    if re.search(r'^(?:lampiran|lamp)[\W_]', combined):
+    # 1. Lampiran (prioritas tinggi bila diawali Lampiran, mis. 'Lampiran SP - FAQ ...').
+    # Alternatif kedua menangani nama bergandeng tanpa pemisah ('lampiran1pojktrust.pdf',
+    # ditemukan di produksi — 'lampiran' + nomor lampiran + nama, tanpa spasi/underscore
+    # sama sekali), sama seperti pola 'faqpbi101708' / 'abspbi101708' di aturan FAQ/Abstrak
+    # di bawah: digit atau kode jenis regulasi langsung setelah kata kunci sudah cukup.
+    if re.search(r'^(?:lampiran|lamp)[\W_]|'
+                r'(?:^|[\W_0-9])(?:lampiran|lamp)(?:pojk|seojk|padk|pdk|kdk|pbi|se|\d|[_ \-])', combined):
         return "lampiran"
 
     # 2. FAQ / Tanya Jawab (termasuk faq_, tanya jawab, faqpbi, dll.)

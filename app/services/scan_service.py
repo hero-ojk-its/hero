@@ -43,6 +43,7 @@ from app.models.ingest_failure import IngestFailure
 from app.crawlers.base import BlockedUrlError, FetchTooLargeError, CrawlerError, FetchedFile
 from app.crawlers.generic_html import SimpleHttpCrawler
 from app.crawlers.registry import get_crawler
+from app.services.column_fit import clip_to_columns
 from app.crawlers.url_utils import (
     normalize_url,
     guard_url,
@@ -51,6 +52,10 @@ from app.crawlers.url_utils import (
     extract_regulation_year,
 )
 from app.services.folder_connector import list_pdf_files, FolderAccessError
+
+# Peran dokumen yang bukan regulasi berdiri sendiri (lihat determine_doc_kind) — tidak
+# boleh masuk KB sebagai dokumen sendiri lewat "Pilih Semua Baru".
+NON_UTAMA_DOC_KINDS = {"abstrak", "faq", "lampiran", "non_regulasi"}
 
 from app.schemas.scan import (
     ScanCreate,
@@ -475,9 +480,15 @@ class ScanService:
                     return
 
                 # 5. Simpan kandidat PDF ke database
+                # (PDF yang sama bisa tertaut dari beberapa regulasi dalam satu scan; unique
+                # constraint (scan_id, url_hash) menolak duplikat, jadi simpan sekali saja.)
+                seen_hashes: set = set()
                 for cand in scan_res.candidates:
                     norm_url = normalize_url(cand.url)
                     url_hash = hashlib.sha256(norm_url.encode("utf-8")).hexdigest()
+                    if url_hash in seen_hashes:
+                        continue
+                    seen_hashes.add(url_hash)
                     cand_reg_year = getattr(cand, "regulation_year", None) or extract_regulation_year(
                         regulation_number=cand.regulation_number,
                         title=cand.document_title,
@@ -508,11 +519,16 @@ class ScanService:
                         size_source=cand.size_source or "unknown",
                         source_path=cand.source_path,
                     )
+                    # Nilai dari situs sumber bisa lebih panjang dari kolom (mis. daftar
+                    # "Sub Sektor"); tanpa dipangkas, INSERT gagal dan seluruh sesi macet.
+                    clip_to_columns(candidate_row)
                     db.add(candidate_row)
 
+                logger.info(f"[Scan] Sesi #{session.id}: crawling selesai, menyimpan {len(scan_res.candidates)} kandidat.")
                 db.flush()
 
                 # 6. Jalankan perbandingan terhadap Knowledge Base (§3.4)
+                logger.info(f"[Scan] Sesi #{session.id}: kandidat tersimpan, membandingkan dengan Knowledge Base.")
                 self._compare_candidates_with_kb(session, db)
 
                 # 7. Selesaikan pemindaian dan ubah status ke siap_dipilih
@@ -537,14 +553,24 @@ class ScanService:
                 logger.info(f"[Scan] Sesi #{session.id} selesai dipindai: {session.candidates_total} kandidat ditemukan.")
 
             except Exception as exc:
-                logger.exception(f"[Scan] Kesalahan tak terduga saat pemindaian sesi #{session.id}: {exc}")
-                session.status = StatusPindai.gagal
-                session.error_message = str(exc)
-                session.finished_at = datetime.now(timezone.utc)
-                if source:
-                    source.last_run_status = "gagal"
-                    source.last_run_message = f"Gagal: {exc}"
-                db.commit()
+                # Jangan menyentuh atribut ORM (mis. session.id) sebelum rollback: pada sesi
+                # yang "menunggu rollback" itu sendiri melempar PendingRollbackError.
+                logger.exception(f"[Scan] Kesalahan tak terduga saat pemindaian sesi #{scan_id}: {exc}")
+                # Setelah flush/INSERT gagal, sesi SQLAlchemy "menunggu rollback": commit
+                # langsung akan melempar PendingRollbackError sehingga status gagal tidak
+                # pernah tersimpan dan sesi menggantung di 'memindai' selamanya.
+                try:
+                    db.rollback()
+                    session.status = StatusPindai.gagal
+                    session.error_message = str(exc)[:1000]
+                    session.finished_at = datetime.now(timezone.utc)
+                    if source:
+                        source.last_run_status = "gagal"
+                        source.last_run_message = f"Gagal: {str(exc)[:500]}"
+                    db.commit()
+                except Exception as exc2:  # noqa: BLE001
+                    logger.exception(f"[Scan] Gagal mencatat kegagalan sesi #{scan_id}: {exc2}")
+                    db.rollback()
 
             finally:
                 if lock_conn is not None:
@@ -667,8 +693,14 @@ class ScanService:
         rejected: List[RejectedSelection] = []
 
         if payload.action == "select_all_new":
+            # "Baru" berarti belum ada di KB DAN bukan Abstrak/FAQ/Lampiran/non-regulasi —
+            # keempatnya bukan dokumen regulasi berdiri sendiri (ditemukan di produksi:
+            # "Pilih Semua Baru" menarik 35 abstrak/faq ke KB karena hanya menyaring
+            # match_status, bukan doc_kind). Tetap bisa dipilih manual lewat action='set'
+            # bagi kasus yang memang perlu, misalnya audit Lampiran yang belum tertaut.
             for c in candidates:
-                if c.match_status != StatusKandidat.sudah_ada:
+                kind = c.doc_kind or "utama"
+                if c.match_status != StatusKandidat.sudah_ada and kind not in NON_UTAMA_DOC_KINDS:
                     c.selected = True
                 else:
                     c.selected = False
@@ -1417,6 +1449,7 @@ class ScanService:
                 existing.status_keberlakuan = getattr(cand_in, "status_keberlakuan", "tidak_diketahui") or "tidak_diketahui"
                 existing.size_source = cand_in.size_source or "unknown"
                 existing.source_path = cand_in.source_path
+                clip_to_columns(existing)
             else:
                 c_yr = getattr(cand_in, "regulation_year", None) or extract_regulation_year(
                     regulation_number=cand_in.regulation_number,
@@ -1448,6 +1481,7 @@ class ScanService:
                     size_source=cand_in.size_source or "unknown",
                     source_path=cand_in.source_path,
                 )
+                clip_to_columns(new_cand)
                 self.db.add(new_cand)
 
         self.db.flush()
