@@ -56,6 +56,8 @@ class JobDocumentSummary(BaseModel):
     title: str
     regulation_number: Optional[str] = None
     file_path_pdf: str
+    access_classification: Optional[str] = None
+    document_role: Optional[str] = None
 
 
 class DuplicateDocumentInfo(BaseModel):
@@ -63,6 +65,8 @@ class DuplicateDocumentInfo(BaseModel):
     title: str
     regulation_number: Optional[str] = None
     is_active: bool = True
+    access_classification: Optional[str] = None
+    document_role: Optional[str] = None
 
 
 class JobFailureSummary(BaseModel):
