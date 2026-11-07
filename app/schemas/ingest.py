@@ -20,6 +20,7 @@ class IngestItemDetailResponse(BaseModel):
     message: Optional[str] = None
     error: Optional[str] = None
     reason_code: Optional[str] = None
+    label_alasan: Optional[str] = None
     placement: Optional[Dict[str, Any]] = None
 
 
@@ -30,6 +31,7 @@ class IngestUploadResponse(BaseModel):
     total_files: int
     success_count: int
     duplicate_count: int
+    duplikat_identitas_count: int = 0
     failed_count: int
     details: List[IngestItemDetailResponse]
 
@@ -69,11 +71,31 @@ class DuplicateDocumentInfo(BaseModel):
     document_role: Optional[str] = None
 
 
+LABEL_ALASAN_MAP = {
+    "pdf_rusak": "PDF rusak",
+    "pdf_terenkripsi": "PDF terkunci kata sandi",
+    "format_tidak_didukung": "Format tidak didukung",
+    "ukuran_melebihi_batas": "Ukuran melebihi batas",
+    "berkas_kosong": "Berkas kosong",
+    "teks_kosong": "Teks tidak terbaca",
+    "teks_kosong_ocr": "Teks tidak terbaca",
+    "duplikat": "Duplikat",
+}
+
+
+def format_label_alasan(reason_code: Optional[str]) -> Optional[str]:
+    """Mengembalikan label bahasa Indonesia ramah pengguna untuk kode alasan kegagalan (Langkah 38)."""
+    if not reason_code:
+        return None
+    return LABEL_ALASAN_MAP.get(reason_code, reason_code)
+
+
 class JobFailureSummary(BaseModel):
     id: int
     original_filename: str
     failure_type: str
     reason_code: str
+    label_alasan: Optional[str] = None
     message: str
     is_retryable: bool
     quarantine_path: Optional[str] = None
@@ -103,6 +125,7 @@ class JobDetailResponse(BaseModel):
     duration_seconds: Optional[float] = None
     success_count: int
     duplicate_count: int
+    duplikat_identitas_count: int = 0
     failed_count: int
     total_found: Optional[int] = None
     processed_count: int = 0
@@ -124,6 +147,7 @@ class JobListItemResponse(BaseModel):
     finished_at: Optional[datetime] = None
     success_count: int
     duplicate_count: int
+    duplikat_identitas_count: int = 0
     failed_count: int
     total_found: Optional[int] = None
     processed_count: int = 0
@@ -138,6 +162,7 @@ class FailureResponse(BaseModel):
     source_url: Optional[str] = None
     failure_type: str
     reason_code: str
+    label_alasan: Optional[str] = None
     message: str
     is_retryable: bool
     quarantine_path: Optional[str] = None
@@ -197,5 +222,6 @@ class BatchRetryResponse(BaseModel):
     results: List[FailureRetryResponse]
     success_count: int
     duplicate_count: int
+    duplikat_identitas_count: int = 0
     failed_count: int
     skipped_count: int

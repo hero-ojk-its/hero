@@ -1,24 +1,27 @@
 #!/usr/bin/env python3
 """
 scripts/periksa_konsistensi_pasal.py
-Pemeriksaan konsistensi dokumen PDF dan data pasal (articles) di basis data (Langkah 37).
+Pemeriksaan konsistensi dokumen PDF dan data pasal (articles) di basis data (Langkah 37 & 38).
 
 Pemakaian:
-    python scripts/periksa_konsistensi_pasal.py [--nonaktifkan-tanpa-pdf] [--antrekan-ulang-tanpa-pasal]
+    python scripts/periksa_konsistensi_pasal.py [--nonaktifkan-tanpa-pdf] [--antrekan-ulang-tanpa-pasal] [--antrekan-ulang-macet]
 
 Aturan:
 - Default adalah DRY-RUN (hanya-baca, tanpa perubahan DB).
 - Kelompok A: Dokumen aktif tanpa berkas PDF fisik di storage.
 - Kelompok B: Dokumen aktif ber-PDF status terindeks/perlu_koreksi tetapi tanpa pasal (articles = 0).
 - Kelompok C: Baris pasal yatim (dokumen tidak ada atau berstatus nonaktif). Hanya dilaporkan.
+- Kelompok D: Dokumen aktif status 'diproses' yang klaimnya kedaluwarsa atau tanpa claimed_at (Langkah 38).
 - Tindakan eksplisit:
   * --nonaktifkan-tanpa-pdf: menonaktifkan dokumen Kelompok A (alasan: "berkas_pdf_hilang", audit DEACTIVATE_DOCUMENT).
-  * --antrekan-ulang-tanpa-pasal: mengembalikan dokumen Kelompok B ke antrean ekstraksi (processing_status="diterima", extraction_claimed_at=None, audit EXTRACTION_REQUEUED).
+  * --antrekan-ulang-tanpa-pasal: mengembalikan dokumen Kelompok B ke antrean ekstraksi (processing_status="diterima", extraction_claimed_at=None, extraction_attempts=0, audit EXTRACTION_REQUEUED).
+  * --antrekan-ulang-macet: mengembalikan dokumen ber-PDF Kelompok D ke antrean ekstraksi (processing_status="diterima", extraction_claimed_at=None, extraction_attempts=0, audit EXTRACTION_REQUEUED). Dokumen tanpa PDF di kelompok D hanya dilaporkan.
 - Tidak ada penghapusan baris DB atau berkas.
 """
 
 import argparse
 from dataclasses import dataclass
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import sys
 from typing import Any, Dict, List, Optional, Tuple
@@ -56,14 +59,25 @@ class ItemKonsistensi:
     jumlah_pasal: int
 
 
+@dataclass
+class ItemKelompokD:
+    document_id: int
+    judul: str
+    extraction_attempts: int
+    extraction_claimed_at: Optional[str]
+    has_pdf: bool
+    will_never_claim: bool
+
+
 def periksa_konsistensi_pasal(
     db: Session,
     storage: Optional[StorageService] = None,
     nonaktifkan_tanpa_pdf: bool = False,
     antrekan_ulang_tanpa_pasal: bool = False,
+    antrekan_ulang_macet: bool = False,
 ) -> Dict[str, Any]:
     """
-    Memeriksa konsistensi dokumen PDF terhadap data pasal.
+    Memeriksa konsistensi dokumen PDF terhadap data pasal serta antrean ekstraksi.
     Mendukung injeksi session DB dan storage service untuk keperluan pengujian.
     """
     if storage is None:
@@ -87,6 +101,10 @@ def periksa_konsistensi_pasal(
 
     kelompok_a: List[ItemKonsistensi] = []
     kelompok_b: List[ItemKonsistensi] = []
+    kelompok_d: List[ItemKelompokD] = []
+
+    timeout_minutes = settings.extraction_claim_timeout_minutes
+    cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
 
     for doc in active_docs:
         pasal_count = counts_by_doc_id.get(doc.id, 0)
@@ -125,6 +143,37 @@ def periksa_konsistensi_pasal(
                     )
                 )
 
+        # Kelompok D: Dokumen aktif processing_status = diproses dengan klaim kedaluwarsa atau null
+        is_candidate_d = doc.processing_status in (
+            StatusPemrosesan.diproses,
+            "diproses",
+        )
+        if is_candidate_d:
+            claimed_at = doc.extraction_claimed_at
+            is_stuck = False
+            if claimed_at is None:
+                is_stuck = True
+            else:
+                if claimed_at.tzinfo is None:
+                    claimed_at = claimed_at.replace(tzinfo=timezone.utc)
+                if claimed_at < cutoff_time:
+                    is_stuck = True
+
+            if is_stuck:
+                attempts = doc.extraction_attempts or 0
+                will_never = attempts >= settings.extraction_max_attempts
+                c_str = doc.extraction_claimed_at.isoformat() if doc.extraction_claimed_at else "(null)"
+                kelompok_d.append(
+                    ItemKelompokD(
+                        document_id=doc.id,
+                        judul=judul_60,
+                        extraction_attempts=attempts,
+                        extraction_claimed_at=c_str,
+                        has_pdf=has_file,
+                        will_never_claim=will_never,
+                    )
+                )
+
     # 3. Kelompok C: Pasal yatim (dokumen tidak ada atau nonaktif)
     orphan_rows = (
         db.query(Article.document_id, func.count(Article.id), Document.is_active)
@@ -141,15 +190,15 @@ def periksa_konsistensi_pasal(
         total_pasal_yatim += cnt
 
     # Cetak laporan
-    print("\n" + "=" * 105)
+    print("\n" + "=" * 110)
     print("                     LAPORAN PEMERIKSAAN KONSISTENSI PDF - PASAL")
-    print("=" * 105)
+    print("=" * 110)
 
     # Kelompok A
     print(f"\n[KELOMPOK A] Dokumen Aktif Tanpa Berkas PDF ({len(kelompok_a)} dokumen):")
     if kelompok_a:
         print(f"{'ID':<6} | {'Status':<14} | {'Judul (60 Karakter)':<60} | {'Jumlah Pasal':<12} | {'File Path PDF'}")
-        print("-" * 105)
+        print("-" * 110)
         for it in kelompok_a:
             print(f"{it.document_id:<6} | {it.status:<14} | {it.judul:<60} | {it.jumlah_pasal:<12} | {it.file_path_pdf}")
     else:
@@ -159,7 +208,7 @@ def periksa_konsistensi_pasal(
     print(f"\n[KELOMPOK B] Dokumen Ber-PDF Tanpa Pasal ({len(kelompok_b)} dokumen):")
     if kelompok_b:
         print(f"{'ID':<6} | {'Status':<14} | {'Judul (60 Karakter)':<60} | {'Jumlah Pasal':<12} | {'File Path PDF'}")
-        print("-" * 105)
+        print("-" * 110)
         for it in kelompok_b:
             print(f"{it.document_id:<6} | {it.status:<14} | {it.judul:<60} | {it.jumlah_pasal:<12} | {it.file_path_pdf}")
     else:
@@ -169,18 +218,33 @@ def periksa_konsistensi_pasal(
     print(f"\n[KELOMPOK C] Pasal Yatim ({len(kelompok_c)} grup dokumen, total {total_pasal_yatim} pasal):")
     if kelompok_c:
         print(f"{'Document ID':<14} | {'Jumlah Pasal Yatim':<20} | {'Status Dokumen Induk'}")
-        print("-" * 60)
+        print("-" * 65)
         for d_id, c_count, st_doc in kelompok_c:
             print(f"{d_id:<14} | {c_count:<20} | {st_doc}")
     else:
         print("  (Nihil - tidak ada pasal yatim)")
 
-    print("\n" + "-" * 105)
+    # Kelompok D
+    never_claimed_count = sum(1 for it in kelompok_d if it.will_never_claim)
+    print(f"\n[KELOMPOK D] Dokumen Macet di 'diproses' ({len(kelompok_d)} dokumen, {never_claimed_count} tidak akan pernah diklaim lagi):")
+    if kelompok_d:
+        print(f"{'ID':<6} | {'Judul (60 Karakter)':<60} | {'Percobaan':<10} | {'Claimed At':<26} | {'Ada PDF?'}")
+        print("-" * 115)
+        for it in kelompok_d:
+            pdf_label = "Ya" if it.has_pdf else "TIDAK"
+            c_label = it.extraction_claimed_at or "(null)"
+            never_tag = " [EXHAUSTED]" if it.will_never_claim else ""
+            print(f"{it.document_id:<6} | {it.judul:<60} | {it.extraction_attempts:<10}{never_tag:<11} | {c_label:<26} | {pdf_label}")
+    else:
+        print("  (Nihil - tidak ada dokumen macet di 'diproses' yang melebihi timeout)")
+
+    print("\n" + "-" * 110)
     print("RINGKASAN JUMLAH:")
     print(f"  - Kelompok A (Tanpa PDF)         : {len(kelompok_a)} dokumen")
     print(f"  - Kelompok B (Ber-PDF tanpa pasal): {len(kelompok_b)} dokumen")
     print(f"  - Kelompok C (Pasal Yatim)       : {total_pasal_yatim} pasal pada {len(kelompok_c)} dokumen")
-    print("-" * 105)
+    print(f"  - Kelompok D (Macet Diproses)    : {len(kelompok_d)} dokumen ({never_claimed_count} percobaan habis)")
+    print("-" * 110)
 
     # Eksekusi tindakan jika diminta
     a_deactivated = 0
@@ -221,21 +285,58 @@ def periksa_konsistensi_pasal(
         db.commit()
         print(f"SUKSES: {b_requeued} dokumen ber-PDF tanpa pasal berhasil dikembalikan ke status 'diterima' untuk antrean ekstraksi ulang.")
 
-    if not nonaktifkan_tanpa_pdf and not antrekan_ulang_tanpa_pasal:
+    d_requeued = 0
+    d_skipped_no_pdf = 0
+    if antrekan_ulang_macet and kelompok_d:
+        print("\n[TINDAKAN] Mengantrekan ulang ekstraksi dokumen Kelompok D (macet di 'diproses')...")
+        d_with_pdf_ids = [it.document_id for it in kelompok_d if it.has_pdf]
+        d_no_pdf_ids = [it.document_id for it in kelompok_d if not it.has_pdf]
+        d_skipped_no_pdf = len(d_no_pdf_ids)
+
+        if d_no_pdf_ids:
+            print(f"  PEMBERITAHUAN: {d_skipped_no_pdf} dokumen tanpa PDF dilewati dari antre ulang: {d_no_pdf_ids}")
+
+        if d_with_pdf_ids:
+            target_docs = db.query(Document).filter(Document.id.in_(d_with_pdf_ids)).all()
+            for doc in target_docs:
+                old_attempts = doc.extraction_attempts or 0
+                doc.processing_status = StatusPemrosesan.diterima
+                doc.extraction_claimed_at = None
+                doc.extraction_attempts = 0
+                record_audit(
+                    db,
+                    action=EXTRACTION_REQUEUED,
+                    target_resource=f"document:{doc.id}",
+                    detail={
+                        "reason": "antrekan_ulang_macet",
+                        "attempt_sebelumnya": old_attempts,
+                    },
+                    commit=False,
+                )
+                d_requeued += 1
+            db.commit()
+            print(f"SUKSES: {d_requeued} dokumen ber-PDF macet di 'diproses' berhasil dikembalikan ke status 'diterima' untuk ekstraksi ulang.")
+
+    if not nonaktifkan_tanpa_pdf and not antrekan_ulang_tanpa_pasal and not antrekan_ulang_macet:
         print("[DRY-RUN] Mode tinjauan saja. Tidak ada perubahan status atau antrean pada basis data.")
 
-    print("=" * 105 + "\n")
+    print("=" * 110 + "\n")
 
     return {
         "kelompok_a_count": len(kelompok_a),
         "kelompok_b_count": len(kelompok_b),
         "kelompok_c_doc_count": len(kelompok_c),
         "kelompok_c_article_count": total_pasal_yatim,
+        "kelompok_d_count": len(kelompok_d),
+        "kelompok_d_never_claimed_count": never_claimed_count,
+        "kelompok_d_skipped_no_pdf": d_skipped_no_pdf,
         "kelompok_a_ids": [it.document_id for it in kelompok_a],
         "kelompok_b_ids": [it.document_id for it in kelompok_b],
+        "kelompok_d_ids": [it.document_id for it in kelompok_d],
         "kelompok_c": kelompok_c,
         "a_deactivated": a_deactivated,
         "b_requeued": b_requeued,
+        "d_requeued": d_requeued,
     }
 
 
@@ -255,6 +356,12 @@ def main() -> int:
         default=False,
         help="Kembalikan dokumen ber-PDF tanpa pasal ke antrean ekstraksi (Kelompok B)",
     )
+    parser.add_argument(
+        "--antrekan-ulang-macet",
+        action="store_true",
+        default=False,
+        help="Kembalikan dokumen ber-PDF macet di 'diproses' ke antrean ekstraksi (Kelompok D)",
+    )
 
     args = parser.parse_args()
 
@@ -264,6 +371,7 @@ def main() -> int:
             db=db,
             nonaktifkan_tanpa_pdf=args.nonaktifkan_tanpa_pdf,
             antrekan_ulang_tanpa_pasal=args.antrekan_ulang_tanpa_pasal,
+            antrekan_ulang_macet=args.antrekan_ulang_macet,
         )
         return 0
     except Exception as exc:
@@ -275,4 +383,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

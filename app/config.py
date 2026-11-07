@@ -36,9 +36,10 @@ class Settings(BaseSettings):
     login_kunci_menit: int = 15
     admin_butuh_kunci_saat_auth_mati: bool = True
 
-    # Storage & Upload
+    # Storage & Upload (Langkah 38: pisahkan max_upload_mb untuk manual vs max_fetch_mb untuk scan/tarik)
     storage_path: str = "./storage"
-    max_upload_mb: int = 100
+    max_upload_mb: int = 25
+    max_fetch_mb: int = 100
 
     # Naming & Category Placement (Langkah 3)
     naming_template: str = "{nomor} {judul} {tahun}"
@@ -136,6 +137,10 @@ class Settings(BaseSettings):
     @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_mb * 1024 * 1024
+
+    @property
+    def max_fetch_bytes(self) -> int:
+        return self.max_fetch_mb * 1024 * 1024
 
     def validate_production_config(self) -> None:
         """Validasi konfigurasi produksi yang ketat saat APP_ENV=production."""

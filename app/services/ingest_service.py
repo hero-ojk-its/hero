@@ -62,6 +62,7 @@ class DocumentMetadataInput:
     release_date: Optional[date] = None
     bidang: Optional[str] = None
     status_keberlakuan: Optional[StatusKeberlakuan] = None
+    status_source: Optional[str] = None
 
 
 @dataclass
@@ -323,6 +324,7 @@ class IngestService:
                 doc_bidang = options.metadata.bidang.strip()[:150]
 
             doc_status_keberlakuan = StatusKeberlakuan.tidak_diketahui
+            doc_status_source = None
             if options.metadata and options.metadata.status_keberlakuan:
                 raw_sk = options.metadata.status_keberlakuan
                 if isinstance(raw_sk, StatusKeberlakuan):
@@ -332,6 +334,11 @@ class IngestService:
                         doc_status_keberlakuan = StatusKeberlakuan(raw_sk.strip().lower())
                     except ValueError:
                         doc_status_keberlakuan = StatusKeberlakuan.tidak_diketahui
+
+            if options.metadata and getattr(options.metadata, "status_source", None):
+                doc_status_source = options.metadata.status_source
+            elif doc_status_keberlakuan != StatusKeberlakuan.tidak_diketahui:
+                doc_status_source = "sumber"
 
             # 5. Hitung tahun regulasi dan nama baku awal berdasarkan format pilihan pengguna
             doc_regulation_year = extract_regulation_year(
@@ -429,6 +436,7 @@ class IngestService:
                 access_classification=final_access_classification,
                 document_role=options.document_role,
                 status_keberlakuan=doc_status_keberlakuan,
+                status_source=doc_status_source,
                 processing_status=StatusPemrosesan.diterima,
                 category_id=options.category_id,
                 kategori_manual=options.category_id is not None,
