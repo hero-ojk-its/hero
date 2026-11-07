@@ -73,10 +73,12 @@ export interface MlHealthResponse {
 export interface MlAnalisaPoint {
   id: string | number;
   kategori: string;
+  topik?: string;
   pasal?: string;
   ref?: string;
   halaman: number | null;
   teks: string;
+  poin?: string;
   prioritas?: number;
   urgensi?: string;
   subjek?: string | null;
@@ -245,6 +247,15 @@ export interface DocumentStatusResponse {
   text_url: string;
   full_text_length: number;
   articles: DocumentArticleSummary[];
+  is_active?: boolean;
+  legal_references?: Array<{
+    id: number;
+    cited_text: string;
+    reference_type: string;
+    referenced_document_id?: number | null;
+    referenced_document_status?: string | null;
+    created_at?: string;
+  }>;
   job_id?: number | null;
   created_at?: string;
   updated_at?: string;
@@ -562,6 +573,39 @@ export async function getKnowledgeBaseDocuments(
 // 8. Ekspor Hasil Analisa Regulasi (GET /api/v1/documents/{document_id}/analisa/ekspor)
 // ============================================================================
 
+// ============================================================================
+// 8b. Perbandingan Analisis Deterministik vs AI (GET /api/v1/documents/{document_id}/analisa/banding)
+// ============================================================================
+
+export interface ModeAnalysisDetail {
+  dibuat?: string | null;
+  basi?: boolean;
+  ml_version?: string | null;
+  hasil?: MlAnalisaResponse | null;
+}
+
+export interface DocumentAnalysisComparisonResponse {
+  document_id: number;
+  deterministik?: ModeAnalysisDetail | null;
+  ai?: ModeAnalysisDetail | null;
+  catatan: string;
+}
+
+/**
+ * Mengambil data perbandingan analisa deterministik vs AI berdampingan (US-05 #49).
+ * Endpoint: GET /api/v1/documents/{document_id}/analisa/banding
+ */
+export async function getDocumentAnalysisComparison(
+  documentId: number,
+  signal?: AbortSignal
+): Promise<DocumentAnalysisComparisonResponse> {
+  return apiFetch<DocumentAnalysisComparisonResponse>(
+    `/api/v1/documents/${documentId}/analisa/banding`,
+    { signal }
+  );
+}
+
+
 export type AnalysisExportFormat = 'docx' | 'csv' | 'json';
 
 export interface ExportDocumentAnalysisParams {
@@ -841,7 +885,7 @@ export interface StoredAnalisaWorkspace {
   documentId: number;
   mode: 'deterministik' | 'ai';
   selectedPasal?: string;
-  activeTab?: 'ringkasan' | 'poin_utama' | 'dasar_hukum' | 'info_tambahan' | 'harmonisasi';
+  activeTab?: 'ringkasan' | 'poin_utama' | 'dasar_hukum' | 'info_tambahan' | 'harmonisasi' | 'perbandingan';
   updatedAt?: number;
 }
 

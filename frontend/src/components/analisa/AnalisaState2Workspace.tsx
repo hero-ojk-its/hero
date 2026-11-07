@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   FileText,
   ExternalLink,
@@ -24,7 +25,12 @@ import {
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
-  Search
+  Search,
+  GitCompare,
+  Columns,
+  Cpu,
+  Lock,
+  Sparkles
 } from 'lucide-react';
 import {
   getMlAnalisa,
@@ -37,8 +43,15 @@ import {
   parsePasalRef,
   normalisasiKerangka,
   getStoredAnalisaWorkspace,
-  saveStoredAnalisaWorkspace
+  saveStoredAnalisaWorkspace,
+  getDocumentAnalysisComparison,
+  getKnowledgeBaseDocuments,
+  type DocumentAnalysisComparisonResponse
 } from '../../lib/analisaApi';
+import {
+  labelStatusKeberlakuan,
+  kelasBadgeStatusKeberlakuan
+} from '../../lib/labelStatus';
 import { ApiError, API_BASE_URL, apiFetchBlob } from '../../lib/api';
 import { PanelErrorBoundary } from '../PanelErrorBoundary';
 import { DraftLabel } from '../DraftLabel';
@@ -84,13 +97,25 @@ export default function AnalisaState2Workspace({
   mode,
   onBackToState1
 }: AnalisaState2WorkspaceProps) {
+  const navigate = useNavigate();
+
   // State Pemuatan & Data API
   const [data, setData] = useState<MlAnalisaResponse | null>(null);
+  const [docStatus, setDocStatus] = useState<DocumentStatusResponse | null>(null);
   const [articles, setArticles] = useState<DocumentArticleSummary[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // State Perbandingan Analisis (US-05 #49 Deterministik vs AI)
+  const [isComparisonOpen, setIsComparisonOpen] = useState<boolean>(false);
+  const [comparisonData, setComparisonData] = useState<DocumentAnalysisComparisonResponse | null>(null);
+  const [comparisonLoading, setComparisonLoading] = useState<boolean>(false);
+  const [comparisonError, setComparisonError] = useState<string | null>(null);
+
+  // Mapping Ketersediaan Rujukan Dasar Hukum di KB
+  const [kbReferenceMap, setKbReferenceMap] = useState<Record<string, { available: boolean; documentId?: number; title?: string; isMultiple?: boolean }>>({});
 
   // State Ekspor Analisis (US-40: DOCX, CSV, JSON)
   const [isExportMenuOpen, setIsExportMenuOpen] = useState<boolean>(false);
@@ -136,7 +161,7 @@ export default function AnalisaState2Workspace({
     ? storedWs.selectedPasal
     : 'Pasal 1';
   const initialTab = (storedWs?.documentId === documentId && storedWs.activeTab)
-    ? (storedWs.activeTab as 'ringkasan' | 'poin_utama' | 'dasar_hukum' | 'info_tambahan' | 'harmonisasi')
+    ? (storedWs.activeTab as 'ringkasan' | 'poin_utama' | 'dasar_hukum' | 'perbandingan' | 'info_tambahan' | 'harmonisasi')
     : 'ringkasan';
 
   // State Workspace Panel 1: Struktur Dokumen
@@ -173,6 +198,13 @@ export default function AnalisaState2Workspace({
   const totalPages = typeof data?.metrik?.jumlah_halaman === 'number' && data.metrik.jumlah_halaman > 0
     ? data.metrik.jumlah_halaman
     : maxPageFromData;
+
+  // Konteks Keberlakuan Regulasi & Jenis Dokumen Aktual (Temuan QA 1 & 4)
+  const effectiveStatusKeberlakuan = docStatus?.status_keberlakuan || data?.identitas?.status || null;
+  const docTypeStr = (docStatus?.regulation_type || data?.identitas?.jenis || data?.identitas?.doc_type || '').toUpperCase();
+  const isSeojk = docTypeStr.includes('SEOJK') || docTypeStr.includes('SURAT EDARAN');
+  const isDraft = docStatus?.document_role === 'draft_kajian';
+
   const naskahContainerRef = useRef<HTMLDivElement>(null);
   const [highlightedPasalId, setHighlightedPasalId] = useState<string | null>(null);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -196,7 +228,7 @@ export default function AnalisaState2Workspace({
   }, []);
 
   // State Workspace Panel 3: Hasil Analisis Tabs (dipulihkan dari storage jika ada)
-  const [activeTab, setActiveTab] = useState<'ringkasan' | 'poin_utama' | 'dasar_hukum' | 'info_tambahan' | 'harmonisasi'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'ringkasan' | 'poin_utama' | 'dasar_hukum' | 'perbandingan' | 'info_tambahan' | 'harmonisasi'>(initialTab);
 
   // State Collapse Manual Panel Kiri (Struktur) & Kanan (Hasil Analisis)
   const [isLeftCollapsed, setIsLeftCollapsed] = useState<boolean>(() => {
@@ -430,6 +462,7 @@ export default function AnalisaState2Workspace({
       let statusDoc: DocumentStatusResponse | null = null;
       if (statusRes.status === 'fulfilled') {
         statusDoc = statusRes.value;
+        setDocStatus(statusRes.value);
         if (Array.isArray(statusRes.value.articles)) {
           setArticles(statusRes.value.articles);
         }
@@ -779,7 +812,7 @@ export default function AnalisaState2Workspace({
           if (!hasKerangka && !hasArticles) {
             showNavFeedback(
               'warning',
-              `Struktur pasal naskah belum tersedia untuk draf ini. Silakan buka tab "PDF Asli"${targetPage ? ` (Pasal berada di sekitar Hal. ${targetPage})` : ''}.`
+              `Struktur pasal naskah belum tersedia untuk ${isDraft ? 'draf ini' : isSeojk ? 'dokumen SEOJK ini' : 'dokumen ini'}. Silakan buka tab "PDF Asli"${targetPage ? ` (Pasal berada di sekitar Hal. ${targetPage})` : ''}.`
             );
           } else {
             showNavFeedback(
@@ -798,7 +831,7 @@ export default function AnalisaState2Workspace({
         highlightTimerRef.current = null;
       }, 3500);
     }
-  }, [articles, data, showNavFeedback, totalPages, viewMode]);
+  }, [articles, data, isDraft, isSeojk, showNavFeedback, totalPages, viewMode]);
 
   // Pulihkan navigasi pasal saat pertama kali data berhasil dimuat (Pekerjaan B)
   const hasRestoredPasalRef = useRef<boolean>(false);
@@ -813,6 +846,116 @@ export default function AnalisaState2Workspace({
       }
     }
   }, [loading, data, selectedPasal, handleJumpToPasal]);
+
+  // Handler Memuat Perbandingan Deterministik vs AI (US-05 #49)
+  const loadComparison = useCallback(async () => {
+    setComparisonLoading(true);
+    setComparisonError(null);
+    try {
+      const res = await getDocumentAnalysisComparison(documentId);
+      setComparisonData(res);
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        if (err.status === 403) {
+          setComparisonError('Akses ditolak: Dokumen non-publik memerlukan autentikasi aktif.');
+        } else if (err.status === 404) {
+          setComparisonError('Dokumen tidak ditemukan atau data perbandingan analisis belum tersedia.');
+        } else {
+          setComparisonError(err.message || 'Gagal memuat perbandingan analisis regulasi.');
+        }
+      } else if (err instanceof Error) {
+        setComparisonError(err.message);
+      } else {
+        setComparisonError('Gagal memuat perbandingan analisis.');
+      }
+    } finally {
+      setComparisonLoading(false);
+    }
+  }, [documentId]);
+
+  // Efek Pemetaan Rujukan Dasar Hukum ke Dokumen Knowledge Base
+  useEffect(() => {
+    if (!data?.dasar_hukum || data.dasar_hukum.length === 0) return;
+
+    const initialMap: Record<string, { available: boolean; documentId?: number; title?: string; isMultiple?: boolean }> = {};
+    const unmapped: string[] = [];
+    const legalRefs = docStatus?.legal_references || [];
+
+    for (const dh of data.dasar_hukum) {
+      const trimmedDh = dh.trim();
+      const matchedRef = legalRefs.find(lr => {
+        if (!lr.cited_text) return false;
+        const ct = lr.cited_text.toLowerCase();
+        const dt = trimmedDh.toLowerCase();
+        return ct.includes(dt) || dt.includes(ct);
+      });
+
+      if (matchedRef && matchedRef.referenced_document_id) {
+        initialMap[trimmedDh] = {
+          available: true,
+          documentId: matchedRef.referenced_document_id,
+          title: matchedRef.cited_text
+        };
+      } else {
+        unmapped.push(trimmedDh);
+      }
+    }
+
+    setKbReferenceMap(prev => ({ ...prev, ...initialMap }));
+
+    if (unmapped.length > 0) {
+      const controller = new AbortController();
+      (async () => {
+        const updates: Record<string, { available: boolean; documentId?: number; title?: string; isMultiple?: boolean }> = {};
+        for (const dh of unmapped) {
+          if (controller.signal.aborted) break;
+          try {
+            // Ekstrak pola jenis, nomor, tahun (misal: "UU 4/2023", "UU No. 4 Tahun 2023", "Undang-Undang Nomor 4 Tahun 2023")
+            const uuMatch = dh.match(/(?:Undang[- ]Undang|UU)\s*(?:Nomor|No\.?)?\s*([0-9]+)\s*(?:Tahun|THN|\/)?\s*([0-9]{4})/i);
+            const query = uuMatch ? `UU ${uuMatch[1]}/${uuMatch[2]}` : dh;
+            const res = await getKnowledgeBaseDocuments({ q: query, limit: 5 }, controller.signal);
+            const items = res?.items || [];
+
+            if (uuMatch) {
+              const num = uuMatch[1].replace(/^0+/, '');
+              const year = parseInt(uuMatch[2], 10);
+              const exactMatches = items.filter(it => {
+                const itNum = (it.regulation_number || '').replace(/^0+/, '');
+                const itYear = it.regulation_year || (it.release_date ? parseInt(it.release_date.slice(0, 4), 10) : null);
+                return itNum === num && (!year || itYear === year);
+              });
+
+              if (exactMatches.length === 1) {
+                updates[dh] = { available: true, documentId: exactMatches[0].id, title: exactMatches[0].title };
+              } else if (exactMatches.length > 1) {
+                updates[dh] = { available: true, isMultiple: true };
+              } else if (items.length === 1) {
+                updates[dh] = { available: true, documentId: items[0].id, title: items[0].title };
+              } else if (items.length > 1) {
+                updates[dh] = { available: true, isMultiple: true };
+              } else {
+                updates[dh] = { available: false };
+              }
+            } else {
+              if (items.length === 1) {
+                updates[dh] = { available: true, documentId: items[0].id, title: items[0].title };
+              } else if (items.length > 1) {
+                updates[dh] = { available: true, isMultiple: true };
+              } else {
+                updates[dh] = { available: false };
+              }
+            }
+          } catch {
+            updates[dh] = { available: false };
+          }
+        }
+        if (!controller.signal.aborted) {
+          setKbReferenceMap(prev => ({ ...prev, ...updates }));
+        }
+      })();
+      return () => controller.abort();
+    }
+  }, [data?.dasar_hukum, docStatus?.legal_references]);
 
   // Tombol "Lanjut ke Harmonisasi": buka tab Harmonisasi di panel kanan
   const handleGoToHarmonisasi = () => {
@@ -964,6 +1107,14 @@ export default function AnalisaState2Workspace({
       );
     }
     if (errorStatus && !data) {
+      if (errorStatus === 403) {
+        return (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold shrink-0">
+            <Lock size={13} className="text-amber-700" />
+            <span>Akses Ditolak</span>
+          </div>
+        );
+      }
       return (
         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 text-red-700 border border-red-200 text-xs font-bold shrink-0">
           <AlertCircle size={13} className="text-red-600" />
@@ -1047,6 +1198,67 @@ export default function AnalisaState2Workspace({
     return ['Semua', ...cats];
   }, [data?.poin_utama]);
 
+  // Hitung jumlah aktual poin per kategori untuk filter poin utama (Temuan QA 6B)
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      Semua: data?.poin_utama ? data.poin_utama.length : 0,
+    };
+    if (data?.poin_utama) {
+      for (const p of data.poin_utama) {
+        if (p.kategori) {
+          const cat = p.kategori.trim();
+          counts[cat] = (counts[cat] || 0) + 1;
+        }
+      }
+    }
+    return counts;
+  }, [data?.poin_utama]);
+
+  // Helper Penyorotan Ayat Tertarget pada Teks Pasal (Temuan QA 3)
+  const renderArticleContentWithAyat = (text: string | null | undefined, targetAyat: string | null) => {
+    if (!text) return null;
+    if (!targetAyat) return text;
+
+    // Pola ayat di perundang-undangan RI: diawali tanda kurung "(3)" pada awal baris/paragraf
+    const ayatRegex = new RegExp(`(^|\\n)\\s*\\(?(${targetAyat})\\)?\\s+([^\\n]+)`, 'i');
+    const match = ayatRegex.exec(text);
+
+    if (!match) {
+      // Fallback: cari tanda kurung ayat sederhana "(3)"
+      const simpleRegex = new RegExp(`(\\(${targetAyat}\\))`, 'g');
+      if (!simpleRegex.test(text)) return text;
+      const parts = text.split(simpleRegex);
+      return (
+        <>
+          {parts.map((part, i) =>
+            part === `(${targetAyat})` ? (
+              <mark key={i} className="bg-amber-100 text-amber-900 font-bold px-1.5 py-0.5 rounded border border-amber-300">
+                {part}
+              </mark>
+            ) : (
+              part
+            )
+          )}
+        </>
+      );
+    }
+
+    const before = text.slice(0, match.index);
+    const matchedLine = match[0];
+    const after = text.slice(match.index + matchedLine.length);
+
+    return (
+      <>
+        {before}
+        <div className="bg-amber-50 border-l-4 border-amber-500 pl-3 py-1.5 my-2 rounded-r shadow-2xs">
+          <span className="font-bold text-amber-900">({targetAyat}) </span>
+          <span className="text-gray-900 font-medium">{match[3]}</span>
+        </div>
+        {after}
+      </>
+    );
+  };
+
   return (
     <div className="w-full max-w-[1600px] mx-auto space-y-4 pb-16 font-sans">
       {/* 1. Header Workspace Breadcrumb */}
@@ -1079,8 +1291,8 @@ export default function AnalisaState2Workspace({
           </p>
         </div>
 
-        {/* Tombol Aksi Header: Mulai Analisis Baru & Analisis Ulang (Pekerjaan B) */}
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        {/* Tombol Aksi Header: Mulai Analisis Baru, Perbandingan Analisis, & Analisis Ulang (Pekerjaan B & QA 5) */}
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
           <button
             type="button"
             onClick={onBackToState1}
@@ -1088,6 +1300,20 @@ export default function AnalisaState2Workspace({
             title="Keluar dari ruang kerja analisis ini dan mulai analisis dokumen baru"
           >
             <span>Mulai Analisis Baru</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIsComparisonOpen(true);
+              if (!comparisonData && !comparisonLoading) {
+                void loadComparison();
+              }
+            }}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold shadow-2xs transition cursor-pointer"
+            title="Buka perbandingan analisis Deterministik vs AI berdampingan (US-05 #49)"
+          >
+            <GitCompare size={12} />
+            <span>Perbandingan Analisis</span>
           </button>
           <button
             type="button"
@@ -1109,13 +1335,34 @@ export default function AnalisaState2Workspace({
             <FileText size={20} />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-gray-900 truncate">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-sm font-bold text-gray-900 truncate max-w-[450px]">
                 {displayJudulRegulasi !== '-' ? displayJudulRegulasi : (loading ? 'Memuat identitas draft...' : `Draft Peraturan #${documentId}`)}
               </h2>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold border border-emerald-200/60 shrink-0">
-                Dokumen Aktif
-              </span>
+              {/* Badge Status Keberlakuan Regulasi (Temuan QA 1) */}
+              {effectiveStatusKeberlakuan && (
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 ${kelasBadgeStatusKeberlakuan(effectiveStatusKeberlakuan)}`}>
+                  {labelStatusKeberlakuan(effectiveStatusKeberlakuan)}
+                </span>
+              )}
+
+              {/* Badge Status Terdaftar di Knowledge Base (Temuan QA 1) */}
+              {docStatus?.is_active !== undefined ? (
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 ${
+                    docStatus.is_active
+                      ? 'bg-slate-100 text-slate-700 border-slate-200'
+                      : 'bg-gray-100 text-gray-500 border-gray-200'
+                  }`}
+                  title={docStatus.is_active ? 'Dokumen terdaftar aktif di Knowledge Base' : 'Dokumen dinonaktifkan di Knowledge Base'}
+                >
+                  {docStatus.is_active ? 'Aktif di KB' : 'Tidak Aktif di KB'}
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-semibold border border-slate-200 shrink-0">
+                  Aktif di KB
+                </span>
+              )}
             </div>
             <p className="text-xs text-gray-500 mt-0.5 truncate">
               {displayTanggalTerbit} • {data?.identitas?.jenis || '-'} • {displayJumlahBab} Bab • {displayJumlahPasal} Pasal
@@ -1284,19 +1531,21 @@ export default function AnalisaState2Workspace({
         </div>
       ) : null}
 
-      {/* ERROR STATE: 404 / 403 / 503 / 504 / 422 */}
+      {/* ERROR STATE: 404 / 403 / 503 / 504 / 422 (Temuan QA 6A) */}
       {!data && !loading && (
         <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-xs">
           <div className="max-w-md mx-auto text-center space-y-4">
-            <div className="w-12 h-12 rounded-full bg-red-100 text-red-700 flex items-center justify-center mx-auto">
-              <AlertCircle size={24} />
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto ${
+              errorStatus === 403 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+            }`}>
+              {errorStatus === 403 ? <Lock size={24} /> : <AlertCircle size={24} />}
             </div>
             <div>
               <h3 className="text-base font-bold text-gray-900">
-                {errorStatus === 404 
-                  ? (errorMessage?.includes('Batas waktu') ? 'Batas Waktu Sinkronisasi Tercapai' : 'Dokumen Belum Siap Dianalisis')
-                  : errorStatus === 403
+                {errorStatus === 403
                   ? 'Akses Ditolak'
+                  : errorStatus === 404
+                  ? (errorMessage?.includes('Batas waktu') ? 'Batas Waktu Sinkronisasi Tercapai' : 'Dokumen Belum Siap Dianalisis')
                   : errorStatus === 503
                   ? 'Layanan Analisis Belum Siap'
                   : errorStatus === 504
@@ -1305,23 +1554,32 @@ export default function AnalisaState2Workspace({
                   ? 'Validasi Parameter Gagal'
                   : 'Gagal Memuat Analisis Regulasi'}
               </h3>
-              <p className="text-xs text-gray-600 mt-1 leading-relaxed">
-                {errorMessage || 'Terjadi kendala teknis saat menghubungi peladen backend.'}
+              <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                {errorStatus === 403
+                  ? 'Anda tidak memiliki izin untuk mengakses dokumen ini. Dokumen non-publik memerlukan sesi login aktif.'
+                  : (errorMessage || 'Terjadi kendala teknis saat menghubungi peladen backend.')}
               </p>
             </div>
-            <div className="flex items-center justify-center gap-2.5">
-              <button
-                type="button"
-                onClick={() => loadAnalysis(false, false)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-700 hover:bg-red-800 text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer"
-              >
-                <RefreshCw size={13} />
-                <span>Coba Lagi</span>
-              </button>
+            <div className="flex items-center justify-center gap-2.5 pt-1">
+              {/* Sembunyikan tombol "Coba Lagi" untuk 403 Akses Ditolak (Temuan QA 6A) */}
+              {errorStatus !== 403 && (
+                <button
+                  type="button"
+                  onClick={() => loadAnalysis(false, false)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-700 hover:bg-red-800 text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer"
+                >
+                  <RefreshCw size={13} />
+                  <span>Coba Lagi</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onBackToState1}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer"
+                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer ${
+                  errorStatus === 403
+                    ? 'bg-red-700 hover:bg-red-800 text-white'
+                    : 'bg-white border border-gray-300 hover:bg-gray-50 text-gray-700'
+                }`}
               >
                 <span>Mulai Analisis Baru</span>
               </button>
@@ -1448,9 +1706,21 @@ export default function AnalisaState2Workspace({
               {/* Tree View Bab & Pasal */}
               <div className="flex-1 overflow-y-auto min-h-0 p-2.5 space-y-1.5 text-xs text-gray-700">
               {filteredKerangka.length === 0 && (
-                <div className="py-8 text-center text-xs text-gray-400">
-                  Tidak ada bab atau pasal yang cocok dengan &quot;{structureSearch}&quot;.
-                </div>
+                structureSearch.trim() !== '' ? (
+                  <div className="py-8 text-center text-xs text-gray-400">
+                    Tidak ada bab atau pasal yang cocok dengan &quot;{structureSearch}&quot;.
+                  </div>
+                ) : isSeojk ? (
+                  <div className="py-8 px-3 text-center text-xs text-gray-500 space-y-1.5">
+                    <p className="font-semibold text-gray-700">Dokumen SEOJK ini tidak memiliki struktur BAB/Pasal yang dapat ditampilkan.</p>
+                    <p className="text-[11px] text-gray-400">Silakan gunakan tab PDF Asli untuk membaca naskah lengkap.</p>
+                  </div>
+                ) : (
+                  <div className="py-8 px-3 text-center text-xs text-gray-500 space-y-1.5">
+                    <p className="font-semibold text-gray-700">Dokumen {isDraft ? 'draf' : 'regulasi'} ini tidak memiliki struktur BAB/Pasal yang dapat ditampilkan.</p>
+                    <p className="text-[11px] text-gray-400">Silakan gunakan tab PDF Asli untuk membaca naskah lengkap.</p>
+                  </div>
+                )
               )}
 
               {filteredKerangka.map((item, babIdx) => {
@@ -1742,6 +2012,9 @@ export default function AnalisaState2Workspace({
                           </div>
                           {(bab.pasal || []).map((pasalStr) => {
                             const parsed = parsePasalRef(pasalStr);
+                            const selectedParsed = parsePasalRef(selectedPasal);
+                            const isCurrentPasal = Boolean(parsed.pasalNum && selectedParsed.pasalNum === parsed.pasalNum);
+                            const targetAyat = isCurrentPasal ? selectedParsed.ayatNum : null;
                             const targetId = parsed.canonicalId || undefined;
                             const points = (data.poin_utama || []).filter(p => {
                               const pRef = p.ref || p.pasal;
@@ -1786,9 +2059,9 @@ export default function AnalisaState2Workspace({
                                 </div>
                                 {fullArticleText ? (
                                   <div className="space-y-3 text-left">
-                                    <p className="text-gray-800 leading-relaxed text-[0.92em] whitespace-pre-line font-serif">
-                                      {fullArticleText}
-                                    </p>
+                                    <div className="text-gray-800 leading-relaxed text-[0.92em] whitespace-pre-line font-serif">
+                                      {renderArticleContentWithAyat(fullArticleText, targetAyat)}
+                                    </div>
                                     {isTeksTerpotong(fullArticleText) && (
                                       <p className="text-[0.75em] italic text-amber-700">
                                         Teks dipotong, buka tab PDF Asli untuk teks lengkap.
@@ -1845,6 +2118,9 @@ export default function AnalisaState2Workspace({
                       </div>
                       {articles.map((art) => {
                         const parsed = parsePasalRef(art.article_number);
+                        const selectedParsed = parsePasalRef(selectedPasal);
+                        const isCurrentPasal = Boolean(parsed.pasalNum && selectedParsed.pasalNum === parsed.pasalNum);
+                        const targetAyat = isCurrentPasal ? selectedParsed.ayatNum : null;
                         const targetId = parsed.canonicalId || undefined;
                         const isHighlighted = targetId ? highlightedPasalId === targetId : false;
                         const points = (data.poin_utama || []).filter(p => {
@@ -1879,9 +2155,9 @@ export default function AnalisaState2Workspace({
                               )}
                             </div>
                             <div className="space-y-3 text-left">
-                              <p className="text-gray-800 leading-relaxed text-[0.92em] whitespace-pre-line font-serif">
-                                {art.content_text}
-                              </p>
+                              <div className="text-gray-800 leading-relaxed text-[0.92em] whitespace-pre-line font-serif">
+                                {renderArticleContentWithAyat(art.content_text, targetAyat)}
+                              </div>
                               {isTeksTerpotong(art.content_text) && (
                                 <p className="text-[0.75em] italic text-amber-700">
                                   Teks dipotong, buka tab PDF Asli untuk teks lengkap.
@@ -1909,8 +2185,15 @@ export default function AnalisaState2Workspace({
                       })}
                     </div>
                   ) : (
-                    <div className="text-center py-8 text-gray-500 text-xs">
-                      Struktur bab dan pasal untuk draf ini belum tersedia. Silakan gunakan tab PDF Asli untuk membaca naskah lengkap.
+                    <div className="text-center py-8 text-gray-500 text-xs space-y-1.5">
+                      <p className="font-semibold text-gray-700">
+                        {isSeojk
+                          ? 'Dokumen SEOJK ini tidak memiliki struktur BAB/Pasal yang dapat ditampilkan.'
+                          : isDraft
+                          ? 'Struktur bab dan pasal untuk draf ini belum tersedia.'
+                          : 'Struktur bab dan pasal untuk dokumen ini belum tersedia.'}
+                      </p>
+                      <p className="text-[11px] text-gray-400">Silakan gunakan tab PDF Asli untuk membaca naskah lengkap.</p>
                     </div>
                   )}
 
@@ -1976,8 +2259,8 @@ export default function AnalisaState2Workspace({
                 </div>
               </div>
 
-              {/* Tab Bar: 5 Tab Rapi Tanpa Horizontal Scrollbar */}
-              <div className="grid grid-cols-5 border-b border-gray-200 bg-gray-50/70 text-xs shrink-0 select-none">
+              {/* Tab Bar: 6 Tab Rapi (Ringkasan, Poin Utama, Dasar Hukum, Bandingkan, Info Tambahan, Harmonisasi) */}
+              <div className="grid grid-cols-6 border-b border-gray-200 bg-gray-50/70 text-xs shrink-0 select-none">
                 <button
                   type="button"
                   onClick={() => setActiveTab('ringkasan')}
@@ -2013,6 +2296,23 @@ export default function AnalisaState2Workspace({
                   title="Dasar Hukum & Konsiderans Mengingat"
                 >
                   Dasar Hukum
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('perbandingan');
+                    if (!comparisonData && !comparisonLoading) {
+                      void loadComparison();
+                    }
+                  }}
+                  className={`py-2.5 px-1 text-center font-semibold transition border-b-2 cursor-pointer truncate text-[11px] ${
+                    activeTab === 'perbandingan'
+                      ? 'border-red-700 text-red-700 bg-white font-bold'
+                      : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-100/50'
+                  }`}
+                  title="Perbandingan Analisis Deterministik vs AI"
+                >
+                  Bandingkan
                 </button>
                 <button
                   type="button"
@@ -2192,22 +2492,30 @@ export default function AnalisaState2Workspace({
                     </span>
                   </div>
 
-                  {/* Filter Kategori */}
-                  <div className="flex items-center gap-1 overflow-x-auto pb-1 text-[11px]">
-                    {availableCategories.map(kat => (
-                      <button
-                        key={kat}
-                        type="button"
-                        onClick={() => setKategoriFilter(kat)}
-                        className={`px-2 py-1 rounded-md font-semibold shrink-0 cursor-pointer transition ${
-                          kategoriFilter === kat
-                            ? 'bg-red-700 text-white'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
-                      >
-                        {kat}
-                      </button>
-                    ))}
+                  {/* Filter Kategori (Temuan QA 6B) */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px]">
+                    {availableCategories.map(kat => {
+                      const count = categoryCounts[kat] ?? 0;
+                      return (
+                        <button
+                          key={kat}
+                          type="button"
+                          onClick={() => setKategoriFilter(kat)}
+                          className={`px-2.5 py-1 rounded-md font-semibold shrink-0 cursor-pointer transition flex items-center gap-1.5 ${
+                            kategoriFilter === kat
+                              ? 'bg-red-700 text-white shadow-2xs'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          <span>{kat}</span>
+                          <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                            kategoriFilter === kat ? 'bg-red-800 text-red-100' : 'bg-gray-200 text-gray-700'
+                          }`}>
+                            ({count})
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {/* List Poin Utama */}
@@ -2272,18 +2580,248 @@ export default function AnalisaState2Workspace({
                 </div>
               )}
 
-              {/* TAB 3: DASAR HUKUM */}
+              {/* TAB 3: DASAR HUKUM (Temuan QA 2) */}
               {activeTab === 'dasar_hukum' && (
                 <div className="space-y-2.5">
-                  <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider mb-2">
-                    DASAR HUKUM TERKAIT
-                  </h4>
-                  {(data.dasar_hukum || []).map((dh, idx) => (
-                    <div key={idx} className="p-2.5 rounded-lg border border-gray-100 bg-gray-50 flex items-start gap-2 text-xs text-gray-700">
-                      <Scale size={14} className="text-red-700 shrink-0 mt-0.5" />
-                      <span>{dh}</span>
+                  <div className="flex items-center justify-between mb-1">
+                    <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                      DASAR HUKUM TERKAIT
+                    </h4>
+                    <span className="text-[10px] text-gray-500 font-mono">
+                      {(data.dasar_hukum || []).length} rujukan
+                    </span>
+                  </div>
+                  {(!data.dasar_hukum || data.dasar_hukum.length === 0) ? (
+                    <div className="p-4 rounded-lg bg-gray-50 text-center text-xs text-gray-500">
+                      Tidak ada rujukan dasar hukum yang teridentifikasi untuk dokumen ini.
                     </div>
-                  ))}
+                  ) : (
+                    (data.dasar_hukum || []).map((dh, idx) => {
+                      const trimmedDh = dh.trim();
+                      const kbInfo = kbReferenceMap[trimmedDh];
+                      const isAvailable = kbInfo?.available === true;
+                      const targetDocId = kbInfo?.documentId;
+                      const isMultiple = kbInfo?.isMultiple === true;
+
+                      if (isAvailable && targetDocId) {
+                        return (
+                          <div
+                            key={idx}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => navigate(`/knowledge/detail/${targetDocId}`)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                navigate(`/knowledge/detail/${targetDocId}`);
+                              }
+                            }}
+                            className="p-3 rounded-lg border border-emerald-200/80 bg-white hover:border-red-300 hover:bg-red-50/20 hover:shadow-2xs transition cursor-pointer flex items-start justify-between gap-3 group"
+                            title={`Buka detail dokumen #${targetDocId} di Knowledge Base`}
+                          >
+                            <div className="flex items-start gap-2.5 text-xs text-gray-800 min-w-0">
+                              <Scale size={14} className="text-red-700 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
+                              <div className="space-y-1 min-w-0">
+                                <span className="font-semibold text-gray-900 group-hover:text-red-700 transition-colors block">
+                                  {dh}
+                                </span>
+                                {kbInfo.title && kbInfo.title !== dh && (
+                                  <p className="text-[11px] text-gray-500 line-clamp-1">
+                                    {kbInfo.title}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                                <Check size={10} className="stroke-[2.5]" />
+                                Tersedia di KB
+                              </span>
+                              <ExternalLink size={12} className="text-gray-400 group-hover:text-red-700 transition-colors" />
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      if (isAvailable && isMultiple) {
+                        return (
+                          <div
+                            key={idx}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => navigate(`/knowledge?q=${encodeURIComponent(trimmedDh)}`)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                navigate(`/knowledge?q=${encodeURIComponent(trimmedDh)}`);
+                              }
+                            }}
+                            className="p-3 rounded-lg border border-emerald-200/80 bg-white hover:border-red-300 hover:bg-red-50/20 hover:shadow-2xs transition cursor-pointer flex items-start justify-between gap-3 group"
+                            title="Buka pencarian di Knowledge Base (terdapat beberapa kemungkinan dokumen)"
+                          >
+                            <div className="flex items-start gap-2.5 text-xs text-gray-800 min-w-0">
+                              <Scale size={14} className="text-red-700 shrink-0 mt-0.5" />
+                              <span className="font-semibold text-gray-900 group-hover:text-red-700 transition-colors block">
+                                {dh}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                                <Check size={10} className="stroke-[2.5]" />
+                                Tersedia di KB
+                              </span>
+                              <ExternalLink size={12} className="text-gray-400 group-hover:text-red-700 transition-colors" />
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          key={idx}
+                          className="p-3 rounded-lg border border-gray-100 bg-gray-50/70 flex items-start justify-between gap-3 text-xs text-gray-600 cursor-default opacity-90"
+                        >
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <Scale size={14} className="text-gray-400 shrink-0 mt-0.5" />
+                            <span className="leading-snug">{dh}</span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-500 border border-gray-200 shrink-0">
+                            Belum tersedia di KB
+                          </span>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+
+              {/* TAB PERBANDINGAN: DETERMINISTIK VS AI (Temuan QA 5) */}
+              {activeTab === 'perbandingan' && (
+                <div className="space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <GitCompare size={13} className="text-red-700" />
+                      <span>PERBANDINGAN ANALISIS</span>
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => setIsComparisonOpen(true)}
+                      className="text-[11px] text-red-700 hover:text-red-800 font-semibold inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <Columns size={11} />
+                      <span>Mode Berdampingan</span>
+                    </button>
+                  </div>
+
+                  {comparisonLoading ? (
+                    <div className="p-8 text-center space-y-2 bg-gray-50 rounded-xl border border-gray-100">
+                      <Loader2 size={18} className="animate-spin text-red-700 mx-auto" />
+                      <p className="text-xs text-gray-600">Memuat perbandingan analisis...</p>
+                    </div>
+                  ) : comparisonError ? (
+                    <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 space-y-2">
+                      <p className="font-semibold">{comparisonError}</p>
+                      <button
+                        type="button"
+                        onClick={() => void loadComparison()}
+                        className="px-3 py-1 bg-white border border-red-300 rounded text-red-700 font-semibold hover:bg-red-50 text-[11px] cursor-pointer"
+                      >
+                        Coba Lagi
+                      </button>
+                    </div>
+                  ) : comparisonData ? (
+                    <div className="space-y-3">
+                      <p className="text-[11px] text-amber-800 bg-amber-50/70 p-2.5 rounded-lg border border-amber-200/70">
+                        {comparisonData.catatan}
+                      </p>
+
+                      {/* Card Ringkas Deterministik */}
+                      <div className="p-3 rounded-xl border border-gray-200 bg-white space-y-2">
+                        <div className="flex items-center justify-between pb-1.5 border-b border-gray-100">
+                          <span className="font-bold text-xs text-gray-900 flex items-center gap-1.5">
+                            <Cpu size={13} className="text-blue-600" />
+                            Deterministik
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {comparisonData.deterministik?.ml_version && (
+                              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
+                                {comparisonData.deterministik.ml_version}
+                              </span>
+                            )}
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                              {comparisonData.deterministik ? 'Tersedia' : 'Belum Dijalankan'}
+                            </span>
+                          </div>
+                        </div>
+                        {comparisonData.deterministik?.hasil ? (
+                          <div className="space-y-1.5 text-xs text-gray-700">
+                            <p className="line-clamp-3 text-gray-600">
+                              {comparisonData.deterministik.hasil.ringkasan_teks || 'Ringkasan ekstraksi deterministik siap dibaca.'}
+                            </p>
+                            <div className="text-[10px] text-gray-500 font-mono pt-1">
+                              Waktu: {comparisonData.deterministik.hasil.metrik?.waktu_ms ?? '-'} ms • Poin: {comparisonData.deterministik.hasil.poin_utama?.length ?? 0}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-400 italic">Data analisis deterministik tidak tersedia.</p>
+                        )}
+                      </div>
+
+                      {/* Card Ringkas AI */}
+                      <div className="p-3 rounded-xl border border-purple-200 bg-purple-50/20 space-y-2">
+                        <div className="flex items-center justify-between pb-1.5 border-b border-purple-100">
+                          <span className="font-bold text-xs text-gray-900 flex items-center gap-1.5">
+                            <Sparkles size={13} className="text-purple-600" />
+                            AI (Gemini)
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {comparisonData.ai?.ml_version && (
+                              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-800">
+                                {comparisonData.ai.ml_version}
+                              </span>
+                            )}
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">
+                              {comparisonData.ai ? 'Tersedia' : 'Belum Dijalankan'}
+                            </span>
+                          </div>
+                        </div>
+                        {comparisonData.ai?.hasil ? (
+                          <div className="space-y-1.5 text-xs text-gray-700">
+                            <p className="line-clamp-3 text-gray-600">
+                              {typeof comparisonData.ai.hasil.ringkasan_ai === 'string'
+                                ? comparisonData.ai.hasil.ringkasan_ai
+                                : (Array.isArray(comparisonData.ai.hasil.ringkasan_ai)
+                                    ? comparisonData.ai.hasil.ringkasan_ai.map(k => k.kalimat).join(' ')
+                                    : comparisonData.ai.hasil.ringkasan_teks || 'Narasi analisis AI siap.')}
+                            </p>
+                            <div className="text-[10px] text-gray-500 font-mono pt-1">
+                              Model: {comparisonData.ai.hasil.ai?.model || 'Gemini'} • Waktu: {comparisonData.ai.hasil.metrik?.waktu_ms ?? '-'} ms
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-400 italic">Data analisis AI belum pernah dieksekusi.</p>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsComparisonOpen(true)}
+                        className="w-full py-2 bg-red-700 hover:bg-red-800 text-white rounded-lg text-xs font-semibold shadow-2xs transition cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <Columns size={13} />
+                        <span>Buka Tampilan Berdampingan Penuh</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-6 text-center space-y-2.5 bg-gray-50 rounded-xl border border-gray-100">
+                      <p className="text-xs text-gray-600">Data perbandingan belum dimuat.</p>
+                      <button
+                        type="button"
+                        onClick={() => void loadComparison()}
+                        className="px-3.5 py-1.5 bg-red-700 text-white rounded-lg text-xs font-semibold hover:bg-red-800 transition cursor-pointer"
+                      >
+                        Muat Perbandingan
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2400,6 +2938,11 @@ export default function AnalisaState2Workspace({
             <>
               <span className="w-2 h-2 rounded-full bg-gray-400 shrink-0" />
               <span>Menganalisis dokumen...</span>
+            </>
+          ) : errorStatus === 403 ? (
+            <>
+              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+              <span className="text-amber-800 font-semibold">Akses Ditolak</span>
             </>
           ) : errorStatus !== null || errorMessage ? (
             <>
@@ -2549,6 +3092,284 @@ export default function AnalisaState2Workspace({
           >
             ✕
           </button>
+        </div>
+      )}
+
+      {/* MODAL PERBANDINGAN DETERMINISTIK VS AI BERDAMPINGAN (Temuan QA 5) */}
+      {isComparisonOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0 bg-white">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-50 text-red-700 border border-red-100 flex items-center justify-center">
+                  <GitCompare size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                    <span>Perbandingan Analisis: Deterministik vs AI</span>
+                    <span className="text-xs font-mono font-normal px-2 py-0.5 rounded bg-gray-100 text-gray-600">
+                      Dokumen #{documentId}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Telaah perbandingan hasil analisis deterministik berbasis aturan dengan analisis naratif AI berdampingan.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void loadComparison()}
+                  disabled={comparisonLoading}
+                  className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition cursor-pointer"
+                  title="Muat ulang perbandingan"
+                >
+                  <RefreshCw size={15} className={comparisonLoading ? 'animate-spin text-red-700' : ''} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsComparisonOpen(false)}
+                  className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition cursor-pointer"
+                  title="Tutup dialog"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              {comparisonLoading ? (
+                <div className="py-24 text-center space-y-3">
+                  <Loader2 size={32} className="animate-spin text-red-700 mx-auto" />
+                  <p className="text-sm font-semibold text-gray-700">Mengambil data perbandingan Deterministik vs AI...</p>
+                  <p className="text-xs text-gray-400">Endpoint: /api/v1/documents/{documentId}/analisa/banding</p>
+                </div>
+              ) : comparisonError ? (
+                <div className="py-12 max-w-lg mx-auto text-center space-y-4">
+                  <div className="w-12 h-12 rounded-full bg-red-100 text-red-700 flex items-center justify-center mx-auto">
+                    <AlertCircle size={24} />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-gray-900">Gagal Memuat Perbandingan</h4>
+                    <p className="text-xs text-gray-600 mt-1">{comparisonError}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void loadComparison()}
+                    className="px-4 py-2 bg-red-700 hover:bg-red-800 text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer"
+                  >
+                    Coba Lagi
+                  </button>
+                </div>
+              ) : comparisonData ? (
+                <div className="space-y-5">
+                  {/* Banner Catatan */}
+                  {comparisonData.catatan && (
+                    <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-start gap-2.5">
+                      <Info size={16} className="text-amber-700 shrink-0 mt-0.5" />
+                      <span>{comparisonData.catatan}</span>
+                    </div>
+                  )}
+
+                  {/* Side-by-Side 2 Kolom Grid */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                    {/* KOLOM KIRI: DETERMINISTIK */}
+                    <div className="rounded-xl border border-blue-200 bg-white flex flex-col overflow-hidden shadow-2xs">
+                      {/* Column Header */}
+                      <div className="p-4 bg-gradient-to-r from-blue-50/70 to-blue-50/30 border-b border-blue-100 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Cpu size={16} className="text-blue-700" />
+                          <h4 className="text-sm font-bold text-gray-900">Mode Deterministik</h4>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {comparisonData.deterministik?.basi && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                              Basi
+                            </span>
+                          )}
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                            comparisonData.deterministik ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-500'
+                          }`}>
+                            {comparisonData.deterministik ? 'Tersedia' : 'Belum Dijalankan'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Column Body */}
+                      <div className="p-4 flex-1 space-y-4 text-xs text-gray-700 overflow-y-auto max-h-[500px]">
+                        {comparisonData.deterministik?.hasil ? (
+                          <>
+                            {/* Metadata */}
+                            <div className="text-[11px] text-gray-500 flex flex-wrap items-center gap-x-4 gap-y-1 pb-2 border-b border-gray-100">
+                              {comparisonData.deterministik.ml_version && (
+                                <span className="font-mono text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                                  Versi: {comparisonData.deterministik.ml_version}
+                                </span>
+                              )}
+                              <span>Dibuat: {comparisonData.deterministik.dibuat ? new Date(comparisonData.deterministik.dibuat).toLocaleString('id-ID') : '-'}</span>
+                              <span>Waktu: {comparisonData.deterministik.hasil.metrik?.waktu_ms ?? '-'} ms</span>
+                              <span>Poin: {comparisonData.deterministik.hasil.poin_utama?.length ?? 0}</span>
+                            </div>
+
+                            {/* Ringkasan */}
+                            <div>
+                              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">
+                                Ringkasan Eksekutif
+                              </span>
+                              <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 text-gray-800 leading-relaxed space-y-2">
+                                {comparisonData.deterministik.hasil.ringkasan_teks ? (
+                                  <p>{comparisonData.deterministik.hasil.ringkasan_teks}</p>
+                                ) : Array.isArray(comparisonData.deterministik.hasil.ringkasan) ? (
+                                  comparisonData.deterministik.hasil.ringkasan.map((r, i) => (
+                                    <p key={i}>{r.kalimat}</p>
+                                  ))
+                                ) : (
+                                  <p className="text-gray-400 italic">Ringkasan deterministik tidak tersedia.</p>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Poin Utama */}
+                            <div>
+                              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">
+                                Poin Utama ({comparisonData.deterministik.hasil.poin_utama?.length ?? 0})
+                              </span>
+                              <div className="space-y-2">
+                                {(comparisonData.deterministik.hasil.poin_utama || []).map((pt, i) => (
+                                  <div key={i} className="p-2.5 rounded-lg border border-gray-100 bg-gray-50/60 text-xs space-y-1">
+                                    <div className="flex items-center justify-between text-[11px]">
+                                      <span className="font-semibold text-blue-800">[{pt.kategori || pt.topik || 'Poin'}]</span>
+                                      <span className="font-mono text-gray-500">{pt.ref || pt.pasal || '-'}</span>
+                                    </div>
+                                    <p className="text-gray-800">{pt.teks || pt.poin || ''}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="py-12 text-center text-gray-400 italic">
+                            Hasil analisis deterministik belum tersedia untuk dokumen ini.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* KOLOM KANAN: AI (GEMINI) */}
+                    <div className="rounded-xl border border-purple-200 bg-white flex flex-col overflow-hidden shadow-2xs">
+                      {/* Column Header */}
+                      <div className="p-4 bg-gradient-to-r from-purple-50/70 to-purple-50/30 border-b border-purple-100 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Sparkles size={16} className="text-purple-700" />
+                          <h4 className="text-sm font-bold text-gray-900">Mode AI (Gemini)</h4>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {comparisonData.ai?.basi && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                              Basi
+                            </span>
+                          )}
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                            comparisonData.ai ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-500'
+                          }`}>
+                            {comparisonData.ai ? 'Tersedia' : 'Belum Dijalankan'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Column Body */}
+                      <div className="p-4 flex-1 space-y-4 text-xs text-gray-700 overflow-y-auto max-h-[500px]">
+                        {comparisonData.ai?.hasil ? (
+                          <>
+                            {/* Metadata */}
+                            <div className="text-[11px] text-gray-500 flex flex-wrap items-center gap-x-4 gap-y-1 pb-2 border-b border-gray-100">
+                              {comparisonData.ai.ml_version && (
+                                <span className="font-mono text-[10px] font-semibold px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">
+                                  Versi: {comparisonData.ai.ml_version}
+                                </span>
+                              )}
+                              <span>Model: {comparisonData.ai.hasil.ai?.model || 'Gemini'}</span>
+                              <span>Dibuat: {comparisonData.ai.dibuat ? new Date(comparisonData.ai.dibuat).toLocaleString('id-ID') : '-'}</span>
+                              <span>Waktu: {comparisonData.ai.hasil.metrik?.waktu_ms ?? '-'} ms</span>
+                            </div>
+
+                            {/* Ringkasan AI */}
+                            <div>
+                              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">
+                                Narasi Ringkasan AI
+                              </span>
+                              <div className="bg-purple-50/30 p-3 rounded-lg border border-purple-100 text-gray-800 leading-relaxed space-y-2 font-serif">
+                                {typeof comparisonData.ai.hasil.ringkasan_ai === 'string' ? (
+                                  <p>{comparisonData.ai.hasil.ringkasan_ai}</p>
+                                ) : Array.isArray(comparisonData.ai.hasil.ringkasan_ai) ? (
+                                  comparisonData.ai.hasil.ringkasan_ai.map((s, i) => (
+                                    <div key={i} className="space-y-1">
+                                      <p>{s.kalimat}</p>
+                                      {Array.isArray(s.rujukan) && s.rujukan.length > 0 && (
+                                        <div className="flex gap-1 font-sans text-[10px] text-purple-700">
+                                          <span>Rujukan: {s.rujukan.join(', ')}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="text-gray-400 italic">Ringkasan AI belum dibuat.</p>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Poin Kunci / Parafrase AI */}
+                            <div>
+                              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">
+                                Parafrase AI &amp; Poin Kunci
+                              </span>
+                              <div className="space-y-2">
+                                {(comparisonData.ai.hasil.poin_utama || []).map((pt, i) => (
+                                  <div key={i} className="p-2.5 rounded-lg border border-purple-100/70 bg-purple-50/20 text-xs space-y-1">
+                                    <div className="flex items-center justify-between text-[11px]">
+                                      <span className="font-semibold text-purple-800">[{pt.kategori || pt.topik || 'Poin'}]</span>
+                                      <span className="font-mono text-gray-500">{pt.ref || pt.pasal || '-'}</span>
+                                    </div>
+                                    <p className="text-gray-800">{pt.teks || pt.poin || ''}</p>
+                                    {pt.parafrase && pt.parafrase !== pt.teks && (
+                                      <p className="text-purple-900 bg-white/80 p-1.5 rounded border border-purple-100 font-serif italic text-[11px]">
+                                        Parafrase AI: {pt.parafrase}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="py-12 text-center text-gray-400 italic space-y-2">
+                            <p>Hasil analisis AI belum pernah dijalankan untuk dokumen ini.</p>
+                            <p className="text-[11px]">Gunakan opsi analisis dengan mode AI untuk menghasilkan data komparasi.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3.5 border-t border-gray-100 bg-gray-50/80 flex items-center justify-between shrink-0">
+              <span className="text-xs text-gray-500">
+                Penyelarasan komparasi otomatis HERO US-05
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsComparisonOpen(false)}
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs font-semibold transition cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
