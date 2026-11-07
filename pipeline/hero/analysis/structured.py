@@ -317,6 +317,9 @@ _LAMP_SKIP = re.compile(r"^(LAMPIRAN|PERATURAN|SURAT\s+EDARAN|OTORITAS\s+JASA\s+
 # "DAFTAR ISI" names the table of contents, not the attachment, and a dotted
 # leader line is that table's rows. Neither is a title.
 _LAMP_NOT_TITLE = re.compile(r"^DAFTAR\s+ISI\b|\.{4,}", re.I)
+# How much of a Lampiran section's own text to quote (T3, Fase 2): enough
+# for one real sentence, not the whole section.
+_LAMPIRAN_EXCERPT_MAX = 260
 
 
 def _judul_lampiran_wajar(line: str) -> bool:
@@ -330,6 +333,53 @@ def _judul_lampiran_wajar(line: str) -> bool:
     if len(huruf) < 4:
         return False
     return sum(c.isupper() for c in huruf) / len(huruf) >= 0.7
+
+
+def _lampiran_body_lines(text: str) -> list[str]:
+    """Lines worth quoting: no signature block, no "DAFTAR ISI"/dotted leaders."""
+    out = []
+    for raw in text.splitlines():
+        line = re.sub(r"\s+", " ", raw).strip()
+        if line and not _SIGNATURE.search(line) and not _LAMP_NOT_TITLE.search(line):
+            out.append(line)
+    return out
+
+
+def lampiran_section_excerpts(tail: str, headings: list[str], limit: int = 6) -> list[dict[str, str]]:
+    """First real sentence under each Lampiran heading, not just its title.
+
+    ``headings`` are the exact lines ``lampiran_profile`` already located in
+    ``tail``; this reads what follows each one, up to the next heading (or
+    the end), and keeps roughly one sentence of it. A heading followed by
+    nothing substantive (only noise, or nothing before the next heading) is
+    left out rather than given a fabricated summary (invarian 6) — that is
+    still a true fact about the document, just a narrower one.
+    """
+    out: list[dict[str, str]] = []
+    cursor = 0
+    for i, heading in enumerate(headings[:limit]):
+        pos = tail.find(heading, cursor)
+        if pos < 0:
+            continue
+        body_start = pos + len(heading)
+        end = len(tail)
+        for other in headings[i + 1:]:
+            p = tail.find(other, body_start)
+            if p >= 0:
+                end = min(end, p)
+        blob = " ".join(_lampiran_body_lines(tail[body_start:end]))
+        cursor = body_start
+        if not blob:
+            continue
+        m = re.match(r".{0,%d}?[.;:]\s" % _LAMPIRAN_EXCERPT_MAX, blob)
+        if m:
+            excerpt = m.group(0).strip()
+        else:
+            excerpt = blob[:_LAMPIRAN_EXCERPT_MAX].rstrip()
+            if len(blob) > _LAMPIRAN_EXCERPT_MAX:
+                excerpt += "…"
+        out.append({"judul": heading, "ringkasan": excerpt})
+    return out
 
 
 def lampiran_profile(full_text: str | None, articles: list[dict[str, Any]]) -> dict[str, Any]:
@@ -379,8 +429,9 @@ def lampiran_profile(full_text: str | None, articles: list[dict[str, Any]]) -> d
                 caps.append(line)
         if not headings:
             headings = caps
+    isi_bagian = lampiran_section_excerpts(tail, headings) if heavy and full_text and headings else []
     return {"berat_lampiran": heavy, "pasal_rujukan": [f"Pasal {a['number']}" for a in refs][:3],
-            "judul_bagian": headings, "judul_lampiran": judul}
+            "judul_bagian": headings, "judul_lampiran": judul, "isi_bagian": isi_bagian}
 
 
 def sanctions(points: list[Point]) -> list[str]:
@@ -484,6 +535,11 @@ def compose_summary(ident: dict[str, Any], kerangka: list[dict[str, Any]], subje
         out.append({"kalimat": "Substansi utama peraturan ini berada di Lampiran, bukan di batang tubuh; "
                                "ringkasan pasal di atas karenanya tidak lengkap." + apa + isi,
                     "rujukan": lampiran["pasal_rujukan"], "fakta": []})
+        # Bukan cuma judul bagian — kutip isinya, supaya PADK yang
+        # substansinya di Lampiran tidak berhenti di daftar judul kosong (T3).
+        for sec in lampiran.get("isi_bagian") or []:
+            out.append({"kalimat": f"{sec['judul']}: {sec['ringkasan']}",
+                        "rujukan": lampiran["pasal_rujukan"], "fakta": []})
     return out
 
 

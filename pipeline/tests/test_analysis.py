@@ -97,6 +97,29 @@ def test_lampiran_kalimat_prosa_tidak_diakui_sebagai_judul():
     assert prof["judul_lampiran"] is None
 
 
+def test_lampiran_isi_bagian_mengutip_isi_bukan_cuma_judul():
+    """T3 (Fase 2): PADK berat-Lampiran mendapat kutipan isi, bukan cuma judul bagian."""
+    arts = [{"number": "1", "text": "Ketentuan mengenai X sebagaimana tercantum dalam: a. Lampiran I."}]
+    full = ("Ditetapkan di Jakarta\nKEPALA EKSEKUTIF PENGAWAS\nLAMPIRAN\n"
+            "I. KETENTUAN UMUM\nBank wajib menyusun pedoman tata kelola teknologi informasi "
+            "secara tertulis dan terkini. Pedoman tersebut wajib disetujui direksi.\n"
+            "II. PELAPORAN BULANAN\nLaporan disampaikan paling lambat tanggal 10 setiap bulan.\n")
+    prof = lampiran_profile(full, arts)
+    assert prof["judul_bagian"] == ["I. KETENTUAN UMUM", "II. PELAPORAN BULANAN"]
+    isi = {sec["judul"]: sec["ringkasan"] for sec in prof["isi_bagian"]}
+    assert isi["I. KETENTUAN UMUM"].startswith(
+        "Bank wajib menyusun pedoman tata kelola teknologi informasi secara tertulis dan terkini.")
+    assert isi["II. PELAPORAN BULANAN"].startswith("Laporan disampaikan paling lambat tanggal 10")
+
+
+def test_lampiran_heading_tanpa_isi_tidak_dipaksa_mengutip():
+    """Invarian 6: bagian tanpa isi substantif tidak diberi ringkasan karangan."""
+    arts = [{"number": "1", "text": "Ketentuan mengenai X sebagaimana tercantum dalam: a. Lampiran I."}]
+    full = "Ditetapkan di Jakarta\nLAMPIRAN\nI. KETENTUAN UMUM\nII. PELAPORAN\n"
+    prof = lampiran_profile(full, arts)
+    assert prof["isi_bagian"] == []
+
+
 def test_lampiran_daftar_isi_bukan_judul_lampiran():
     arts = [{"number": "1", "text": "Pedoman sebagaimana tercantum dalam Lampiran."}]
     full = ("Ditetapkan di Jakarta\nLAMPIRAN\nDAFTAR ISI\n"

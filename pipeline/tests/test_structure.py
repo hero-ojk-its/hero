@@ -89,6 +89,49 @@ isi.
     assert [s["number"] for s in struct.sections] == ["I", "II"]
 
 
+def test_paragraf_judul_title_case_tidak_bocor_ke_ayat():
+    """T5 (Fase 2): "Paragraf 2 Bidang Tugas ..." dicetak Title Case, bukan
+    kapital semua seperti BAB — tanpa pengecekan tambahan, baris ini lolos
+    dari deteksi judul dan nyangkut di akhir teks ayat sebelumnya."""
+    text = """BAB I
+KETENTUAN UMUM
+
+Bagian Kesatu
+Umum
+
+Paragraf 1
+Tugas Pengawasan
+
+Pasal 1
+(1) Otoritas melakukan pengawasan terhadap Bank.
+
+Paragraf 2
+Bidang Tugas Pengawasan Perbankan
+
+Pasal 2
+(1) Pengawasan dilakukan secara berkala.
+"""
+    struct = parse_structure(pages(text))
+    assert [a.number for a in struct.articles] == ["1", "2"]
+    assert "Paragraf" not in struct.articles[0].text
+    assert "Bidang Tugas" not in struct.articles[0].ayat[0][1]
+    assert struct.articles[1].paragraf == "Paragraf 2 Bidang Tugas Pengawasan Perbankan"
+
+
+def test_prosa_berawal_bagian_tidak_disalah_baca_sebagai_judul():
+    """Baris prosa yang (karena word-wrap PDF) kebetulan dimulai dengan
+    "Bagian" tetap masuk teks ayat — bukan dianggap judul baru."""
+    text = """BAB I
+KETENTUAN UMUM
+
+Pasal 1
+(1) Pelapor wajib menyampaikan laporan sebagaimana diatur dalam
+Bagian yang menjadi tanggung jawabnya, paling lambat 10 hari kerja.
+"""
+    struct = parse_structure(pages(text))
+    assert "Bagian yang menjadi tanggung jawabnya" in struct.articles[0].text
+
+
 def test_roman_to_int():
     assert roman_to_int("I") == 1
     assert roman_to_int("IV") == 4

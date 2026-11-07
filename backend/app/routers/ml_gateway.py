@@ -720,51 +720,126 @@ class _AnalisaJobStore:
     dipoll, bukan ditunggu dalam satu permintaan.
     """
 
-    _TTL_DETIK = 3600  # job yang sudah selesai dibuang setelah 1 jam agar memori tidak bocor
+    _TTL_DETIK = 3600  # job yang sudah selesai/gagal dibuang setelah 1 jam agar memori tidak bocor
 
     def __init__(self) -> None:
         self._jobs: dict[str, dict[str, Any]] = {}
+        # Menyimpan referensi kuat ke task yang sedang berjalan agar tidak dibersihkan garbage collector
+        # (Dokumentasi Python asyncio: task tanpa referensi kuat bisa di-GC sebelum selesai).
+        self._tasks: set[asyncio.Task] = set()
         self._lock = asyncio.Lock()
 
-    async def mulai(self, coro_fn) -> str:
+    async def mulai(
+        self,
+        coro_fn,
+        document_id: int,
+        mode: str,
+        pemilik_id: Optional[int] = None,
+    ) -> str:
         job_id = uuid.uuid4().hex
         async with self._lock:
-            self._jobs[job_id] = {"status": "berjalan", "mulai": time.time(), "hasil": None, "error": None}
+            self._jobs[job_id] = {
+                "status": "berjalan",
+                "mulai": time.time(),
+                "hasil": None,
+                "error": None,
+                "document_id": document_id,
+                "mode": mode,
+                "pemilik_id": pemilik_id,
+            }
 
         async def runner() -> None:
             try:
-                hasil = await coro_fn()
+                # Bungkus eksekusi dengan batas waktu maksimal jika ml_job_timeout_seconds > 0
+                if settings.ml_job_timeout_seconds > 0:
+                    coro = asyncio.wait_for(
+                        coro_fn(),
+                        timeout=settings.ml_job_timeout_seconds + 60.0,
+                    )
+                else:
+                    coro = coro_fn()
+                hasil = await coro
+                if isinstance(hasil, JSONResponse) and hasil.status_code >= 400:
+                    import json
+                    body_content = json.loads(hasil.body.decode("utf-8")) if hasil.body else None
+                    async with self._lock:
+                        self._jobs[job_id]["status"] = "gagal"
+                        self._jobs[job_id]["error"] = {
+                            "status_code": hasil.status_code,
+                            "detail": body_content,
+                        }
+                    return
                 async with self._lock:
                     self._jobs[job_id]["status"] = "selesai"
                     self._jobs[job_id]["hasil"] = hasil
+            except asyncio.TimeoutError:
+                logger.warning("Job analisa %s melebihi batas waktu total", job_id)
+                async with self._lock:
+                    self._jobs[job_id]["status"] = "gagal"
+                    self._jobs[job_id]["error"] = {
+                        "status_code": status.HTTP_504_GATEWAY_TIMEOUT,
+                        "detail": {
+                            "code": "analisa_terlalu_lama",
+                            "message": "Analisa melebihi batas waktu maksimal.",
+                        },
+                    }
             except HTTPException as exc:
                 async with self._lock:
                     self._jobs[job_id]["status"] = "gagal"
                     self._jobs[job_id]["error"] = {"status_code": exc.status_code, "detail": exc.detail}
-            except Exception as exc:                                       # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 logger.exception("Job analisa %s gagal tak terduga", job_id)
                 async with self._lock:
                     self._jobs[job_id]["status"] = "gagal"
                     self._jobs[job_id]["error"] = {"status_code": 500, "detail": str(exc)}
 
-        asyncio.create_task(runner())
+        task = asyncio.create_task(runner())
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
         await self._bersihkan()
         return job_id
 
     async def get(self, job_id: str) -> Optional[dict[str, Any]]:
+        await self._bersihkan()
         async with self._lock:
             job = self._jobs.get(job_id)
             return dict(job) if job else None
 
     async def _bersihkan(self) -> None:
-        cutoff = time.time() - self._TTL_DETIK
+        now = time.time()
+        cutoff_selesai = now - self._TTL_DETIK
+        job_timeout = settings.ml_job_timeout_seconds
+        cutoff_berjalan = (job_timeout + 120.0) if job_timeout > 0 else 0
+
         async with self._lock:
-            stale = [jid for jid, j in self._jobs.items() if j["status"] != "berjalan" and j["mulai"] < cutoff]
+            # Job berjalan yang melebihi batas waktu maksimal ditandai gagal
+            if cutoff_berjalan > 0:
+                for j in self._jobs.values():
+                    if j.get("status") == "berjalan" and (now - j.get("mulai", now)) > cutoff_berjalan:
+                        j["status"] = "gagal"
+                        j["error"] = {
+                            "status_code": status.HTTP_504_GATEWAY_TIMEOUT,
+                            "detail": {
+                                "code": "analisa_terlalu_lama",
+                                "message": "Analisa melebihi batas waktu maksimal.",
+                            },
+                        }
+            # Job selesai/gagal yang melebihi TTL dibersihkan
+            stale = [
+                jid for jid, j in self._jobs.items()
+                if j.get("status") != "berjalan" and j.get("mulai", now) < cutoff_selesai
+            ]
             for jid in stale:
                 del self._jobs[jid]
 
 
 _analisa_jobs = _AnalisaJobStore()
+
+
+def make_job_ml_client(timeout: httpx.Timeout) -> httpx.AsyncClient:
+    """Membuat AsyncClient untuk job latar belakang (dapat di-mock dalam pengujian)."""
+    return httpx.AsyncClient(timeout=timeout)
 
 
 @router.post("/analisa/{document_id}/mulai", summary="Mulai Analisa (job latar belakang)")
@@ -773,24 +848,46 @@ async def post_ml_analisa_mulai(
     request: Request,
     mode: Optional[Literal["deterministik", "ai"]] = Query("ai"),
     segar: bool = Query(False, description="Paksa hitung ulang tanpa cache"),
+    db: Session = Depends(get_db),
     current_user=Depends(perlu_izin(Izin.ANALISA_JALANKAN)),
 ):
     """Mulai analisa di latar belakang; kembalikan ``job_id`` untuk dipoll via
     ``GET /analisa-job/{job_id}``. Dipakai untuk mode AI agar tidak kena batas
     proxy Cloudflare (~100 d) seperti endpoint sinkron di atas."""
+    # 1. Cek konfigurasi layanan analisa
+    if not settings.ml_service_url:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "layanan_analisa_belum_dikonfigurasi",
+                "message": "Layanan analisa belum dikonfigurasi (ML_SERVICE_URL kosong).",
+            },
+        )
+
+    # 2. Cek hak akses dokumen (404 bila tidak ditemukan / nonaktif, 403 bila non-publik tanpa izin)
+    check_document_access(db, document_id, user=current_user)
+
     from app.database import SessionLocal
 
+    mode_str = mode if mode else "ai"
+    pemilik_id = getattr(current_user, "id", None)
+
     async def jalankan() -> Any:
-        baca = settings.ml_timeout_seconds if settings.ml_timeout_seconds > 0 else None
+        baca = settings.ml_job_timeout_seconds if settings.ml_job_timeout_seconds > 0 else None
         timeout = httpx.Timeout(baca, connect=settings.ml_connect_timeout_seconds)
         db2 = SessionLocal()
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client2:
+            async with make_job_ml_client(timeout) as client2:
                 return await _jalankan_analisa(document_id, request, mode, segar, db2, client2, current_user)
         finally:
             db2.close()
 
-    job_id = await _analisa_jobs.mulai(jalankan)
+    job_id = await _analisa_jobs.mulai(
+        jalankan,
+        document_id=document_id,
+        mode=mode_str,
+        pemilik_id=pemilik_id,
+    )
     return {"job_id": job_id, "status": "berjalan"}
 
 
@@ -809,9 +906,24 @@ async def get_ml_analisa_job(
                 "message": f"Job {job_id} tidak ditemukan (sudah dibersihkan setelah 1 jam, atau id salah).",
             },
         )
+
+    # Pemeriksaan kepemilikan job saat auth aktif
+    if settings.auth_enabled:
+        user_id = getattr(current_user, "id", None)
+        if job.get("pemilik_id") != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "job_tidak_ditemukan",
+                    "message": f"Job {job_id} tidak ditemukan (sudah dibersihkan setelah 1 jam, atau id salah).",
+                },
+            )
+
     out: dict[str, Any] = {
         "job_id": job_id,
         "status": job["status"],
+        "document_id": job.get("document_id"),
+        "mode": job.get("mode"),
         "berjalan_detik": round(time.time() - job["mulai"], 1),
     }
     if job["status"] == "selesai":

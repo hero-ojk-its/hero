@@ -126,16 +126,24 @@ pdf:
 #   jdih_ojk  — drive the AJAX register at jdih.ojk.go.id
 # ---------------------------------------------------------------------------
 sites:
-  # (1) Main OJK regulation register — 1,570 regulations over 157 pages
-  # (counted 2026-09-15). The pager is an ASP.NET postback, so the
-  # ojk_sharepoint adapter replays it; a link crawler only ever sees page 1.
+  # (1) Main OJK regulation register — ~1,581 regulations over 159 pages
+  # (counted 2026-09-15, re-verified live 2026-11-05: the pager itself
+  # replays cleanly end to end, no page it cannot cross). The pager is an
+  # ASP.NET postback, so the ojk_sharepoint adapter replays it; a link
+  # crawler only ever sees page 1.
   # Each detail page adds Sektor / SubSektor / Jenis / Nomor / Tanggal
   # Berlaku plus the attachments (regulation, Abstrak, FAQ, Lampiran).
   - name: "OJK — Regulasi"
     url: "https://ojk.go.id/id/regulasi/default.aspx"
     enabled: true
     adapter: ojk_sharepoint
-    max_documents: 12              # per `hero scrape`; `hero discover` lists all
+    # Dinaikkan dari 12 agar bukan jadi pembatas buatan untuk target klien
+    # "sampai 1.500 file di knowledge base" — angka nyata registernya
+    # sekitar 1.581 (lihat komentar di atas), jadi ini sudah mencakup semua.
+    # `hero scrape` aman dijalankan berkali-kali: baris yang sudah di KB
+    # dilewati (bukan diunduh ulang), dan setiap panggilan melanjutkan dari
+    # halaman 1, otomatis maju ke halaman yang belum pernah diunduh.
+    max_documents: 1600             # per `hero scrape`; `hero discover` lists all
 
   # (2) Draft regulations open for public comment — 650 over 65 pages.
   # Each draft ships as a ZIP; HERO extracts its "Batang Tubuh" (body text).
