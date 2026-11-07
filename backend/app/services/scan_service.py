@@ -950,7 +950,7 @@ class ScanService:
                 except TypeError:
                     crawler = get_crawler(settings) or SimpleHttpCrawler(allow_private=settings.crawl_allow_private_networks)
                 storage = get_storage_service()
-                ingest_svc = IngestService(db, storage)
+                ingest_svc = IngestService(db, storage, max_upload_bytes=settings.max_fetch_bytes)
 
                 candidates = (
                     db.query(ScanCandidate)
@@ -1013,7 +1013,7 @@ class ScanService:
                             continue
                     else:
                         try:
-                            fetched = crawler.fetch(cand.url, max_bytes=settings.max_upload_bytes)
+                            fetched = crawler.fetch(cand.url, max_bytes=settings.max_fetch_bytes)
                         except FetchTooLargeError as fle:
                             failure = IngestFailure(
                                 job_id=job.id,
@@ -1122,7 +1122,7 @@ class ScanService:
 
                     elif session.destination == TujuanTarik.unduh_folder:
                         try:
-                            validate_pdf(fetched.filename, fetched.content, settings.max_upload_bytes)
+                            validate_pdf(fetched.filename, fetched.content, settings.max_fetch_bytes)
                             safe_hint = sanitize_filename(fetched.filename)
                             rel_path = storage.save_pdf(
                                 fetched.content,

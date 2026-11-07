@@ -6,6 +6,7 @@ pemantauan job, dan antrian penanganan kegagalan / retry (Langkah 2 & 3).
 from datetime import date
 from typing import List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, Query, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -38,6 +39,7 @@ from app.schemas.ingest import (
     JobFailureSummary,
     JobDocumentSummary,
     DuplicateDocumentInfo,
+    format_label_alasan,
     JobSourceInfo,
 )
 from app.services.ingest_service import (
@@ -93,6 +95,7 @@ def _format_failure_response(f: IngestFailure) -> FailureResponse:
         source_url=f.source_url,
         failure_type=f.failure_type.value if hasattr(f.failure_type, "value") else str(f.failure_type),
         reason_code=f.reason_code,
+        label_alasan=format_label_alasan(f.reason_code),
         message=f.message,
         is_retryable=f.is_retryable,
         quarantine_path=f.quarantine_path,
@@ -172,6 +175,10 @@ def upload_pdf(
         None,
         description="URL asal dokumen (opsional)",
     ),
+    status_keberlakuan: Optional[str] = Form(
+        None,
+        description="Status keberlakuan awal dari sumber (opsional)",
+    ),
     persetujuan_publik_oleh: Optional[str] = Form(
         None,
         description="Pihak yang menyetujui publikasi draft kajian (wajib jika peran draft_kajian dan akses publik)",
@@ -215,6 +222,7 @@ def upload_pdf(
         regulation_number and regulation_number.strip(),
         release_date and release_date.strip(),
         bidang and bidang.strip(),
+        status_keberlakuan and status_keberlakuan.strip(),
     ])
     if len(files) > 1 and has_single_doc_meta:
         raise HTTPException(
@@ -293,6 +301,7 @@ def upload_pdf(
             regulation_type=regulation_type.strip() if regulation_type and regulation_type.strip() else None,
             release_date=parsed_release_date,
             bidang=bidang.strip() if bidang and bidang.strip() else None,
+            status_keberlakuan=status_keberlakuan.strip() if status_keberlakuan and status_keberlakuan.strip() else None,
         )
     elif regulation_type and regulation_type.strip():
         meta_input = DocumentMetadataInput(
@@ -368,6 +377,7 @@ def upload_pdf(
                 "error": r.message,
                 "failure_id": r.extra.get("failure_id"),
                 "reason_code": r.reason_code,
+                "label_alasan": format_label_alasan(r.reason_code),
             })
 
     return {
@@ -419,6 +429,18 @@ def list_jobs(
             )
             .count()
         )
+        dup_identitas = (
+            db.query(Document)
+            .filter(
+                Document.job_id == j.id,
+                Document.is_active == False,
+                or_(
+                    Document.duplicate_of_id.isnot(None),
+                    Document.deactivated_reason.like("duplikat_identitas%"),
+                ),
+            )
+            .count()
+        )
         source_info = None
         if j.source:
             source_info = {
@@ -438,6 +460,7 @@ def list_jobs(
             "status": j.status.value if hasattr(j.status, "value") else str(j.status),
             "success_count": j.success_count,
             "duplicate_count": j.duplicate_count,
+            "duplikat_identitas_count": dup_identitas,
             "failed_count": j.failed_count,
             "total_found": j.total_found,
             "processed_count": j.processed_count,
@@ -515,6 +538,7 @@ def get_job_detail(
                 original_filename=f.original_filename,
                 failure_type=f.failure_type.value if hasattr(f.failure_type, "value") else str(f.failure_type),
                 reason_code=f.reason_code,
+                label_alasan=format_label_alasan(f.reason_code),
                 message=f.message,
                 is_retryable=f.is_retryable,
                 quarantine_path=f.quarantine_path,
@@ -540,6 +564,19 @@ def get_job_detail(
         else:
             progress_pct = 100.0
 
+    duplikat_identitas_count = (
+        db.query(Document)
+        .filter(
+            Document.job_id == job.id,
+            Document.is_active == False,
+            or_(
+                Document.duplicate_of_id.isnot(None),
+                Document.deactivated_reason.like("duplikat_identitas%"),
+            ),
+        )
+        .count()
+    )
+
     return JobDetailResponse(
         id=job.id,
         job_type=job.job_type.value if hasattr(job.job_type, "value") else str(job.job_type),
@@ -554,6 +591,7 @@ def get_job_detail(
         duration_seconds=duration,
         success_count=job.success_count,
         duplicate_count=job.duplicate_count,
+        duplikat_identitas_count=duplikat_identitas_count,
         failed_count=job.failed_count,
         total_found=job.total_found,
         processed_count=job.processed_count,

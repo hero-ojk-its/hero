@@ -1,15 +1,15 @@
 import logging
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, status
+from fastapi import FastAPI, Request, Response, status
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError, OperationalError
 
 from app.config import settings, APP_VERSION
 from app.database import seed_initial_categories, SessionLocal
+from app.responses import Utf8JSONResponse
 
 # IMPORT EXPLICIT
 from app.routers.auth import router as auth_router
@@ -144,7 +144,18 @@ app = FastAPI(
     docs_url=docs_url,
     redoc_url=redoc_url,
     openapi_url=openapi_url,
+    default_response_class=Utf8JSONResponse,
 )
+
+
+@app.middleware("http")
+async def ensure_utf8_charset(request: Request, call_next):
+    """Memastikan seluruh respons JSON memiliki Content-Type: application/json; charset=utf-8."""
+    response: Response = await call_next(request)
+    ct = response.headers.get("content-type")
+    if ct and ct.startswith("application/json") and "charset" not in ct.lower():
+        response.headers["content-type"] = "application/json; charset=utf-8"
+    return response
 
 
 def custom_openapi():
@@ -239,7 +250,7 @@ def health():
     except Exception as exc:
         logger.error("Health check failed on database: %s", exc)
         db_ok = False
-        return JSONResponse(
+        return Utf8JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={
                 "status": "degraded",

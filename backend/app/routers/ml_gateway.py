@@ -18,7 +18,7 @@ from typing import Any, Literal, Optional
 
 import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
-from fastapi.responses import JSONResponse
+from app.responses import Utf8JSONResponse as JSONResponse
 from sqlalchemy.orm import Session
 
 from app.config import settings

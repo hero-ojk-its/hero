@@ -116,6 +116,9 @@ class DocumentVersionResponse(BaseModel):
     document_role: Optional[str] = None
     status_keberlakuan: Optional[str] = None
     status_source: Optional[str] = None
+    status_keterangan: Optional[str] = None
+    jumlah_relasi: int = 0
+    identity_key_kosong: bool = False
     induk: List[VersionRelationItem] = Field(default_factory=list)
     diubah_oleh: List[VersionRelationItem] = Field(default_factory=list)
     dicabut_oleh: List[VersionRelationItem] = Field(default_factory=list)

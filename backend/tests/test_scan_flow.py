@@ -229,9 +229,10 @@ def test_k08_k09_k10_pull_failures_and_duplicates(client, db_session: Session, s
     monkeypatch.setattr(settings, "crawl_allow_private_networks", True)
     monkeypatch.setattr(settings, "crawl_delay_seconds", 0)
     
-    # Set max upload size 15 KB agar besar.pdf (±60 KB) gagal karena ukuran
+    # Set max fetch/upload size 15 KB agar besar.pdf (±60 KB) gagal karena ukuran (Langkah 38: split max_fetch_bytes)
     from app.config import Settings
     monkeypatch.setattr(Settings, "max_upload_bytes", property(lambda self: 15000))
+    monkeypatch.setattr(Settings, "max_fetch_bytes", property(lambda self: 15000))
 
     # Pra-isi dokumen di KB yang hash-nya sama dengan a2.pdf
     content_a2 = make_pdf("Unique PDF Content for a2.pdf")

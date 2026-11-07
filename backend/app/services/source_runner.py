@@ -247,7 +247,7 @@ class SourceRunner:
             processed_count = 0
             results: List[ItemResult] = []
             storage = get_storage_service()
-            ingest_svc = IngestService(db, storage)
+            ingest_svc = IngestService(db, storage, max_upload_bytes=settings.max_fetch_bytes)
 
             # Tentukan naming_format dan naming_separator efektif (override di run > default sumber)
             effective_naming_format = naming_format if naming_format is not None else (source.default_naming_format if source else None)
