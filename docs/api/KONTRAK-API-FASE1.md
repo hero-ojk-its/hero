@@ -1005,7 +1005,10 @@ Pencarian regulasi pada MVP Fase 1 menggunakan **PostgreSQL Full-Text Search** b
 ```
 - **Keterangan Field:**
   - `identity_key`: Kunci kanonik identitas regulasi (`JENIS|NOMOR|TAHUN`). Bernilai `null` jika dokumen belum memiliki nomor/tahun/jenis lengkap.
-  - `status_source`: Asal penetapan status keberlakuan (`manual` | `relasi` | `lapisan_data` | `null`).
+  - `status_source`: Asal penetapan status keberlakuan (`manual` | `relasi` | `lapisan_data` | `tanggal_berlaku` | `sumber` | `null`). Catatan: status "dihitung dari relasi" hanya berlaku bila status_source = "relasi", dan relasi bergantung pada sinkron dari lapisan data (POST /internal/relations).
+  - `status_keterangan`: Kalimat penjelas singkat dalam bahasa Indonesia sesuai status_source.
+  - `jumlah_relasi`: Total relasi masuk dan keluar yang ditemukan untuk identity_key dokumen.
+  - `identity_key_kosong`: Bernilai true bila dokumen belum memiliki identity_key (relasi tidak dapat dicocokkan).
   - `induk`: Regulasi induk yang diubah oleh dokumen ini (bila dokumen ini merupakan regulasi perubahan).
   - `diubah_oleh`: Seluruh regulasi yang mengubah dokumen ini, terurut kronologis dari yang terlama.
   - `dicabut_oleh`: Seluruh regulasi yang mencabut dokumen ini.
@@ -2155,7 +2158,7 @@ Field respons/parameter: `job_status`
 | **403 Forbidden** | Akses ditolak | Mengakses PDF non-publik saat mode proteksi aktif | Tampilkan dialog izin akses atau peringatan login. |
 | **404 Not Found** | Data tidak ditemukan | ID dokumen, scan, atau sumber tidak ditemukan | Arahkan pengguna kembali ke halaman daftar. |
 | **409 Conflict** | Konflik status | Sesi sedang berjalan atau mencoba retry job aktif | Berikan notifikasi bahwa proses sedang berjalan di latar belakang. |
-| **413 Payload Too Large** | Berkas melebihi batas | Ukuran unggah PDF melebihi batas (default 100 MB) | Peringatkan pengguna untuk mengunggah berkas lebih kecil. |
+| **413 Payload Too Large** | Berkas melebihi batas | Ukuran unggah PDF melebihi batas (default 25 MB) | Peringatkan pengguna untuk mengunggah berkas lebih kecil. |
 | **422 Unprocessable** | Validasi skema gagal | Komponen format nama salah, field wajib kosong | Sorot field formulir yang bersangkutan dengan pesan spesifik. |
 | **503 Service Unavailable** | Layanan database/AI sibuk | Koneksi database terputus atau komponen ML offline | Tampilkan pesan coba lagi beberapa saat. |
 

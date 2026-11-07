@@ -116,6 +116,9 @@ class DocumentVersionResponse(BaseModel):
     document_role: Optional[str] = None
     status_keberlakuan: Optional[str] = None
     status_source: Optional[str] = None
+    status_keterangan: Optional[str] = None
+    jumlah_relasi: int = 0
+    identity_key_kosong: bool = False
     induk: List[VersionRelationItem] = Field(default_factory=list)
     diubah_oleh: List[VersionRelationItem] = Field(default_factory=list)
     dicabut_oleh: List[VersionRelationItem] = Field(default_factory=list)
@@ -497,7 +500,7 @@ def _format_single_document_response(doc: Document, db: Session, current_user: O
                 "level": a.level,
                 "chapter_title": a.chapter_title,
                 "article_number": a.article_number,
-                "content_text": a.content_text[:300] + "..." if a.content_text and len(a.content_text) > 300 else a.content_text,
+                "content_text": a.content_text,
                 "order_index": a.order_index,
                 "page": a.page,
             }
@@ -526,6 +529,7 @@ def _format_single_document_response(doc: Document, db: Session, current_user: O
     "/{document_id}",
     summary="Detail satu dokumen beserta pasalnya",
     responses={
+        403: {"description": "Dokumen non-publik memerlukan autentikasi aktif"},
         404: {"description": "Dokumen tidak ditemukan"},
     },
 )
@@ -538,6 +542,8 @@ def get_document(
     doc = db.query(Document).filter(Document.id == document_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
+
+    check_non_public_access(doc, current_user)
 
     return _format_single_document_response(doc, db, current_user=current_user)
 

@@ -106,7 +106,12 @@ def recompute_status(
     today = date.today()
 
     for doc in documents:
-        # 1. Keputusan pengguna manual menang
+        # Urutan prioritas penentuan status_keberlakuan (Langkah 38):
+        # 1. manual: keputusan pengguna manual selalu menang dan tidak boleh ditimpa otomatis.
+        # 2. relasi / lapisan_data: relasi hukum antarperaturan dari grafik / data layer.
+        # 3. tanggal_berlaku: jika tidak ada relasi, dihitung dari tanggal berlaku vs hari ini.
+        # 4. sumber: status dari metadata situs sumber; boleh ditimpa oleh relasi atau tanggal berlaku,
+        #    tetapi TIDAK dikembalikan ke 'tidak_diketahui' bila relasi dihapus.
         if doc.status_source == "manual":
             continue
 
@@ -119,7 +124,7 @@ def recompute_status(
         if is_attachment:
             # Dokumen lampiran: hanya menjalankan aturan tanggal berlaku
             if (
-                doc.status_source in (None, "relasi", "tanggal_berlaku")
+                doc.status_source in (None, "relasi", "tanggal_berlaku", "sumber")
                 and doc.effective_date
             ):
                 if doc.effective_date <= today:
@@ -175,7 +180,7 @@ def recompute_status(
                 rule_matched = "lapisan_data"
             elif (
                 len(in_rels) == 0
-                and doc.status_source in (None, "relasi", "tanggal_berlaku")
+                and doc.status_source in (None, "relasi", "tanggal_berlaku", "sumber")
                 and doc.effective_date
             ):
                 # 5a. Tidak ada relasi masuk, dan status_source in {None, relasi, tanggal_berlaku},
@@ -391,6 +396,22 @@ def sync_relations(
     }
 
 
+STATUS_KETERANGAN_MAP = {
+    "manual": "Diubah manual oleh admin",
+    "relasi": "Dihitung dari relasi antarperaturan",
+    "lapisan_data": "Dihitung dari relasi antarperaturan",
+    "tanggal_berlaku": "Dihitung dari tanggal berlaku",
+    "sumber": "Mengikuti status di situs sumber",
+}
+
+
+def get_status_keterangan(status_source: Optional[str]) -> str:
+    """Mengembalikan kalimat singkat penjelas asal status_source (Langkah 38)."""
+    if not status_source:
+        return "Belum diketahui"
+    return STATUS_KETERANGAN_MAP.get(status_source, "Belum diketahui")
+
+
 def get_versioning_details(
     db: Session,
     doc: Document,
@@ -410,6 +431,9 @@ def get_versioning_details(
             "document_role": doc.document_role.value if hasattr(doc.document_role, "value") else str(doc.document_role) if doc.document_role else None,
             "status_keberlakuan": doc.status_keberlakuan.value if doc.status_keberlakuan else "tidak_diketahui",
             "status_source": doc.status_source,
+            "status_keterangan": get_status_keterangan(doc.status_source),
+            "jumlah_relasi": 0,
+            "identity_key_kosong": True,
             "induk": [],
             "diubah_oleh": [],
             "dicabut_oleh": [],
@@ -561,6 +585,8 @@ def get_versioning_details(
             "pasal_terkait": r.articles_text,
         })
 
+    tot_rels = len(out_amends) + len(out_repeals) + len(in_amends) + len(in_repeals)
+
     return {
         "document_id": doc.id,
         "identity_key": my_key,
@@ -568,9 +594,12 @@ def get_versioning_details(
         "document_role": doc.document_role.value if hasattr(doc.document_role, "value") else str(doc.document_role) if doc.document_role else None,
         "status_keberlakuan": doc.status_keberlakuan.value if doc.status_keberlakuan else "tidak_diketahui",
         "status_source": doc.status_source,
+        "status_keterangan": get_status_keterangan(doc.status_source),
+        "jumlah_relasi": tot_rels,
+        "identity_key_kosong": False,
         "induk": induk_list,
         "diubah_oleh": diubah_oleh_list,
         "dicabut_oleh": dicabut_oleh_list,
         "mencabut": mencabut_list,
-        "catatan": "Draft / Rekomendasi — status dihitung dari relasi antarperaturan; periksa teks resmi.",
+        "catatan": "Draft / Rekomendasi — status dihitung dari relasi antarperaturan (status_source = relasi); periksa teks resmi. Relasi bergantung pada sinkronisasi dari lapisan data (POST /internal/relations).",
     }

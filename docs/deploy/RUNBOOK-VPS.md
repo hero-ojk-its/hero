@@ -357,9 +357,9 @@ Sesuai arahan Weekly #7 Pak Faris dan Test Plan PM:
      ```
 
   2. **Pemeriksaan Konsistensi PDF - Pasal (Menggantikan Hapus Manual DB)**:
-     Periksa dokumen aktif tanpa berkas fisik PDF dan dokumen ber-PDF tanpa pasal:
+     Periksa dokumen aktif tanpa berkas fisik PDF, dokumen ber-PDF tanpa pasal, serta dokumen macet di `diproses`:
      ```bash
-     # Dry-run laporan konsistensi (Kelompok A, B, C):
+     # Dry-run laporan konsistensi (Kelompok A, B, C, D):
      docker compose exec backend python scripts/periksa_konsistensi_pasal.py
 
      # Tindakan perbaikan yang aman:
@@ -368,6 +368,9 @@ Sesuai arahan Weekly #7 Pak Faris dan Test Plan PM:
 
      # - Kembalikan dokumen Kelompok B (ber-PDF tanpa pasal) ke antrean ekstraksi ulang:
      docker compose exec backend python scripts/periksa_konsistensi_pasal.py --antrekan-ulang-tanpa-pasal
+
+     # - Kembalikan dokumen Kelompok D (ber-PDF macet di status 'diproses') ke antrean ekstraksi ulang (Langkah 38):
+     docker compose exec backend python scripts/periksa_konsistensi_pasal.py --antrekan-ulang-macet
      ```
 
   3. **Penarikan Massal Hanya Dokumen Utama (`tarik_semua.py`)**:
@@ -630,5 +633,39 @@ docker compose exec backend python scripts/periksa_judul.py
 docker compose exec backend python scripts/periksa_judul.py --apply
 ```
 > **Catatan:** Perintah `--apply` tidak mengubah teks judul dokumen, melainkan menandai status pemrosesan menjadi `perlu_koreksi` dan mencatat jejak audit `UPDATE_METADATA` dengan alasan `langkah35_judul_mencurigakan` untuk peninjauan manual di antarmuka web.
+
+---
+
+## 15. Penanganan Temuan QA Hamdan & Persiapan UAT (Langkah 38)
+
+### 15.1 Pemisahan Batas Unggah Manual & Unduh Web
+Mulai Langkah 38, batas berkas dipisahkan:
+- `MAX_UPLOAD_MB=25`: Batas unggah PDF manual lewat antarmuka web / API `POST /ingest/upload-pdf` dan retry berkas manual.
+- `MAX_FETCH_MB=100`: Batas unduh PDF otomatis dari perayap web (crawling/scan/tarik) dan retry URL.
+
+Pastikan kedua variabel ini tercantum di `.env.prod` pada server VPS.
+
+### 15.2 Backfill Asal Status Keberlakuan (`scripts/backfill_status_source.py`)
+Untuk dokumen yang sudah memiliki status keberlakuan (bukan `tidak_diketahui`) tetapi kolom `status_source` masih `null`:
+```bash
+# 1. Pindai dokumen yang memerlukan backfill (dry-run):
+docker compose exec backend python scripts/backfill_status_source.py
+
+# 2. Terapkan pembaruan status_source='sumber' ke basis data:
+docker compose exec backend python scripts/backfill_status_source.py --apply
+```
+
+### 15.3 Penanganan Dokumen Macet di Status 'diproses' (Kelompok D)
+Dokumen yang berstatus `diproses` tetapi tidak selesai diekstraksi dan telah melewati masa tenggang klaim (`EXTRACTION_CLAIM_TIMEOUT_MINUTES=30` menit) akan masuk ke **Kelompok D**. Jika percobaan ekstraksinya sudah mencapai batas (`EXTRACTION_MAX_ATTEMPTS`), dokumen tersebut tidak akan pernah diklaim kembali oleh worker.
+
+**Kapan memakai opsi `--antrekan-ulang-macet`:**
+- Jalankan opsi ini saat terdapat dokumen aktif ber-PDF di Kelompok D yang terhenti di `diproses`.
+- Perintah ini akan mereset status dokumen menjadi `diterima`, membersihkan `extraction_claimed_at`, dan mereset `extraction_attempts = 0` sehingga dapat diklaim kembali oleh worker ekstraksi.
+- **PENTING:** Bila setelah diantrekan ulang dokumen kembali macet di status `diproses` berulang kali, penyebab utamanya berada di sisi worker ekstraksi (lapisan data/ML, mis. service ekstraksi mati atau crash akibat format PDF tertentu). Segera laporkan ke tim data pipeline (Fathir).
+```bash
+# Antrekan ulang dokumen ber-PDF yang macet di 'diproses':
+docker compose exec backend python scripts/periksa_konsistensi_pasal.py --antrekan-ulang-macet
+```
+
 
 
