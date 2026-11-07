@@ -452,8 +452,6 @@ class FailureService:
             from app.services.category_service import CategoryService
             from app.services.placement_service import PlacementService
             from app.services.naming_service import NamingInput, is_metadata_sufficient
-            from app.config import settings
-
             cat_svc = CategoryService(self.db)
             place_svc = PlacementService(self.db, self.storage, cat_svc, settings)
             place_res = place_svc.place(doc, force=True, actor_user_id=actor_user_id, ip_address=ip_address)
@@ -492,7 +490,7 @@ class FailureService:
             if (doc.pdf_terproteksi is None or doc.page_count is None) and doc.file_path_pdf:
                 try:
                     pdf_bytes = self.storage.read_pdf(doc.file_path_pdf)
-                    info = validate_pdf(doc.original_filename or "dokumen.pdf", pdf_bytes, settings.max_upload_bytes)
+                    info = validate_pdf(doc.original_filename or "dokumen.pdf", pdf_bytes, settings.max_fetch_bytes)
                     if doc.pdf_terproteksi is None:
                         doc.pdf_terproteksi = info.terproteksi
                     if doc.page_count is None:
@@ -557,7 +555,7 @@ class FailureService:
             if (doc.pdf_terproteksi is None or doc.page_count is None) and doc.file_path_pdf:
                 try:
                     pdf_bytes = self.storage.read_pdf(doc.file_path_pdf)
-                    info = validate_pdf(doc.original_filename or "dokumen.pdf", pdf_bytes, settings.max_upload_bytes)
+                    info = validate_pdf(doc.original_filename or "dokumen.pdf", pdf_bytes, settings.max_fetch_bytes)
                     if doc.pdf_terproteksi is None:
                         doc.pdf_terproteksi = info.terproteksi
                     if doc.page_count is None:
@@ -604,10 +602,9 @@ class FailureService:
         if fetch_url:
             from app.crawlers.registry import get_crawler
             from app.crawlers.simple_http import SimpleHttpCrawler
-            from app.config import settings
             crawler = get_crawler(settings) or SimpleHttpCrawler(allow_private=settings.crawl_allow_private_networks)
             try:
-                fetched = crawler.fetch(fetch_url, max_bytes=settings.max_upload_bytes)
+                fetched = crawler.fetch(fetch_url, max_bytes=settings.max_fetch_bytes)
                 content = fetched.content
             except Exception as e:
                 failure.attempt_count += 1
@@ -706,7 +703,9 @@ class FailureService:
         self.db.commit()
         self.db.refresh(new_job)
 
-        ingest_svc = IngestService(self.db, self.storage)
+        is_scan = bool(fetch_url or (parent_job and parent_job.job_type != JenisJobIngest.unggah_manual))
+        retry_max_bytes = settings.max_fetch_bytes if is_scan else settings.max_upload_bytes
+        ingest_svc = IngestService(self.db, self.storage, max_upload_bytes=retry_max_bytes)
         item = IngestItem(
             filename=failure.original_filename,
             content=content,

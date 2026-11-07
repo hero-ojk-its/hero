@@ -78,7 +78,7 @@ def run_backfill(
                 continue
 
             content = storage.read_pdf(doc.file_path_pdf)
-            info = validate_pdf(doc.original_filename or "dokumen.pdf", content, settings.max_upload_bytes)
+            info = validate_pdf(doc.original_filename or "dokumen.pdf", content, settings.max_fetch_bytes)
 
             if info.terproteksi:
                 stats["terproteksi"] += 1

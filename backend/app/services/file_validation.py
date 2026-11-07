@@ -5,12 +5,15 @@ Layanan validasi format berkas PDF, sanitasi nama berkas, dan penghitungan finge
 import enum
 import hashlib
 import io
+import logging
 import os
 import re
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from pypdf import PdfReader
+
+logger = logging.getLogger("hero")
 
 
 class FileRejectCode(str, enum.Enum):
@@ -156,10 +159,10 @@ def validate_pdf(filename: str, content: bytes, max_bytes: int) -> PdfInfo:
         raise
     except Exception as exc:
         err_detail = str(exc).strip()
-        err_msg = f"PDF rusak atau tidak bisa dibuka: {err_detail[:160]}"[:200]
+        logger.info("PDF rusak atau tidak bisa dibuka: %s", err_detail)
         raise FileValidationError(
             code=FileRejectCode.pdf_rusak,
-            message=err_msg,
+            message="Berkas PDF rusak atau tidak lengkap sehingga tidak bisa dibuka. Unduh ulang atau minta berkas aslinya.",
         )
 
 

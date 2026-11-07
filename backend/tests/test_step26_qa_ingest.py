@@ -87,7 +87,7 @@ def test_r01_corrupt_stream_65_bytes():
         validate_pdf("batch_05_rusak.pdf", corrupt_65, 10 * 1024 * 1024)
 
     assert exc_info.value.code == FileRejectCode.pdf_rusak
-    assert "PDF rusak atau tidak bisa dibuka" in exc_info.value.message
+    assert "Berkas PDF rusak atau tidak lengkap sehingga tidak bisa dibuka" in exc_info.value.message
     assert len(exc_info.value.message) <= 200
 
 
