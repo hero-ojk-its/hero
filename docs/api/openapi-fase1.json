@@ -1791,6 +1791,9 @@
               }
             }
           },
+          "403": {
+            "description": "Dokumen non-publik memerlukan autentikasi aktif"
+          },
           "404": {
             "description": "Dokumen tidak ditemukan"
           },
@@ -5341,6 +5344,357 @@
         }
       }
     },
+    "/api/v1/documents/{document_id}/harmonisasi/tanggapan": {
+      "put": {
+        "tags": [
+          "Harmonisasi"
+        ],
+        "summary": "Beri atau perbarui tanggapan analis terhadap temuan harmonisasi (US-49 #71)",
+        "description": "[US-49, FR-HRM-11] Menyimpan atau memperbarui penilaian analis (valid / tidak_relevan)\nbeserta catatan untuk suatu temuan harmonisasi. Kunci temuan dihitung di server secara stabil.\n\nCatatan: Dua temuan dengan jenis, pasal_draft, pembanding, dan pasal_pembanding yang sama\nakan berbagi satu tanggapan (disengaja, agar penandaan bertahan saat harmonisasi diulang).",
+        "operationId": "upsert_tanggapan_temuan_api_v1_documents__document_id__harmonisasi_tanggapan_put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TanggapanTemuanIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TanggapanTemuanResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Harmonisasi"
+        ],
+        "summary": "Daftar tanggapan analis untuk draft kajian tertentu (US-49 #71)",
+        "description": "Mengembalikan seluruh daftar tanggapan analis yang tersimpan untuk dokumen draft tertentu.",
+        "operationId": "list_tanggapan_temuan_api_v1_documents__document_id__harmonisasi_tanggapan_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TanggapanTemuanResponse"
+                  },
+                  "title": "Response List Tanggapan Temuan Api V1 Documents  Document Id  Harmonisasi Tanggapan Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/documents/{document_id}/harmonisasi/tanggapan/{kunci_temuan}": {
+      "delete": {
+        "tags": [
+          "Harmonisasi"
+        ],
+        "summary": "Hapus tanggapan temuan harmonisasi (US-49 #71)",
+        "description": "Menghapus penandaan/tanggapan analis sehingga temuan kembali berstatus 'belum dinilai'.",
+        "operationId": "delete_tanggapan_temuan_api_v1_documents__document_id__harmonisasi_tanggapan__kunci_temuan__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "kunci_temuan",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Kunci Temuan"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/harmonisasi/tanggapan/rekap": {
+      "get": {
+        "tags": [
+          "Harmonisasi"
+        ],
+        "summary": "Rekap tanggapan analis untuk evaluasi recall (FR-HRM-11, #74)",
+        "description": "[FR-HRM-11, #74] Rekapitulasi tanggapan valid vs tidak relevan per jenis temuan\nuntuk bahan evaluasi recall dan umpan balik model.",
+        "operationId": "rekap_tanggapan_api_v1_harmonisasi_tanggapan_rekap_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dari",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Tanggal awal penilaian (YYYY-MM-DD)",
+              "title": "Dari"
+            },
+            "description": "Tanggal awal penilaian (YYYY-MM-DD)"
+          },
+          {
+            "name": "sampai",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Tanggal akhir penilaian (YYYY-MM-DD)",
+              "title": "Sampai"
+            },
+            "description": "Tanggal akhir penilaian (YYYY-MM-DD)"
+          },
+          {
+            "name": "document_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter dokumen draft tertentu",
+              "title": "Document Id"
+            },
+            "description": "Filter dokumen draft tertentu"
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Format respons: 'csv' atau default JSON",
+              "title": "Format"
+            },
+            "description": "Format respons: 'csv' atau default JSON"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/documents/{document_id}/harmonisasi/ekspor": {
+      "get": {
+        "tags": [
+          "Harmonisasi"
+        ],
+        "summary": "Ekspor laporan harmonisasi regulasi (DOCX, CSV, JSON) (US-50 #73)",
+        "description": "[US-50, FR-HRM-13] Mengekspor laporan hasil harmonisasi draft regulasi ke berkas DOCX, CSV, atau JSON\nlangsung dari hasil yang tersimpan di basis data (tanpa memanggil layanan ML).",
+        "operationId": "export_document_harmonization_api_v1_documents__document_id__harmonisasi_ekspor_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Format berkas ekspor: docx | csv | json",
+              "default": "docx",
+              "title": "Format"
+            },
+            "description": "Format berkas ekspor: docx | csv | json"
+          },
+          {
+            "name": "run_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ID eksekusi tertentu dari riwayat harmonisasi",
+              "title": "Run Id"
+            },
+            "description": "ID eksekusi tertentu dari riwayat harmonisasi"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Berkas ekspor laporan harmonisasi dalam format DOCX, CSV, atau JSON.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {},
+              "text/csv": {}
+            }
+          },
+          "403": {
+            "description": "Akses ditolak (dokumen non-publik memerlukan otentikasi)"
+          },
+          "404": {
+            "description": "Dokumen tidak ditemukan atau belum pernah diharmonisasi"
+          },
+          "422": {
+            "description": "Bukan dokumen draft kajian atau format tidak didukung"
+          }
+        }
+      }
+    },
     "/api/v1/users/": {
       "get": {
         "tags": [
@@ -6142,6 +6496,11 @@
             "type": "integer",
             "title": "Duplicate Count"
           },
+          "duplikat_identitas_count": {
+            "type": "integer",
+            "title": "Duplikat Identitas Count",
+            "default": 0
+          },
           "failed_count": {
             "type": "integer",
             "title": "Failed Count"
@@ -6352,6 +6711,18 @@
             ],
             "title": "Source Url",
             "description": "URL asal dokumen (opsional)"
+          },
+          "status_keberlakuan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Keberlakuan",
+            "description": "Status keberlakuan awal dari sumber (opsional)"
           },
           "persetujuan_publik_oleh": {
             "anyOf": [
@@ -8120,6 +8491,27 @@
             ],
             "title": "Status Source"
           },
+          "status_keterangan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Keterangan"
+          },
+          "jumlah_relasi": {
+            "type": "integer",
+            "title": "Jumlah Relasi",
+            "default": 0
+          },
+          "identity_key_kosong": {
+            "type": "boolean",
+            "title": "Identity Key Kosong",
+            "default": false
+          },
           "induk": {
             "items": {
               "$ref": "#/components/schemas/VersionRelationItem"
@@ -8682,6 +9074,17 @@
           "reason_code": {
             "type": "string",
             "title": "Reason Code"
+          },
+          "label_alasan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Alasan"
           },
           "message": {
             "type": "string",
@@ -9287,6 +9690,20 @@
               }
             ],
             "title": "Rencana Perubahan"
+          },
+          "tanggapan": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tanggapan"
           }
         },
         "additionalProperties": true,
@@ -9368,6 +9785,29 @@
                 "type": "null"
               }
             ]
+          },
+          "kunci_temuan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kunci Temuan"
+          },
+          "tanggapan": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tanggapan"
           }
         },
         "additionalProperties": true,
@@ -9495,6 +9935,17 @@
             ],
             "title": "Reason Code"
           },
+          "label_alasan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Alasan"
+          },
           "placement": {
             "anyOf": [
               {
@@ -9583,6 +10034,11 @@
           "duplicate_count": {
             "type": "integer",
             "title": "Duplicate Count"
+          },
+          "duplikat_identitas_count": {
+            "type": "integer",
+            "title": "Duplikat Identitas Count",
+            "default": 0
           },
           "failed_count": {
             "type": "integer",
@@ -10081,6 +10537,11 @@
             "type": "integer",
             "title": "Duplicate Count"
           },
+          "duplikat_identitas_count": {
+            "type": "integer",
+            "title": "Duplikat Identitas Count",
+            "default": 0
+          },
           "failed_count": {
             "type": "integer",
             "title": "Failed Count"
@@ -10219,6 +10680,17 @@
           "reason_code": {
             "type": "string",
             "title": "Reason Code"
+          },
+          "label_alasan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Alasan"
           },
           "message": {
             "type": "string",
@@ -12057,6 +12529,171 @@
         },
         "type": "object",
         "title": "SyncRelationsIn"
+      },
+      "TanggapanTemuanIn": {
+        "properties": {
+          "temuan": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Temuan",
+            "description": "Objek temuan dari respons harmonisasi"
+          },
+          "penilaian": {
+            "type": "string",
+            "title": "Penilaian",
+            "description": "Penilaian analis: 'valid' atau 'tidak_relevan'"
+          },
+          "catatan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catatan",
+            "description": "Catatan analis (maksimal 2000 karakter)"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id",
+            "description": "ID eksekusi tempat temuan ditandai"
+          },
+          "dinilai_oleh_nama": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dinilai Oleh Nama",
+            "description": "Nama penilai opsional (terutama mode auth mati)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "temuan",
+          "penilaian"
+        ],
+        "title": "TanggapanTemuanIn"
+      },
+      "TanggapanTemuanResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "kunci_temuan": {
+            "type": "string",
+            "title": "Kunci Temuan"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "temuan_id_ml": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temuan Id Ml"
+          },
+          "penilaian": {
+            "type": "string",
+            "title": "Penilaian"
+          },
+          "catatan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catatan"
+          },
+          "ringkasan_temuan": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ringkasan Temuan"
+          },
+          "dinilai_oleh": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dinilai Oleh"
+          },
+          "dinilai_oleh_nama": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dinilai Oleh Nama"
+          },
+          "dibuat": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Dibuat"
+          },
+          "diperbarui": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Diperbarui"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "document_id",
+          "kunci_temuan",
+          "penilaian",
+          "dibuat",
+          "diperbarui"
+        ],
+        "title": "TanggapanTemuanResponse"
       },
       "TujuanTarik": {
         "type": "string",

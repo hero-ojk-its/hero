@@ -33,6 +33,8 @@ class HarmonisasiTemuan(BaseModel):
     pasal_pembanding: Optional[Any] = None
     badge: Optional[HarmonisasiBadge] = None
     pembanding: Optional[HarmonisasiPembanding] = None
+    kunci_temuan: Optional[str] = None
+    tanggapan: Optional[Dict[str, Any]] = None
 
 
 class HarmonisasiRingkasan(BaseModel):
@@ -40,6 +42,7 @@ class HarmonisasiRingkasan(BaseModel):
     total_temuan: Optional[Any] = None
     per_jenis: Optional[Dict[str, Any]] = None
     rencana_perubahan: Optional[Any] = None
+    tanggapan: Optional[Dict[str, int]] = None
 
 
 class HarmonisasiCache(BaseModel):
