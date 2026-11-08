@@ -9,7 +9,7 @@
  *   (disaring_backend, cache, penyaringan temuan yang pembandingnya tidak boleh diakses).
  */
 
-import { apiJson, ApiError, buildQueryString } from './api';
+import { apiJson, ApiError, buildQueryString, apiFetchBlob } from './api';
 import { ANALISA_TIMEOUT_MS, ML_API_BASE_URL } from './analisaApi';
 import type { MlAnalisaCache } from './analisaApi';
 import type { components, operations } from './openapi';
@@ -25,6 +25,16 @@ export type HarmonisasiBody = NonNullable<HarmonisasiOperation['requestBody']>['
 
 export type JenisTemuan = 'pasal_baru' | 'duplikasi' | 'menggantikan' | 'memperjelas' | 'konflik';
 export const JENIS_TEMUAN: readonly JenisTemuan[] = ['pasal_baru', 'duplikasi', 'menggantikan', 'memperjelas', 'konflik'];
+
+export type PenilaianTemuan = 'valid' | 'tidak_relevan';
+export const PENILAIAN_TEMUAN: readonly PenilaianTemuan[] = ['valid', 'tidak_relevan'];
+
+export interface TanggapanTemuanData {
+  penilaian: PenilaianTemuan | string;
+  catatan?: string | null;
+  dinilai_oleh_nama?: string | null;
+  diperbarui?: string | null;
+}
 
 export interface HarmonisasiBadge {
   value?: string | null;
@@ -71,12 +81,22 @@ export interface HarmonisasiTemuan {
   klausul_baku?: boolean | null;
   /** Untuk audit/kalibrasi ambang, tidak ditampilkan */
   terdekat?: unknown;
+  /** Kunci temuan stabil SHA-256 dari server (Langkah 39 #71) */
+  kunci_temuan?: string | null;
+  /** Status penilaian dan catatan analis (Langkah 39 #71) */
+  tanggapan?: TanggapanTemuanData | null;
 }
 
 export interface HarmonisasiRencanaPerubahan {
   diubah?: string[];
   disisipkan?: string[];
   dihapus?: string[];
+}
+
+export interface HarmonisasiRingkasanTanggapan {
+  valid?: number;
+  tidak_relevan?: number;
+  belum_dinilai?: number;
 }
 
 export interface HarmonisasiRingkasan {
@@ -89,6 +109,8 @@ export interface HarmonisasiRingkasan {
   rujukan_dicabut?: number;
   /** null bila draft tidak memuat instruksi perubahan */
   rencana_perubahan?: HarmonisasiRencanaPerubahan | null;
+  /** Rekapitulasi penilaian analis (Langkah 39 #71) */
+  tanggapan?: HarmonisasiRingkasanTanggapan | null;
 }
 
 export interface HarmonisasiDraft {
@@ -160,6 +182,114 @@ export async function postHarmonisasi(
     signal,
     timeout: ANALISA_TIMEOUT_MS,
   });
+}
+
+// ============================================================================
+// Penandaan Temuan Harmonisasi (US-49 #71)
+// ============================================================================
+
+export interface TanggapanTemuanPayload {
+  temuan: Record<string, unknown>;
+  penilaian: PenilaianTemuan;
+  catatan?: string | null;
+  run_id?: number | null;
+  dinilai_oleh_nama?: string | null;
+}
+
+export interface TanggapanTemuanResponse {
+  id: number;
+  document_id: number;
+  kunci_temuan: string;
+  run_id?: number | null;
+  temuan_id_ml?: string | null;
+  penilaian: string;
+  catatan?: string | null;
+  ringkasan_temuan?: Record<string, unknown> | null;
+  dinilai_oleh?: number | null;
+  dinilai_oleh_nama?: string | null;
+  dibuat: string;
+  diperbarui: string;
+}
+
+/**
+ * Menyimpan atau memperbarui penilaian analis ('valid' | 'tidak_relevan')
+ * beserta catatan opsional untuk temuan harmonisasi (US-49 #71).
+ */
+export async function upsertTanggapanTemuan(
+  documentId: number,
+  payload: TanggapanTemuanPayload,
+  options?: { signal?: AbortSignal }
+): Promise<TanggapanTemuanResponse> {
+  return apiJson<TanggapanTemuanResponse>(
+    'PUT',
+    `/api/v1/documents/${documentId}/harmonisasi/tanggapan`,
+    payload,
+    { signal: options?.signal }
+  );
+}
+
+/**
+ * Mengambil daftar tanggapan analis yang tersimpan untuk dokumen draft tertentu.
+ */
+export async function listTanggapanTemuan(
+  documentId: number,
+  options?: { signal?: AbortSignal }
+): Promise<TanggapanTemuanResponse[]> {
+  return apiJson<TanggapanTemuanResponse[]>(
+    'GET',
+    `/api/v1/documents/${documentId}/harmonisasi/tanggapan`,
+    null,
+    { signal: options?.signal }
+  );
+}
+
+/**
+ * Menghapus penandaan/tanggapan analis sehingga temuan kembali berstatus 'belum dinilai'.
+ */
+export async function deleteTanggapanTemuan(
+  documentId: number,
+  kunciTemuan: string,
+  options?: { signal?: AbortSignal }
+): Promise<unknown> {
+  return apiJson<unknown>(
+    'DELETE',
+    `/api/v1/documents/${documentId}/harmonisasi/tanggapan/${encodeURIComponent(kunciTemuan)}`,
+    null,
+    { signal: options?.signal }
+  );
+}
+
+// ============================================================================
+// Ekspor Laporan Harmonisasi (US-50 #73)
+// ============================================================================
+
+export type HarmonisasiExportFormat = 'docx' | 'csv' | 'json';
+
+export interface ExportHarmonisasiResult {
+  blob: Blob;
+  filename: string;
+}
+
+/**
+ * Mengekspor berkas laporan hasil harmonisasi draft regulasi ke format DOCX, CSV, atau JSON (US-50 #73).
+ * Menggunakan helper apiFetchBlob untuk menerima respons file biner/stream dan memparsing nama berkas asli.
+ */
+export async function exportHarmonisasi(
+  documentId: number,
+  format: HarmonisasiExportFormat,
+  runId?: number | null,
+  options?: { signal?: AbortSignal }
+): Promise<ExportHarmonisasiResult> {
+  const params: Record<string, string> = { format };
+  if (typeof runId === 'number') {
+    params.run_id = String(runId);
+  }
+  const qs = buildQueryString(params);
+  const url = `/api/v1/documents/${documentId}/harmonisasi/ekspor${qs}`;
+  const blob = await apiFetchBlob(url, { signal: options?.signal });
+  const fallbackFilename = `harmonisasi_dokumen_${documentId}.${format}`;
+  const filename = blob.filename || fallbackFilename;
+  return { blob, filename };
 }
 
 // ============================================================================

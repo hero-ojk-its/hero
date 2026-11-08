@@ -2912,6 +2912,12 @@ export default function AnalisaState2Workspace({
                     state={harmonisasi}
                     onMuat={(segar) => void muatHarmonisasi(segar)}
                     onJumpToPasal={handleJumpToPasal}
+                    documentId={documentId}
+                    documentRole={docStatus?.document_role}
+                    onUpdateHarmonisasiData={(updatedData) => {
+                      setHarmonisasiState((prev) => prev ? { ...prev, data: updatedData } : null);
+                      saveStoredHarmonisasiResult(documentId, updatedData);
+                    }}
                   />
                 </PanelErrorBoundary>
               )}

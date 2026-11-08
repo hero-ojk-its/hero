@@ -1,8 +1,34 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
-import { ExternalLink, FileText, Info, Loader2, RefreshCw } from 'lucide-react';
-import { apiFetchBlob } from '../../lib/api';
-import { labelTemuan, warnaTemuan, isJenisTemuan, ringkasDisaring } from '../../lib/harmonisasiApi';
+import {
+  ExternalLink,
+  FileText,
+  Info,
+  Loader2,
+  RefreshCw,
+  Download,
+  ChevronDown,
+  CheckCircle2,
+  XCircle,
+  HelpCircle,
+  MessageSquare,
+  Clock,
+  User,
+  AlertCircle,
+  FileSpreadsheet,
+  FileCode2,
+} from 'lucide-react';
+import { apiFetchBlob, ApiError } from '../../lib/api';
+import {
+  labelTemuan,
+  warnaTemuan,
+  isJenisTemuan,
+  ringkasDisaring,
+  upsertTanggapanTemuan,
+  deleteTanggapanTemuan,
+  exportHarmonisasi,
+  listTanggapanTemuan,
+} from '../../lib/harmonisasiApi';
 import type {
   HarmonisasiPembanding,
   HarmonisasiResponse,
@@ -10,6 +36,8 @@ import type {
   JenisTemuan,
   PesanGalat,
   WarnaTemuan,
+  PenilaianTemuan,
+  HarmonisasiExportFormat,
 } from '../../lib/harmonisasiApi';
 import { DraftLabel } from '../DraftLabel';
 import { ErrorState } from '../ErrorState';
@@ -27,6 +55,9 @@ export interface HarmonisasiPanelProps {
   /** segar=true memaksa hitung ulang tanpa cache */
   onMuat: (segar: boolean) => void;
   onJumpToPasal: (pasal: string) => void;
+  documentId?: number;
+  documentRole?: string | null;
+  onUpdateHarmonisasiData?: (updatedData: HarmonisasiResponse) => void;
 }
 
 const KELAS_WARNA: Record<WarnaTemuan, { badge: string; kartu: string; kartuAktif: string }> = {
@@ -72,36 +103,164 @@ function targetPdf(p: HarmonisasiPembanding | null | undefined): { path: string;
   return { path, hash: hash || halaman };
 }
 
-export default function HarmonisasiPanel({ state, onMuat, onJumpToPasal }: HarmonisasiPanelProps) {
+/** Kunci identifikasi temuan stabil */
+function getTemuanKey(t: HarmonisasiTemuan, fallbackIndex?: number): string {
+  if (t.kunci_temuan && t.kunci_temuan.trim() !== '') return t.kunci_temuan;
+  const pembandingId = t.pembanding?.key || t.pembanding?.document_id || '';
+  const pembandingPasal = t.pembanding?.pasal || '';
+  return `${t.jenis}|${t.pasal_draft}|${pembandingId}|${pembandingPasal}|${fallbackIndex ?? ''}`;
+}
+
+export default function HarmonisasiPanel({
+  state,
+  onMuat,
+  onJumpToPasal,
+  documentId,
+  documentRole,
+  onUpdateHarmonisasiData,
+}: HarmonisasiPanelProps) {
   const [filterJenis, setFilterJenis] = useState<string | null>(null);
+  const [filterPenilaian, setFilterPenilaian] = useState<'semua' | 'valid' | 'tidak_relevan' | 'belum_dinilai'>('semua');
   const [pdfGalat, setPdfGalat] = useState<string | null>(null);
 
+  // State Ekspor Laporan (#73)
+  const [exportOpen, setExportOpen] = useState<boolean>(false);
+  const [exportingFormat, setExportingFormat] = useState<HarmonisasiExportFormat | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const exportDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  // State Penandaan Temuan (#71)
+  const [savingKunci, setSavingKunci] = useState<Record<string, boolean>>({});
+  const [aksiError, setAksiError] = useState<Record<string, string | null>>({});
+  const [bukaCatatan, setBukaCatatan] = useState<Record<string, boolean>>({});
+  const [catatanDraft, setCatatanDraft] = useState<Record<string, string>>({});
+
+  const isDraft = documentRole === 'draft_kajian';
   const data = state?.data ?? null;
   const loading = state?.status === 'loading';
+
   const temuan = useMemo<HarmonisasiTemuan[]>(
     () => (Array.isArray(data?.temuan) ? data.temuan.filter((t) => t && typeof t === 'object' && teksAda(t.pasal_draft)) : []),
     [data]
   );
 
-  // Angka kartu dihitung dari temuan yang tampil (bukan ringkasan.per_jenis, yang dihitung sebelum penyaringan akses)
+  // Angka kartu dihitung dari temuan yang tampil (bukan ringkasan.per_jenis)
   const jumlahPerJenis = useMemo(() => {
     const hitung: Record<string, number> = {};
     for (const t of temuan) hitung[t.jenis] = (hitung[t.jenis] ?? 0) + 1;
     return hitung;
   }, [temuan]);
 
+  // Rekapitulasi penilaian analis (#71)
+  const tanggapanRingkasan = data?.ringkasan?.tanggapan;
+  const rekapTanggapan = useMemo(() => {
+    if (tanggapanRingkasan && typeof tanggapanRingkasan.valid === 'number') {
+      return {
+        valid: tanggapanRingkasan.valid ?? 0,
+        tidakRelevan: tanggapanRingkasan.tidak_relevan ?? 0,
+        belumDinilai: tanggapanRingkasan.belum_dinilai ?? 0,
+      };
+    }
+    let valid = 0;
+    let tidakRelevan = 0;
+    let belumDinilai = 0;
+    for (const t of temuan) {
+      const p = t.tanggapan?.penilaian;
+      if (p === 'valid') valid++;
+      else if (p === 'tidak_relevan') tidakRelevan++;
+      else belumDinilai++;
+    }
+    return { valid, tidakRelevan, belumDinilai };
+  }, [tanggapanRingkasan, temuan]);
+
   const kartu = [...KARTU_JENIS, ...((jumlahPerJenis.konflik ?? 0) > 0 ? (['konflik'] as JenisTemuan[]) : [])];
-  const temuanTampil = filterJenis ? temuan.filter((t) => t.jenis === filterJenis) : temuan;
-  // Hitungan kartu tetap dari temuan yang tampil; ini hanya keterangan
+
+  // Filter temuan berdasarkan jenis dan penilaian analis
+  const temuanTampil = useMemo(() => {
+    return temuan.filter((t) => {
+      if (filterJenis && t.jenis !== filterJenis) return false;
+      if (filterPenilaian === 'valid') return t.tanggapan?.penilaian === 'valid';
+      if (filterPenilaian === 'tidak_relevan') return t.tanggapan?.penilaian === 'tidak_relevan';
+      if (filterPenilaian === 'belum_dinilai') return !t.tanggapan || !t.tanggapan.penilaian;
+      return true;
+    });
+  }, [temuan, filterJenis, filterPenilaian]);
+
   const catatanDisaring = ringkasDisaring(data);
   const ringkasan = data?.ringkasan ?? null;
+
+  // Tutup dropdown ekspor saat klik di luar
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent | globalThis.MouseEvent) {
+      if (exportDropdownRef.current && !exportDropdownRef.current.contains(event.target as Node)) {
+        setExportOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Sinkronisasi tanggapan dari database saat dokumen dimuat tanpa memicu ML
+  useEffect(() => {
+    if (!documentId || !isDraft || !data?.temuan || data.temuan.length === 0) return;
+    let active = true;
+    listTanggapanTemuan(documentId)
+      .then((records) => {
+        if (!active || !records || records.length === 0) return;
+        const map = new Map(records.map((r) => [r.kunci_temuan, r]));
+        let hasChange = false;
+        const updatedTemuan = data.temuan!.map((t) => {
+          if (!t.kunci_temuan) return t;
+          const rec = map.get(t.kunci_temuan);
+          if (rec) {
+            if (!t.tanggapan || t.tanggapan.penilaian !== rec.penilaian || t.tanggapan.catatan !== rec.catatan) {
+              hasChange = true;
+              return {
+                ...t,
+                tanggapan: {
+                  penilaian: rec.penilaian as PenilaianTemuan,
+                  catatan: rec.catatan,
+                  dinilai_oleh_nama: rec.dinilai_oleh_nama,
+                  diperbarui: rec.diperbarui,
+                },
+              };
+            }
+          }
+          return t;
+        });
+        if (hasChange) {
+          let v = 0;
+          let tr = 0;
+          let bd = 0;
+          for (const item of updatedTemuan) {
+            if (item.tanggapan?.penilaian === 'valid') v++;
+            else if (item.tanggapan?.penilaian === 'tidak_relevan') tr++;
+            else bd++;
+          }
+          const updatedData: HarmonisasiResponse = {
+            ...data,
+            temuan: updatedTemuan,
+            ringkasan: {
+              ...data.ringkasan,
+              tanggapan: { valid: v, tidak_relevan: tr, belum_dinilai: bd },
+            },
+          };
+          onUpdateHarmonisasiData?.(updatedData);
+        }
+      })
+      .catch(() => {
+        // Abaikan kegagalan jaringan latar belakang
+      });
+    return () => {
+      active = false;
+    };
+  }, [documentId, isDraft, data, onUpdateHarmonisasiData]);
 
   const bukaPdf = (e: MouseEvent | KeyboardEvent, p: HarmonisasiPembanding | null | undefined) => {
     e.stopPropagation();
     const target = targetPdf(p);
     if (!target) return;
     setPdfGalat(null);
-    // Tab dibuka saat klik agar tidak diblokir popup blocker, lalu diisi blob setelah unduhan selesai
     const tab = window.open('', '_blank');
     if (tab) tab.document.title = 'Memuat PDF…';
     apiFetchBlob(target.path)
@@ -126,25 +285,287 @@ export default function HarmonisasiPanel({ state, onMuat, onJumpToPasal }: Harmo
     }
   };
 
+  // Handler Beri / Perbarui Penilaian Temuan (#71)
+  const handleNilai = async (e: MouseEvent, t: HarmonisasiTemuan, penilaian: PenilaianTemuan) => {
+    e.stopPropagation();
+    if (!documentId || !isDraft) return;
+    const key = getTemuanKey(t);
+    setSavingKunci((prev) => ({ ...prev, [key]: true }));
+    setAksiError((prev) => ({ ...prev, [key]: null }));
+    try {
+      const catatanInput = catatanDraft[key] !== undefined ? catatanDraft[key] : (t.tanggapan?.catatan ?? null);
+      const res = await upsertTanggapanTemuan(documentId, {
+        temuan: t as unknown as Record<string, unknown>,
+        penilaian,
+        catatan: catatanInput && catatanInput.trim() !== '' ? catatanInput.trim() : null,
+      });
+
+      // Update temuan pada state memori
+      t.kunci_temuan = res.kunci_temuan;
+      t.tanggapan = {
+        penilaian: res.penilaian as PenilaianTemuan,
+        catatan: res.catatan,
+        dinilai_oleh_nama: res.dinilai_oleh_nama,
+        diperbarui: res.diperbarui,
+      };
+
+      // Hitung ulang rekap penilaian
+      let v = 0;
+      let tr = 0;
+      let bd = 0;
+      for (const item of temuan) {
+        if (item.tanggapan?.penilaian === 'valid') v++;
+        else if (item.tanggapan?.penilaian === 'tidak_relevan') tr++;
+        else bd++;
+      }
+
+      const updated: HarmonisasiResponse = {
+        ...data!,
+        temuan: [...(data!.temuan || [])],
+        ringkasan: {
+          ...(data!.ringkasan || {}),
+          tanggapan: { valid: v, tidak_relevan: tr, belum_dinilai: bd },
+        },
+      };
+      onUpdateHarmonisasiData?.(updated);
+      setBukaCatatan((prev) => ({ ...prev, [key]: false }));
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        if (err.status === 422 && typeof err.detail === 'object' && (err.detail as Record<string, unknown>)?.code === 'bukan_draft') {
+          setAksiError((prev) => ({ ...prev, [key]: 'Hanya dokumen draft kajian yang dapat diberi tanggapan.' }));
+        } else {
+          setAksiError((prev) => ({ ...prev, [key]: err.message || 'Gagal menyimpan penilaian.' }));
+        }
+      } else if (err instanceof Error) {
+        setAksiError((prev) => ({ ...prev, [key]: err.message }));
+      } else {
+        setAksiError((prev) => ({ ...prev, [key]: 'Gagal menyimpan penilaian temuan.' }));
+      }
+    } finally {
+      setSavingKunci((prev) => ({ ...prev, [key]: false }));
+    }
+  };
+
+  // Handler Batalkan Penilaian Temuan (#71)
+  const handleBatal = async (e: MouseEvent, t: HarmonisasiTemuan) => {
+    e.stopPropagation();
+    if (!documentId || !isDraft) return;
+    const key = getTemuanKey(t);
+    if (!t.kunci_temuan) {
+      t.tanggapan = null;
+      return;
+    }
+
+    setSavingKunci((prev) => ({ ...prev, [key]: true }));
+    setAksiError((prev) => ({ ...prev, [key]: null }));
+    try {
+      await deleteTanggapanTemuan(documentId, t.kunci_temuan);
+      t.tanggapan = null;
+
+      // Hitung ulang rekap penilaian
+      let v = 0;
+      let tr = 0;
+      let bd = 0;
+      for (const item of temuan) {
+        if (item.tanggapan?.penilaian === 'valid') v++;
+        else if (item.tanggapan?.penilaian === 'tidak_relevan') tr++;
+        else bd++;
+      }
+
+      const updated: HarmonisasiResponse = {
+        ...data!,
+        temuan: [...(data!.temuan || [])],
+        ringkasan: {
+          ...(data!.ringkasan || {}),
+          tanggapan: { valid: v, tidak_relevan: tr, belum_dinilai: bd },
+        },
+      };
+      onUpdateHarmonisasiData?.(updated);
+      setCatatanDraft((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      setBukaCatatan((prev) => ({ ...prev, [key]: false }));
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setAksiError((prev) => ({ ...prev, [key]: err.message || 'Gagal membatalkan penilaian.' }));
+      } else if (err instanceof Error) {
+        setAksiError((prev) => ({ ...prev, [key]: err.message }));
+      } else {
+        setAksiError((prev) => ({ ...prev, [key]: 'Gagal membatalkan penilaian.' }));
+      }
+    } finally {
+      setSavingKunci((prev) => ({ ...prev, [key]: false }));
+    }
+  };
+
+  // Handler Ekspor Laporan Harmonisasi (#73)
+  const handleExport = async (format: HarmonisasiExportFormat) => {
+    if (!documentId || exportingFormat !== null) return;
+    if (!isDraft) {
+      setExportError('Ekspor laporan harmonisasi hanya tersedia untuk dokumen draft kajian.');
+      return;
+    }
+    setExportingFormat(format);
+    setExportError(null);
+    try {
+      const { blob, filename } = await exportHarmonisasi(documentId, format);
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+      setExportOpen(false);
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        if (err.status === 404) {
+          setExportError('Dokumen ini belum pernah diharmonisasi. Silakan jalankan harmonisasi terlebih dahulu.');
+        } else if (err.status === 422) {
+          setExportError('Hanya dokumen draft kajian yang dapat diekspor laporan harmonisasinya.');
+        } else if (err.status === 403) {
+          setExportError('Akses ditolak: Dokumen non-publik memerlukan sesi login aktif.');
+        } else {
+          setExportError(err.message || 'Gagal mengunduh berkas laporan harmonisasi.');
+        }
+      } else if (err instanceof Error) {
+        setExportError(err.message);
+      } else {
+        setExportError('Terjadi kendala saat mengekspor laporan harmonisasi.');
+      }
+    } finally {
+      setExportingFormat(null);
+    }
+  };
+
   return (
-    <div className="space-y-3">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-2">
+    <div className="space-y-3 font-sans">
+      {/* Header & Toolbar */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-xs font-bold text-gray-900 uppercase tracking-wider truncate">Harmonisasi Draft vs Korpus</span>
           <DraftLabel ukuran="kecil" />
         </div>
-        <button
-          type="button"
-          onClick={() => onMuat(true)}
-          disabled={loading}
-          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-gray-200 bg-white text-[11px] font-semibold text-gray-700 hover:bg-gray-50 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-          title="Hitung ulang harmonisasi tanpa cache (segar=true)"
-        >
-          <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
-          <span>Hitung ulang</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Menu Dropdown Ekspor Laporan (#73) */}
+          <div className="relative" ref={exportDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setExportOpen(!exportOpen)}
+              disabled={loading || exportingFormat !== null || !data || !isDraft}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-semibold transition cursor-pointer ${
+                !isDraft
+                  ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed opacity-60'
+                  : exportOpen
+                  ? 'border-red-300 bg-red-50 text-red-700'
+                  : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+              }`}
+              title={
+                !isDraft
+                  ? 'Ekspor harmonisasi hanya tersedia untuk dokumen draft kajian'
+                  : 'Ekspor laporan hasil harmonisasi regulasi (DOCX, CSV, JSON)'
+              }
+            >
+              {exportingFormat !== null ? (
+                <Loader2 size={11} className="animate-spin text-red-700" />
+              ) : (
+                <Download size={11} className="text-gray-600" />
+              )}
+              <span>Ekspor</span>
+              <ChevronDown size={11} className={`transition-transform duration-200 ${exportOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {exportOpen && isDraft && (
+              <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1 text-xs animate-in fade-in zoom-in-95 duration-150">
+                <div className="px-3 py-1.5 border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                  Pilih Format Laporan
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleExport('docx')}
+                  disabled={exportingFormat !== null}
+                  className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-center gap-2 text-gray-700 transition cursor-pointer disabled:opacity-50"
+                >
+                  <FileText size={14} className="text-blue-600 shrink-0" />
+                  <div className="min-w-0">
+                    <span className="font-semibold block text-xs">Dokumen Word (.docx)</span>
+                    <span className="text-[10px] text-gray-500">Tabel resmi &amp; penilaian analis</span>
+                  </div>
+                  {exportingFormat === 'docx' && <Loader2 size={12} className="animate-spin ml-auto text-blue-600" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleExport('csv')}
+                  disabled={exportingFormat !== null}
+                  className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-center gap-2 text-gray-700 transition cursor-pointer disabled:opacity-50"
+                >
+                  <FileSpreadsheet size={14} className="text-emerald-600 shrink-0" />
+                  <div className="min-w-0">
+                    <span className="font-semibold block text-xs">Tabel Analisis (.csv)</span>
+                    <span className="text-[10px] text-gray-500">Berkas spreadsheet UTF-8</span>
+                  </div>
+                  {exportingFormat === 'csv' && <Loader2 size={12} className="animate-spin ml-auto text-emerald-600" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleExport('json')}
+                  disabled={exportingFormat !== null}
+                  className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-center gap-2 text-gray-700 transition cursor-pointer disabled:opacity-50"
+                >
+                  <FileCode2 size={14} className="text-purple-600 shrink-0" />
+                  <div className="min-w-0">
+                    <span className="font-semibold block text-xs">Data Terstruktur (.json)</span>
+                    <span className="text-[10px] text-gray-500">Metadata &amp; temuan terpadu</span>
+                  </div>
+                  {exportingFormat === 'json' && <Loader2 size={12} className="animate-spin ml-auto text-purple-600" />}
+                </button>
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onMuat(true)}
+            disabled={loading}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-gray-200 bg-white text-[11px] font-semibold text-gray-700 hover:bg-gray-50 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+            title="Hitung ulang harmonisasi tanpa cache (segar=true)"
+          >
+            <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+            <span>Hitung ulang</span>
+          </button>
+        </div>
       </div>
+
+      {/* Informasi Dokumen Non-Draft (Read-Only) */}
+      {!isDraft && (
+        <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-center gap-2 shadow-2xs">
+          <Info size={14} className="text-amber-600 shrink-0" />
+          <span>
+            Dokumen ini berstatus korpus regulasi eksisting (non-draft). Penandaan temuan dan ekspor laporan harmonisasi hanya tersedia untuk dokumen berstatus draft kajian.
+          </span>
+        </div>
+      )}
+
+      {/* Banner Error Ekspor */}
+      {exportError && (
+        <div className="p-2.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-800 flex items-start justify-between gap-2 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={14} className="text-red-600 shrink-0 mt-0.5" />
+            <span>{exportError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setExportError(null)}
+            className="text-red-500 hover:text-red-800 text-xs font-bold p-0.5 cursor-pointer"
+            title="Tutup pesan"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Belum dijalankan */}
       {!state && (
@@ -197,6 +618,69 @@ export default function HarmonisasiPanel({ state, onMuat, onJumpToPasal }: Harmo
             </p>
           )}
 
+          {/* Rekap Penilaian Analis (#71) */}
+          <div className="p-2.5 bg-gray-50 rounded-lg border border-gray-200/90 space-y-1.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-bold text-gray-700 uppercase tracking-wide">Status Penilaian Temuan</span>
+              <span className="text-gray-400 text-[10px]">Klik untuk filter daftar</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {/* Kartu Valid */}
+              <button
+                type="button"
+                onClick={() => setFilterPenilaian(filterPenilaian === 'valid' ? 'semua' : 'valid')}
+                className={`p-2 rounded-lg border text-left transition cursor-pointer flex flex-col justify-between ${
+                  filterPenilaian === 'valid'
+                    ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-300'
+                    : 'border-emerald-200 bg-white hover:bg-emerald-50/50'
+                }`}
+                title="Filter hanya temuan yang dinilai Valid"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-semibold text-emerald-800 uppercase">Valid</span>
+                  <CheckCircle2 size={12} className="text-emerald-600" />
+                </div>
+                <span className="text-base font-bold text-emerald-900 mt-0.5">{rekapTanggapan.valid}</span>
+              </button>
+
+              {/* Kartu Tidak Relevan */}
+              <button
+                type="button"
+                onClick={() => setFilterPenilaian(filterPenilaian === 'tidak_relevan' ? 'semua' : 'tidak_relevan')}
+                className={`p-2 rounded-lg border text-left transition cursor-pointer flex flex-col justify-between ${
+                  filterPenilaian === 'tidak_relevan'
+                    ? 'border-slate-500 bg-slate-100 ring-2 ring-slate-300'
+                    : 'border-slate-200 bg-white hover:bg-slate-50'
+                }`}
+                title="Filter hanya temuan yang dinilai Tidak Relevan"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-semibold text-slate-700 uppercase">Tidak Relevan</span>
+                  <XCircle size={12} className="text-slate-500" />
+                </div>
+                <span className="text-base font-bold text-slate-900 mt-0.5">{rekapTanggapan.tidakRelevan}</span>
+              </button>
+
+              {/* Kartu Belum Dinilai */}
+              <button
+                type="button"
+                onClick={() => setFilterPenilaian(filterPenilaian === 'belum_dinilai' ? 'semua' : 'belum_dinilai')}
+                className={`p-2 rounded-lg border text-left transition cursor-pointer flex flex-col justify-between ${
+                  filterPenilaian === 'belum_dinilai'
+                    ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-300'
+                    : 'border-amber-200 bg-white hover:bg-amber-50/50'
+                }`}
+                title="Filter temuan yang belum dinilai"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-semibold text-amber-700 uppercase">Belum Dinilai</span>
+                  <HelpCircle size={12} className="text-amber-500" />
+                </div>
+                <span className="text-base font-bold text-amber-900 mt-0.5">{rekapTanggapan.belumDinilai}</span>
+              </button>
+            </div>
+          </div>
+
           {/* Kartu ringkasan per jenis (klik untuk filter) */}
           <div className="grid grid-cols-2 gap-2">
             {kartu.map((jenis) => {
@@ -217,13 +701,23 @@ export default function HarmonisasiPanel({ state, onMuat, onJumpToPasal }: Harmo
             })}
           </div>
 
-          <div className="flex items-center justify-between text-[11px] text-gray-500">
+          {/* Baris Status Filter */}
+          <div className="flex items-center justify-between text-[11px] text-gray-500 flex-wrap gap-1">
             <span>
-              {filterJenis ? `${temuanTampil.length} temuan ${labelTemuan({ jenis: filterJenis })}` : `${temuan.length} temuan`}
+              Menampilkan {temuanTampil.length} dari {temuan.length} temuan
+              {filterJenis ? ` (${labelTemuan({ jenis: filterJenis })})` : ''}
+              {filterPenilaian !== 'semua' ? ` [${filterPenilaian.replace('_', ' ')}]` : ''}
             </span>
-            {filterJenis && (
-              <button type="button" onClick={() => setFilterJenis(null)} className="font-semibold text-red-700 hover:underline cursor-pointer">
-                Tampilkan semua
+            {(filterJenis || filterPenilaian !== 'semua') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterJenis(null);
+                  setFilterPenilaian('semua');
+                }}
+                className="font-semibold text-red-700 hover:underline cursor-pointer"
+              >
+                Reset semua filter
               </button>
             )}
           </div>
@@ -250,29 +744,40 @@ export default function HarmonisasiPanel({ state, onMuat, onJumpToPasal }: Harmo
             />
           ) : temuanTampil.length === 0 ? (
             <EmptyState
-              title="Tidak ada temuan untuk jenis ini"
-              message={`Tidak ada temuan berjenis ${filterJenis ? labelTemuan({ jenis: filterJenis }) : ''}.`}
+              title="Tidak ada temuan yang cocok"
+              message="Tidak ada temuan dengan kombinasi filter jenis dan penilaian yang dipilih."
               actionLabel="Tampilkan semua"
-              onAction={() => setFilterJenis(null)}
+              onAction={() => {
+                setFilterJenis(null);
+                setFilterPenilaian('semua');
+              }}
             />
           ) : (
-            <ul className="space-y-2.5">
+            <ul className="space-y-3">
               {temuanTampil.map((t, idx) => {
                 const warna = KELAS_WARNA[warnaTemuan(t)];
                 const pdf = targetPdf(t.pembanding);
                 const perbedaan = Array.isArray(t.perbedaan) ? t.perbedaan.filter(teksAda) : [];
                 const keyakinan = typeof t.keyakinan === 'number' && !isNaN(t.keyakinan) ? Math.round(t.keyakinan * 100) : null;
                 const baku = t.klausul_baku === true;
+                const cardKey = getTemuanKey(t, idx);
+                const isSaving = Boolean(savingKunci[cardKey]);
+                const errorPesan = aksiError[cardKey];
+                const editorCatatanTerbuka = Boolean(bukaCatatan[cardKey]);
+                const catatanTeks = catatanDraft[cardKey] !== undefined ? catatanDraft[cardKey] : (t.tanggapan?.catatan ?? '');
+                const penilaianAktif = t.tanggapan?.penilaian;
+
                 return (
-                  <li key={`${t.pasal_draft}-${idx}`}>
+                  <li key={cardKey}>
                     <div
                       role="button"
                       tabIndex={0}
                       onClick={() => lompat(t.pasal_draft)}
                       onKeyDown={(e) => tombolKeyboard(e, t.pasal_draft)}
                       title={`Lompat ke ${t.pasal_draft} di panel naskah`}
-                      className={`p-3 rounded-lg border border-gray-200 bg-white hover:border-gray-300 transition cursor-pointer space-y-1.5 text-xs ${baku ? 'opacity-60' : ''}`}
+                      className={`p-3.5 rounded-xl border border-gray-200 bg-white hover:border-gray-300 transition cursor-pointer space-y-2 text-xs shadow-2xs ${baku ? 'opacity-70' : ''}`}
                     >
+                      {/* Baris Judul & Jenis */}
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <span className="font-bold text-gray-900 truncate">{t.pasal_draft}</span>
@@ -306,6 +811,7 @@ export default function HarmonisasiPanel({ state, onMuat, onJumpToPasal }: Harmo
                         </ul>
                       )}
 
+                      {/* Pembanding */}
                       {t.pembanding && (
                         <div className="mt-1 p-2 rounded-md bg-gray-50 border border-gray-100 space-y-1">
                           <div className="flex items-start justify-between gap-2">
@@ -337,6 +843,200 @@ export default function HarmonisasiPanel({ state, onMuat, onJumpToPasal }: Harmo
                           )}
                         </div>
                       )}
+
+                      {/* ========================================================= */}
+                      {/* AREA PENANDAAN TEMUAN OLEH ANALIS (#71) */}
+                      {/* ========================================================= */}
+                      <div
+                        className="pt-2.5 mt-2 border-t border-gray-100 flex flex-col gap-2"
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          {/* Indikator Status Penilaian */}
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {penilaianAktif === 'valid' ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                <CheckCircle2 size={11} />
+                                <span>Valid</span>
+                              </span>
+                            ) : penilaianAktif === 'tidak_relevan' ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-300">
+                                <XCircle size={11} />
+                                <span>Tidak Relevan</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                                <HelpCircle size={11} />
+                                <span>Belum Dinilai</span>
+                              </span>
+                            )}
+
+                            {isSaving && <Loader2 size={12} className="animate-spin text-red-700 ml-1" />}
+                          </div>
+
+                          {/* Tombol Aksi Penilaian (#71) */}
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {!isDraft ? (
+                              <span className="text-[10px] text-gray-400 italic">Non-draft (read-only)</span>
+                            ) : (
+                              <>
+                                {/* Tombol Valid */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => void handleNilai(e, t, 'valid')}
+                                  disabled={isSaving}
+                                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold transition cursor-pointer disabled:opacity-50 ${
+                                    penilaianAktif === 'valid'
+                                      ? 'bg-emerald-600 text-white shadow-2xs font-bold'
+                                      : 'bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50'
+                                  }`}
+                                  title="Tandai temuan ini sebagai Valid"
+                                >
+                                  <CheckCircle2 size={11} />
+                                  <span>Valid</span>
+                                </button>
+
+                                {/* Tombol Tidak Relevan */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => void handleNilai(e, t, 'tidak_relevan')}
+                                  disabled={isSaving}
+                                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold transition cursor-pointer disabled:opacity-50 ${
+                                    penilaianAktif === 'tidak_relevan'
+                                      ? 'bg-slate-700 text-white shadow-2xs font-bold'
+                                      : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'
+                                  }`}
+                                  title="Tandai temuan ini sebagai Tidak Relevan"
+                                >
+                                  <XCircle size={11} />
+                                  <span>Tidak Relevan</span>
+                                </button>
+
+                                {/* Tombol Toggle Catatan */}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setBukaCatatan((prev) => ({
+                                      ...prev,
+                                      [cardKey]: !prev[cardKey],
+                                    }))
+                                  }
+                                  className={`p-1 rounded text-[11px] border transition cursor-pointer ${
+                                    t.tanggapan?.catatan || editorCatatanTerbuka
+                                      ? 'border-gray-300 bg-gray-100 text-gray-800'
+                                      : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                                  }`}
+                                  title={t.tanggapan?.catatan ? 'Edit catatan analis' : 'Tambah catatan analis'}
+                                >
+                                  <MessageSquare size={12} />
+                                </button>
+
+                                {/* Tombol Batalkan Penilaian */}
+                                {penilaianAktif && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => void handleBatal(e, t)}
+                                    disabled={isSaving}
+                                    className="px-1.5 py-1 text-[10px] text-gray-500 hover:text-red-700 hover:underline transition cursor-pointer disabled:opacity-50"
+                                    title="Batalkan penandaan temuan ini"
+                                  >
+                                    Batalkan
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Catatan Tersimpan (Saat editor tertutup) */}
+                        {!editorCatatanTerbuka && t.tanggapan?.catatan && (
+                          <div className="bg-gray-50 rounded-md p-2 text-[11px] text-gray-700 border border-gray-100 italic space-y-0.5">
+                            <span className="font-semibold text-gray-600 block not-italic text-[10px]">Catatan Analis:</span>
+                            <p className="whitespace-pre-wrap">{t.tanggapan.catatan}</p>
+                          </div>
+                        )}
+
+                        {/* Editor Input Catatan Opsional (#71) */}
+                        {editorCatatanTerbuka && isDraft && (
+                          <div className="bg-gray-50 p-2.5 rounded-lg border border-gray-200 space-y-1.5 animate-in fade-in duration-150">
+                            <div className="flex items-center justify-between text-[10px] text-gray-500">
+                              <span className="font-semibold text-gray-700">Catatan Analis (Opsional)</span>
+                              <span className={catatanTeks.length > 1900 ? 'text-amber-600 font-bold' : ''}>
+                                {catatanTeks.length}/2000
+                              </span>
+                            </div>
+                            <textarea
+                              rows={2}
+                              maxLength={2000}
+                              value={catatanTeks}
+                              onChange={(e) =>
+                                setCatatanDraft((prev) => ({
+                                  ...prev,
+                                  [cardKey]: e.target.value,
+                                }))
+                              }
+                              placeholder="Tuliskan catatan atau justifikasi analis..."
+                              className="w-full text-xs p-2 bg-white border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-red-700 focus:border-red-700 resize-y"
+                            />
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setBukaCatatan((prev) => ({
+                                    ...prev,
+                                    [cardKey]: false,
+                                  }))
+                                }
+                                className="px-2 py-1 text-[10px] text-gray-600 hover:bg-gray-200 rounded transition cursor-pointer"
+                              >
+                                Batal
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isSaving || !penilaianAktif}
+                                onClick={(e) => void handleNilai(e, t, (penilaianAktif as PenilaianTemuan) || 'valid')}
+                                className="px-2.5 py-1 text-[10px] bg-red-700 hover:bg-red-800 text-white font-semibold rounded shadow-2xs transition cursor-pointer disabled:opacity-50"
+                                title={!penilaianAktif ? 'Pilih Valid atau Tidak Relevan terlebih dahulu' : 'Simpan catatan'}
+                              >
+                                {isSaving ? 'Menyimpan...' : 'Simpan Catatan'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Metadata Penilai & Waktu Pembaruan */}
+                        {t.tanggapan && (t.tanggapan.dinilai_oleh_nama || t.tanggapan.diperbarui) && (
+                          <div className="flex items-center gap-3 text-[10px] text-gray-400">
+                            {t.tanggapan.dinilai_oleh_nama && (
+                              <span className="flex items-center gap-1">
+                                <User size={10} />
+                                <span>{t.tanggapan.dinilai_oleh_nama}</span>
+                              </span>
+                            )}
+                            {t.tanggapan.diperbarui && (
+                              <span className="flex items-center gap-1">
+                                <Clock size={10} />
+                                <span>{new Date(t.tanggapan.diperbarui).toLocaleString('id-ID')}</span>
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Error Aksi Temuan */}
+                        {errorPesan && (
+                          <div className="p-1.5 rounded bg-red-50 border border-red-200 text-[10px] text-red-700 flex items-center justify-between">
+                            <span>{errorPesan}</span>
+                            <button
+                              type="button"
+                              onClick={() => setAksiError((prev) => ({ ...prev, [cardKey]: null }))}
+                              className="font-bold text-red-700 ml-1 cursor-pointer"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )}
+                      </div>
 
                       {!isJenisTemuan(t.jenis) && (
                         <p className="text-[10px] text-gray-400 flex items-center gap-1">
