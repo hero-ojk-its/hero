@@ -90,6 +90,7 @@ def reset_test_db():
     try:
         db.execute(text("""
             TRUNCATE TABLE 
+                tanggapan_temuan,
                 article_references,
                 legal_references,
                 articles,
@@ -1217,6 +1218,40 @@ Frontend cukup memanggil satu asal (`API_BASE_URL` backend) tanpa perlu menghubu
   - `k` (opsional): `1-50` (default: `10`)
   - `kecuali_dokumen` (opsional): ID dokumen draft untuk dikecualikan dari pembanding
   - `hanya_publik` (opsional): boolean (dipaksa `true` saat mode proteksi non-publik aktif)
+
+### 11.10 Tanggapan Temuan Harmonisasi (US-49 #71)
+- **PUT /api/v1/documents/{{document_id}}/harmonisasi/tanggapan**
+  - **Izin:** `TANGGAPAN_TINJAU` (Analis, Pilot User)
+  - **Body:**
+    ```json
+    {{
+      "temuan": {{ "...objek temuan harmonisasi..." }},
+      "penilaian": "valid | tidak_relevan",
+      "catatan": "Catatan analis maksimal 2000 karakter",
+      "run_id": 123
+    }}
+    ```
+  - **Perilaku:** Server menghitung `kunci_temuan` berbasis hash SHA-256 murni dari substansi temuan (disimpan pada kolom DB varchar(64)) sehingga stabil terhadap perubahan ID ML. Dua temuan dengan jenis, pasal_draft, pembanding, dan pasal_pembanding yang sama akan berbagi satu tanggapan (disengaja, agar penandaan bertahan saat harmonisasi diulang). Melakukan upsert penilaian dan mencatat audit `TANGGAPAN_TEMUAN`. Hanya berlaku untuk dokumen `draft_kajian` (422 jika `corpus_eksisting`). Payload temuan dibatasi maks 20.000 karakter dan wajib memuat field jenis.
+- **GET /api/v1/documents/{{document_id}}/harmonisasi/tanggapan**
+  - **Izin:** `KB_BACA`
+  - **Perilaku:** Mengembalikan daftar seluruh tanggapan analis yang tersimpan untuk dokumen draft tersebut.
+- **DELETE /api/v1/documents/{{document_id}}/harmonisasi/tanggapan/{{kunci_temuan}}**
+  - **Izin:** `TANGGAPAN_TINJAU`
+  - **Perilaku:** Menghapus penilaian analis dan mengembalikan temuan ke status belum dinilai.
+- **GET /api/v1/harmonisasi/tanggapan/rekap**
+  - **Izin:** `KB_BACA`
+  - **Parameter Query:** `dari`, `sampai`, `document_id`, `format` (`json` atau `csv`).
+  - **Perilaku:** Mengembalikan rekapitulasi jumlah valid vs tidak relevan per jenis temuan (dan total) untuk evaluasi recall (#74), menghormati hak akses dokumen (403/404 bila document_id tanpa hak akses). Format CSV menyertakan UTF-8 BOM.
+
+### 11.11 Ekspor Laporan Harmonisasi (US-50 #73)
+- **Method & Path:** `GET /api/v1/documents/{{document_id}}/harmonisasi/ekspor`
+- **Izin:** `ANALISA_EKSPOR` (Analis)
+- **Parameter Query:**
+  - `format` (opsional): `docx` (default) | `csv` | `json`
+  - `run_id` (opsional): ID riwayat eksekusi harmonisasi tertentu
+- **Perilaku:** Mengambil hasil harmonisasi tersimpan (cache atau run) tanpa memanggil ML, menyaring rujukan nonaktif/non-publik, menggabungkan tanggapan analis, dan menghasilkan dokumen laporan sesuai format.
+- **Kode Galat:** 404 `harmonisasi_belum_ada` bila belum pernah diharmonisasi, 422 `bukan_draft` bila bukan `draft_kajian`.
+- **Audit:** Mencatat jejak audit `EXPORT_HARMONIZATION`.
 
 ---
 

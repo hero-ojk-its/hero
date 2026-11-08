@@ -80,6 +80,7 @@ def db_session() -> Generator[Session, None, None]:
         # Truncate semua tabel yang relevan dengan RESTART IDENTITY CASCADE
         db.execute(text("""
             TRUNCATE TABLE 
+                tanggapan_temuan,
                 article_references,
                 legal_references,
                 articles,
