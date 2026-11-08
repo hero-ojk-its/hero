@@ -34,7 +34,10 @@ from app.services.analysis_result_service import (
 )
 from app.services.audit_service import RUN_ANALYSIS, RUN_HARMONIZATION, record_audit
 from app.services.analysis_run_service import record_run
-from app.services.tanggapan_service import gabungkan_tanggapan_ke_harmonisasi
+from app.services.tanggapan_service import (
+    gabungkan_tanggapan_ke_harmonisasi,
+    tandai_kunci_temuan,
+)
 from app.schemas.harmonisasi import HarmonisasiResponse
 
 logger = logging.getLogger("hero")
@@ -1034,7 +1037,8 @@ async def post_ml_harmonisasi(
             except Exception as exc:
                 logger.warning("Gagal memanggil record_run pada cache hit harmonisasi: %s", exc)
 
-            filtered_data, discarded, rincian = saring_rujukan_lengkap(cached.result, allowed_ids)
+            marked_data = tandai_kunci_temuan(cached.result)
+            filtered_data, discarded, rincian = saring_rujukan_lengkap(marked_data, allowed_ids)
             sesuaikan_ringkasan_harmonisasi(filtered_data, discarded, rincian)
             filtered_data = gabungkan_tanggapan_ke_harmonisasi(db, document_id, filtered_data)
             if isinstance(filtered_data, dict):
@@ -1121,7 +1125,8 @@ async def post_ml_harmonisasi(
                 except Exception as exc:
                     logger.warning("Gagal memanggil record_run pada cache basi harmonisasi: %s", exc)
 
-                filtered_data, discarded, rincian = saring_rujukan_lengkap(fallback.result, allowed_ids)
+                marked_data = tandai_kunci_temuan(fallback.result)
+                filtered_data, discarded, rincian = saring_rujukan_lengkap(marked_data, allowed_ids)
                 sesuaikan_ringkasan_harmonisasi(filtered_data, discarded, rincian)
                 filtered_data = gabungkan_tanggapan_ke_harmonisasi(db, document_id, filtered_data)
                 if isinstance(filtered_data, dict):
@@ -1298,7 +1303,8 @@ async def post_ml_harmonisasi(
         logger.warning("Gagal memanggil record_run harmonisasi: %s", exc)
 
     # 7. Saring rujukan dan catat audit
-    filtered_data, discarded, rincian = saring_rujukan_lengkap(data, allowed_ids)
+    marked_data = tandai_kunci_temuan(data)
+    filtered_data, discarded, rincian = saring_rujukan_lengkap(marked_data, allowed_ids)
     sesuaikan_ringkasan_harmonisasi(filtered_data, discarded, rincian)
     filtered_data = gabungkan_tanggapan_ke_harmonisasi(db, document_id, filtered_data)
     if isinstance(filtered_data, dict):

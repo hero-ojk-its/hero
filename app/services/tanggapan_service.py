@@ -26,17 +26,16 @@ def kunci_temuan(temuan: Union[Dict[str, Any], Any]) -> str:
     """
     Menghasilkan kunci hash SHA-256 (32 karakter hex, disimpan pada kolom DB varchar(64)) yang stabil untuk satu temuan harmonisasi.
 
-    Alasan arsitektural:
-    ID temuan dari layanan ML (mis. 't-1234') tidak dijamin stabil antar eksekusi harmonisasi.
-    Agar penandaan analis (valid / tidak_relevan) tetap menempel pada temuan yang sama
-    walaupun harmonisasi dijalankan ulang dan 'id' dari ML berubah, kunci dihitung secara murni
-    dari substansi temuan: kombinasi ternormalisasi jenis temuan, pasal draft, kunci/ID regulasi
-    pembanding, dan pasal pembanding.
+    Bentuk temuan engine:
+    - jenis: temuan.jenis
+    - pasal_draft: temuan.pasal_draft
+    - pembanding:
+      - identitas: pembanding.key -> fallback pembanding.doc_id -> fallback pembanding.document_id
+      - pasal: pembanding.pasal -> fallback temuan.pasal_pembanding (kompatibilitas ke belakang)
+    - Untuk temuan pasal_baru (pembanding bernilai None / null), identitas dan pasal pembanding bernilai string kosong.
 
-    Batasan & Perilaku:
-    Dua temuan dengan `jenis`, `pasal_draft`, pembanding, dan `pasal_pembanding` yang sama
-    akan menghasilkan kunci yang identik dan berbagi satu tanggapan (disengaja, agar penandaan
-    bertahan saat harmonisasi diulang).
+    Rumus stabil:
+    jenis|pasal_draft|identitas_pembanding|pasal_pembanding (ternormalisasi), SHA-256 dipotong 32 karakter hex.
     """
     if hasattr(temuan, "model_dump"):
         t_dict = temuan.model_dump()
@@ -56,16 +55,46 @@ def kunci_temuan(temuan: Union[Dict[str, Any], Any]) -> str:
     else:
         p_dict = getattr(pembanding, "__dict__", {}) if pembanding else {}
 
-    # Prioritaskan pembanding.key, jika tidak ada/kosong fallback ke pembanding.document_id
+    # Prioritaskan pembanding.key, jika tidak ada fallback ke doc_id, lalu document_id
     pembanding_val = p_dict.get("key")
+    if pembanding_val is None or str(pembanding_val).strip() == "":
+        pembanding_val = p_dict.get("doc_id")
     if pembanding_val is None or str(pembanding_val).strip() == "":
         pembanding_val = p_dict.get("document_id")
     pembanding_str = _clean_field(pembanding_val)
 
-    pasal_pembanding_str = _clean_field(t_dict.get("pasal_pembanding"))
+    # Pasal pembanding: pembanding.pasal -> fallback ke pasal_pembanding top-level
+    pasal_pembanding_val = p_dict.get("pasal")
+    if pasal_pembanding_val is None or str(pasal_pembanding_val).strip() == "":
+        pasal_pembanding_val = t_dict.get("pasal_pembanding")
+    pasal_pembanding_str = _clean_field(pasal_pembanding_val)
 
     gabungan = f"{jenis_str}|{pasal_draft_str}|{pembanding_str}|{pasal_pembanding_str}"
     return hashlib.sha256(gabungan.encode("utf-8")).hexdigest()[:32]
+
+
+def tandai_kunci_temuan(data: Union[Dict[str, Any], Any]) -> Union[Dict[str, Any], Any]:
+    """
+    Menerima hasil ML mentah dan mengembalikan deepcopy dengan field 'kunci_temuan'
+    terisi pada setiap elemen di list 'temuan'. Data asli / cache analysis_results tidak termodifikasi.
+
+    Kunci dihitung SEBELUM penyaringan rujukan sensitif agar kunci stabil antar pengguna
+    yang memiliki hak akses berbeda atas dokumen pembanding.
+    """
+    if not isinstance(data, dict):
+        return data
+
+    data_copy = copy.deepcopy(data)
+    temuan_list = data_copy.get("temuan")
+    if isinstance(temuan_list, list):
+        for item in temuan_list:
+            if isinstance(item, dict):
+                existing_key = item.get("kunci_temuan")
+                if isinstance(existing_key, str) and len(existing_key) == 32 and all(c in "0123456789abcdefABCDEF" for c in existing_key):
+                    item["kunci_temuan"] = existing_key.lower()
+                else:
+                    item["kunci_temuan"] = kunci_temuan(item)
+    return data_copy
 
 
 def gabungkan_tanggapan_ke_harmonisasi(
@@ -117,8 +146,13 @@ def gabungkan_tanggapan_ke_harmonisasi(
         if not isinstance(item, dict):
             continue
 
-        kunci = kunci_temuan(item)
-        item["kunci_temuan"] = kunci
+        existing_key = item.get("kunci_temuan")
+        if isinstance(existing_key, str) and len(existing_key) == 32 and all(c in "0123456789abcdefABCDEF" for c in existing_key):
+            kunci = existing_key.lower()
+            item["kunci_temuan"] = kunci
+        else:
+            kunci = kunci_temuan(item)
+            item["kunci_temuan"] = kunci
 
         record = tanggapan_map.get(kunci)
         if record:
