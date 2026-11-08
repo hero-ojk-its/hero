@@ -34,6 +34,7 @@ from app.services.analysis_result_service import (
 )
 from app.services.audit_service import RUN_ANALYSIS, RUN_HARMONIZATION, record_audit
 from app.services.analysis_run_service import record_run
+from app.services.tanggapan_service import gabungkan_tanggapan_ke_harmonisasi
 from app.schemas.harmonisasi import HarmonisasiResponse
 
 logger = logging.getLogger("hero")
@@ -1035,6 +1036,7 @@ async def post_ml_harmonisasi(
 
             filtered_data, discarded, rincian = saring_rujukan_lengkap(cached.result, allowed_ids)
             sesuaikan_ringkasan_harmonisasi(filtered_data, discarded, rincian)
+            gabungkan_tanggapan_ke_harmonisasi(db, document_id, filtered_data)
             if isinstance(filtered_data, dict):
                 filtered_data["cache"] = {
                     "hit": True,
@@ -1121,6 +1123,7 @@ async def post_ml_harmonisasi(
 
                 filtered_data, discarded, rincian = saring_rujukan_lengkap(fallback.result, allowed_ids)
                 sesuaikan_ringkasan_harmonisasi(filtered_data, discarded, rincian)
+                gabungkan_tanggapan_ke_harmonisasi(db, document_id, filtered_data)
                 if isinstance(filtered_data, dict):
                     filtered_data["cache"] = {
                         "hit": True,
@@ -1297,6 +1300,7 @@ async def post_ml_harmonisasi(
     # 7. Saring rujukan dan catat audit
     filtered_data, discarded, rincian = saring_rujukan_lengkap(data, allowed_ids)
     sesuaikan_ringkasan_harmonisasi(filtered_data, discarded, rincian)
+    gabungkan_tanggapan_ke_harmonisasi(db, document_id, filtered_data)
     if isinstance(filtered_data, dict):
         dibuat_str = (
             saved_row.created_at.isoformat()
