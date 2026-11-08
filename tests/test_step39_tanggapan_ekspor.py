@@ -20,6 +20,7 @@ Pengujian Fase 3 untuk penandaan temuan harmonisasi (#71) dan ekspor laporan har
 - E06: Format tidak dikenal -> 422
 - E07: Audit EXPORT_HARMONIZATION -> tercatat dengan format & jumlah temuan
 """
+import copy
 import csv
 from datetime import datetime, timezone, timedelta
 import io
@@ -51,12 +52,12 @@ from app.models.enums import (
 from app.models.tanggapan_temuan import TanggapanTemuan
 from app.models.user import User
 from app.routers.auth import ALGORITHM
-from app.routers.ml_gateway import get_ml_client
+from app.routers.ml_gateway import get_ml_client, saring_rujukan
 from app.services.audit_service import (
     EXPORT_HARMONIZATION,
     TANGGAPAN_TEMUAN,
 )
-from app.services.tanggapan_service import kunci_temuan
+from app.services.tanggapan_service import kunci_temuan, tandai_kunci_temuan
 
 
 @pytest.fixture(autouse=True)
@@ -712,13 +713,15 @@ def test_e02_ekspor_csv(client: TestClient, db_session: Session):
     header = rows[0]
     assert "Kunci Temuan" in header
     assert "Penilaian Analis" in header
+    assert "Keyakinan" in header
 
     row_data = rows[1]
     assert row_data[1] == "baru"
     assert row_data[2] == "Pasal 25"
-    assert row_data[6] == "tidak_relevan"
-    assert row_data[7] == "Klausul dikecualikan"
-    assert row_data[8] == "Analis Budi"
+    pen_idx = header.index("Penilaian Analis")
+    assert row_data[pen_idx] == "tidak_relevan"
+    assert row_data[pen_idx + 1] == "Klausul dikecualikan"
+    assert row_data[pen_idx + 2] == "Analis Budi"
 
 
 def test_e03_ekspor_json(client: TestClient, db_session: Session):
@@ -1131,3 +1134,345 @@ def test_h15_concurrent_put_integrity_error_handled(client: TestClient, db_sessi
     assert row is not None
     assert row.penilaian == "valid"
     assert row.catatan == "Catatan update yang menang"
+
+
+@pytest.fixture
+def TEMUAN_ASLI():
+    """Fixture meniru bentuk temuan engine harmonisasi asli (pipeline/hero/harmonisasi/engine.py)."""
+    return [
+        {
+            "pasal_draft": "Pasal 5",
+            "halaman_draft": 3,
+            "kutipan_draft": "Ketentuan mengenai modal kerja...",
+            "jenis": "duplikasi",
+            "keyakinan": 0.82,
+            "tingkat": "tinggi",
+            "alasan": "Terdapat kesamaan rumusan kewajiban modal kerja minimal.",
+            "pembanding": {
+                "doc_id": "doc-101",
+                "document_id": 101,
+                "key": "POJK|10|2023",
+                "judul": "POJK Nomor 10 Tahun 2023",
+                "nomor": "POJK 10/2023",
+                "status": "berlaku",
+                "pasal": "Pasal 12",
+                "halaman": 10,
+                "kutipan": "Modal kerja wajib dipenuhi minimal...",
+                "pdf": "storage/pojk10_2023.pdf",
+            },
+            "kemiripan": 0.81,
+            "perbedaan": [],
+            "alternatif": [],
+            "klausul_baku": False,
+            "terdekat": {},
+        },
+        {
+            "pasal_draft": "Pasal 5",
+            "halaman_draft": 3,
+            "kutipan_draft": "Ketentuan mengenai modal kerja...",
+            "jenis": "duplikasi",
+            "keyakinan": 0.75,
+            "tingkat": "sedang",
+            "alasan": "Terdapat rumusan pelaporan modal kerja yang serupa.",
+            "pembanding": {
+                "doc_id": "doc-101",
+                "document_id": 101,
+                "key": "POJK|10|2023",
+                "judul": "POJK Nomor 10 Tahun 2023",
+                "nomor": "POJK 10/2023",
+                "status": "berlaku",
+                "pasal": "Pasal 14",
+                "halaman": 12,
+                "kutipan": "Pelaporan modal kerja dilakukan...",
+                "pdf": "storage/pojk10_2023.pdf",
+            },
+            "kemiripan": 0.74,
+            "perbedaan": [],
+            "alternatif": [],
+            "klausul_baku": False,
+            "terdekat": {},
+        },
+        {
+            "pasal_draft": "Pasal 20",
+            "halaman_draft": 8,
+            "kutipan_draft": "Ketentuan mengenai audit kecerdasan buatan...",
+            "jenis": "pasal_baru",
+            "keyakinan": 0.90,
+            "tingkat": "tinggi",
+            "alasan": "Ketentuan tata kelola AI ini belum diatur dalam regulasi pembanding mana pun.",
+            "pembanding": None,
+            "kemiripan": 0.0,
+            "perbedaan": [],
+            "alternatif": [],
+            "klausul_baku": False,
+            "terdekat": {},
+        },
+    ]
+
+
+def test_c01_beda_pasal_pembanding_beda_kunci(TEMUAN_ASLI):
+    """C01: Dua temuan dengan pasal_draft sama ke peraturan sama tetapi pembanding.pasal berbeda -> kunci berbeda."""
+    t1 = TEMUAN_ASLI[0]
+    t2 = TEMUAN_ASLI[1]
+    assert t1["pasal_draft"] == t2["pasal_draft"]
+    assert t1["pembanding"]["key"] == t2["pembanding"]["key"]
+    assert t1["pembanding"]["pasal"] != t2["pembanding"]["pasal"]
+
+    k1 = kunci_temuan(t1)
+    k2 = kunci_temuan(t2)
+    assert k1 != k2
+    assert len(k1) == 32
+    assert len(k2) == 32
+
+
+def test_c02_kunci_sama_berhak_dan_tidak_berhak_pembanding(TEMUAN_ASLI):
+    """C02: Kunci temuan identik antara pengguna berhak dan tidak berhak atas dokumen pembanding non-publik (karena dihitung sebelum penyaringan)."""
+    raw_item = copy.deepcopy(TEMUAN_ASLI[0])
+    raw_item["pembanding"]["document_id"] = 999  # ID dokumen pembanding rahasia
+
+    # 1. Tandai kunci temuan dari hasil mentah sebelum penyaringan
+    payload = {"temuan": [raw_item]}
+    marked_payload = tandai_kunci_temuan(payload)
+    kunci_sebelum = marked_payload["temuan"][0]["kunci_temuan"]
+    assert marked_payload["temuan"][0]["pembanding"]["pasal"] == "Pasal 12"
+
+    # 2. Pengguna tanpa hak baca atas dokumen 999: saring_rujukan menetralkan document_id dan menghapus pasal
+    filtered_item, _ = saring_rujukan(marked_payload["temuan"][0], allowed_ids={1})
+    assert filtered_item["pembanding"]["document_id"] is None
+    assert "pasal" not in filtered_item["pembanding"]
+
+    # 3. Kunci temuan pada objek tersaring TETAP identik dengan kunci asli
+    assert filtered_item["kunci_temuan"] == kunci_sebelum
+
+    # 4. Bukti: jika kunci baru dihitung SETELAH penyaringan, kuncinya akan BERBEDA
+    kunci_setelah_saring = kunci_temuan(filtered_item)
+    assert kunci_setelah_saring != kunci_sebelum
+
+
+def test_c03_put_tanggapan_kunci_valid_vs_kunci_palsu(client: TestClient, db_session: Session, TEMUAN_ASLI):
+    """C03: PUT temuan yang sudah disaring (tanpa pembanding.pasal) dengan kunci_temuan valid -> tersimpan; kunci palsu -> diabaikan & dihitung dari payload."""
+    draft = create_test_doc(title="Draft Kajian C03", document_role=PeranDokumen.draft_kajian)
+    comp = create_test_doc(title="POJK 10 2023")
+    db_session.add_all([draft, comp])
+    db_session.commit()
+
+    temuan_data = copy.deepcopy(TEMUAN_ASLI)
+    temuan_data[0]["pembanding"]["document_id"] = comp.id
+    kunci_asli_0 = kunci_temuan(temuan_data[0])
+
+    cached_payload = {
+        "versi": "1.0",
+        "ringkasan": {"total_temuan": 3},
+        "temuan": temuan_data,
+    }
+    seed_harmonisasi_result(db_session, draft, cached_payload)
+
+    # 1. PUT dengan temuan tersaring (tanpa pasal di pembanding), membawa kunci_temuan valid 32-hex
+    filtered_item = copy.deepcopy(temuan_data[0])
+    filtered_item["pembanding"].pop("pasal", None)
+    filtered_item["kunci_temuan"] = kunci_asli_0
+
+    r_valid = client.put(
+        f"/api/v1/documents/{draft.id}/harmonisasi/tanggapan",
+        json={"temuan": filtered_item, "penilaian": "valid", "catatan": "Validasi temuan tersaring"},
+    )
+    assert r_valid.status_code == 200
+    res_data = r_valid.json()
+    assert res_data["kunci_temuan"] == kunci_asli_0
+
+    db_session.expire_all()
+    row = db_session.query(TanggapanTemuan).filter_by(document_id=draft.id, kunci_temuan=kunci_asli_0).first()
+    assert row is not None
+    assert row.penilaian == "valid"
+    assert row.catatan == "Validasi temuan tersaring"
+
+    # 2. PUT dengan kunci_temuan palsu (tidak cocok dengan hasil tersimpan terakhir)
+    kunci_palsu = "deadbeef" * 4
+    fake_item = copy.deepcopy(filtered_item)
+    fake_item["kunci_temuan"] = kunci_palsu
+
+    r_fake = client.put(
+        f"/api/v1/documents/{draft.id}/harmonisasi/tanggapan",
+        json={"temuan": fake_item, "penilaian": "tidak_relevan", "catatan": "Kunci palsu diabaikan"},
+    )
+    assert r_fake.status_code == 200
+    res_fake = r_fake.json()
+    assert res_fake["kunci_temuan"] != kunci_palsu
+    assert res_fake["kunci_temuan"] == kunci_temuan(fake_item)
+
+
+def test_c04_ekspor_csv_dan_docx_terisi_pembanding_pasal_dan_alasan(client: TestClient, db_session: Session, TEMUAN_ASLI):
+    """C04: Ekspor CSV dan DOCX kolom Pasal Pembanding dan Uraian Temuan terisi dari pembanding.pasal dan alasan, serta kolom Keyakinan."""
+    draft = create_test_doc(
+        title="Draft RPOJK Asli",
+        regulation_type="RPOJK",
+        regulation_number="5",
+        regulation_year=2024,
+        document_role=PeranDokumen.draft_kajian,
+    )
+    comp = create_test_doc(title="POJK 10 2023", regulation_type="POJK", regulation_number="10", regulation_year=2023)
+    db_session.add_all([draft, comp])
+    db_session.commit()
+
+    temuan_data = copy.deepcopy(TEMUAN_ASLI)
+    temuan_data[0]["pembanding"]["document_id"] = comp.id
+    temuan_data[1]["pembanding"]["document_id"] = comp.id
+
+    cached_payload = {
+        "versi": "1.0",
+        "ringkasan": {"total_temuan": 3},
+        "temuan": temuan_data,
+    }
+    seed_harmonisasi_result(db_session, draft, cached_payload)
+
+    # 1. Ekspor CSV
+    r_csv = client.get(f"/api/v1/documents/{draft.id}/harmonisasi/ekspor?format=csv")
+    assert r_csv.status_code == 200
+    reader = csv.reader(io.StringIO(r_csv.content.decode("utf-8-sig")))
+    rows = list(reader)
+    header = rows[0]
+    assert "Pasal Pembanding" in header
+    assert "Uraian Temuan" in header
+    assert "Keyakinan" in header
+
+    idx_pasal_p = header.index("Pasal Pembanding")
+    idx_uraian = header.index("Uraian Temuan")
+    idx_keyakinan = header.index("Keyakinan")
+
+    row1 = rows[1]  # Temuan 0
+    assert row1[idx_pasal_p] == "Pasal 12"
+    assert row1[idx_uraian] == "Terdapat kesamaan rumusan kewajiban modal kerja minimal."
+    assert row1[idx_keyakinan] == "tinggi (0,82)"
+
+    row2 = rows[2]  # Temuan 1
+    assert row2[idx_pasal_p] == "Pasal 14"
+    assert row2[idx_uraian] == "Terdapat rumusan pelaporan modal kerja yang serupa."
+    assert row2[idx_keyakinan] == "sedang (0,75)"
+
+    row3 = rows[3]  # Temuan 2 (pasal_baru)
+    assert row3[idx_pasal_p] == ""
+    assert row3[idx_uraian] == "Ketentuan tata kelola AI ini belum diatur dalam regulasi pembanding mana pun."
+    assert row3[idx_keyakinan] == "tinggi (0,90)"
+
+    # 2. Ekspor DOCX
+    r_docx = client.get(f"/api/v1/documents/{draft.id}/harmonisasi/ekspor?format=docx")
+    assert r_docx.status_code == 200
+    doc_file = docx.Document(io.BytesIO(r_docx.content))
+    tbl_text = "\n".join([cell.text for row in doc_file.tables[0].rows for cell in row.cells])
+    assert "Pasal 12" in tbl_text
+    assert "Pasal 14" in tbl_text
+    assert "Terdapat kesamaan rumusan kewajiban modal kerja minimal." in tbl_text
+    assert "tinggi (0,82)" in tbl_text
+
+
+def test_c05_cache_analysis_results_bersih_di_ketiga_jalur(client: TestClient, db_session: Session, TEMUAN_ASLI):
+    """C05: analysis_results di DB tetap murni tanpa kunci_temuan / tanggapan di ketiga jalur (fresh, cache hit, cache basi/fallback)."""
+    draft = create_test_doc(title="Draft C05 Cache Purity", document_role=PeranDokumen.draft_kajian)
+    comp = create_test_doc(title="POJK 10 2024")
+    db_session.add_all([draft, comp])
+    db_session.commit()
+
+    temuan_data = copy.deepcopy(TEMUAN_ASLI)
+    temuan_data[0]["pembanding"]["document_id"] = comp.id
+    temuan_data[1]["pembanding"]["document_id"] = comp.id
+
+    def ml_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "versi": "1.0",
+                "draft": {"title": draft.title},
+                "ringkasan": {"total_temuan": 3},
+                "temuan": temuan_data,
+            },
+        )
+
+    app.dependency_overrides[get_ml_client] = lambda: httpx.AsyncClient(transport=httpx.MockTransport(ml_handler))
+
+    # Jalur 1: Fresh ML
+    r1 = client.post(f"/api/v1/ml/harmonisasi/{draft.id}", json=[comp.id])
+    assert r1.status_code == 200
+    db_session.expire_all()
+    cached1 = db_session.query(AnalysisResult).filter_by(document_id=draft.id, kind=JenisAnalisa.harmonisasi).first()
+    assert cached1 is not None
+    assert "kunci_temuan" not in cached1.result["temuan"][0]
+    assert "tanggapan" not in cached1.result["temuan"][0]
+    assert "tanggapan" not in cached1.result["ringkasan"]
+
+    # Beri tanggapan analis
+    client.put(
+        f"/api/v1/documents/{draft.id}/harmonisasi/tanggapan",
+        json={"temuan": temuan_data[0], "penilaian": "valid"},
+    )
+
+    # Jalur 2: Cache Hit
+    r2 = client.post(f"/api/v1/ml/harmonisasi/{draft.id}", json=[comp.id])
+    assert r2.status_code == 200
+    assert r2.json()["cache"]["hit"] is True
+    db_session.expire_all()
+    cached2 = db_session.query(AnalysisResult).filter_by(document_id=draft.id, kind=JenisAnalisa.harmonisasi).first()
+    assert "kunci_temuan" not in cached2.result["temuan"][0]
+    assert "tanggapan" not in cached2.result["temuan"][0]
+    assert "tanggapan" not in cached2.result["ringkasan"]
+
+    # Jalur 3: Cache basi / fallback (simulasi perubahan fingerprint pada draft)
+    draft.file_hash = "different_hash_" + "0" * 49
+    db_session.commit()
+
+    def ml_handler_fail(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("ML layer down", request=request)
+
+    app.dependency_overrides[get_ml_client] = lambda: httpx.AsyncClient(transport=httpx.MockTransport(ml_handler_fail))
+    r3 = client.post(f"/api/v1/ml/harmonisasi/{draft.id}", json=[comp.id])
+    assert r3.status_code == 200
+    assert r3.json()["cache"]["basi"] is True
+    db_session.expire_all()
+    cached3 = db_session.query(AnalysisResult).filter_by(document_id=draft.id, kind=JenisAnalisa.harmonisasi).first()
+    assert "kunci_temuan" not in cached3.result["temuan"][0]
+    assert "tanggapan" not in cached3.result["temuan"][0]
+
+
+def test_c06_pasal_baru_tanpa_pembanding_lancar(client: TestClient, db_session: Session, TEMUAN_ASLI):
+    """C06: Temuan pasal_baru (pembanding: null) tidak error di kunci_temuan, PUT tanggapan, maupun ekspor DOCX/CSV/JSON."""
+    item_baru = TEMUAN_ASLI[2]
+    assert item_baru["pembanding"] is None
+
+    # 1. Kunci temuan tidak error
+    k = kunci_temuan(item_baru)
+    assert isinstance(k, str) and len(k) == 32
+
+    draft = create_test_doc(title="Draft C06 Pasal Baru", document_role=PeranDokumen.draft_kajian)
+    db_session.add(draft)
+    db_session.commit()
+
+    # 2. PUT tanggapan tidak error
+    r_put = client.put(
+        f"/api/v1/documents/{draft.id}/harmonisasi/tanggapan",
+        json={"temuan": item_baru, "penilaian": "valid", "catatan": "Pasal baru memang dibutuhkan"},
+    )
+    assert r_put.status_code == 200
+    data_put = r_put.json()
+    assert data_put["kunci_temuan"] == k
+    assert data_put["ringkasan_temuan"]["pembanding"] is None
+    assert data_put["ringkasan_temuan"]["alasan"] == item_baru["alasan"]
+
+    cached_payload = {
+        "versi": "1.0",
+        "ringkasan": {"total_temuan": 1},
+        "temuan": [item_baru],
+    }
+    seed_harmonisasi_result(db_session, draft, cached_payload)
+
+    # 3. Ekspor CSV tidak error
+    r_csv = client.get(f"/api/v1/documents/{draft.id}/harmonisasi/ekspor?format=csv")
+    assert r_csv.status_code == 200
+    assert "pasal_baru" in r_csv.text
+
+    # 4. Ekspor DOCX tidak error
+    r_docx = client.get(f"/api/v1/documents/{draft.id}/harmonisasi/ekspor?format=docx")
+    assert r_docx.status_code == 200
+
+    # 5. Ekspor JSON tidak error
+    r_json = client.get(f"/api/v1/documents/{draft.id}/harmonisasi/ekspor?format=json")
+    assert r_json.status_code == 200
+    assert r_json.json()["temuan"][0]["tanggapan"]["penilaian"] == "valid"
