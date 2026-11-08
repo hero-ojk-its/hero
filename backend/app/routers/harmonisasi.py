@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session
 
 from app.core.permissions import Izin, perlu_izin
 from app.database import get_db
-from app.models.enums import PeranDokumen
+from app.models.analysis_result import AnalysisResult
+from app.models.enums import JenisAnalisa, PeranDokumen
 from app.models.tanggapan_temuan import TanggapanTemuan
 from app.routers.ml_gateway import (
     allowed_document_ids,
@@ -32,7 +33,10 @@ from app.services.audit_service import (
     record_audit,
 )
 from app.services.harmonisasi_export_service import export_harmonisasi
-from app.services.tanggapan_service import kunci_temuan
+from app.services.tanggapan_service import (
+    kunci_temuan,
+    tandai_kunci_temuan,
+)
 
 logger = logging.getLogger("hero")
 
@@ -65,24 +69,70 @@ def upsert_tanggapan_temuan(
             detail={"code": "bukan_draft", "message": "Hanya dokumen draft kajian yang dapat diberi tanggapan harmonisasi."},
         )
 
-    kunci = kunci_temuan(payload.temuan)
-    pembanding = payload.temuan.get("pembanding") or {}
+    kunci = None
+    client_kunci = payload.temuan.get("kunci_temuan")
+    if (
+        isinstance(client_kunci, str)
+        and len(client_kunci) == 32
+        and all(c in "0123456789abcdefABCDEF" for c in client_kunci)
+    ):
+        client_kunci_clean = client_kunci.lower()
+        latest_ar = (
+            db.query(AnalysisResult)
+            .filter(
+                AnalysisResult.document_id == document_id,
+                AnalysisResult.kind == JenisAnalisa.harmonisasi,
+            )
+            .order_by(AnalysisResult.created_at.desc())
+            .first()
+        )
+        if latest_ar and isinstance(latest_ar.result, dict):
+            marked = tandai_kunci_temuan(latest_ar.result)
+            valid_keys = {
+                item.get("kunci_temuan")
+                for item in marked.get("temuan", [])
+                if isinstance(item, dict) and item.get("kunci_temuan")
+            }
+            if client_kunci_clean in valid_keys:
+                kunci = client_kunci_clean
+
+    if not kunci:
+        kunci = kunci_temuan(payload.temuan)
+
+    pembanding_raw = payload.temuan.get("pembanding")
+    p_dict = pembanding_raw if isinstance(pembanding_raw, dict) else None
+
+    # Pasal pembanding: pembanding.pasal -> fallback ke pasal_pembanding
+    pasal_p_val = p_dict.get("pasal") if p_dict else None
+    if pasal_p_val is None or str(pasal_p_val).strip() == "":
+        pasal_p_val = payload.temuan.get("pasal_pembanding")
+
+    # Alasan: temuan.alasan -> fallback temuan.deskripsi
+    alasan_val = payload.temuan.get("alasan") or payload.temuan.get("deskripsi")
+    alasan_cut = str(alasan_val)[:300] if alasan_val else None
 
     p_draft = payload.temuan.get("pasal_draft")
-    p_pembanding = payload.temuan.get("pasal_pembanding")
     p_draft_cut = str(p_draft)[:300] if isinstance(p_draft, str) else p_draft
-    p_pembanding_cut = str(p_pembanding)[:300] if isinstance(p_pembanding, str) else p_pembanding
+    p_pembanding_cut = str(pasal_p_val)[:300] if isinstance(pasal_p_val, str) else pasal_p_val
+
+    pembanding_summary = None
+    if p_dict is not None:
+        pembanding_summary = {
+            "key": p_dict.get("key"),
+            "doc_id": p_dict.get("doc_id"),
+            "document_id": p_dict.get("document_id"),
+            "nomor": p_dict.get("nomor"),
+            "judul": (p_dict.get("judul") or "")[:200] if p_dict.get("judul") else None,
+        }
 
     ringkasan_temuan = {
         "jenis": payload.temuan.get("jenis"),
-        "judul": (payload.temuan.get("judul") or "")[:200] if payload.temuan.get("judul") else None,
         "pasal_draft": p_draft_cut,
         "pasal_pembanding": p_pembanding_cut,
-        "pembanding": {
-            "document_id": pembanding.get("document_id"),
-            "key": pembanding.get("key"),
-            "nomor": pembanding.get("nomor"),
-        },
+        "alasan": alasan_cut,
+        "keyakinan": payload.temuan.get("keyakinan"),
+        "tingkat": payload.temuan.get("tingkat"),
+        "pembanding": pembanding_summary,
     }
 
     if current_user:

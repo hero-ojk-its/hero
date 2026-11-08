@@ -22,7 +22,10 @@ from app.models.analysis_result import AnalysisResult
 from app.models.analysis_run import AnalysisRun
 from app.models.document import Document
 from app.models.enums import JenisAnalisa
-from app.services.tanggapan_service import gabungkan_tanggapan_ke_harmonisasi
+from app.services.tanggapan_service import (
+    gabungkan_tanggapan_ke_harmonisasi,
+    tandai_kunci_temuan,
+)
 
 logger = logging.getLogger("hero")
 
@@ -66,6 +69,27 @@ def generate_harmonisasi_export_filename(
         cleaned_ascii = f"harmonisasi_dokumen_{document_id}_{mode}.{ext}"
 
     return cleaned_ascii, cleaned_utf8
+
+
+def _format_keyakinan(tingkat: Any, keyakinan: Any) -> str:
+    """Format tingkat dan keyakinan, mis. 'tinggi (0,82)'."""
+    score_str = None
+    if keyakinan is not None:
+        try:
+            score_val = float(keyakinan)
+            score_str = f"{score_val:.2f}".replace(".", ",")
+        except (ValueError, TypeError):
+            score_str = str(keyakinan)
+
+    tingkat_str = str(tingkat).strip() if tingkat is not None and str(tingkat).strip() else None
+
+    if tingkat_str and score_str:
+        return f"{tingkat_str} ({score_str})"
+    elif tingkat_str:
+        return tingkat_str
+    elif score_str:
+        return score_str
+    return "-"
 
 
 def export_harmonisasi_to_docx(
@@ -129,7 +153,7 @@ def export_harmonisasi_to_docx(
 
     # 4. Tabel Temuan
     document.add_heading("Daftar Temuan Harmonisasi", level=2)
-    tbl = document.add_table(rows=1, cols=8)
+    tbl = document.add_table(rows=1, cols=9)
     tbl.style = "Table Grid"
 
     hdr_cells = tbl.rows[0].cells
@@ -140,6 +164,7 @@ def export_harmonisasi_to_docx(
         "Peraturan Pembanding",
         "Pasal Pembanding",
         "Uraian Temuan",
+        "Keyakinan",
         "Penilaian Analis",
         "Catatan",
     ]
@@ -155,13 +180,21 @@ def export_harmonisasi_to_docx(
         row_cells[1].text = str(t.get("jenis") or "-")
         row_cells[2].text = str(t.get("pasal_draft") or "-")
 
-        p_info = t.get("pembanding") or {}
-        p_str = p_info.get("nomor") or p_info.get("key") or p_info.get("judul") or "-"
-        if p_info.get("nomor") and p_info.get("judul") and p_info.get("nomor") != p_info.get("judul"):
-            p_str = f"{p_info.get('nomor')} ({p_info.get('judul')})"
+        p_info = t.get("pembanding")
+        p_dict = p_info if isinstance(p_info, dict) else {}
+        p_str = p_dict.get("nomor") or p_dict.get("key") or p_dict.get("judul") or "-"
+        if p_dict.get("nomor") and p_dict.get("judul") and p_dict.get("nomor") != p_dict.get("judul"):
+            p_str = f"{p_dict.get('nomor')} ({p_dict.get('judul')})"
         row_cells[3].text = str(p_str)
-        row_cells[4].text = str(t.get("pasal_pembanding") or "-")
-        row_cells[5].text = str(t.get("deskripsi") or t.get("judul") or "-")
+
+        pasal_p = p_dict.get("pasal") or t.get("pasal_pembanding")
+        row_cells[4].text = str(pasal_p or "-")
+
+        uraian = t.get("alasan") or t.get("deskripsi") or t.get("judul")
+        row_cells[5].text = str(uraian or "-")
+
+        keyakinan_str = _format_keyakinan(t.get("tingkat"), t.get("keyakinan"))
+        row_cells[6].text = str(keyakinan_str or "-")
 
         tg = t.get("tanggapan")
         if isinstance(tg, dict):
@@ -170,8 +203,8 @@ def export_harmonisasi_to_docx(
         else:
             pen = "Belum dinilai"
             cat = "-"
-        row_cells[6].text = pen
-        row_cells[7].text = cat
+        row_cells[7].text = pen
+        row_cells[8].text = cat
 
     # 5. Catatan Kaki / Disclaimer (URD)
     document.add_paragraph()
@@ -199,6 +232,7 @@ def export_harmonisasi_to_csv(data: Dict[str, Any]) -> bytes:
         "Peraturan Pembanding",
         "Pasal Pembanding",
         "Uraian Temuan",
+        "Keyakinan",
         "Penilaian Analis",
         "Catatan Analis",
         "Dinilai Oleh",
@@ -209,10 +243,17 @@ def export_harmonisasi_to_csv(data: Dict[str, Any]) -> bytes:
     for i, t in enumerate(temuan_list, start=1):
         if not isinstance(t, dict):
             continue
-        p_info = t.get("pembanding") or {}
-        p_str = p_info.get("nomor") or p_info.get("key") or p_info.get("judul") or ""
-        if p_info.get("nomor") and p_info.get("judul") and p_info.get("nomor") != p_info.get("judul"):
-            p_str = f"{p_info.get('nomor')} ({p_info.get('judul')})"
+        p_info = t.get("pembanding")
+        p_dict = p_info if isinstance(p_info, dict) else {}
+        p_str = p_dict.get("nomor") or p_dict.get("key") or p_dict.get("judul") or ""
+        if p_dict.get("nomor") and p_dict.get("judul") and p_dict.get("nomor") != p_dict.get("judul"):
+            p_str = f"{p_dict.get('nomor')} ({p_dict.get('judul')})"
+
+        pasal_p = p_dict.get("pasal") or t.get("pasal_pembanding")
+        uraian = t.get("alasan") or t.get("deskripsi") or t.get("judul")
+        keyakinan_str = _format_keyakinan(t.get("tingkat"), t.get("keyakinan"))
+        if keyakinan_str == "-":
+            keyakinan_str = ""
 
         tg = t.get("tanggapan")
         if isinstance(tg, dict):
@@ -229,8 +270,9 @@ def export_harmonisasi_to_csv(data: Dict[str, Any]) -> bytes:
             t.get("jenis") or "",
             t.get("pasal_draft") or "",
             p_str,
-            t.get("pasal_pembanding") or "",
-            t.get("deskripsi") or t.get("judul") or "",
+            pasal_p or "",
+            uraian or "",
+            keyakinan_str,
             pen,
             cat,
             oleh,
@@ -369,15 +411,18 @@ def export_harmonisasi(
                     },
                 )
 
-    # 2. Penyaringan rujukan dokumen nonaktif / non-publik
+    # 2. Tandai kunci temuan dari data mentah SEBELUM penyaringan rujukan
+    marked_data = tandai_kunci_temuan(raw_data)
+
+    # 3. Penyaringan rujukan dokumen nonaktif / non-publik
     if allowed_ids is not None and saring_rujukan_lengkap_fn is not None:
-        filtered_data, discarded, rincian = saring_rujukan_lengkap_fn(raw_data, allowed_ids)
+        filtered_data, discarded, rincian = saring_rujukan_lengkap_fn(marked_data, allowed_ids)
         if sesuaikan_ringkasan_harmonisasi_fn is not None:
             sesuaikan_ringkasan_harmonisasi_fn(filtered_data, discarded, rincian)
     else:
-        filtered_data = json.loads(json.dumps(raw_data))
+        filtered_data = marked_data
 
-    # 3. Gabungkan tanggapan analis
+    # 4. Gabungkan tanggapan analis
     filtered_data = gabungkan_tanggapan_ke_harmonisasi(db, doc.id, filtered_data)
 
     temuan_count = len(filtered_data.get("temuan", [])) if isinstance(filtered_data.get("temuan"), list) else 0
