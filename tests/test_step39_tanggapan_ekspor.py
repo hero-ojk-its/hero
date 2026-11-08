@@ -878,3 +878,256 @@ def test_e07_audit_export_harmonization(client: TestClient, db_session: Session)
     assert audit.detail["format"] == "csv"
     assert audit.detail["jumlah_temuan"] == 1
     assert audit.detail["document_id"] == draft.id
+
+
+def test_h12_cache_purity_fresh_and_hit(client: TestClient, db_session: Session):
+    """H12: Setelah harmonisasi (jalur baru & jalur hit) dan ada tanggapan tersimpan, analysis_results murni tanpa kunci_temuan / tanggapan."""
+    draft = create_test_doc(title="Draft Uji Kemurnian Cache", document_role=PeranDokumen.draft_kajian)
+    comp = create_test_doc(title="POJK 10 2024", regulation_type="POJK", regulation_number="10", regulation_year=2024)
+    db_session.add_all([draft, comp])
+    db_session.commit()
+
+    temuan_item = {
+        "id": "ml-t1",
+        "jenis": "menggantikan",
+        "pasal_draft": "Pasal 10 ayat (1)",
+        "pembanding": {"document_id": comp.id, "key": "POJK|10|2024"},
+        "pasal_pembanding": "Pasal 5",
+        "deskripsi": "Mengubah batasan modal",
+    }
+
+    def ml_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "versi": "1.0",
+                "draft": {"title": draft.title},
+                "ringkasan": {"total_temuan": 1, "per_jenis": {"menggantikan": 1}},
+                "temuan": [temuan_item],
+            },
+        )
+
+    app.dependency_overrides[get_ml_client] = lambda: httpx.AsyncClient(transport=httpx.MockTransport(ml_handler))
+
+    # 1. Jalankan harmonisasi pertama kali (jalur baru / fresh ML)
+    resp1 = client.post(f"/api/v1/ml/harmonisasi/{draft.id}", json=[comp.id])
+    assert resp1.status_code == 200
+
+    # 2. Beri tanggapan analis pada temuan tersebut
+    client.put(
+        f"/api/v1/documents/{draft.id}/harmonisasi/tanggapan",
+        json={"temuan": temuan_item, "penilaian": "valid", "catatan": "Tepat sasaran"},
+    )
+
+    # 3. Verifikasi cache analysis_results di DB tetap murni (baca ulang dengan expire_all)
+    db_session.expire_all()
+    cached1 = (
+        db_session.query(AnalysisResult)
+        .filter(AnalysisResult.document_id == draft.id, AnalysisResult.kind == JenisAnalisa.harmonisasi)
+        .first()
+    )
+    assert cached1 is not None
+    assert "kunci_temuan" not in cached1.result["temuan"][0]
+    assert "tanggapan" not in cached1.result["temuan"][0]
+    assert "tanggapan" not in cached1.result["ringkasan"]
+
+    # 4. Jalankan harmonisasi kedua kali (jalur cache hit)
+    resp2 = client.post(f"/api/v1/ml/harmonisasi/{draft.id}", json=[comp.id])
+    assert resp2.status_code == 200
+    body2 = resp2.json()
+    assert body2["cache"]["hit"] is True
+    # Respons klien memuat kunci_temuan dan tanggapan
+    assert body2["temuan"][0]["kunci_temuan"] == kunci_temuan(temuan_item)
+    assert body2["temuan"][0]["tanggapan"]["penilaian"] == "valid"
+    assert body2["ringkasan"]["tanggapan"]["valid"] == 1
+
+    # 5. Verifikasi cache analysis_results di DB TETAP murni setelah cache hit
+    db_session.expire_all()
+    cached2 = (
+        db_session.query(AnalysisResult)
+        .filter(AnalysisResult.document_id == draft.id, AnalysisResult.kind == JenisAnalisa.harmonisasi)
+        .first()
+    )
+    assert cached2 is not None
+    assert "kunci_temuan" not in cached2.result["temuan"][0]
+    assert "tanggapan" not in cached2.result["temuan"][0]
+    assert "tanggapan" not in cached2.result["ringkasan"]
+
+
+def test_h13_rekap_respects_access_control(client: TestClient, db_session: Session, monkeypatch):
+    """H13: Rekap tanggapan menghormati hak akses dokumen (saring draft non-publik & 403 saat filter document_id)."""
+    draft_pub = create_test_doc(
+        title="Draft Publik",
+        document_role=PeranDokumen.draft_kajian,
+        access_classification=KlasifikasiAkses.publik,
+    )
+    draft_sec = create_test_doc(
+        title="Draft Rahasia",
+        document_role=PeranDokumen.draft_kajian,
+        access_classification=KlasifikasiAkses.non_publik,
+    )
+    user_analis = User(
+        username="analis_h13",
+        hashed_password="hash",
+        role=PeranPengguna.analis.value,
+        is_active=True,
+    )
+    db_session.add_all([draft_pub, draft_sec, user_analis])
+    db_session.commit()
+
+    # Beri tanggapan pada draft publik via API
+    client.put(
+        f"/api/v1/documents/{draft_pub.id}/harmonisasi/tanggapan",
+        json={"temuan": {"jenis": "baru", "pasal_draft": "P1"}, "penilaian": "valid"},
+    )
+    # Masukkan tanggapan untuk draft rahasia langsung di DB
+    tanggapan_sec = TanggapanTemuan(
+        document_id=draft_sec.id,
+        kunci_temuan="sec_key_h13",
+        penilaian="valid",
+        ringkasan_temuan={"jenis": "baru", "pasal_draft": "P2"},
+        dibuat=datetime.now(timezone.utc),
+        diperbarui=datetime.now(timezone.utc),
+    )
+    db_session.add(tanggapan_sec)
+    db_session.commit()
+
+    # 1. Panggilan rekap tanpa auth (mode dev dengan protect_non_public aktif)
+    # Rekap global tidak boleh menghitung tanggapan pada draft_sec
+    res_rekap_global = client.get("/api/v1/harmonisasi/tanggapan/rekap")
+    assert res_rekap_global.status_code == 200
+    data_global = res_rekap_global.json()
+    assert data_global["total"]["valid"] == 1  # Hanya draft publik
+
+    # 2. Panggilan rekap dengan filter document_id draft_sec tanpa hak akses -> 403
+    res_rekap_sec = client.get(f"/api/v1/harmonisasi/tanggapan/rekap?document_id={draft_sec.id}")
+    assert res_rekap_sec.status_code == 403
+
+    # 3. Panggilan rekap dengan filter document_id draft_pub -> 200
+    res_rekap_pub = client.get(f"/api/v1/harmonisasi/tanggapan/rekap?document_id={draft_pub.id}")
+    assert res_rekap_pub.status_code == 200
+    assert res_rekap_pub.json()["total"]["valid"] == 1
+
+    # 4. Saat auth aktif: analis dengan izin KB_BACA_NONPUBLIK dapat melihat draft rahasia
+    monkeypatch.setattr(settings, "auth_enabled", True)
+    token_analis = _buat_token_auth(user_analis)
+
+    # 4a. Rekap filter document_id draft_sec dengan token analis -> 200
+    res_auth_sec = client.get(
+        f"/api/v1/harmonisasi/tanggapan/rekap?document_id={draft_sec.id}",
+        headers={"Authorization": f"Bearer {token_analis}"},
+    )
+    assert res_auth_sec.status_code == 200
+    assert res_auth_sec.json()["total"]["valid"] == 1
+
+    # 4b. Rekap global untuk analis memuat draft publik dan rahasia (total 2)
+    res_auth_global = client.get(
+        "/api/v1/harmonisasi/tanggapan/rekap",
+        headers={"Authorization": f"Bearer {token_analis}"},
+    )
+    assert res_auth_global.status_code == 200
+    assert res_auth_global.json()["total"]["valid"] == 2
+
+
+def test_h14_payload_validation_limits(client: TestClient, db_session: Session):
+    """H14: Validasi batasan payload (temuan tanpa jenis, jenis kosong, json temuan > 20.000 kar, potongan pasal_draft/pasal_pembanding di ringkasan_temuan)."""
+    draft = create_test_doc(document_role=PeranDokumen.draft_kajian)
+    db_session.add(draft)
+    db_session.commit()
+
+    # 1. Temuan tanpa jenis -> 422
+    r1 = client.put(
+        f"/api/v1/documents/{draft.id}/harmonisasi/tanggapan",
+        json={"temuan": {"pasal_draft": "Pasal 1"}, "penilaian": "valid"},
+    )
+    assert r1.status_code == 422
+
+    # 2. Temuan jenis kosong -> 422
+    r2 = client.put(
+        f"/api/v1/documents/{draft.id}/harmonisasi/tanggapan",
+        json={"temuan": {"jenis": "   ", "pasal_draft": "Pasal 1"}, "penilaian": "valid"},
+    )
+    assert r2.status_code == 422
+
+    # 3. Temuan ukuran JSON > 20.000 karakter -> 422
+    big_temuan = {"jenis": "baru", "blob": "x" * 25000}
+    r3 = client.put(
+        f"/api/v1/documents/{draft.id}/harmonisasi/tanggapan",
+        json={"temuan": big_temuan, "penilaian": "valid"},
+    )
+    assert r3.status_code == 422
+    assert "20.000" in r3.text
+
+    # 4. Potongan pasal_draft dan pasal_pembanding ke maks 300 kar di ringkasan_temuan
+    long_p_draft = "Pasal " + ("A" * 350)
+    long_p_comp = "Pasal " + ("B" * 350)
+    temuan_long = {
+        "jenis": "konflik",
+        "pasal_draft": long_p_draft,
+        "pembanding": {"key": "POJK|99"},
+        "pasal_pembanding": long_p_comp,
+    }
+    r4 = client.put(
+        f"/api/v1/documents/{draft.id}/harmonisasi/tanggapan",
+        json={"temuan": temuan_long, "penilaian": "valid"},
+    )
+    assert r4.status_code == 200
+
+    db_session.expire_all()
+    kunci = kunci_temuan(temuan_long)
+    row = db_session.query(TanggapanTemuan).filter_by(document_id=draft.id, kunci_temuan=kunci).first()
+    assert row is not None
+    assert len(row.ringkasan_temuan["pasal_draft"]) == 300
+    assert len(row.ringkasan_temuan["pasal_pembanding"]) == 300
+
+
+def test_h15_concurrent_put_integrity_error_handled(client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch):
+    """H15: PUT bersamaan memicu IntegrityError pada commit pertama -> rollback & update existing -> 200."""
+    draft = create_test_doc(document_role=PeranDokumen.draft_kajian)
+    db_session.add(draft)
+    db_session.commit()
+
+    temuan = {"jenis": "menggantikan", "pasal_draft": "Pasal 99", "pembanding": {"key": "POJK|99"}}
+    kunci = kunci_temuan(temuan)
+
+    call_count = [0]
+    orig_commit = Session.commit
+
+    def commit_with_simulated_race(self):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            # Simulasikan ada transaksi konkuren yang sudah berhasil commit baris ini duluan
+            from app.database import SessionLocal
+            with SessionLocal() as other_db:
+                other_row = TanggapanTemuan(
+                    document_id=draft.id,
+                    kunci_temuan=kunci,
+                    penilaian="tidak_relevan",
+                    catatan="Catatan dari concurrent racer",
+                    ringkasan_temuan={"jenis": "menggantikan"},
+                    dibuat=datetime.now(timezone.utc),
+                    diperbarui=datetime.now(timezone.utc),
+                )
+                other_db.add(other_row)
+                other_db.commit()
+            # Panggil commit asli -> Postgres akan menolak dengan IntegrityError karena kunci duplikat!
+            return orig_commit(self)
+        return orig_commit(self)
+
+    monkeypatch.setattr(Session, "commit", commit_with_simulated_race)
+
+    resp = client.put(
+        f"/api/v1/documents/{draft.id}/harmonisasi/tanggapan",
+        json={"temuan": temuan, "penilaian": "valid", "catatan": "Catatan update yang menang"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["penilaian"] == "valid"
+    assert data["catatan"] == "Catatan update yang menang"
+
+    # Verifikasi baris di DB telah diupdate
+    db_session.expire_all()
+    row = db_session.query(TanggapanTemuan).filter_by(document_id=draft.id, kunci_temuan=kunci).first()
+    assert row is not None
+    assert row.penilaian == "valid"
+    assert row.catatan == "Catatan update yang menang"

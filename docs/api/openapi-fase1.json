@@ -5350,7 +5350,7 @@
           "Harmonisasi"
         ],
         "summary": "Beri atau perbarui tanggapan analis terhadap temuan harmonisasi (US-49 #71)",
-        "description": "[US-49, FR-HRM-11] Menyimpan atau memperbarui penilaian analis (valid / tidak_relevan)\nbeserta catatan untuk suatu temuan harmonisasi. Kunci temuan dihitung di server secara stabil.",
+        "description": "[US-49, FR-HRM-11] Menyimpan atau memperbarui penilaian analis (valid / tidak_relevan)\nbeserta catatan untuk suatu temuan harmonisasi. Kunci temuan dihitung di server secara stabil.\n\nCatatan: Dua temuan dengan jenis, pasal_draft, pembanding, dan pasal_pembanding yang sama\nakan berbagi satu tanggapan (disengaja, agar penandaan bertahan saat harmonisasi diulang).",
         "operationId": "upsert_tanggapan_temuan_api_v1_documents__document_id__harmonisasi_tanggapan_put",
         "security": [
           {

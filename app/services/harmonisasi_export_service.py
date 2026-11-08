@@ -378,7 +378,7 @@ def export_harmonisasi(
         filtered_data = json.loads(json.dumps(raw_data))
 
     # 3. Gabungkan tanggapan analis
-    gabungkan_tanggapan_ke_harmonisasi(db, doc.id, filtered_data)
+    filtered_data = gabungkan_tanggapan_ke_harmonisasi(db, doc.id, filtered_data)
 
     temuan_count = len(filtered_data.get("temuan", [])) if isinstance(filtered_data.get("temuan"), list) else 0
     now_utc = datetime.now(timezone.utc)

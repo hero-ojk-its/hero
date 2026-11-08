@@ -3,6 +3,7 @@ app/schemas/tanggapan.py
 Skema Pydantic untuk penandaan dan tanggapan temuan harmonisasi (Langkah 39, US-49 #71).
 """
 from datetime import datetime
+import json
 from typing import Any, Dict, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -13,6 +14,22 @@ class TanggapanTemuanIn(BaseModel):
     catatan: Optional[str] = Field(None, description="Catatan analis (maksimal 2000 karakter)")
     run_id: Optional[int] = Field(None, description="ID eksekusi tempat temuan ditandai")
     dinilai_oleh_nama: Optional[str] = Field(None, max_length=255, description="Nama penilai opsional (terutama mode auth mati)")
+
+    @field_validator("temuan")
+    @classmethod
+    def validate_temuan(cls, v: Any) -> Dict[str, Any]:
+        if not isinstance(v, dict):
+            raise ValueError("Objek temuan harus berupa dictionary")
+        jenis = v.get("jenis")
+        if not isinstance(jenis, str) or not jenis.strip():
+            raise ValueError("Objek temuan wajib memiliki field 'jenis' berupa teks tidak kosong")
+        try:
+            dumped = json.dumps(v)
+        except Exception:
+            raise ValueError("Objek temuan tidak dapat diserialisasi ke JSON")
+        if len(dumped) > 20000:
+            raise ValueError("Ukuran objek temuan melebihi batas maksimal (20.000 karakter)")
+        return v
 
     @field_validator("penilaian")
     @classmethod
@@ -26,6 +43,13 @@ class TanggapanTemuanIn(BaseModel):
     def validate_catatan(cls, v: Optional[str]) -> Optional[str]:
         if v is not None and len(v) > 2000:
             raise ValueError("Catatan maksimal 2000 karakter")
+        return v
+
+    @field_validator("dinilai_oleh_nama")
+    @classmethod
+    def validate_dinilai_oleh_nama(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v) > 255:
+            raise ValueError("Nama penilai maksimal 255 karakter")
         return v
 
 

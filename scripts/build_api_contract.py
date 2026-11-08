@@ -1231,7 +1231,7 @@ Frontend cukup memanggil satu asal (`API_BASE_URL` backend) tanpa perlu menghubu
       "run_id": 123
     }}
     ```
-  - **Perilaku:** Server menghitung `kunci_temuan` berbasis hash SHA-256 murni dari substansi temuan sehingga stabil terhadap perubahan ID ML. Melakukan upsert penilaian dan mencatat audit `TANGGAPAN_TEMUAN`. Hanya berlaku untuk dokumen `draft_kajian` (422 jika `corpus_eksisting`).
+  - **Perilaku:** Server menghitung `kunci_temuan` berbasis hash SHA-256 murni dari substansi temuan (disimpan pada kolom DB varchar(64)) sehingga stabil terhadap perubahan ID ML. Dua temuan dengan jenis, pasal_draft, pembanding, dan pasal_pembanding yang sama akan berbagi satu tanggapan (disengaja, agar penandaan bertahan saat harmonisasi diulang). Melakukan upsert penilaian dan mencatat audit `TANGGAPAN_TEMUAN`. Hanya berlaku untuk dokumen `draft_kajian` (422 jika `corpus_eksisting`). Payload temuan dibatasi maks 20.000 karakter dan wajib memuat field jenis.
 - **GET /api/v1/documents/{{document_id}}/harmonisasi/tanggapan**
   - **Izin:** `KB_BACA`
   - **Perilaku:** Mengembalikan daftar seluruh tanggapan analis yang tersimpan untuk dokumen draft tersebut.
@@ -1241,7 +1241,7 @@ Frontend cukup memanggil satu asal (`API_BASE_URL` backend) tanpa perlu menghubu
 - **GET /api/v1/harmonisasi/tanggapan/rekap**
   - **Izin:** `KB_BACA`
   - **Parameter Query:** `dari`, `sampai`, `document_id`, `format` (`json` atau `csv`).
-  - **Perilaku:** Mengembalikan rekapitulasi jumlah valid vs tidak relevan per jenis temuan (dan total) untuk evaluasi recall (#74). Format CSV menyertakan UTF-8 BOM.
+  - **Perilaku:** Mengembalikan rekapitulasi jumlah valid vs tidak relevan per jenis temuan (dan total) untuk evaluasi recall (#74), menghormati hak akses dokumen (403/404 bila document_id tanpa hak akses). Format CSV menyertakan UTF-8 BOM.
 
 ### 11.11 Ekspor Laporan Harmonisasi (US-50 #73)
 - **Method & Path:** `GET /api/v1/documents/{{document_id}}/harmonisasi/ekspor`

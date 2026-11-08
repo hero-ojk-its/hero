@@ -1036,7 +1036,7 @@ async def post_ml_harmonisasi(
 
             filtered_data, discarded, rincian = saring_rujukan_lengkap(cached.result, allowed_ids)
             sesuaikan_ringkasan_harmonisasi(filtered_data, discarded, rincian)
-            gabungkan_tanggapan_ke_harmonisasi(db, document_id, filtered_data)
+            filtered_data = gabungkan_tanggapan_ke_harmonisasi(db, document_id, filtered_data)
             if isinstance(filtered_data, dict):
                 filtered_data["cache"] = {
                     "hit": True,
@@ -1123,7 +1123,7 @@ async def post_ml_harmonisasi(
 
                 filtered_data, discarded, rincian = saring_rujukan_lengkap(fallback.result, allowed_ids)
                 sesuaikan_ringkasan_harmonisasi(filtered_data, discarded, rincian)
-                gabungkan_tanggapan_ke_harmonisasi(db, document_id, filtered_data)
+                filtered_data = gabungkan_tanggapan_ke_harmonisasi(db, document_id, filtered_data)
                 if isinstance(filtered_data, dict):
                     filtered_data["cache"] = {
                         "hit": True,
@@ -1300,7 +1300,7 @@ async def post_ml_harmonisasi(
     # 7. Saring rujukan dan catat audit
     filtered_data, discarded, rincian = saring_rujukan_lengkap(data, allowed_ids)
     sesuaikan_ringkasan_harmonisasi(filtered_data, discarded, rincian)
-    gabungkan_tanggapan_ke_harmonisasi(db, document_id, filtered_data)
+    filtered_data = gabungkan_tanggapan_ke_harmonisasi(db, document_id, filtered_data)
     if isinstance(filtered_data, dict):
         dibuat_str = (
             saved_row.created_at.isoformat()

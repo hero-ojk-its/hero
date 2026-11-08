@@ -9,6 +9,7 @@ import logging
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.permissions import Izin, perlu_izin
@@ -53,6 +54,9 @@ def upsert_tanggapan_temuan(
     """
     [US-49, FR-HRM-11] Menyimpan atau memperbarui penilaian analis (valid / tidak_relevan)
     beserta catatan untuk suatu temuan harmonisasi. Kunci temuan dihitung di server secara stabil.
+
+    Catatan: Dua temuan dengan jenis, pasal_draft, pembanding, dan pasal_pembanding yang sama
+    akan berbagi satu tanggapan (disengaja, agar penandaan bertahan saat harmonisasi diulang).
     """
     doc = check_document_access(db, document_id, user=current_user)
     if doc.document_role != PeranDokumen.draft_kajian:
@@ -63,11 +67,17 @@ def upsert_tanggapan_temuan(
 
     kunci = kunci_temuan(payload.temuan)
     pembanding = payload.temuan.get("pembanding") or {}
+
+    p_draft = payload.temuan.get("pasal_draft")
+    p_pembanding = payload.temuan.get("pasal_pembanding")
+    p_draft_cut = str(p_draft)[:300] if isinstance(p_draft, str) else p_draft
+    p_pembanding_cut = str(p_pembanding)[:300] if isinstance(p_pembanding, str) else p_pembanding
+
     ringkasan_temuan = {
         "jenis": payload.temuan.get("jenis"),
         "judul": (payload.temuan.get("judul") or "")[:200] if payload.temuan.get("judul") else None,
-        "pasal_draft": payload.temuan.get("pasal_draft"),
-        "pasal_pembanding": payload.temuan.get("pasal_pembanding"),
+        "pasal_draft": p_draft_cut,
+        "pasal_pembanding": p_pembanding_cut,
         "pembanding": {
             "document_id": pembanding.get("document_id"),
             "key": pembanding.get("key"),
@@ -121,7 +131,35 @@ def upsert_tanggapan_temuan(
         )
         db.add(record)
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Penanganan perlombaan PUT bersamaan untuk kunci yang sama
+        db.rollback()
+        existing = (
+            db.query(TanggapanTemuan)
+            .filter(
+                TanggapanTemuan.document_id == document_id,
+                TanggapanTemuan.kunci_temuan == kunci,
+            )
+            .first()
+        )
+        if existing:
+            before_penilaian = existing.penilaian
+            existing.penilaian = payload.penilaian
+            existing.catatan = payload.catatan
+            existing.run_id = payload.run_id or existing.run_id
+            if payload.temuan.get("id") is not None:
+                existing.temuan_id_ml = str(payload.temuan.get("id"))
+            existing.ringkasan_temuan = ringkasan_temuan
+            existing.dinilai_oleh = dinilai_oleh
+            existing.dinilai_oleh_nama = dinilai_oleh_nama
+            existing.diperbarui = datetime.now(timezone.utc)
+            record = existing
+            db.commit()
+        else:
+            raise
+
     db.refresh(record)
 
     actor_user_id = getattr(current_user, "id", None) if current_user else None
@@ -251,8 +289,18 @@ def rekap_tanggapan(
     untuk bahan evaluasi recall dan umpan balik model.
     """
     query = db.query(TanggapanTemuan)
+    allowed_ids = None
     if document_id is not None:
+        check_document_access(db, document_id, user=current_user)
         query = query.filter(TanggapanTemuan.document_id == document_id)
+    else:
+        allowed_ids = allowed_document_ids(db, user=current_user)
+        if allowed_ids is not None:
+            if not allowed_ids:
+                pass
+            else:
+                query = query.filter(TanggapanTemuan.document_id.in_(allowed_ids))
+
     if dari is not None:
         dari_dt = datetime.combine(dari, time.min).replace(tzinfo=timezone.utc)
         query = query.filter(TanggapanTemuan.dibuat >= dari_dt)
@@ -260,7 +308,10 @@ def rekap_tanggapan(
         sampai_dt = datetime.combine(sampai, time.max).replace(tzinfo=timezone.utc)
         query = query.filter(TanggapanTemuan.dibuat <= sampai_dt)
 
-    rows = query.all()
+    if document_id is None and allowed_ids is not None and not allowed_ids:
+        rows = []
+    else:
+        rows = query.all()
 
     per_jenis: Dict[str, Dict[str, int]] = {}
     total_valid = 0

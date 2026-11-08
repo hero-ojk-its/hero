@@ -3,6 +3,7 @@ app/services/tanggapan_service.py
 Layanan untuk pengelolaan kunci temuan harmonisasi, penandaan analis (#71),
 dan penggabungan tanggapan ke dalam payload respons harmonisasi.
 """
+import copy
 import hashlib
 import logging
 from typing import Any, Dict, Union
@@ -23,7 +24,7 @@ def _clean_field(val: Any) -> str:
 
 def kunci_temuan(temuan: Union[Dict[str, Any], Any]) -> str:
     """
-    Menghasilkan kunci hash SHA-256 (32 karakter hex) yang stabil untuk satu temuan harmonisasi.
+    Menghasilkan kunci hash SHA-256 (32 karakter hex, disimpan pada kolom DB varchar(64)) yang stabil untuk satu temuan harmonisasi.
 
     Alasan arsitektural:
     ID temuan dari layanan ML (mis. 't-1234') tidak dijamin stabil antar eksekusi harmonisasi.
@@ -31,6 +32,11 @@ def kunci_temuan(temuan: Union[Dict[str, Any], Any]) -> str:
     walaupun harmonisasi dijalankan ulang dan 'id' dari ML berubah, kunci dihitung secara murni
     dari substansi temuan: kombinasi ternormalisasi jenis temuan, pasal draft, kunci/ID regulasi
     pembanding, dan pasal pembanding.
+
+    Batasan & Perilaku:
+    Dua temuan dengan `jenis`, `pasal_draft`, pembanding, dan `pasal_pembanding` yang sama
+    akan menghasilkan kunci yang identik dan berbagi satu tanggapan (disengaja, agar penandaan
+    bertahan saat harmonisasi diulang).
     """
     if hasattr(temuan, "model_dump"):
         t_dict = temuan.model_dump()
@@ -65,19 +71,35 @@ def kunci_temuan(temuan: Union[Dict[str, Any], Any]) -> str:
 def gabungkan_tanggapan_ke_harmonisasi(
     db: Session,
     document_id: int,
-    data: Dict[str, Any],
-) -> Dict[str, Any]:
+    data: Union[Dict[str, Any], Any],
+) -> Union[Dict[str, Any], Any]:
     """
     Menggabungkan tanggapan analis yang tersimpan di database ke dalam objek data respons harmonisasi:
     - Menambahkan 'kunci_temuan' pada setiap objek di list 'temuan'
     - Menambahkan 'tanggapan' ({penilaian, catatan, dinilai_oleh_nama, diperbarui} atau null)
     - Menambahkan rekap tanggapan pada 'ringkasan': {valid, tidak_relevan, belum_dinilai}
 
-    PENTING: Fungsi ini dipanggil hanya pada dictionary respons sebelum dikembalikan ke klien,
-    sehingga data yang tersimpan di cache analysis_results tetap murni hasil keluaran layanan ML.
+    PENTING: Fungsi ini bekerja pada salinan (deepcopy) daftar temuan dan ringkasan,
+    sehingga data asli yang tersimpan di cache analysis_results tetap murni hasil keluaran layanan ML.
     """
     if not isinstance(data, dict):
         return data
+
+    # Buat salinan aman agar cache / data sumber tidak termodifikasi
+    data_copy = copy.copy(data)
+    temuan_raw = data.get("temuan")
+    if isinstance(temuan_raw, list):
+        temuan_list = [copy.deepcopy(item) if isinstance(item, dict) else item for item in temuan_raw]
+    else:
+        temuan_list = []
+    data_copy["temuan"] = temuan_list
+
+    ringkasan_raw = data.get("ringkasan")
+    if isinstance(ringkasan_raw, dict):
+        ringkasan = copy.deepcopy(ringkasan_raw)
+    else:
+        ringkasan = {}
+    data_copy["ringkasan"] = ringkasan
 
     # Ambil seluruh tanggapan aktif untuk dokumen draft ini
     records = (
@@ -86,10 +108,6 @@ def gabungkan_tanggapan_ke_harmonisasi(
         .all()
     )
     tanggapan_map: Dict[str, TanggapanTemuan] = {r.kunci_temuan: r for r in records}
-
-    temuan_list = data.get("temuan")
-    if not isinstance(temuan_list, list):
-        temuan_list = []
 
     count_valid = 0
     count_tidak_relevan = 0
@@ -120,15 +138,10 @@ def gabungkan_tanggapan_ke_harmonisasi(
             item["tanggapan"] = None
             count_belum_dinilai += 1
 
-    ringkasan = data.get("ringkasan")
-    if not isinstance(ringkasan, dict):
-        ringkasan = {}
-        data["ringkasan"] = ringkasan
-
     ringkasan["tanggapan"] = {
         "valid": count_valid,
         "tidak_relevan": count_tidak_relevan,
         "belum_dinilai": count_belum_dinilai,
     }
 
-    return data
+    return data_copy
