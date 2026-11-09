@@ -63,9 +63,11 @@ export default function AnalysisHistory({
       setDocuments(items);
       setTotalDocs(res.total ?? items.length);
 
-      // Mulai pemeriksaan status riwayat analisa hanya untuk dokumen yang terindeks di halaman aktif
-      const indexedDocs = items.filter((d) => d.processing_status === 'terindeks');
-      if (indexedDocs.length > 0) {
+      // Mulai pemeriksaan status riwayat analisa untuk dokumen yang siap di halaman aktif (terindeks & perlu_koreksi)
+      const readyDocs = items.filter(
+        (d) => d.processing_status === 'terindeks' || d.processing_status === 'perlu_koreksi'
+      );
+      if (readyDocs.length > 0) {
         if (activeRunsAbortRef.current) {
           activeRunsAbortRef.current.abort();
         }
@@ -75,7 +77,7 @@ export default function AnalysisHistory({
         // Inisialisasi status loading untuk item yang belum ada di map
         setAnalysisStatusMap((prev) => {
           const updated = { ...prev };
-          for (const d of indexedDocs) {
+          for (const d of readyDocs) {
             if (!updated[d.id]) {
               updated[d.id] = { loading: true, checked: false };
             }
@@ -84,7 +86,7 @@ export default function AnalysisHistory({
         });
 
         // Request riwayat analisa & harmonisasi secara paralel per dokumen yang terlihat
-        for (const doc of indexedDocs) {
+        for (const doc of readyDocs) {
           (async () => {
             try {
               const [harmonisasiRes, analisaRes] = await Promise.allSettled([
@@ -166,25 +168,82 @@ export default function AnalysisHistory({
     }
   };
 
+  // Helper untuk menentukan apakah dokumen selesai diekstrak dan siap dianalisis
+  const isDocumentReady = (status?: string | null): boolean => {
+    return status === 'terindeks' || status === 'perlu_koreksi';
+  };
+
+  const getDisabledActionLabel = (status?: string | null): string => {
+    switch (status) {
+      case 'diterima':
+        return 'Menunggu Ekstraksi';
+      case 'diproses':
+        return 'Sedang Diproses';
+      case 'gagal':
+        return 'Ekstraksi Gagal';
+      case 'ditolak':
+        return 'Dokumen Ditolak';
+      default:
+        return 'Belum Siap';
+    }
+  };
+
+  const getDisabledActionTitle = (status?: string | null): string => {
+    switch (status) {
+      case 'diterima':
+        return 'Dokumen masih dalam antrean ekstraksi teks';
+      case 'diproses':
+        return 'Dokumen sedang diproses oleh engine ekstraksi';
+      case 'gagal':
+        return 'Ekstraksi teks PDF gagal (teks tidak dapat dibaca)';
+      case 'ditolak':
+        return 'Dokumen ditolak oleh sistem';
+      default:
+        return 'Dokumen belum siap untuk dianalisis';
+    }
+  };
+
   // Helper badge status ekstraksi
   const renderExtractionBadge = (status?: string | null) => {
     switch (status) {
       case 'terindeks':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <CheckCircle2 size={12} className="text-emerald-600" />
-            Terindeks
-          </span>
+          <div className="flex flex-col items-start gap-0.5">
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <CheckCircle2 size={12} className="text-emerald-600" />
+              Terindeks
+            </span>
+            <span className="text-[10px] text-gray-500 font-medium">Metadata Lengkap</span>
+          </div>
+        );
+      case 'perlu_koreksi':
+        return (
+          <div className="flex flex-col items-start gap-0.5">
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+              <AlertTriangle size={12} className="text-amber-600" />
+              Perlu Koreksi
+            </span>
+            <span className="text-[10px] text-amber-700 font-medium">
+              Ekstraksi Selesai • Metadata Belum Lengkap
+            </span>
+          </div>
+        );
+      case 'diterima':
+        return (
+          <div className="flex flex-col items-start gap-0.5">
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+              <Clock size={12} className="text-blue-600" />
+              Menunggu Ekstraksi
+            </span>
+          </div>
         );
       case 'diproses':
-      case 'diterima':
         return (
           <div className="flex flex-col items-start gap-0.5">
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 animate-pulse">
               <Clock size={12} className="text-blue-600 animate-spin" />
               Sedang Diproses
             </span>
-            <span className="text-[10px] text-amber-600 font-medium">Ekstraksi Belum Selesai</span>
           </div>
         );
       case 'gagal':
@@ -194,17 +253,16 @@ export default function AnalysisHistory({
               <XCircle size={12} className="text-rose-600" />
               Ekstraksi Gagal
             </span>
-            <span className="text-[10px] text-rose-600 font-medium">Ekstraksi Belum Selesai</span>
+            <span className="text-[10px] text-rose-600 font-medium">Teks PDF Tidak Terbaca</span>
           </div>
         );
-      case 'perlu_koreksi':
+      case 'ditolak':
         return (
           <div className="flex flex-col items-start gap-0.5">
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-              <AlertTriangle size={12} className="text-amber-600" />
-              Perlu Koreksi
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700 border border-gray-300">
+              <XCircle size={12} className="text-gray-500" />
+              Dokumen Ditolak
             </span>
-            <span className="text-[10px] text-amber-600 font-medium">Ekstraksi Belum Selesai</span>
           </div>
         );
       default:
@@ -219,10 +277,29 @@ export default function AnalysisHistory({
 
   // Helper tampilan status analisa regulasi
   const renderAnalysisStatus = (doc: DocumentItem) => {
-    if (doc.processing_status !== 'terindeks') {
+    const status = doc.processing_status;
+
+    if (status === 'diterima') {
       return (
         <span className="text-gray-400 italic text-[11px]">
-          Belum dianalisis (ekstraksi belum selesai)
+          Menunggu ekstraksi
+        </span>
+      );
+    }
+
+    if (status === 'diproses') {
+      return (
+        <span className="text-blue-600 italic text-[11px] flex items-center gap-1">
+          <Clock size={11} className="animate-spin" />
+          Ekstraksi sedang berjalan...
+        </span>
+      );
+    }
+
+    if (status === 'gagal' || status === 'ditolak') {
+      return (
+        <span className="text-rose-500 italic text-[11px]">
+          Tidak dapat dianalisis (ekstraksi gagal)
         </span>
       );
     }
@@ -384,7 +461,7 @@ export default function AnalysisHistory({
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {documents.map((doc) => {
-                  const isIndexed = doc.processing_status === 'terindeks';
+                  const isReady = isDocumentReady(doc.processing_status);
                   return (
                     <tr key={doc.id} className="hover:bg-gray-50/70 transition-colors">
                       <td className="py-3 px-4 font-mono font-bold text-gray-800">
@@ -415,7 +492,7 @@ export default function AnalysisHistory({
                         {renderAnalysisStatus(doc)}
                       </td>
                       <td className="py-3 px-4 text-right whitespace-nowrap">
-                        {isIndexed ? (
+                        {isReady ? (
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               type="button"
@@ -439,9 +516,9 @@ export default function AnalysisHistory({
                         ) : (
                           <span
                             className="inline-block px-2.5 py-1 rounded text-[11px] text-gray-400 bg-gray-100 border border-gray-200 cursor-not-allowed"
-                            title="Dokumen belum dapat dianalisis karena ekstraksi belum selesai"
+                            title={getDisabledActionTitle(doc.processing_status)}
                           >
-                            Belum Siap
+                            {getDisabledActionLabel(doc.processing_status)}
                           </span>
                         )}
                       </td>
@@ -455,7 +532,7 @@ export default function AnalysisHistory({
           {/* Card View (Mobile & Tablet) */}
           <div className="block md:hidden space-y-3">
             {documents.map((doc) => {
-              const isIndexed = doc.processing_status === 'terindeks';
+              const isReady = isDocumentReady(doc.processing_status);
               return (
                 <div
                   key={doc.id}
@@ -488,7 +565,7 @@ export default function AnalysisHistory({
 
                   {/* Mobile Action Buttons */}
                   <div className="pt-2 border-t border-gray-200/60 flex items-center justify-end gap-2">
-                    {isIndexed ? (
+                    {isReady ? (
                       <>
                         <button
                           type="button"
@@ -507,7 +584,7 @@ export default function AnalysisHistory({
                       </>
                     ) : (
                       <span className="text-[11px] text-gray-400 italic">
-                        Ekstraksi Belum Selesai
+                        {getDisabledActionTitle(doc.processing_status)}
                       </span>
                     )}
                   </div>
