@@ -49,8 +49,13 @@ def _build_session_response(session: ScanSession, db: Session, request: Optional
     uncert_cand = sum(1 for c in candidates if c.match_status == StatusKandidat.mungkin_ada)
     selected_cand = sum(1 for c in candidates if c.selected)
 
+    summary_total = total_cand
+    cand_live = getattr(session, "candidates_total", 0) or 0
+    if session.status in (StatusPindai.antrian, StatusPindai.memindai) and cand_live > total_cand:
+        summary_total = cand_live
+
     summary = ScanSummaryCount(
-        total=total_cand,
+        total=summary_total,
         baru=baru_cand,
         sudah_ada=exist_cand,
         mungkin_ada=uncert_cand,
@@ -80,6 +85,7 @@ def _build_session_response(session: ScanSession, db: Session, request: Optional
 
     session_dict = {c.name: getattr(session, c.name) for c in session.__table__.columns}
     session_dict["candidates_summary"] = summary
+    session_dict["candidates_total_live"] = getattr(session, "candidates_total", None)
     session_dict["pull_progress"] = pull_prog
     session_dict["download_url"] = download_url
     if session_dict.get("blocked") is None:
