@@ -132,6 +132,14 @@ export default function JobDetailModal({ jobId, onClose }: JobDetailModalProps) 
                 <div>
                   <span className="text-gray-500 block mb-0.5">Jenis Pekerjaan</span>
                   <span className="font-medium text-gray-900">{getJenisJobIngestLabel(job.job_type)}</span>
+                  {job.job_type === 'unggah_manual' && (
+                    <span
+                      className="text-[10px] text-gray-500 block font-normal"
+                      title="Backend tidak mencatat apakah unggahan berasal dari Ingest Dokumen atau Analisa Regulasi"
+                    >
+                      (Asal fitur tidak tercatat)
+                    </span>
+                  )}
                 </div>
                 <div>
                   <span className="text-gray-500 block mb-0.5">Sumber / Target</span>
@@ -227,27 +235,75 @@ export default function JobDetailModal({ jobId, onClose }: JobDetailModalProps) 
                         {job.documents.map((doc) => (
                           <div
                             key={doc.id}
-                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100/70 transition-colors"
+                            className="p-3 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100/70 transition-colors space-y-2"
                           >
-                            <div className="flex items-center space-x-3 overflow-hidden">
-                              <FileText size={18} className="text-emerald-600 flex-shrink-0" />
-                              <div className="overflow-hidden">
-                                <p className="text-xs font-semibold text-gray-900 truncate" title={doc.title}>
-                                  {doc.title}
-                                </p>
-                                <p className="text-[11px] text-gray-500">
-                                  ID #{doc.id} {doc.regulation_number ? `• ${doc.regulation_number}` : ''}
-                                </p>
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-start space-x-2.5 overflow-hidden">
+                                <FileText size={18} className="text-emerald-600 flex-shrink-0 mt-0.5" />
+                                <div className="overflow-hidden">
+                                  <p className="text-xs font-semibold text-gray-900 truncate" title={doc.title}>
+                                    {doc.title}
+                                  </p>
+                                  <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-[11px] text-gray-500">
+                                    <span>ID #{doc.id}</span>
+                                    {doc.regulation_number && <span>• {doc.regulation_number}</span>}
+                                    {doc.document_role && (
+                                      <span
+                                        className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${
+                                          doc.document_role === 'draft_kajian'
+                                            ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                            : 'bg-blue-50 text-blue-700 border-blue-200'
+                                        }`}
+                                      >
+                                        {doc.document_role === 'draft_kajian' ? 'Draft Kajian' : 'Corpus Eksisting'}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                             </div>
-                            <Link
-                              to={`/detail-dokumen?id=${doc.id}`}
-                              target="_blank"
-                              className="text-xs text-red-700 hover:text-red-800 flex items-center space-x-1 font-medium flex-shrink-0 ml-2"
-                            >
-                              <span>Buka Dokumen</span>
-                              <ExternalLink size={12} />
-                            </Link>
+
+                            {/* Tombol Aksi Dokumen */}
+                            <div className="flex flex-wrap items-center justify-end gap-2 pt-1 border-t border-gray-200/60">
+                              <Link
+                                to={`/analisa?documentId=${doc.id}&stage=summary`}
+                                target="_blank"
+                                className="px-2.5 py-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-md transition-colors flex items-center gap-1"
+                                title="Buka Summary Dokumen"
+                              >
+                                <span>Buka Summary</span>
+                                <ExternalLink size={11} />
+                              </Link>
+
+                              {doc.processing_status !== 'gagal' ? (
+                                <Link
+                                  to={`/analisa?documentId=${doc.id}&stage=analisa`}
+                                  target="_blank"
+                                  className="px-2.5 py-1 text-[11px] font-semibold text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md transition-colors flex items-center gap-1"
+                                  title="Buka Workspace Analisa"
+                                >
+                                  <span>Buka Analisa</span>
+                                  <ExternalLink size={11} />
+                                </Link>
+                              ) : (
+                                <span
+                                  className="px-2 py-1 text-[10px] text-gray-400 bg-gray-100 rounded border border-gray-200 cursor-not-allowed"
+                                  title="Dokumen belum terindeks / gagal ekstraksi"
+                                >
+                                  Analisa (Belum Siap)
+                                </span>
+                              )}
+
+                              <Link
+                                to={`/knowledge/detail/${doc.id}`}
+                                target="_blank"
+                                className="px-2.5 py-1 text-[11px] font-semibold text-red-700 hover:text-red-800 bg-white hover:bg-red-50 border border-gray-200 rounded-md transition-colors flex items-center gap-1"
+                                title="Buka Detail Dokumen di Knowledge Base"
+                              >
+                                <span>Detail Dokumen</span>
+                                <ExternalLink size={11} />
+                              </Link>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -283,10 +339,21 @@ export default function JobDetailModal({ jobId, onClose }: JobDetailModalProps) 
                             )}
                             <p className="text-gray-600 text-[11px]">{f.message}</p>
                             {f.duplicate_of_document_id && (
-                              <p className="mt-1 text-[11px] text-amber-800 font-medium">
-                                Dokumen pembanding: #{f.duplicate_of_document_id}{' '}
-                                {f.duplicate_of_document?.title ? `(${f.duplicate_of_document.title})` : ''}
-                              </p>
+                              <div className="mt-2 pt-2 border-t border-amber-200/60 flex flex-wrap items-center justify-between gap-2">
+                                <p className="text-[11px] text-amber-800 font-medium">
+                                  Dokumen pembanding: #{f.duplicate_of_document_id}{' '}
+                                  {f.duplicate_of_document?.title ? `(${f.duplicate_of_document.title})` : ''}
+                                </p>
+                                <Link
+                                  to={`/knowledge/detail/${f.duplicate_of_document_id}`}
+                                  target="_blank"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-md transition-colors"
+                                  title={`Buka detail dokumen pembanding #${f.duplicate_of_document_id}`}
+                                >
+                                  <span>Lihat Dokumen Pembanding (#{f.duplicate_of_document_id})</span>
+                                  <ExternalLink size={12} />
+                                </Link>
+                              </div>
                             )}
                           </div>
                         ))}

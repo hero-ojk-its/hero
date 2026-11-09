@@ -941,4 +941,77 @@ export function clearStoredAnalisaWorkspace(): void {
   }
 }
 
+// ============================================================================
+// 12. Riwayat Draft Regulasi & Riwayat Eksekusi Analisa (Langkah 21, US-10)
+// ============================================================================
+
+export interface ListDraftDocumentsParams {
+  skip?: number;
+  limit?: number;
+  q?: string;
+}
+
+/**
+ * Mengambil daftar dokumen draft kajian yang pernah diunggah.
+ * Endpoint: GET /api/v1/documents?document_role=draft_kajian
+ */
+export async function listDraftDocuments(
+  params?: ListDraftDocumentsParams,
+  signal?: AbortSignal
+): Promise<DocumentsResponse> {
+  const queryParams: Record<string, string | number> = {
+    document_role: 'draft_kajian',
+    limit: params?.limit ?? 10,
+    skip: params?.skip ?? 0,
+  };
+  if (params?.q) {
+    queryParams.q = params.q;
+  }
+  const qs = buildQueryString(queryParams as Record<string, unknown>);
+  return apiFetch<DocumentsResponse>(`/api/v1/documents${qs}`, { signal });
+}
+
+export interface AnalysisRunItem {
+  run_id: number;
+  kind: 'analisa' | 'harmonisasi';
+  dibuat: string | null;
+  oleh?: string | null;
+  mode_diminta: 'deterministik' | 'ai';
+  mode_dipakai?: 'deterministik' | 'ai' | null;
+  sumber: string;
+  segar: boolean;
+  http_status: number;
+  error_code?: string | null;
+  ml_version?: string | null;
+  ringkasan_output?: {
+    jumlah_poin?: number;
+    kata_ringkasan?: number;
+    waktu_ms?: number;
+    jumlah_temuan?: number;
+    [key: string]: unknown;
+  } | null;
+  duration_ms?: number | null;
+  fingerprint_sama_dengan_sekarang?: boolean;
+}
+
+export interface AnalysisRunsListResponse {
+  document_id: number;
+  total: number;
+  items: AnalysisRunItem[];
+  catatan?: string | null;
+}
+
+/**
+ * Mengambil riwayat eksekusi analisa atau harmonisasi untuk dokumen tertentu.
+ * Endpoint: GET /api/v1/documents/{documentId}/analisa/riwayat?kind={kind}
+ */
+export async function getDocumentAnalysisRuns(
+  documentId: number,
+  kind?: 'analisa' | 'harmonisasi',
+  signal?: AbortSignal
+): Promise<AnalysisRunsListResponse> {
+  const qs = kind ? `?kind=${kind}` : '';
+  return apiFetch<AnalysisRunsListResponse>(`/api/v1/documents/${documentId}/analisa/riwayat${qs}`, { signal });
+}
+
 export type { DocumentsResponse, DocumentItem, DocumentBlob };

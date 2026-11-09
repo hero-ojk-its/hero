@@ -320,6 +320,7 @@ export interface JobDocumentSummary {
   regulation_number?: string | null;
   document_role?: string;
   match_status?: string;
+  processing_status?: string | null;
 }
 
 export interface JobFailureSummary {

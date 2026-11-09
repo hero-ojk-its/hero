@@ -798,23 +798,6 @@ export default function SummaryView({
               </>
             )}
           </div>
-
-          {/* Footer Panel Kanan: Tombol Lanjutkan Analisa */}
-          <div className="p-4 border-t border-gray-200 bg-gray-50/70 flex items-center justify-between gap-3 shrink-0">
-            <span className="text-[11px] text-gray-500 hidden sm:inline">
-              Tahap berikutnya: Komparasi terhadap Knowledge Base regulasi.
-            </span>
-
-            <button
-              type="button"
-              onClick={onProceedToAnalisa}
-              disabled={loading || !data}
-              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg text-xs font-bold bg-red-800 hover:bg-red-900 disabled:bg-gray-300 disabled:cursor-not-allowed text-white shadow-xs transition-colors cursor-pointer ml-auto"
-            >
-              <span>Lanjutkan Analisa</span>
-              <ArrowRight size={15} />
-            </button>
-          </div>
         </div>
       </div>
     </div>

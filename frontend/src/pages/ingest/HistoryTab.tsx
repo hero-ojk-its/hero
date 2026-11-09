@@ -549,9 +549,17 @@ export default function HistoryTab() {
                           #{j.id}
                         </td>
                         <td className="py-3 px-4">
-                          <span className="font-medium text-gray-900">
+                          <span className="font-medium text-gray-900 block">
                             {getJenisJobIngestLabel(j.job_type)}
                           </span>
+                          {j.job_type === 'unggah_manual' && (
+                            <span
+                              className="text-[10px] text-gray-500 font-normal block"
+                              title="Backend tidak mencatat apakah unggahan berasal dari Ingest Dokumen atau Analisa Regulasi"
+                            >
+                              Asal fitur tidak tercatat
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-gray-600 max-w-xs truncate" title={j.source_ref || '-'}>
                           {j.source_ref || '-'}

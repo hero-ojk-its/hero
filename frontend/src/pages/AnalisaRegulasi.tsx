@@ -44,6 +44,7 @@ import {
 } from '../lib/configApi';
 import AnalisaState2Workspace from '../components/analisa/AnalisaState2Workspace';
 import SummaryView from '../components/analisa/SummaryView';
+import AnalysisHistory from '../components/analisa/AnalysisHistory';
 
 export default function AnalisaRegulasi() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1469,6 +1470,11 @@ export default function AnalisaRegulasi() {
           </button>
         </div>
       </form>
+
+      {/* Riwayat Draft Regulasi (Langkah 21 / US-10) */}
+      <AnalysisHistory
+        onOpenWorkspace={(id, stage) => handleOpenWorkspace(id, 'deterministik', stage)}
+      />
     </div>
   );
 }
