@@ -36,7 +36,14 @@ import { potongJudul } from '../lib/kemiripanApi';
 import { usePolling } from '../lib/usePolling';
 import { ErrorState } from '../components/ErrorState';
 import { ApiError } from '../lib/api';
+import {
+  getAppKonfigurasi,
+  resolveMaxUploadMb,
+  formatUploadLimitErrorMessage,
+  type KonfigurasiResponse,
+} from '../lib/configApi';
 import AnalisaState2Workspace from '../components/analisa/AnalisaState2Workspace';
+import SummaryView from '../components/analisa/SummaryView';
 
 export default function AnalisaRegulasi() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -44,15 +51,17 @@ export default function AnalisaRegulasi() {
   // State Deep Linking URL
   const paramDocId = searchParams.get('documentId');
   const paramMode = searchParams.get('mode') as 'deterministik' | 'ai' | null;
+  const paramStage = searchParams.get('stage') as 'summary' | 'analisa' | null;
 
-  // Active Document ID untuk State 2 Workspace
+  // Active Document ID untuk Workspace
   const activeDocumentId = paramDocId && !isNaN(Number(paramDocId)) && Number(paramDocId) > 0
     ? Number(paramDocId)
     : null;
   const activeMode: 'deterministik' | 'ai' = paramMode === 'ai' ? 'ai' : 'deterministik';
+  const activeStage: 'summary' | 'analisa' = paramStage === 'analisa' ? 'analisa' : 'summary';
 
-  // 1. Pemilihan Metode Analisis: 'deterministik' (default) | 'ai'
-  const [selectedMode, setSelectedMode] = useState<'deterministik' | 'ai'>('deterministik');
+  // 1. Metode Analisis: Selalu 'deterministik' untuk alur awal draf (Summary-First MVP 3)
+  const selectedMode: 'deterministik' = 'deterministik';
 
   // 2. State Unggah Draf PDF
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -82,6 +91,23 @@ export default function AnalisaRegulasi() {
   const isPersetujuanValid = isPersetujuanOlehValid && isPersetujuanAlasanValid;
 
   // 4. State Layanan ML & Eksekusi Upload
+  const [appConfig, setAppConfig] = useState<KonfigurasiResponse | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    getAppKonfigurasi().then((cfg) => {
+      if (mounted) {
+        setAppConfig(cfg);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const maxUploadMb = resolveMaxUploadMb(appConfig);
+  const maxUploadBytes = maxUploadMb * 1024 * 1024;
+
   const [mlHealth, setMlHealth] = useState<MlHealthResponse | null>(null);
   const [mlHealthLoading, setMlHealthLoading] = useState<boolean>(true);
   const [isUploading, setIsUploading] = useState<boolean>(false);
@@ -128,14 +154,19 @@ export default function AnalisaRegulasi() {
         setAccessClassification(doc.access_classification);
       }
       if (isDocumentReadyForAnalysis(doc)) {
-        // Dokumen siap dianalisis: transisi ke State 2 Workspace via useSearchParams
-        const effectiveMode = mlHealth?.mode_ai === true ? selectedMode : 'deterministik';
+        // Dokumen siap dianalisis: transisi ke Summary Workspace (Summary-First) via useSearchParams
+        const effectiveMode = 'deterministik';
         if (uploadedDocumentId) {
-          saveStoredAnalisaWorkspace({ documentId: uploadedDocumentId, mode: effectiveMode });
+          saveStoredAnalisaWorkspace({
+            documentId: uploadedDocumentId,
+            mode: effectiveMode,
+            stage: 'summary',
+          });
         }
         setSearchParams({
           documentId: String(uploadedDocumentId),
           mode: effectiveMode,
+          stage: 'summary',
         });
       }
     },
@@ -185,12 +216,8 @@ export default function AnalisaRegulasi() {
     try {
       const health = await checkMlHealth();
       setMlHealth(health);
-      if (health.mode_ai !== true) {
-        setSelectedMode('deterministik');
-      }
     } catch {
       setMlHealth(null);
-      setSelectedMode('deterministik');
     } finally {
       setMlHealthLoading(false);
     }
@@ -223,6 +250,7 @@ export default function AnalisaRegulasi() {
         saveStoredAnalisaWorkspace({
           documentId: activeDocumentId,
           mode: activeMode,
+          stage: activeStage,
         });
         setIsRestoringWorkspace(false);
         return;
@@ -246,11 +274,13 @@ export default function AnalisaRegulasi() {
         }
 
         if (isDocumentReadyForAnalysis(doc)) {
-          // Dokumen sudah terindeks: pulihkan ke State 2 Workspace via useSearchParams
+          // Dokumen sudah terindeks: pulihkan ke Workspace via useSearchParams
           const targetMode = stored.mode || 'deterministik';
+          const targetStage = stored.stage || 'summary';
           setSearchParams({
             documentId: String(stored.documentId),
             mode: targetMode,
+            stage: targetStage,
           }, { replace: true });
         } else if (doc.processing_status === 'diproses' || doc.processing_status === 'diterima') {
           // Dokumen masih dalam proses: pulihkan State 1 dan aktifkan polling 2 detik
@@ -282,7 +312,7 @@ export default function AnalisaRegulasi() {
     return () => {
       isCancelled = true;
     };
-  }, [activeDocumentId, activeMode, setSearchParams]);
+  }, [activeDocumentId, activeMode, activeStage, setSearchParams]);
 
   // Handler Drag & Drop File
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -316,9 +346,9 @@ export default function AnalisaRegulasi() {
       setUploadError('Berkas harus berupa dokumen format PDF (.pdf).');
       return;
     }
-    // Validasi batas ukuran 100 MB (mengikuti batas backend)
-    if (file.size > 100 * 1024 * 1024) {
-      setUploadError('Ukuran berkas melebihi batas maksimum 100 MB.');
+    // Validasi batas ukuran unggah (dinamis dari backend, fallback 25 MB)
+    if (file.size > maxUploadBytes) {
+      setUploadError(formatUploadLimitErrorMessage(maxUploadMb));
       return;
     }
 
@@ -454,7 +484,7 @@ export default function AnalisaRegulasi() {
 
       const docId = result.documentId;
       setUploadedDocumentId(docId);
-      saveStoredAnalisaWorkspace({ documentId: docId, mode: selectedMode });
+      saveStoredAnalisaWorkspace({ documentId: docId, mode: selectedMode, stage: 'summary' });
       setIsUploading(false);
       setUploadProgress(null);
       uploadAbortControllerRef.current = null;
@@ -496,7 +526,13 @@ export default function AnalisaRegulasi() {
           err.detail && typeof err.detail === 'object' && !Array.isArray(err.detail)
             ? (err.detail as Record<string, unknown>)
             : null;
-        if (err.status === 422 && detailObj?.code === 'draft_publik_butuh_persetujuan' && typeof detailObj.message === 'string') {
+        if (err.status === 413) {
+          const batas =
+            typeof detailObj?.batas_mb === 'number' && detailObj.batas_mb > 0
+              ? detailObj.batas_mb
+              : maxUploadMb;
+          msg = formatUploadLimitErrorMessage(batas);
+        } else if (err.status === 422 && detailObj?.code === 'draft_publik_butuh_persetujuan' && typeof detailObj.message === 'string') {
           msg = detailObj.message;
         } else if (typeof detailObj?.message === 'string') {
           msg = detailObj.message;
@@ -516,8 +552,12 @@ export default function AnalisaRegulasi() {
     }
   };
 
-  // Handler Pembukaan Dokumen ke State 2
-  const handleOpenWorkspace = (docId: number, mode: 'deterministik' | 'ai' = selectedMode) => {
+  // Handler Pembukaan Dokumen ke Workspace
+  const handleOpenWorkspace = (
+    docId: number,
+    mode: 'deterministik' | 'ai' = selectedMode,
+    stage: 'summary' | 'analisa' = 'summary'
+  ) => {
     documentPolling.stop();
     setIsPollingActive(false);
     if (uploadAbortControllerRef.current) {
@@ -526,14 +566,45 @@ export default function AnalisaRegulasi() {
       uploadAbortControllerRef.current = null;
     }
     const effectiveMode = (mlHealth && mlHealth.mode_ai === false) ? 'deterministik' : mode;
-    saveStoredAnalisaWorkspace({ documentId: docId, mode: effectiveMode });
+    saveStoredAnalisaWorkspace({ documentId: docId, mode: effectiveMode, stage });
     setSearchParams({
       documentId: String(docId),
       mode: effectiveMode,
+      stage,
     });
   };
 
-  // Handler Kembali dari State 2 ke State 1 (Pekerjaan B: reset workspace)
+  // Handler Lanjutkan ke Workspace Analisa Lengkap (Stage 2)
+  const handleProceedToAnalisa = () => {
+    if (activeDocumentId === null) return;
+    saveStoredAnalisaWorkspace({
+      documentId: activeDocumentId,
+      mode: activeMode,
+      stage: 'analisa',
+    });
+    setSearchParams({
+      documentId: String(activeDocumentId),
+      mode: activeMode,
+      stage: 'analisa',
+    });
+  };
+
+  // Handler Kembali ke Ringkasan Eksekutif & Key Takeaways (Summary View)
+  const handleBackToSummary = () => {
+    if (activeDocumentId === null) return;
+    saveStoredAnalisaWorkspace({
+      documentId: activeDocumentId,
+      mode: activeMode,
+      stage: 'summary',
+    });
+    setSearchParams({
+      documentId: String(activeDocumentId),
+      mode: activeMode,
+      stage: 'summary',
+    });
+  };
+
+  // Handler Kembali dari Workspace ke State 1 (Upload Draf Baru)
   const handleBackToState1 = () => {
     clearStoredAnalisaWorkspace();
     setSearchParams({});
@@ -571,17 +642,27 @@ export default function AnalisaRegulasi() {
   }
 
   // ============================================================================
-  // TAMPILAN STATE 2: WORKSPACE TIGA PANEL (Jika documentId ada di URL)
+  // TAMPILAN WORKSPACE: SUMMARY VIEW (STAGE 1.5) ATAU ANALISA REGULASI (STAGE 2)
   // ============================================================================
   if (activeDocumentId !== null) {
+    if (activeStage === 'analisa') {
+      return (
+        <AnalisaState2Workspace
+          key={`analisa-${activeDocumentId}`}
+          documentId={activeDocumentId}
+          mode={activeMode}
+          onBackToState1={handleBackToState1}
+          onBackToSummary={handleBackToSummary}
+        />
+      );
+    }
+
     return (
-      <AnalisaState2Workspace
-        // key: pindah ke draft lain (mis. dari banner kemiripan) me-mount ulang workspace,
-        // sehingga state lama ter-reset dan request/polling dokumen sebelumnya dibatalkan
-        key={activeDocumentId}
+      <SummaryView
+        key={`summary-${activeDocumentId}`}
         documentId={activeDocumentId}
-        mode={activeMode}
         onBackToState1={handleBackToState1}
+        onProceedToAnalisa={handleProceedToAnalisa}
       />
     );
   }
@@ -1014,7 +1095,7 @@ export default function AnalisaRegulasi() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-4 border-b border-gray-100">
             <div>
               <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider">
-                1. Unggah Draft Peraturan untuk Dianalisis
+                Unggah Draft Peraturan untuk Dianalisis
               </h2>
               <p className="text-xs text-gray-500 mt-0.5">
                 Unggah naskah rancangan peraturan baru dalam format PDF. Dokumen diklasifikasikan sebagai {accessClassification === 'non_publik' ? 'Non-Publik' : 'Publik'} untuk kajian telaah dan ekstraksi pasal.
@@ -1059,7 +1140,7 @@ export default function AnalisaRegulasi() {
                   <span className="text-red-700 underline font-semibold hover:text-red-800">pilih dari komputer</span>
                 </p>
                 <p className="text-[11px] text-gray-500">
-                  Format wajib: Dokumen PDF (.pdf) • Batas maksimum ukuran: 100 MB
+                  Format wajib: Dokumen PDF (.pdf) • Batas maksimum ukuran: {maxUploadMb} MB
                 </p>
               </div>
             </div>
@@ -1330,68 +1411,6 @@ export default function AnalisaRegulasi() {
                 </div>
               </div>
             )}
-          </div>
-        </div>
-
-        {/* 5. PEMILIHAN METODE ANALISIS */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-2xs space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                2. METODE ANALISIS REGULASI
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Tentukan pendekatan penelaahan naskah regulasi yang akan digunakan.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-            {/* Opsi Deterministik */}
-            <div
-              onClick={() => setSelectedMode('deterministik')}
-              className={`p-4 rounded-xl border-2 transition cursor-pointer space-y-1.5 ${
-                selectedMode === 'deterministik'
-                  ? 'border-red-700 bg-red-50/20 shadow-xs'
-                  : 'border-gray-200 bg-white hover:border-gray-300'
-              }`}
-            >
-              <h3 className="text-sm font-bold text-gray-900">Mode Deterministik</h3>
-              <p className="text-xs text-gray-600 leading-relaxed">
-                Ekstraksi struktural pasal per pasal, pemetaan norma kewajiban, larangan, dan sanksi berdasarkan aturan hukum pasti tanpa risiko halusinasi.
-              </p>
-            </div>
-
-            {/* Opsi AI */}
-            <div
-              onClick={() => {
-                if (mlHealth?.mode_ai === true) {
-                  setSelectedMode('ai');
-                }
-              }}
-              className={`p-4 rounded-xl border-2 transition space-y-1.5 ${
-                mlHealth?.mode_ai !== true
-                  ? 'border-gray-200 bg-gray-50/70 opacity-60 cursor-not-allowed'
-                  : selectedMode === 'ai'
-                  ? 'border-red-700 bg-red-50/20 shadow-xs cursor-pointer'
-                  : 'border-gray-200 bg-white hover:border-gray-300 cursor-pointer'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-gray-900">Mode AI</h3>
-                {mlHealth?.mode_ai !== true && (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-gray-200 text-gray-700">
-                    Belum tersedia
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-gray-600 leading-relaxed">
-                Penelaahan kontekstual berbasis pemahaman teks untuk intisari tematik dan perangkuman klausul kompleks.{' '}
-                {mlHealth?.mode_ai !== true
-                  ? 'Layanan model AI belum aktif pada mesin analisis.'
-                  : 'Otomatis beralih ke Deterministik bila model AI offline.'}
-              </p>
-            </div>
           </div>
         </div>
 

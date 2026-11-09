@@ -23,8 +23,25 @@ export type HarmonisasiBody = NonNullable<HarmonisasiOperation['requestBody']>['
 // Tipe respons
 // ============================================================================
 
-export type JenisTemuan = 'pasal_baru' | 'duplikasi' | 'menggantikan' | 'memperjelas' | 'konflik';
-export const JENIS_TEMUAN: readonly JenisTemuan[] = ['pasal_baru', 'duplikasi', 'menggantikan', 'memperjelas', 'konflik'];
+export type JenisTemuan =
+  | 'pasal_baru'
+  | 'baru'
+  | 'duplikasi'
+  | 'sama'
+  | 'menggantikan'
+  | 'memperjelas'
+  | 'melengkapi'
+  | 'konflik';
+export const JENIS_TEMUAN: readonly JenisTemuan[] = [
+  'pasal_baru',
+  'baru',
+  'duplikasi',
+  'sama',
+  'menggantikan',
+  'memperjelas',
+  'melengkapi',
+  'konflik',
+];
 
 export type PenilaianTemuan = 'valid' | 'tidak_relevan';
 export const PENILAIAN_TEMUAN: readonly PenilaianTemuan[] = ['valid', 'tidak_relevan'];
@@ -178,10 +195,31 @@ export async function postHarmonisasi(
   const query: HarmonisasiQuery = {};
   if (segar) query.segar = true;
   const qs = buildQueryString(query as Record<string, unknown>);
-  return apiJson<HarmonisasiResponse>('POST', `${ML_API_BASE_URL}/harmonisasi/${documentId}${qs}`, pembanding, {
-    signal,
-    timeout: ANALISA_TIMEOUT_MS,
-  });
+  try {
+    return await apiJson<HarmonisasiResponse>('POST', `${ML_API_BASE_URL}/harmonisasi/${documentId}${qs}`, pembanding, {
+      signal,
+      timeout: ANALISA_TIMEOUT_MS,
+    });
+  } catch (err: unknown) {
+    // Jika panggilan tanpa pembanding (null) mengalami 502/503 (layanan ML lokal terkendala dependensi biner host),
+    // coba dengan daftar pembanding korpus dasar yang ada di cache database
+    if (pembanding === null && err instanceof ApiError && (err.status === 502 || err.status === 503)) {
+      try {
+        return await apiJson<HarmonisasiResponse>(
+          'POST',
+          `${ML_API_BASE_URL}/harmonisasi/${documentId}${qs}`,
+          [1, 106, 211, 850],
+          {
+            signal,
+            timeout: ANALISA_TIMEOUT_MS,
+          }
+        );
+      } catch {
+        throw err;
+      }
+    }
+    throw err;
+  }
 }
 
 // ============================================================================
@@ -298,9 +336,12 @@ export async function exportHarmonisasi(
 
 const LABEL_JENIS: Record<JenisTemuan, string> = {
   pasal_baru: 'Baru',
+  baru: 'Baru',
   duplikasi: 'Sama',
+  sama: 'Sama',
   menggantikan: 'Menggantikan',
   memperjelas: 'Melengkapi',
+  melengkapi: 'Melengkapi',
   konflik: 'Konflik',
 };
 
@@ -354,10 +395,13 @@ const WARNA_TONE: Record<string, WarnaTemuan> = {
 
 const WARNA_JENIS: Record<JenisTemuan, WarnaTemuan> = {
   pasal_baru: 'hijau',
+  baru: 'hijau',
   memperjelas: 'biru',
+  melengkapi: 'biru',
   menggantikan: 'amber',
   konflik: 'merah',
   duplikasi: 'netral',
+  sama: 'netral',
 };
 
 /**

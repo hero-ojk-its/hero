@@ -884,6 +884,7 @@ export function normalisasiRingkasanAi(nilai: unknown): MlAnalisaAiSentenceNorma
 export interface StoredAnalisaWorkspace {
   documentId: number;
   mode: 'deterministik' | 'ai';
+  stage?: 'summary' | 'analisa';
   selectedPasal?: string;
   activeTab?: 'ringkasan' | 'poin_utama' | 'dasar_hukum' | 'info_tambahan' | 'harmonisasi' | 'perbandingan';
   updatedAt?: number;
@@ -901,6 +902,7 @@ export function getStoredAnalisaWorkspace(): StoredAnalisaWorkspace | null {
       return {
         documentId: parsed.documentId,
         mode: parsed.mode === 'ai' ? 'ai' : 'deterministik',
+        stage: parsed.stage === 'analisa' ? 'analisa' : 'summary',
         selectedPasal: typeof parsed.selectedPasal === 'string' ? parsed.selectedPasal : undefined,
         activeTab: typeof parsed.activeTab === 'string' ? parsed.activeTab : undefined,
         updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : undefined,
@@ -919,6 +921,7 @@ export function saveStoredAnalisaWorkspace(state: Partial<StoredAnalisaWorkspace
     const merged: StoredAnalisaWorkspace = {
       documentId: state.documentId,
       mode: state.mode ?? existing?.mode ?? 'deterministik',
+      stage: state.stage ?? existing?.stage ?? 'summary',
       selectedPasal: state.selectedPasal !== undefined ? state.selectedPasal : existing?.selectedPasal,
       activeTab: state.activeTab !== undefined ? state.activeTab : existing?.activeTab,
       updatedAt: Date.now(),

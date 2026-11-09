@@ -22,7 +22,10 @@ import {
   CheckCircle,
   Edit3,
   RefreshCw,
-  Lock
+  Lock,
+  GitBranch,
+  Layers,
+  AlertCircle
 } from 'lucide-react';
 import { EditMetadataModal, EditStatusModal } from './DetailDokumenModals';
 import { regulasiData } from '../data/regulasiData';
@@ -32,7 +35,10 @@ import {
   apiFetch, 
   apiFetchBlob, 
   ApiError, 
-  adaptDocumentToDetail
+  adaptDocumentToDetail,
+  getDocumentVersionRelations,
+  type DocumentVersionResponse,
+  type VersionRelationItem
 } from '../lib/api';
 import {
   FIELD_PENEMPATAN_DOKUMEN,
@@ -98,6 +104,70 @@ function GarudaEmblem() {
   );
 }
 
+// Komponen item baris relasi regulasi untuk section Riwayat & Relasi
+function RelationItemRow({ item }: { item: VersionRelationItem }) {
+  const navigate = useNavigate();
+  const hasId = typeof item.document_id === 'number' && item.document_id > 0;
+  const isRestricted = Boolean(item.restricted);
+  const displayTitle = item.judul || item.key || 'Regulasi Terkait';
+
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-gray-50/70 hover:bg-gray-50 border border-gray-200 rounded-lg transition-colors">
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {item.key && (
+            <span className="font-mono text-[11px] font-bold text-gray-700 bg-white px-2 py-0.5 rounded border border-gray-200 shadow-2xs">
+              {item.key}
+            </span>
+          )}
+          {typeof item.perubahan_ke === 'number' && item.perubahan_ke > 0 && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+              Perubahan ke-{item.perubahan_ke}
+            </span>
+          )}
+          {item.sebagian && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+              Sebagian
+            </span>
+          )}
+          {isRestricted && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+              <Lock size={10} />
+              Dokumen Terbatas
+            </span>
+          )}
+          {item.access_classification && (
+            <span className="inline-flex items-center text-[10px] font-medium text-gray-500 bg-white px-1.5 py-0.5 rounded border border-gray-200">
+              {item.access_classification}
+            </span>
+          )}
+        </div>
+
+        <p className="text-xs font-semibold text-gray-900 leading-snug">
+          {displayTitle}
+        </p>
+
+        {item.pasal_terkait && (
+          <p className="text-[11px] text-gray-600">
+            <span className="font-medium text-gray-700">Pasal terkait:</span> {item.pasal_terkait}
+          </p>
+        )}
+      </div>
+
+      {hasId && (
+        <button
+          type="button"
+          onClick={() => navigate(`/knowledge/detail/${item.document_id}`)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-red-50 text-gray-700 hover:text-red-700 border border-gray-300 hover:border-red-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0 self-start sm:self-center shadow-2xs"
+        >
+          <span>Buka Dokumen</span>
+          <ExternalLink size={12} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function DetailDokumen() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -132,12 +202,18 @@ export default function DetailDokumen() {
   const [textNotFound, setTextNotFound] = useState<boolean>(false);
   const [isCopied, setIsCopied] = useState<boolean>(false);
 
-  // Memuat metadata, PDF, dan teks secara terpisah dan paralel saat ID berubah
+  // 4. State riwayat versi dan relasi dokumen (Langkah 18 / Fase 2)
+  const [versiData, setVersiData] = useState<DocumentVersionResponse | null>(null);
+  const [versiLoading, setVersiLoading] = useState<boolean>(isApiConfigured && Boolean(id));
+  const [versiError, setVersiError] = useState<string | null>(null);
+
+  // Memuat metadata, PDF, teks, dan riwayat versi secara terpisah dan paralel saat ID berubah
   useEffect(() => {
     if (!isApiConfigured || !id) {
       setLoading(false);
       setPdfLoading(false);
       setTextLoading(false);
+      setVersiLoading(false);
       return;
     }
 
@@ -256,6 +332,27 @@ export default function DetailDokumen() {
         setTextLoading(false);
       });
 
+    // 4. Ambil riwayat versi dan relasi dokumen
+    setVersiLoading(true);
+    setVersiError(null);
+    setVersiData(null);
+
+    getDocumentVersionRelations(Number(id), { signal })
+      .then((res) => {
+        if (!signal.aborted) {
+          setVersiData(res);
+          setVersiLoading(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (signal.aborted) return;
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (err instanceof Error && err.name === 'AbortError') return;
+
+        setVersiError(err instanceof Error ? err.message : 'Gagal memuat riwayat versi dan relasi dokumen');
+        setVersiLoading(false);
+      });
+
     return () => {
       controller.abort();
       if (pdfBlobUrlRef.current) {
@@ -356,6 +453,23 @@ export default function DetailDokumen() {
           setTextError(err instanceof Error ? err.message : 'Gagal memuat teks dokumen dari server');
         }
         setTextLoading(false);
+      });
+  };
+
+  // Handler retry terpisah untuk Riwayat & Relasi
+  const retryFetchVersi = () => {
+    if (!isApiConfigured || !id) return;
+    setVersiLoading(true);
+    setVersiError(null);
+
+    getDocumentVersionRelations(Number(id))
+      .then((res) => {
+        setVersiData(res);
+        setVersiLoading(false);
+      })
+      .catch((err: unknown) => {
+        setVersiError(err instanceof Error ? err.message : 'Gagal memuat riwayat versi dan relasi dokumen');
+        setVersiLoading(false);
       });
   };
 
@@ -1469,6 +1583,193 @@ export default function DetailDokumen() {
           </div>
         )}
 
+        {/* 2c. Riwayat & Relasi Dokumen (Langkah 18 / Fase 2) */}
+        <div id="section-detail-riwayat-relasi" className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-6 sm:p-7">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-gray-100">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 bg-red-50 text-red-700 rounded-lg">
+                <GitBranch className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-bold text-gray-900 text-base">Riwayat & Relasi</h3>
+                  {versiData && (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+                      {versiData.jumlah_relasi} Relasi
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Silsilah perubahan, relasi pencabutan, dan riwayat versi regulasi.
+                </p>
+              </div>
+            </div>
+
+            {isApiConfigured && Boolean(id) && (
+              <button
+                type="button"
+                onClick={retryFetchVersi}
+                disabled={versiLoading}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-gray-50 text-gray-700 hover:text-red-700 border border-gray-300 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer self-start sm:self-auto disabled:opacity-50"
+                title="Muat ulang riwayat versi dan relasi"
+              >
+                <RefreshCw size={13} className={versiLoading ? 'animate-spin text-red-700' : ''} />
+                <span>Segarkan</span>
+              </button>
+            )}
+          </div>
+
+          {/* Status Keterangan Banner (jika tersedia dari backend) */}
+          {versiData?.status_keterangan && (
+            <div className="mb-5 bg-blue-50/70 border border-blue-200 rounded-lg p-3 text-xs text-blue-900 flex items-start gap-2">
+              <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold">Keterangan Status: </span>
+                <span>{versiData.status_keterangan}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Loading State */}
+          {versiLoading && (
+            <div className="py-8 flex flex-col items-center justify-center text-center">
+              <RefreshCw className="w-6 h-6 animate-spin text-red-700 mb-2" />
+              <p className="text-xs text-gray-500">Memuat riwayat versi dan relasi regulasi...</p>
+            </div>
+          )}
+
+          {/* Error State */}
+          {!versiLoading && versiError && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-xs text-red-800 flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold">Gagal memuat relasi versi</p>
+                  <p className="text-red-700 mt-0.5">{versiError}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={retryFetchVersi}
+                className="px-2.5 py-1 bg-white border border-red-300 text-red-700 hover:bg-red-50 rounded text-xs font-semibold shrink-0 cursor-pointer"
+              >
+                Coba Lagi
+              </button>
+            </div>
+          )}
+
+          {/* Empty State: identitas belum lengkap (identity_key_kosong = true) */}
+          {!versiLoading && !versiError && versiData && versiData.jumlah_relasi === 0 && versiData.identity_key_kosong && (
+            <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-4 text-xs text-amber-900 flex items-start gap-3">
+              <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-semibold text-amber-950">
+                  Relasi belum tersedia (identitas dokumen belum lengkap).
+                </p>
+                <p className="text-amber-800 leading-relaxed">
+                  Dokumen ini belum memiliki data identitas regulasi yang lengkap (misalnya jenis, nomor, atau tahun belum terindeks). Silsilah relasi versi akan otomatis dipetakan setelah identitas dokumen dilengkapi melalui menu Koreksi Metadata.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Empty State: tidak ada relasi tetapi identitas lengkap */}
+          {!versiLoading && !versiError && versiData && versiData.jumlah_relasi === 0 && !versiData.identity_key_kosong && (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 text-center text-xs text-gray-500">
+              <Layers className="w-6 h-6 text-gray-400 mx-auto mb-2" />
+              <p className="font-semibold text-gray-700">Tidak ada riwayat perubahan atau relasi regulasi</p>
+              <p className="text-gray-500 mt-0.5">Dokumen ini berdiri sendiri dan belum memiliki relasi mengubah, diubah, atau mencabut peraturan lain.</p>
+            </div>
+          )}
+
+          {/* Data Relasi Tersedia */}
+          {!versiLoading && !versiError && versiData && (versiData.jumlah_relasi > 0 || (versiData.induk?.length || 0) + (versiData.diubah_oleh?.length || 0) + (versiData.mencabut?.length || 0) + (versiData.dicabut_oleh?.length || 0) > 0) && (
+            <div className="space-y-6">
+              {/* Dokumen Induk */}
+              {versiData.induk && versiData.induk.length > 0 && (
+                <div className="space-y-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                    <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
+                      Dokumen Induk ({versiData.induk.length})
+                    </h4>
+                  </div>
+                  <div className="space-y-2">
+                    {versiData.induk.map((item, idx) => (
+                      <RelationItemRow key={`induk-${item.key || item.document_id || idx}`} item={item} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Diubah Oleh */}
+              {versiData.diubah_oleh && versiData.diubah_oleh.length > 0 && (
+                <div className="space-y-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
+                    <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
+                      Diubah Oleh ({versiData.diubah_oleh.length})
+                    </h4>
+                  </div>
+                  <div className="space-y-2">
+                    {versiData.diubah_oleh.map((item, idx) => (
+                      <RelationItemRow key={`diubah-${item.key || item.document_id || idx}`} item={item} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Mencabut */}
+              {versiData.mencabut && versiData.mencabut.length > 0 && (
+                <div className="space-y-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-rose-600"></span>
+                    <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
+                      Mencabut ({versiData.mencabut.length})
+                    </h4>
+                  </div>
+                  <div className="space-y-2">
+                    {versiData.mencabut.map((item, idx) => (
+                      <RelationItemRow key={`mencabut-${item.key || item.document_id || idx}`} item={item} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Dicabut Oleh */}
+              {versiData.dicabut_oleh && versiData.dicabut_oleh.length > 0 && (
+                <div className="space-y-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-red-600"></span>
+                    <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
+                      Dicabut Oleh ({versiData.dicabut_oleh.length})
+                    </h4>
+                  </div>
+                  <div className="space-y-2">
+                    {versiData.dicabut_oleh.map((item, idx) => (
+                      <RelationItemRow key={`dicabut-${item.key || item.document_id || idx}`} item={item} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Catatan Tambahan (jika ada) */}
+              {versiData.catatan && (
+                <p className="text-xs text-gray-500 italic mt-2">
+                  {versiData.catatan}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Mode Offline / Tanpa API */}
+          {!isApiConfigured && (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-xs text-gray-500 text-center">
+              Fitur Riwayat & Relasi aktif saat terhubung ke backend HERO.
+            </div>
+          )}
+        </div>
+
         {/* 3. Dokumen Asli (Buka Dokumen, Buka PDF Asli, & Unduh) */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-6 sm:p-7">
           <div className="flex items-center gap-2.5 mb-5 pb-4 border-b border-gray-100">
@@ -1684,6 +1985,7 @@ export default function DetailDokumen() {
               setFetchedDoc(adaptDocumentToDetail(updatedDoc));
               setToastMessage('Metadata tersimpan');
               setHasilPenempatan(ringkasPenempatan(updatedDoc));
+              retryFetchVersi();
             }}
           />
           <EditStatusModal
@@ -1696,6 +1998,7 @@ export default function DetailDokumen() {
               setFetchedDoc(adaptDocumentToDetail(updated));
               setToastMessage(message || 'Status keberlakuan berhasil diperbarui');
               setHasilPenempatan(null);
+              retryFetchVersi();
             }}
           />
         </>

@@ -10,6 +10,7 @@ import {
   ZoomOut,
   Scale,
   ArrowRight,
+  ArrowLeft,
   Download,
   RefreshCw,
   FileCode,
@@ -90,12 +91,14 @@ export interface AnalisaState2WorkspaceProps {
   documentId: number;
   mode: 'deterministik' | 'ai';
   onBackToState1: () => void;
+  onBackToSummary?: () => void;
 }
 
 export default function AnalisaState2Workspace({
   documentId,
   mode,
-  onBackToState1
+  onBackToState1,
+  onBackToSummary
 }: AnalisaState2WorkspaceProps) {
   const navigate = useNavigate();
 
@@ -161,8 +164,8 @@ export default function AnalisaState2Workspace({
     ? storedWs.selectedPasal
     : 'Pasal 1';
   const initialTab = (storedWs?.documentId === documentId && storedWs.activeTab)
-    ? (storedWs.activeTab as 'ringkasan' | 'poin_utama' | 'dasar_hukum' | 'perbandingan' | 'info_tambahan' | 'harmonisasi')
-    : 'ringkasan';
+    ? (storedWs.activeTab as 'harmonisasi' | 'ringkasan' | 'poin_utama' | 'dasar_hukum' | 'perbandingan' | 'info_tambahan')
+    : 'harmonisasi';
 
   // State Workspace Panel 1: Struktur Dokumen
   const [expandedBabs, setExpandedBabs] = useState<Record<string, boolean>>({
@@ -227,8 +230,8 @@ export default function AnalisaState2Workspace({
     }, 4500);
   }, []);
 
-  // State Workspace Panel 3: Hasil Analisis Tabs (dipulihkan dari storage jika ada)
-  const [activeTab, setActiveTab] = useState<'ringkasan' | 'poin_utama' | 'dasar_hukum' | 'perbandingan' | 'info_tambahan' | 'harmonisasi'>(initialTab);
+  // State Workspace Panel 3: Hasil Analisis Tabs (dipulihkan dari storage jika ada, default: harmonisasi perbandingan MVP 3)
+  const [activeTab, setActiveTab] = useState<'harmonisasi' | 'ringkasan' | 'poin_utama' | 'dasar_hukum' | 'perbandingan' | 'info_tambahan'>(initialTab);
 
   // State Collapse Manual Panel Kiri (Struktur) & Kanan (Hasil Analisis)
   const [isLeftCollapsed, setIsLeftCollapsed] = useState<boolean>(() => {
@@ -1262,7 +1265,7 @@ export default function AnalisaState2Workspace({
   return (
     <div className="w-full max-w-[1600px] mx-auto space-y-4 pb-16 font-sans">
       {/* 1. Header Workspace Breadcrumb */}
-      <div className="flex items-center text-xs font-semibold tracking-wider text-gray-500">
+      <div className="flex items-center text-xs font-semibold tracking-wider text-gray-500 flex-wrap">
         <button 
           type="button"
           onClick={onBackToState1}
@@ -1278,8 +1281,21 @@ export default function AnalisaState2Workspace({
         >
           ANALISA REGULASI
         </button>
+        {onBackToSummary && (
+          <>
+            <span className="mx-2 text-gray-400">&gt;</span>
+            <button
+              type="button"
+              onClick={onBackToSummary}
+              className="hover:text-red-700 transition cursor-pointer text-gray-700 font-bold"
+              title="Kembali ke Ringkasan Eksekutif & Key Takeaways"
+            >
+              SUMMARY
+            </button>
+          </>
+        )}
         <span className="mx-2 text-gray-400">&gt;</span>
-        <span className="text-red-700 uppercase">HASIL ANALISIS</span>
+        <span className="text-red-700 uppercase">WORKSPACE ANALISA</span>
       </div>
 
       {/* 2. Top Header Title & Actions */}
@@ -1291,8 +1307,20 @@ export default function AnalisaState2Workspace({
           </p>
         </div>
 
-        {/* Tombol Aksi Header: Mulai Analisis Baru, Perbandingan Analisis, & Analisis Ulang (Pekerjaan B & QA 5) */}
+        {/* Tombol Aksi Header: Kembali ke Summary, Mulai Analisis Baru, Perbandingan Analisis, & Analisis Ulang */}
         <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          {onBackToSummary && (
+            <button
+              type="button"
+              onClick={onBackToSummary}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-800 text-xs font-bold shadow-2xs transition cursor-pointer"
+              title="Kembali ke tampilan Ringkasan Eksekutif dan Key Takeaways"
+            >
+              <ArrowLeft size={13} />
+              <span>Kembali ke Summary</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onBackToState1}
@@ -1395,6 +1423,36 @@ export default function AnalisaState2Workspace({
                 Fallback
               </span>
             )}
+          </div>
+
+          {/* Toggle AI Analisa (Disabled - Segera Hadir untuk MVP 3, Section H) */}
+          <div
+            className="relative group flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50/80 cursor-not-allowed select-none"
+            title="Analisa berbantuan AI akan tersedia pada pengembangan berikutnya."
+          >
+            <div className="flex items-center gap-1.5">
+              <Sparkles size={13} className="text-gray-400" />
+              <span className="text-xs font-semibold text-gray-500">Analisa AI</span>
+              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200 uppercase">
+                Segera
+              </span>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={false}
+              disabled={true}
+              className="relative inline-flex h-4 w-8 shrink-0 cursor-not-allowed rounded-full border-2 border-transparent bg-gray-200 transition-colors opacity-60"
+              aria-label="Toggle Analisa AI (Belum tersedia)"
+            >
+              <span className="pointer-events-none inline-block h-3 w-3 translate-x-0 rounded-full bg-white shadow transform ring-0 transition" />
+            </button>
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:flex flex-col items-center z-30 pointer-events-none">
+              <div className="bg-gray-900 text-white text-[11px] font-medium py-1 px-2.5 rounded shadow-lg whitespace-nowrap">
+                Analisa berbantuan AI akan tersedia pada pengembangan berikutnya.
+              </div>
+              <div className="w-2 h-2 bg-gray-900 rotate-45 -mt-1" />
+            </div>
           </div>
 
           {/* Badge Status */}
@@ -2259,8 +2317,27 @@ export default function AnalisaState2Workspace({
                 </div>
               </div>
 
-              {/* Tab Bar: 6 Tab Rapi (Ringkasan, Poin Utama, Dasar Hukum, Bandingkan, Info Tambahan, Harmonisasi) */}
+              {/* Tab Bar: 6 Tab Rapi (Harmonisasi Utama MVP 3, Ringkasan, Poin Utama, Dasar Hukum, Bandingkan, Info Tambahan) */}
               <div className="grid grid-cols-6 border-b border-gray-200 bg-gray-50/70 text-xs shrink-0 select-none">
+                <button
+                  type="button"
+                  onClick={bukaTabHarmonisasi}
+                  className={`py-2.5 px-1 text-center font-semibold transition border-b-2 cursor-pointer truncate text-[11px] ${
+                    activeTab === 'harmonisasi'
+                      ? 'border-red-700 text-red-700 bg-white font-bold'
+                      : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-100/50'
+                  }`}
+                  title="Harmonisasi Draft vs Knowledge Base (MVP 3)"
+                >
+                  <span className="flex items-center justify-center gap-1">
+                    <span>Harmonisasi</span>
+                    {Array.isArray(harmonisasi?.data?.temuan) && harmonisasi.data.temuan.length > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-red-100 text-red-800 font-bold">
+                        {harmonisasi.data.temuan.length}
+                      </span>
+                    )}
+                  </span>
+                </button>
                 <button
                   type="button"
                   onClick={() => setActiveTab('ringkasan')}
@@ -2326,22 +2403,10 @@ export default function AnalisaState2Workspace({
                 >
                   Info Tambahan
                 </button>
-                <button
-                  type="button"
-                  onClick={bukaTabHarmonisasi}
-                  className={`py-2.5 px-1 text-center font-semibold transition border-b-2 cursor-pointer truncate text-[11px] ${
-                    activeTab === 'harmonisasi'
-                      ? 'border-red-700 text-red-700 bg-white font-bold'
-                      : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-100/50'
-                  }`}
-                  title="Harmonisasi Draft vs Regulasi Eksisting"
-                >
-                  Harmonisasi
-                </button>
               </div>
 
               {/* Tab Contents */}
-              <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4 text-xs">
+              <div data-testid="panel-hasil-scroll" className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4 text-xs">
               {/* TAB 1: RINGKASAN */}
               {activeTab === 'ringkasan' && (
                 <div className="space-y-4">

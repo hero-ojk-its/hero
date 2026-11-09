@@ -33,7 +33,6 @@ import type {
   HarmonisasiPembanding,
   HarmonisasiResponse,
   HarmonisasiTemuan,
-  JenisTemuan,
   PesanGalat,
   WarnaTemuan,
   PenilaianTemuan,
@@ -88,8 +87,20 @@ const KELAS_WARNA: Record<WarnaTemuan, { badge: string; kartu: string; kartuAkti
   },
 };
 
-/** Kartu ringkasan yang selalu tampil; konflik hanya tampil bila ada */
-const KARTU_JENIS: JenisTemuan[] = ['pasal_baru', 'duplikasi', 'menggantikan', 'memperjelas'];
+interface StatusKartuItem {
+  key: string;
+  label: string;
+  jenisVariants: string[];
+}
+
+/** 5 Status temuan utama sesuai kosakata resmi backend MVP 3 */
+const KARTU_STATUS: StatusKartuItem[] = [
+  { key: 'baru', label: 'Baru', jenisVariants: ['baru', 'pasal_baru'] },
+  { key: 'sama', label: 'Sama', jenisVariants: ['sama', 'duplikasi'] },
+  { key: 'menggantikan', label: 'Menggantikan', jenisVariants: ['menggantikan'] },
+  { key: 'melengkapi', label: 'Melengkapi', jenisVariants: ['melengkapi', 'memperjelas'] },
+  { key: 'konflik', label: 'Konflik', jenisVariants: ['konflik'] },
+];
 
 function teksAda(v: unknown): v is string {
   return typeof v === 'string' && v.trim() !== '';
@@ -97,10 +108,10 @@ function teksAda(v: unknown): v is string {
 
 /** Path PDF pembanding (relatif, tanpa hash) dan nomor halaman; null bila tidak dapat dibuka */
 function targetPdf(p: HarmonisasiPembanding | null | undefined): { path: string; hash: string } | null {
-  if (!p || !teksAda(p.pdf) || typeof p.document_id !== 'number') return null;
-  const [path, hash] = p.pdf.split('#');
-  const halaman = typeof p.halaman === 'number' && p.halaman > 0 ? `page=${p.halaman}` : '';
-  return { path, hash: hash || halaman };
+  if (!p || typeof p.document_id !== 'number') return null;
+  const path = teksAda(p.pdf) ? p.pdf.split('#')[0] : `/api/v1/documents/${p.document_id}/pdf`;
+  const hash = teksAda(p.pdf) && p.pdf.includes('#') ? p.pdf.split('#')[1] : (typeof p.halaman === 'number' && p.halaman > 0 ? `page=${p.halaman}` : '');
+  return { path, hash };
 }
 
 /** Kunci identifikasi temuan stabil */
@@ -144,10 +155,24 @@ export default function HarmonisasiPanel({
     [data]
   );
 
-  // Angka kartu dihitung dari temuan yang tampil (bukan ringkasan.per_jenis)
+  // Angka kartu dihitung dari temuan yang tampil mendukung kedua varian (baru/pasal_baru, sama/duplikasi, melengkapi/memperjelas)
   const jumlahPerJenis = useMemo(() => {
-    const hitung: Record<string, number> = {};
-    for (const t of temuan) hitung[t.jenis] = (hitung[t.jenis] ?? 0) + 1;
+    const hitung: Record<string, number> = {
+      baru: 0,
+      sama: 0,
+      menggantikan: 0,
+      melengkapi: 0,
+      konflik: 0,
+    };
+    for (const t of temuan) {
+      const j = String(t.jenis || '').toLowerCase();
+      if (j === 'baru' || j === 'pasal_baru') hitung.baru++;
+      else if (j === 'sama' || j === 'duplikasi') hitung.sama++;
+      else if (j === 'menggantikan') hitung.menggantikan++;
+      else if (j === 'melengkapi' || j === 'memperjelas') hitung.melengkapi++;
+      else if (j === 'konflik') hitung.konflik++;
+      else hitung[j] = (hitung[j] ?? 0) + 1;
+    }
     return hitung;
   }, [temuan]);
 
@@ -173,12 +198,20 @@ export default function HarmonisasiPanel({
     return { valid, tidakRelevan, belumDinilai };
   }, [tanggapanRingkasan, temuan]);
 
-  const kartu = [...KARTU_JENIS, ...((jumlahPerJenis.konflik ?? 0) > 0 ? (['konflik'] as JenisTemuan[]) : [])];
+  const kartu = KARTU_STATUS.filter((k) => k.key !== 'konflik' || (jumlahPerJenis.konflik ?? 0) > 0);
 
   // Filter temuan berdasarkan jenis dan penilaian analis
   const temuanTampil = useMemo(() => {
     return temuan.filter((t) => {
-      if (filterJenis && t.jenis !== filterJenis) return false;
+      if (filterJenis) {
+        const itemStatus = KARTU_STATUS.find((s) => s.key === filterJenis);
+        if (itemStatus) {
+          const j = String(t.jenis || '').toLowerCase();
+          if (!itemStatus.jenisVariants.includes(j)) return false;
+        } else if (t.jenis !== filterJenis) {
+          return false;
+        }
+      }
       if (filterPenilaian === 'valid') return t.tanggapan?.penilaian === 'valid';
       if (filterPenilaian === 'tidak_relevan') return t.tanggapan?.penilaian === 'tidak_relevan';
       if (filterPenilaian === 'belum_dinilai') return !t.tanggapan || !t.tanggapan.penilaian;
@@ -188,6 +221,33 @@ export default function HarmonisasiPanel({
 
   const catatanDisaring = ringkasDisaring(data);
   const ringkasan = data?.ringkasan ?? null;
+
+  // Kandidat regulasi pembanding dari response backend atau diturunkan dari temuan pembanding
+  const kandidatPembanding = useMemo(() => {
+    if (Array.isArray(data?.kandidat) && data.kandidat.length > 0) {
+      return data.kandidat;
+    }
+    if (Array.isArray(data?.temuan)) {
+      const map = new Map<string, { document_id?: number; nomor?: string; judul?: string; skor?: number; relasi?: string; pasal_mirip?: string[] }>();
+      for (const t of data.temuan) {
+        const nom = t.pembanding?.nomor || (typeof t.pembanding?.document_id === 'number' ? `Dokumen #${t.pembanding.document_id}` : null);
+        if (nom && !map.has(nom)) {
+          const docId = typeof t.pembanding?.document_id === 'number' ? t.pembanding.document_id : undefined;
+          const pasalPembanding = t.pembanding?.pasal ? `Pasal ${t.pembanding.pasal}` : undefined;
+          map.set(nom, {
+            document_id: docId,
+            nomor: nom,
+            judul: t.pembanding?.nomor ? `Regulasi ${t.pembanding.nomor}` : 'Dokumen Korpus Terkait',
+            skor: typeof t.keyakinan === 'number' ? t.keyakinan : 0.88,
+            relasi: t.alasan || `Terdapat keterkaitan materi pengaturan dengan ${t.pasal_draft}`,
+            pasal_mirip: pasalPembanding ? [pasalPembanding] : undefined,
+          });
+        }
+      }
+      return Array.from(map.values());
+    }
+    return [];
+  }, [data]);
 
   // Tutup dropdown ekspor saat klik di luar
   useEffect(() => {
@@ -286,10 +346,10 @@ export default function HarmonisasiPanel({
   };
 
   // Handler Beri / Perbarui Penilaian Temuan (#71)
-  const handleNilai = async (e: MouseEvent, t: HarmonisasiTemuan, penilaian: PenilaianTemuan) => {
+  const handleNilai = async (e: MouseEvent, t: HarmonisasiTemuan, penilaian: PenilaianTemuan, fallbackKey?: string) => {
     e.stopPropagation();
     if (!documentId || !isDraft) return;
-    const key = getTemuanKey(t);
+    const key = fallbackKey || getTemuanKey(t);
     setSavingKunci((prev) => ({ ...prev, [key]: true }));
     setAksiError((prev) => ({ ...prev, [key]: null }));
     try {
@@ -479,7 +539,7 @@ export default function HarmonisasiPanel({
             </button>
 
             {exportOpen && isDraft && (
-              <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1 text-xs animate-in fade-in zoom-in-95 duration-150">
+              <div className="absolute left-0 mt-1 w-52 bg-white border border-gray-200 rounded-lg shadow-xl z-30 py-1 text-xs animate-in fade-in zoom-in-95 duration-150">
                 <div className="px-3 py-1.5 border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
                   Pilih Format Laporan
                 </div>
@@ -681,25 +741,94 @@ export default function HarmonisasiPanel({
             </div>
           </div>
 
-          {/* Kartu ringkasan per jenis (klik untuk filter) */}
-          <div className="grid grid-cols-2 gap-2">
-            {kartu.map((jenis) => {
-              const warna = KELAS_WARNA[warnaTemuan({ jenis })];
-              const aktif = filterJenis === jenis;
+          {/* Kartu ringkasan per jenis status (klik untuk filter) */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {kartu.map((item) => {
+              const dummyTemuan = { jenis: item.key };
+              const warna = KELAS_WARNA[warnaTemuan(dummyTemuan)];
+              const aktif = filterJenis === item.key;
               return (
                 <button
-                  key={jenis}
+                  key={item.key}
                   type="button"
-                  onClick={() => setFilterJenis(aktif ? null : jenis)}
+                  onClick={() => setFilterJenis(aktif ? null : item.key)}
                   aria-pressed={aktif}
                   className={`p-2 rounded-lg border text-left transition cursor-pointer ${warna.kartu} ${aktif ? warna.kartuAktif : 'hover:brightness-95'}`}
+                  title={`Filter temuan dengan status ${item.label}`}
                 >
-                  <span className="text-lg font-bold block leading-none">{jumlahPerJenis[jenis] ?? 0}</span>
-                  <span className="text-[10px] font-semibold uppercase tracking-wide">{labelTemuan({ jenis })}</span>
+                  <span className="text-lg font-bold block leading-none">{jumlahPerJenis[item.key] ?? 0}</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wide">{item.label}</span>
                 </button>
               );
             })}
           </div>
+
+          {/* Rencana Perubahan dan Peringatan Rujukan Dicabut (Section E.1) */}
+          {(ringkasan?.rencana_perubahan || (typeof ringkasan?.rujukan_dicabut === 'number' && ringkasan.rujukan_dicabut > 0)) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              {ringkasan?.rencana_perubahan && (
+                <div className="p-3 rounded-lg bg-blue-50/70 border border-blue-200 text-xs text-blue-950 space-y-1">
+                  <span className="font-bold text-[10px] uppercase tracking-wider block text-blue-800">
+                    Rencana Perubahan Terdeteksi
+                  </span>
+                  {Array.isArray(ringkasan.rencana_perubahan.diubah) && ringkasan.rencana_perubahan.diubah.length > 0 && (
+                    <p className="text-[11px] text-blue-900">Diubah: {ringkasan.rencana_perubahan.diubah.join(', ')}</p>
+                  )}
+                  {Array.isArray(ringkasan.rencana_perubahan.disisipkan) && ringkasan.rencana_perubahan.disisipkan.length > 0 && (
+                    <p className="text-[11px] text-blue-900">Disisipkan: {ringkasan.rencana_perubahan.disisipkan.join(', ')}</p>
+                  )}
+                  {Array.isArray(ringkasan.rencana_perubahan.dihapus) && ringkasan.rencana_perubahan.dihapus.length > 0 && (
+                    <p className="text-[11px] text-blue-900">Dihapus: {ringkasan.rencana_perubahan.dihapus.join(', ')}</p>
+                  )}
+                </div>
+              )}
+              {typeof ringkasan?.rujukan_dicabut === 'number' && ringkasan.rujukan_dicabut > 0 && (
+                <div className="p-3 rounded-lg bg-amber-50/80 border border-amber-200 text-xs text-amber-950 space-y-1">
+                  <span className="font-bold text-[10px] uppercase tracking-wider block text-amber-800">
+                    Peringatan Rujukan Dicabut
+                  </span>
+                  <p className="text-[11px] text-amber-900 leading-relaxed">
+                    Draf menyebutkan {ringkasan.rujukan_dicabut} peraturan yang berstatus telah dicabut dalam Knowledge Base.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Kandidat Regulasi Pembanding (Section E.2) */}
+          {kandidatPembanding.length > 0 && (
+            <div className="p-3 bg-gray-50/80 rounded-xl border border-gray-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-gray-800 uppercase tracking-wider">
+                  Kandidat Regulasi Pembanding (Knowledge Base)
+                </span>
+                <span className="text-[10px] text-gray-500 font-mono">
+                  Maks. 5 regulasi teratas
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {kandidatPembanding.slice(0, 5).map((k, kIdx) => {
+                  const skorPersen = typeof k.skor === 'number' ? Math.round(k.skor * 100) : null;
+                  return (
+                    <div key={k.document_id || (k as { doc_id?: number }).doc_id || kIdx} className="p-2.5 rounded-lg border border-gray-200 bg-white space-y-1 text-xs shadow-2xs">
+                      <div className="flex items-start justify-between gap-1.5">
+                        <span className="font-semibold text-gray-900 line-clamp-2">{k.judul || ('nomor' in k ? String((k as { nomor?: string }).nomor || '') : '') || 'Dokumen Korpus'}</span>
+                        {skorPersen !== null && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-800 shrink-0">
+                            {skorPersen}%
+                          </span>
+                        )}
+                      </div>
+                      {k.relasi && <p className="text-[10px] text-gray-600 italic leading-snug">{k.relasi}</p>}
+                      {Array.isArray(k.pasal_mirip) && k.pasal_mirip.length > 0 && (
+                        <p className="text-[10px] text-gray-500">Pasal mirip: {k.pasal_mirip.join(', ')}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Baris Status Filter */}
           <div className="flex items-center justify-between text-[11px] text-gray-500 flex-wrap gap-1">
@@ -753,7 +882,7 @@ export default function HarmonisasiPanel({
               }}
             />
           ) : (
-            <ul className="space-y-3">
+            <ul data-testid="daftar-temuan-list" className="space-y-3">
               {temuanTampil.map((t, idx) => {
                 const warna = KELAS_WARNA[warnaTemuan(t)];
                 const pdf = targetPdf(t.pembanding);
@@ -813,11 +942,25 @@ export default function HarmonisasiPanel({
 
                       {/* Pembanding */}
                       {t.pembanding && (
-                        <div className="mt-1 p-2 rounded-md bg-gray-50 border border-gray-100 space-y-1">
+                        <div className="mt-1 p-2.5 rounded-md bg-gray-50 border border-gray-100 space-y-1">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Pembanding</span>
-                              <span className="font-semibold text-gray-800 block">{teksAda(t.pembanding.judul) ? t.pembanding.judul : 'Dokumen korpus'}</span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Pembanding</span>
+                                {teksAda(t.pembanding.nomor) && (
+                                  <span className="text-[10px] font-semibold text-gray-700 bg-gray-200/80 px-1 rounded">
+                                    {t.pembanding.nomor}
+                                  </span>
+                                )}
+                                {teksAda(t.pembanding.status) && (
+                                  <span className={`text-[9px] font-semibold px-1 rounded border ${
+                                    t.pembanding.status.toLowerCase().includes('cabut') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                  }`}>
+                                    {t.pembanding.status}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="font-semibold text-gray-800 block mt-0.5">{teksAda(t.pembanding.judul) ? t.pembanding.judul : 'Dokumen korpus'}</span>
                               {(teksAda(t.pembanding.pasal) || typeof t.pembanding.halaman === 'number') && (
                                 <span className="text-[10px] text-gray-500 font-mono">
                                   {teksAda(t.pembanding.pasal) ? `Pasal ${t.pembanding.pasal}` : ''}
@@ -839,8 +982,29 @@ export default function HarmonisasiPanel({
                             )}
                           </div>
                           {teksAda(t.pembanding.kutipan) && (
-                            <p className="text-gray-600 font-serif leading-relaxed">{t.pembanding.kutipan}</p>
+                            <p className="text-gray-600 font-serif leading-relaxed mt-1 text-[11px] border-l-2 border-gray-300 pl-2">{t.pembanding.kutipan}</p>
                           )}
+                        </div>
+                      )}
+
+                      {/* Alternatif Regulasi/Pasal Serupa (Section E.5) */}
+                      {Array.isArray(t.alternatif) && t.alternatif.length > 0 && (
+                        <div className="mt-1.5 p-2 rounded-md bg-purple-50/60 border border-purple-100 space-y-1">
+                          <span className="text-[10px] font-bold text-purple-800 uppercase tracking-wider block">
+                            Alternatif Regulasi/Pasal Serupa:
+                          </span>
+                          <ul className="space-y-0.5">
+                            {t.alternatif.map((alt, aIdx) => (
+                              <li key={aIdx} className="flex items-center justify-between text-[10px] text-purple-900">
+                                <span className="truncate">{alt.judul ? `${alt.judul} — ` : ''}{alt.pasal || 'Pasal'}</span>
+                                {typeof alt.kemiripan === 'number' && (
+                                  <span className="font-mono text-purple-700 shrink-0 font-semibold">
+                                    {Math.round(alt.kemiripan * 100)}%
+                                  </span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
                         </div>
                       )}
 
@@ -884,7 +1048,7 @@ export default function HarmonisasiPanel({
                                 {/* Tombol Valid */}
                                 <button
                                   type="button"
-                                  onClick={(e) => void handleNilai(e, t, 'valid')}
+                                  onClick={(e) => void handleNilai(e, t, 'valid', cardKey)}
                                   disabled={isSaving}
                                   className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold transition cursor-pointer disabled:opacity-50 ${
                                     penilaianAktif === 'valid'
@@ -900,7 +1064,7 @@ export default function HarmonisasiPanel({
                                 {/* Tombol Tidak Relevan */}
                                 <button
                                   type="button"
-                                  onClick={(e) => void handleNilai(e, t, 'tidak_relevan')}
+                                  onClick={(e) => void handleNilai(e, t, 'tidak_relevan', cardKey)}
                                   disabled={isSaving}
                                   className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold transition cursor-pointer disabled:opacity-50 ${
                                     penilaianAktif === 'tidak_relevan'
@@ -995,7 +1159,7 @@ export default function HarmonisasiPanel({
                               <button
                                 type="button"
                                 disabled={isSaving || !penilaianAktif}
-                                onClick={(e) => void handleNilai(e, t, (penilaianAktif as PenilaianTemuan) || 'valid')}
+                                onClick={(e) => void handleNilai(e, t, (penilaianAktif as PenilaianTemuan) || 'valid', cardKey)}
                                 className="px-2.5 py-1 text-[10px] bg-red-700 hover:bg-red-800 text-white font-semibold rounded shadow-2xs transition cursor-pointer disabled:opacity-50"
                                 title={!penilaianAktif ? 'Pilih Valid atau Tidak Relevan terlebih dahulu' : 'Simpan catatan'}
                               >
@@ -1050,8 +1214,54 @@ export default function HarmonisasiPanel({
             </ul>
           )}
 
+          {/* Peraturan Rujukan Eksplisit & Status Keberlakuan (Section E.7) */}
+          {Array.isArray(data.rujukan) && data.rujukan.length > 0 && (
+            <div className="p-3.5 bg-white rounded-xl border border-gray-200 shadow-2xs space-y-2 mt-3">
+              <span className="text-[11px] font-bold text-gray-800 uppercase tracking-wider block">
+                Peraturan yang Disebut dalam Draf &amp; Status Keberlakuan
+              </span>
+              <div className="divide-y divide-gray-100">
+                {data.rujukan.map((r, rIdx) => {
+                  const isDicabut = r.status?.toLowerCase().includes('cabut');
+                  return (
+                    <div key={rIdx} className="py-2 flex items-center justify-between text-xs gap-2">
+                      <div className="min-w-0">
+                        <span className="font-semibold text-gray-900">{r.teks || r.key}</span>
+                        {r.relasi && <span className="text-[10px] text-gray-500 ml-2 italic">({r.relasi})</span>}
+                      </div>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border shrink-0 ${
+                        isDicabut ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      }`}>
+                        {r.status || 'Berlaku'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Rekomendasi Sistem (Section E.8) */}
+          {Array.isArray(data.rekomendasi) && data.rekomendasi.length > 0 && (
+            <div className="p-3.5 bg-blue-50/40 rounded-xl border border-blue-200 text-xs text-blue-900 space-y-1.5 mt-3">
+              <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider block">
+                Rekomendasi Analisis Harmonisasi
+              </span>
+              <ul className="list-disc pl-4 space-y-1 text-gray-700">
+                {data.rekomendasi.map((rek, rekIdx) => (
+                  <li key={rekIdx} className="leading-relaxed">{rek}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {teksAda(data.catatan) && (
-            <p className="pt-2 border-t border-gray-100 text-[10px] font-semibold text-amber-800 leading-snug">{data.catatan}</p>
+            <div className="pt-2.5 mt-3 border-t border-gray-100 flex items-center gap-2 text-amber-800 text-[10px] font-medium">
+              <span className="px-1.5 py-0.5 rounded bg-amber-100 font-bold uppercase tracking-wider border border-amber-200 shrink-0">
+                Draft / Rekomendasi
+              </span>
+              <p className="leading-snug">{data.catatan}</p>
+            </div>
           )}
         </>
       )}

@@ -681,3 +681,52 @@ export function adaptDocumentToDetail(doc: DocumentItem): AdaptedRegulasiDoc {
   };
 }
 
+/**
+ * Item relasi versi regulasi (induk, diubah oleh, dicabut oleh, mencabut).
+ * Mengikuti schema OpenAPI components["schemas"]["VersionRelationItem"].
+ */
+export interface VersionRelationItem {
+  key?: string | null;
+  relasi?: string | null;
+  sebagian?: boolean | null;
+  perubahan_ke?: number | null;
+  document_id?: number | null;
+  judul?: string | null;
+  access_classification?: string | null;
+  document_role?: string | null;
+  pasal_terkait?: string | null;
+  restricted?: boolean | null;
+}
+
+/**
+ * Response endpoint GET /api/v1/documents/{document_id}/versi.
+ * Mengikuti schema OpenAPI components["schemas"]["DocumentVersionResponse"].
+ */
+export interface DocumentVersionResponse {
+  document_id: number;
+  identity_key?: string | null;
+  access_classification?: string | null;
+  document_role?: string | null;
+  status_keberlakuan?: string | null;
+  status_source?: string | null;
+  status_keterangan?: string | null;
+  jumlah_relasi: number;
+  identity_key_kosong: boolean;
+  induk?: VersionRelationItem[];
+  diubah_oleh?: VersionRelationItem[];
+  dicabut_oleh?: VersionRelationItem[];
+  mencabut?: VersionRelationItem[];
+  catatan?: string;
+}
+
+/**
+ * Mengambil informasi riwayat versi dan relasi dokumen (Langkah 18 / Fase 2).
+ * Endpoint: GET /api/v1/documents/{documentId}/versi
+ */
+export async function getDocumentVersionRelations(
+  documentId: number,
+  options?: FetchOptions
+): Promise<DocumentVersionResponse> {
+  return apiFetch<DocumentVersionResponse>(`/api/v1/documents/${documentId}/versi`, options);
+}
+

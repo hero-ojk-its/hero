@@ -29,15 +29,14 @@ import {
 } from '../../lib/ingestApi';
 import { isApiConfigured, ApiError } from '../../lib/api';
 import { labelAlasanGagal } from '../../lib/labelStatus';
+import {
+  getAppKonfigurasi,
+  resolveMaxUploadMb,
+  formatUploadLimitErrorMessage,
+  type KonfigurasiResponse,
+} from '../../lib/configApi';
 import NamingFormatPicker from './components/NamingFormatPicker';
 import ManualUploadJobHistory from './components/ManualUploadJobHistory';
-
-// Harus sama dengan MAX_UPLOAD_MB backend (app/config.py: max_upload_mb, dan
-// `request_body max_size` di deploy/Caddyfile). Backend belum mengekspos angka
-// ini lewat API, jadi untuk sekarang disalin — dan dipakai BERSAMA oleh teks
-// bantuan dan validasinya supaya keduanya tidak bisa lagi berbeda.
-const MAX_UPLOAD_MB = 100;
-const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
 interface QueuedFileItem {
   id: string;
@@ -90,6 +89,24 @@ export default function UploadTab() {
   const [metaRegulationType, setMetaRegulationType] = useState('POJK');
   const [metaBidang, setMetaBidang] = useState('');
   const [metaReleaseDate, setMetaReleaseDate] = useState('');
+
+  // Konfigurasi Aplikasi (Batas unggah dinamis dari backend, fallback 25 MB)
+  const [appConfig, setAppConfig] = useState<KonfigurasiResponse | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    getAppKonfigurasi().then((cfg) => {
+      if (mounted) {
+        setAppConfig(cfg);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const maxUploadMb = resolveMaxUploadMb(appConfig);
+  const maxUploadBytes = maxUploadMb * 1024 * 1024;
 
   // Upload Execution State
   const [isUploading, setIsUploading] = useState(false);
@@ -221,10 +238,10 @@ export default function UploadTab() {
       const sizeStr = file.size > 1024 * 1024 ? `${sizeMB} MB` : `${Math.max(1, Math.round(file.size / 1024))} KB`;
 
       // Ditolak di sini, sebelum satu byte pun diunggah: tanpa cek ini berkas
-      // berukuran ratusan MB terkirim penuh dulu, baru ditolak backend.
-      if (file.size > MAX_UPLOAD_BYTES) {
+      // berukuran besar terkirim penuh dulu, baru ditolak backend.
+      if (file.size > maxUploadBytes) {
         newErrors.push(
-          `Berkas "${file.name}" ditolak. Ukurannya ${sizeStr}, melebihi batas ${MAX_UPLOAD_MB}MB per berkas.`
+          `Berkas "${file.name}" ditolak. Ukurannya ${sizeStr}, melebihi batas ${maxUploadMb}MB per berkas.`
         );
         return;
       }
@@ -471,7 +488,13 @@ export default function UploadTab() {
               ? (err.detail as Record<string, unknown>)
               : null;
 
-          if (err.status === 422 && detailObj?.code === 'draft_publik_butuh_persetujuan' && typeof detailObj.message === 'string') {
+          if (err.status === 413) {
+            const batas =
+              typeof detailObj?.batas_mb === 'number' && detailObj.batas_mb > 0
+                ? detailObj.batas_mb
+                : maxUploadMb;
+            errMsg = formatUploadLimitErrorMessage(batas);
+          } else if (err.status === 422 && detailObj?.code === 'draft_publik_butuh_persetujuan' && typeof detailObj.message === 'string') {
             errMsg = detailObj.message;
           } else if (typeof detailObj?.message === 'string') {
             errMsg = detailObj.message;
@@ -724,7 +747,7 @@ export default function UploadTab() {
                   <div className="inline-flex items-center gap-2 text-xs text-gray-500 bg-gray-50 px-3.5 py-1.5 rounded-full border border-gray-200">
                     <span className="font-semibold text-gray-700">Hanya berkas PDF yang diterima.</span>
                     <span>•</span>
-                    <span>Maksimal {MAX_UPLOAD_MB}MB per berkas</span>
+                    <span>Maksimal {maxUploadMb}MB per berkas</span>
                   </div>
                 </div>
               </div>
