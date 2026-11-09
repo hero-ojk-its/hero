@@ -689,60 +689,60 @@ export default function HarmonisasiPanel({
               <button
                 type="button"
                 onClick={() => setFilterPenilaian(filterPenilaian === 'valid' ? 'semua' : 'valid')}
-                className={`p-2 rounded-lg border text-left transition cursor-pointer flex flex-col justify-between ${
+                className={`min-h-[58px] min-w-0 p-2.5 rounded-lg border text-left transition cursor-pointer flex flex-col justify-between ${
                   filterPenilaian === 'valid'
                     ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-300'
                     : 'border-emerald-200 bg-white hover:bg-emerald-50/50'
                 }`}
                 title="Filter hanya temuan yang dinilai Valid"
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-semibold text-emerald-800 uppercase">Valid</span>
-                  <CheckCircle2 size={12} className="text-emerald-600" />
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-[10px] font-semibold text-emerald-800 uppercase tracking-wider truncate">Valid</span>
+                  <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
                 </div>
-                <span className="text-base font-bold text-emerald-900 mt-0.5">{rekapTanggapan.valid}</span>
+                <span className="text-lg font-bold text-emerald-900 leading-tight">{rekapTanggapan.valid}</span>
               </button>
 
               {/* Kartu Tidak Relevan */}
               <button
                 type="button"
                 onClick={() => setFilterPenilaian(filterPenilaian === 'tidak_relevan' ? 'semua' : 'tidak_relevan')}
-                className={`p-2 rounded-lg border text-left transition cursor-pointer flex flex-col justify-between ${
+                className={`min-h-[58px] min-w-0 p-2.5 rounded-lg border text-left transition cursor-pointer flex flex-col justify-between ${
                   filterPenilaian === 'tidak_relevan'
                     ? 'border-slate-500 bg-slate-100 ring-2 ring-slate-300'
                     : 'border-slate-200 bg-white hover:bg-slate-50'
                 }`}
                 title="Filter hanya temuan yang dinilai Tidak Relevan"
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-semibold text-slate-700 uppercase">Tidak Relevan</span>
-                  <XCircle size={12} className="text-slate-500" />
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-[10px] font-semibold text-slate-700 uppercase tracking-wider truncate">Tidak Relevan</span>
+                  <XCircle size={12} className="text-slate-500 shrink-0" />
                 </div>
-                <span className="text-base font-bold text-slate-900 mt-0.5">{rekapTanggapan.tidakRelevan}</span>
+                <span className="text-lg font-bold text-slate-900 leading-tight">{rekapTanggapan.tidakRelevan}</span>
               </button>
 
               {/* Kartu Belum Dinilai */}
               <button
                 type="button"
                 onClick={() => setFilterPenilaian(filterPenilaian === 'belum_dinilai' ? 'semua' : 'belum_dinilai')}
-                className={`p-2 rounded-lg border text-left transition cursor-pointer flex flex-col justify-between ${
+                className={`min-h-[58px] min-w-0 p-2.5 rounded-lg border text-left transition cursor-pointer flex flex-col justify-between ${
                   filterPenilaian === 'belum_dinilai'
                     ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-300'
                     : 'border-amber-200 bg-white hover:bg-amber-50/50'
                 }`}
                 title="Filter temuan yang belum dinilai"
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-semibold text-amber-700 uppercase">Belum Dinilai</span>
-                  <HelpCircle size={12} className="text-amber-500" />
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-[10px] font-semibold text-amber-700 uppercase tracking-wider truncate">Belum Dinilai</span>
+                  <HelpCircle size={12} className="text-amber-500 shrink-0" />
                 </div>
-                <span className="text-base font-bold text-amber-900 mt-0.5">{rekapTanggapan.belumDinilai}</span>
+                <span className="text-lg font-bold text-amber-900 leading-tight">{rekapTanggapan.belumDinilai}</span>
               </button>
             </div>
           </div>
 
           {/* Kartu ringkasan per jenis status (klik untuk filter) */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2">
             {kartu.map((item) => {
               const dummyTemuan = { jenis: item.key };
               const warna = KELAS_WARNA[warnaTemuan(dummyTemuan)];
@@ -753,11 +753,11 @@ export default function HarmonisasiPanel({
                   type="button"
                   onClick={() => setFilterJenis(aktif ? null : item.key)}
                   aria-pressed={aktif}
-                  className={`p-2 rounded-lg border text-left transition cursor-pointer ${warna.kartu} ${aktif ? warna.kartuAktif : 'hover:brightness-95'}`}
+                  className={`min-h-[52px] min-w-0 p-2 rounded-lg border text-left transition cursor-pointer flex flex-col justify-between ${warna.kartu} ${aktif ? warna.kartuAktif : 'hover:brightness-95'}`}
                   title={`Filter temuan dengan status ${item.label}`}
                 >
-                  <span className="text-lg font-bold block leading-none">{jumlahPerJenis[item.key] ?? 0}</span>
-                  <span className="text-[10px] font-semibold uppercase tracking-wide">{item.label}</span>
+                  <span className="text-base font-bold block leading-none">{jumlahPerJenis[item.key] ?? 0}</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wide truncate w-full" title={item.label}>{item.label}</span>
                 </button>
               );
             })}
@@ -806,22 +806,29 @@ export default function HarmonisasiPanel({
                   Maks. 5 regulasi teratas
                 </span>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
                 {kandidatPembanding.slice(0, 5).map((k, kIdx) => {
                   const skorPersen = typeof k.skor === 'number' ? Math.round(k.skor * 100) : null;
+                  const judulTeks = k.judul || ('nomor' in k ? String((k as { nomor?: string }).nomor || '') : '') || 'Dokumen Korpus';
                   return (
-                    <div key={k.document_id || (k as { doc_id?: number }).doc_id || kIdx} className="p-2.5 rounded-lg border border-gray-200 bg-white space-y-1 text-xs shadow-2xs">
-                      <div className="flex items-start justify-between gap-1.5">
-                        <span className="font-semibold text-gray-900 line-clamp-2">{k.judul || ('nomor' in k ? String((k as { nomor?: string }).nomor || '') : '') || 'Dokumen Korpus'}</span>
-                        {skorPersen !== null && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-800 shrink-0">
-                            {skorPersen}%
+                    <div key={k.document_id || (k as { doc_id?: number }).doc_id || kIdx} className="p-2.5 rounded-lg border border-gray-200 bg-white space-y-1 text-xs shadow-2xs min-w-0 flex flex-col justify-between">
+                      <div className="space-y-1">
+                        <div className="flex items-start justify-between gap-1.5 min-w-0">
+                          <span className="font-semibold text-gray-900 line-clamp-2 min-w-0 flex-1 leading-snug break-words" title={judulTeks}>
+                            {judulTeks}
                           </span>
-                        )}
+                          {skorPersen !== null && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-800 shrink-0 self-start">
+                              {skorPersen}%
+                            </span>
+                          )}
+                        </div>
+                        {k.relasi && <p className="text-[10px] text-gray-600 italic leading-snug line-clamp-2 break-words" title={k.relasi}>{k.relasi}</p>}
                       </div>
-                      {k.relasi && <p className="text-[10px] text-gray-600 italic leading-snug">{k.relasi}</p>}
                       {Array.isArray(k.pasal_mirip) && k.pasal_mirip.length > 0 && (
-                        <p className="text-[10px] text-gray-500">Pasal mirip: {k.pasal_mirip.join(', ')}</p>
+                        <p className="text-[10px] text-gray-500 pt-1 border-t border-gray-100 truncate" title={`Pasal mirip: ${k.pasal_mirip.join(', ')}`}>
+                          Pasal mirip: {k.pasal_mirip.join(', ')}
+                        </p>
                       )}
                     </div>
                   );
@@ -904,11 +911,11 @@ export default function HarmonisasiPanel({
                       onClick={() => lompat(t.pasal_draft)}
                       onKeyDown={(e) => tombolKeyboard(e, t.pasal_draft)}
                       title={`Lompat ke ${t.pasal_draft} di panel naskah`}
-                      className={`p-3.5 rounded-xl border border-gray-200 bg-white hover:border-gray-300 transition cursor-pointer space-y-2 text-xs shadow-2xs ${baku ? 'opacity-70' : ''}`}
+                      className={`p-3.5 rounded-xl border border-gray-200 bg-white hover:border-gray-300 transition cursor-pointer space-y-2 text-xs shadow-2xs min-w-0 overflow-hidden ${baku ? 'opacity-70' : ''}`}
                     >
                       {/* Baris Judul & Jenis */}
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="flex items-center justify-between gap-2 min-w-0">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
                           <span className="font-bold text-gray-900 truncate">{t.pasal_draft}</span>
                           <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border shrink-0 ${warna.badge}`}>
                             {labelTemuan(t)}
@@ -928,41 +935,43 @@ export default function HarmonisasiPanel({
                           Klausul baku: redaksi serupa umum di banyak peraturan, keyakinan diturunkan.
                         </p>
                       )}
-                      {teksAda(t.alasan) && <p className="text-gray-700 leading-relaxed">{t.alasan}</p>}
+                      {teksAda(t.alasan) && <p className="text-gray-700 leading-relaxed break-words">{t.alasan}</p>}
                       {teksAda(t.kutipan_draft) && (
-                        <blockquote className="border-l-2 border-gray-300 pl-2 text-gray-600 italic font-serif">
+                        <blockquote className="border-l-2 border-gray-300 pl-2 text-gray-600 italic font-serif break-words">
                           {t.kutipan_draft}
                         </blockquote>
                       )}
                       {perbedaan.length > 0 && (
-                        <ul className="list-disc pl-4 text-gray-700 space-y-0.5">
+                        <ul className="list-disc pl-4 text-gray-700 space-y-0.5 break-words">
                           {perbedaan.map((p, pIdx) => <li key={pIdx}>{p}</li>)}
                         </ul>
                       )}
 
                       {/* Pembanding */}
                       {t.pembanding && (
-                        <div className="mt-1 p-2.5 rounded-md bg-gray-50 border border-gray-100 space-y-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
+                        <div className="mt-1 p-2.5 rounded-md bg-gray-50 border border-gray-100 space-y-1.5 min-w-0 overflow-hidden">
+                          <div className="flex items-start justify-between gap-2 min-w-0">
+                            <div className="min-w-0 flex-1 space-y-0.5">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Pembanding</span>
                                 {teksAda(t.pembanding.nomor) && (
-                                  <span className="text-[10px] font-semibold text-gray-700 bg-gray-200/80 px-1 rounded">
+                                  <span className="text-[10px] font-semibold text-gray-700 bg-gray-200/80 px-1 rounded truncate max-w-full">
                                     {t.pembanding.nomor}
                                   </span>
                                 )}
                                 {teksAda(t.pembanding.status) && (
-                                  <span className={`text-[9px] font-semibold px-1 rounded border ${
+                                  <span className={`text-[9px] font-semibold px-1 rounded border shrink-0 ${
                                     t.pembanding.status.toLowerCase().includes('cabut') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'
                                   }`}>
                                     {t.pembanding.status}
                                   </span>
                                 )}
                               </div>
-                              <span className="font-semibold text-gray-800 block mt-0.5">{teksAda(t.pembanding.judul) ? t.pembanding.judul : 'Dokumen korpus'}</span>
+                              <span className="font-semibold text-gray-800 block mt-0.5 text-xs break-words" title={teksAda(t.pembanding.judul) ? t.pembanding.judul : undefined}>
+                                {teksAda(t.pembanding.judul) ? t.pembanding.judul : 'Dokumen korpus'}
+                              </span>
                               {(teksAda(t.pembanding.pasal) || typeof t.pembanding.halaman === 'number') && (
-                                <span className="text-[10px] text-gray-500 font-mono">
+                                <span className="text-[10px] text-gray-500 font-mono block">
                                   {teksAda(t.pembanding.pasal) ? `Pasal ${t.pembanding.pasal}` : ''}
                                   {typeof t.pembanding.halaman === 'number' ? ` · hal. ${t.pembanding.halaman}` : ''}
                                 </span>
@@ -973,7 +982,7 @@ export default function HarmonisasiPanel({
                                 type="button"
                                 onClick={(e) => bukaPdf(e, t.pembanding)}
                                 onKeyDown={(e) => e.stopPropagation()}
-                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-700 hover:underline shrink-0 cursor-pointer"
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-700 hover:underline shrink-0 cursor-pointer pt-0.5"
                                 title="Buka PDF pembanding pada halaman terkait"
                               >
                                 <ExternalLink size={11} />
@@ -982,20 +991,20 @@ export default function HarmonisasiPanel({
                             )}
                           </div>
                           {teksAda(t.pembanding.kutipan) && (
-                            <p className="text-gray-600 font-serif leading-relaxed mt-1 text-[11px] border-l-2 border-gray-300 pl-2">{t.pembanding.kutipan}</p>
+                            <p className="text-gray-600 font-serif leading-relaxed mt-1 text-[11px] border-l-2 border-gray-300 pl-2 break-words whitespace-pre-wrap">{t.pembanding.kutipan}</p>
                           )}
                         </div>
                       )}
 
                       {/* Alternatif Regulasi/Pasal Serupa (Section E.5) */}
                       {Array.isArray(t.alternatif) && t.alternatif.length > 0 && (
-                        <div className="mt-1.5 p-2 rounded-md bg-purple-50/60 border border-purple-100 space-y-1">
+                        <div className="mt-1.5 p-2 rounded-md bg-purple-50/60 border border-purple-100 space-y-1 min-w-0 overflow-hidden">
                           <span className="text-[10px] font-bold text-purple-800 uppercase tracking-wider block">
                             Alternatif Regulasi/Pasal Serupa:
                           </span>
                           <ul className="space-y-0.5">
                             {t.alternatif.map((alt, aIdx) => (
-                              <li key={aIdx} className="flex items-center justify-between text-[10px] text-purple-900">
+                              <li key={aIdx} className="flex items-center justify-between text-[10px] text-purple-900 gap-2">
                                 <span className="truncate">{alt.judul ? `${alt.judul} — ` : ''}{alt.pasal || 'Pasal'}</span>
                                 {typeof alt.kemiripan === 'number' && (
                                   <span className="font-mono text-purple-700 shrink-0 font-semibold">
@@ -1012,13 +1021,13 @@ export default function HarmonisasiPanel({
                       {/* AREA PENANDAAN TEMUAN OLEH ANALIS (#71) */}
                       {/* ========================================================= */}
                       <div
-                        className="pt-2.5 mt-2 border-t border-gray-100 flex flex-col gap-2"
+                        className="pt-2.5 mt-2 border-t border-gray-100 flex flex-col gap-2 min-w-0"
                         onClick={(e) => e.stopPropagation()}
                         onKeyDown={(e) => e.stopPropagation()}
                       >
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center justify-between gap-2 flex-wrap min-w-0">
                           {/* Indikator Status Penilaian */}
-                          <div className="flex items-center gap-1.5 min-w-0">
+                          <div className="flex items-center gap-1.5 min-w-0 shrink-0">
                             {penilaianAktif === 'valid' ? (
                               <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
                                 <CheckCircle2 size={11} />
@@ -1040,7 +1049,7 @@ export default function HarmonisasiPanel({
                           </div>
 
                           {/* Tombol Aksi Penilaian (#71) */}
-                          <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="flex items-center gap-1.5 flex-wrap shrink-0">
                             {!isDraft ? (
                               <span className="text-[10px] text-gray-400 italic">Non-draft (read-only)</span>
                             ) : (
@@ -1050,7 +1059,7 @@ export default function HarmonisasiPanel({
                                   type="button"
                                   onClick={(e) => void handleNilai(e, t, 'valid', cardKey)}
                                   disabled={isSaving}
-                                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold transition cursor-pointer disabled:opacity-50 ${
+                                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold transition cursor-pointer disabled:opacity-50 shrink-0 ${
                                     penilaianAktif === 'valid'
                                       ? 'bg-emerald-600 text-white shadow-2xs font-bold'
                                       : 'bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50'
@@ -1066,7 +1075,7 @@ export default function HarmonisasiPanel({
                                   type="button"
                                   onClick={(e) => void handleNilai(e, t, 'tidak_relevan', cardKey)}
                                   disabled={isSaving}
-                                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold transition cursor-pointer disabled:opacity-50 ${
+                                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold transition cursor-pointer disabled:opacity-50 shrink-0 ${
                                     penilaianAktif === 'tidak_relevan'
                                       ? 'bg-slate-700 text-white shadow-2xs font-bold'
                                       : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'
@@ -1086,7 +1095,7 @@ export default function HarmonisasiPanel({
                                       [cardKey]: !prev[cardKey],
                                     }))
                                   }
-                                  className={`p-1 rounded text-[11px] border transition cursor-pointer ${
+                                  className={`p-1 rounded text-[11px] border transition cursor-pointer shrink-0 ${
                                     t.tanggapan?.catatan || editorCatatanTerbuka
                                       ? 'border-gray-300 bg-gray-100 text-gray-800'
                                       : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
@@ -1102,7 +1111,7 @@ export default function HarmonisasiPanel({
                                     type="button"
                                     onClick={(e) => void handleBatal(e, t)}
                                     disabled={isSaving}
-                                    className="px-1.5 py-1 text-[10px] text-gray-500 hover:text-red-700 hover:underline transition cursor-pointer disabled:opacity-50"
+                                    className="px-1.5 py-1 text-[10px] text-gray-500 hover:text-red-700 hover:underline transition cursor-pointer disabled:opacity-50 shrink-0"
                                     title="Batalkan penandaan temuan ini"
                                   >
                                     Batalkan
