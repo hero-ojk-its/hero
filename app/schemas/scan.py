@@ -106,6 +106,7 @@ class ScanSessionResponse(BaseModel):
     blocked: bool = False
     pages_visited: int
     candidates_summary: ScanSummaryCount
+    candidates_total_live: Optional[int] = None
     truncated: bool
     stats: Optional[Dict[str, Any]] = None
     errors: List[str] = []
