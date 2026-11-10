@@ -18,7 +18,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from typing import Any
 
-from hero.graph.identity import canonical_ref
+from hero.graph.identity import RegRef, canonical_ref
 
 # "Peraturan Otoritas Jasa Keuangan Nomor 14 Tahun 2023", "POJK Nomor 1/POJK.05/2016",
 # "Undang-Undang Nomor 4 Tahun 2023", "Surat Edaran OJK Nomor 25/SEOJK.05/2019".
@@ -26,6 +26,8 @@ _REF = re.compile(
     r"((?:Peraturan|Undang-Undang|Surat\s+Edaran|Keputusan|POJK|SEOJK|PADK|UU)\b"
     r"[^;:()]{0,140}?\bNomor\s+[\w./-]+(?:\s+Tahun\s+\d{4})?)",
     re.IGNORECASE)
+_PENERBIT = re.compile(r"^\s*(?:Peraturan|Surat\s+Edaran|Keputusan)\s+((?:[A-Z][\w.]*\s+(?:dan\s+)?){1,5}?)Nomor\s+"
+                       r"([\w./-]+)\s+Tahun\s+(\d{4})", re.IGNORECASE)
 _SELF = re.compile(r"\b(?:ini|tersebut)\b", re.IGNORECASE)
 
 # One amendment instruction: "3. Ketentuan Pasal 5 diubah sehingga berbunyi …",
@@ -100,6 +102,19 @@ def _where(snippet: str, articles: list[dict[str, Any]]) -> list[str]:
     return [str(a["number"]) for a in articles if head in " ".join((a.get("text") or "").split())]
 
 
+def _ref_penerbit(raw: str) -> RegRef | None:
+    """Rujukan bernomor dari penerbit yang tak ada di tabel jenis kita ("Peraturan Badan Siber dan
+    Sandi Negara Nomor 1 Tahun 2024" → BSSN|1|2024). Tanpa ini ia dibuang diam-diam dari
+    daftar "peraturan yang disebut dalam draf"; kini tampil, dengan status tak diketahui."""
+    m = _PENERBIT.match(" ".join(raw.split()))
+    if not m:
+        return None
+    singkatan = "".join(w[0].upper() for w in m.group(1).split() if w.lower() != "dan")
+    if len(singkatan) < 2:
+        return None
+    return RegRef(f"{singkatan}|{m.group(2)}|{m.group(3)}", singkatan, m.group(2), int(m.group(3)))
+
+
 def explicit_references(conn: sqlite3.Connection, full_text: str, title: str | None,
                         articles: list[dict[str, Any]], own_key: str | None = None,
                         ) -> list[Reference]:
@@ -113,7 +128,7 @@ def explicit_references(conn: sqlite3.Connection, full_text: str, title: str | N
         raw = m.group(1)
         if _SELF.search(raw.split("Nomor")[0][-25:]):
             continue  # "Peraturan OJK ini" is the draft itself
-        ref = canonical_ref(raw)
+        ref = canonical_ref(raw) or _ref_penerbit(raw)
         if ref is None or ref.key == own_key:
             continue
         ctx = text[max(0, m.start() - 160): m.end() + 80]
