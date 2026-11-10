@@ -134,7 +134,17 @@ _LIGATURES = {
     "ﬄ": "ffl", "‘": "'", "’": "'", "“": '"',
     "”": '"', "–": "-", "—": "-", " ": " ",
 }
-_HYPHEN_BREAK = re.compile(r"(\w)-\s*\n\s*(\w)")
+# Pemenggalan di ujung baris disambung TANPA tanda hubung ("menyam-\npaikan" -> "menyampaikan"),
+# kecuali bila tanda hubungnya memang bagian dari katanya: kata ulang ("undang-undang",
+# "masing-masing", "sehari-hari") atau nama diri ("Undang-Undang"). Dulu semuanya disambung,
+# sehingga dasar hukum tertulis "UndangUndang" (temuan QA #5).
+_HYPHEN_BREAK = re.compile(r"(\w+)-[ \t]*\n[ \t]*(\w+)")
+
+
+def _sambung_penggalan(m: "re.Match[str]") -> str:
+    kiri, kanan = m.group(1), m.group(2)
+    ulang = kiri.lower() == kanan.lower() or (len(kanan) >= 4 and kiri.lower().endswith(kanan.lower()))
+    return f"{kiri}-{kanan}" if (kanan[:1].isupper() or ulang) else f"{kiri}{kanan}"
 _MULTI_BLANK = re.compile(r"\n{3,}")
 _TRAILING_WS = re.compile(r"[ \t]+\n")
 _MULTI_SPACE = re.compile(r"[ \t]{2,}")
@@ -148,7 +158,7 @@ def clean_text(text: str) -> str:
     for src, dst in _LIGATURES.items():
         text = text.replace(src, dst)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
-    text = _HYPHEN_BREAK.sub(r"\1\2", text)
+    text = _HYPHEN_BREAK.sub(_sambung_penggalan, text)
     text = _TRAILING_WS.sub("\n", text)
     text = _MULTI_SPACE.sub(" ", text)
     text = _MULTI_BLANK.sub("\n\n", text)
@@ -204,6 +214,7 @@ def reflow_paragraphs(text: str) -> str:
             out[-1] = f"{out[-1]} {line}"
             continue
         if (out and out[-1] and not _STRUCTURAL_START.match(line)
+                and " | " not in line and " | " not in out[-1]
                 and not _SENTENCE_END.search(out[-1])
                 and not _HEADING_LINE.match(out[-1])
                 and not _PAGE_NUMBER_LINE.match(out[-1])
@@ -301,6 +312,63 @@ def strip_repeated_lines(pages: list[PageText], threshold: float = 0.6) -> None:
 # --------------------------------------------------------------------------
 # Extraction
 # --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Urutan baca halaman. ``get_text("text")`` mengikuti urutan PENGGAMBARAN di berkas, bukan
+# urutan visual. Untuk prosa keduanya sama; untuk tabel dan bagan hasil ekspor (satu bentuk
+# per sel, digambar acak) hasilnya bercampur: "Ketua Tim Penanggung Jawab / Evaluasi …".
+# Halaman hanya disusun ulang bila urutan bloknya terbukti acak, supaya prosa dan halaman
+# dua kolom (terjemahan Inggris OJK/BI) tidak ikut berubah.
+# ---------------------------------------------------------------------------
+_LONCAT_PT = 3.0            # blok berikutnya lebih tinggi dari yang sebelumnya = loncatan ke atas
+_MIN_BLOK = 6
+_MIN_LONCATAN = 3
+_RASIO_LONCATAN = 0.15      # halaman dua kolom hanya punya ±1 loncatan
+_JARAK_SEL = 1.2            # celah horizontal > 1,2 × tinggi kata = pindah sel
+
+
+def urutan_acak(boxes: list[tuple]) -> bool:
+    """Apakah kotak-kotak (dalam urutan berkas) sering melompat ke atas halaman?"""
+    if len(boxes) < _MIN_BLOK:
+        return False
+    naik = sum(1 for a, b in zip(boxes, boxes[1:]) if b[1] < a[1] - _LONCAT_PT)
+    return naik >= _MIN_LONCATAN and naik / (len(boxes) - 1) >= _RASIO_LONCATAN
+
+
+def susun_baris(words: list[tuple]) -> str:
+    """Kata (x0, y0, x1, y1, teks, …) → teks baris demi baris, atas→bawah, kiri→kanan.
+
+    Dibaca per KATA, bukan per blok: PyMuPDF menggabungkan teks berdekatan ke satu blok dengan
+    urutan internal berkas ("Tahapan No" untuk sel "No" lalu "Tahapan"). Satu baris = kata yang
+    rentang vertikalnya tumpang-tindih ≥ separuh tinggi kata terpendek di baris itu; celah lebar
+    antarkata di satu baris menandai pindah sel (" | ")."""
+    baris: list[list[tuple]] = []
+    y0 = y1 = tmin = 0.0
+    for w in sorted(words, key=lambda w: (w[1], w[0])):
+        tinggi = max(w[3] - w[1], 1.0)
+        if baris and min(y1, w[3]) - max(y0, w[1]) >= 0.5 * min(tinggi, tmin):
+            baris[-1].append(w)
+            y0, y1, tmin = min(y0, w[1]), max(y1, w[3]), min(tmin, tinggi)
+        else:
+            baris.append([w])
+            y0, y1, tmin = w[1], w[3], tinggi
+    out = []
+    for r in baris:
+        r.sort(key=lambda w: w[0])
+        teks = r[0][4]
+        for a, b in zip(r, r[1:]):
+            teks += (" | " if b[0] - a[2] > _JARAK_SEL * max(a[3] - a[1], 1.0) else " ") + b[4]
+        out.append(teks)
+    return "\n".join(out)
+
+
+def page_text(page) -> str:
+    """Teks halaman dalam urutan baca bila urutan berkasnya terbukti acak; selain itu apa adanya."""
+    blocks = [b for b in page.get_text("blocks") if b[6] == 0 and b[4].strip()]
+    if not urutan_acak(blocks):
+        return page.get_text("text")
+    return susun_baris(page.get_text("words"))
+
+
 def extract_pdf(
     path: Path,
     ocr_settings: OcrSettings | None = None,
@@ -349,7 +417,7 @@ def extract_pdf(
 
             for i in range(doc.page_count):
                 try:
-                    raw = "" if force_ocr else doc[i].get_text("text")
+                    raw = "" if force_ocr else page_text(doc[i])
                 except Exception as exc:  # noqa: BLE001 - one bad page ≠ a bad doc
                     log.warning("%s: page %d text layer unreadable (%s); "
                                "falling back to OCR", path.name, i + 1, exc)

@@ -111,11 +111,13 @@ RE_DIUBAH = re.compile(
     r"\bPERUBAHAN\s+(?:KE[A-Z]*\s+)?ATAS\b|\bstatus\s*:?\s*diubah\b",
     re.IGNORECASE)
 
+# Satu pola umum untuk semua jenis rujukan, termasuk penerbit yang tak kita daftar
+# (Badan Siber dan Sandi Negara, Dewan Komisioner, …). Daftar jenis tertutup dulu
+# menjatuhkan 5 dari 7 butir "Mengingat" sebuah Keputusan. "ini" dikecualikan:
+# "Peraturan ini … Nomor" adalah dokumen itu sendiri.
 RE_LEGAL_BASIS = re.compile(
-    r"(Undang[-\s]?Undang(?:\s+Republik\s+Indonesia)?\s+Nomor\s+[0-9]{1,4}\s+"
-    r"Tahun\s+(?:19|20)\d{2}"
-    r"|Peraturan\s+(?:Pemerintah|Presiden|Otoritas\s+Jasa\s+Keuangan|"
-    r"Bank\s+Indonesia|Menteri[^,;\n]{0,40})\s+Nomor\s+[0-9A-Z./\-]{1,30}"
+    r"(Undang[-\s]?Undang(?:\s+Republik\s+Indonesia)?\s+Nomor\s+[0-9]{1,4}\s+Tahun\s+(?:19|20)\d{2}"
+    r"|(?:Peraturan|Surat\s+Edaran|Keputusan)\s+(?:(?!\bini\b)[^;:()]){2,100}?\s+Nomor\s+[0-9A-Z./\-]{1,30}"
     r"(?:\s+Tahun\s+(?:19|20)\d{2})?)",
     re.IGNORECASE)
 
@@ -284,33 +286,95 @@ def _extract_issuer(head: str) -> str | None:
     return None
 
 
-def _detect_status(text: str, subject: str | None = None) -> str:
+# "Peraturan ini mulai berlaku pada tanggal 1 Januari 2027" / "… pada tanggal diundangkan" /
+# "Keputusan ini mulai berlaku pada tanggal ditetapkan". Hanya kalimat tentang dokumen itu sendiri
+# ("… ini"); "Pasal 5 mulai berlaku …" dan "Pada saat Peraturan ini mulai berlaku, …" tidak cocok.
+RE_BERLAKU = re.compile(
+    r"\bini\s+(?:mulai\s+)?berlaku\s+(?:efektif\s+)?(?:pada\s+|sejak\s+|mulai\s+)?(?:tanggal\s+|saat\s+)?([^.;]{0,70})",
+    re.IGNORECASE)
+RE_DIUNDANGKAN = re.compile(r"Diundangkan\s+di\s+[\w ]{2,30}?\s+pada\s+tanggal\s+([^\n]{0,40})", re.IGNORECASE)
+
+
+def _extract_effective_date(text: str, issued: date | None) -> date | None:
+    """Tanggal mulai berlaku dokumen ini bila TERTULIS; selain itu None — tidak pernah ditebak.
+
+    Kalimat terakhir yang terbaca menang: "Pasal 8 … mulai berlaku pada tanggal yang ditetapkan
+    dalam Peraturan ini" disusul "Pasal 9 … mulai berlaku pada tanggal 1 Januari 2027".
+    Durasi relatif ("6 bulan sejak diundangkan") sengaja tidak dihitung."""
+    flat = _norm_space(text or "")
+    hasil: date | None = None
+    for m in RE_BERLAKU.finditer(flat):
+        sisa = m.group(1).strip()
+        tgl = RE_DATE_LONG.match(sisa)
+        if tgl:
+            d = _parse_date(tgl.group(0))
+        elif re.match(r"diundangkan\b", sisa, re.IGNORECASE):
+            u = RE_DIUNDANGKAN.search(flat)
+            d = _parse_date(u.group(1)) if u else None
+        elif re.match(r"ditetapkan\b", sisa, re.IGNORECASE):
+            d = issued
+        else:
+            d = None
+        hasil = d or hasil
+    return hasil
+
+
+def _detect_status(text: str, subject: str | None = None, effective: date | None = None,
+                   today: date | None = None) -> str:
     """Status of *this* document, not of the ones it refers to.
 
     A regulation is an amendment only when its own TENTANG clause reads
     "PERUBAHAN ATAS ...". The preamble cites amendments to *other* regulations
     constantly, so it must not be consulted here.
-    """
+
+    Tanpa bukti hasilnya ``unknown`` — dulu bawaannya "berlaku", dan tebakan itu merembes ke layar
+    Analisa untuk dokumen yang backend sendiri tak tahu statusnya. Bukti keberlakuan satu-satunya
+    di sini adalah tanggal mulai berlaku yang tertulis (aturan yang sama dengan backend)."""
     tail = text[-3000:]
     if re.search(r"peraturan\s+ini\s+dinyatakan\s+(?:tidak\s+berlaku|dicabut)",
                  tail, re.IGNORECASE):
         return "dicabut"
     if subject and RE_DIUBAH.search(subject):
         return "diubah"
-    return "berlaku"
+    if effective:
+        return "berlaku" if effective <= (today or date.today()) else "belum_berlaku"
+    return "unknown"
 
 
-def _extract_legal_basis(text: str, limit: int = 25) -> list[str]:
+def _is_self(item: str, number: str | None, year: int | None) -> bool:
+    """Judul dokumen sendiri ("PERATURAN … NOMOR 91 TAHUN 2026") bukan dasar hukumnya."""
+    if not number:
+        return False
+    m = re.search(r"nomor\s+([0-9a-z./\-]+)(?:\s+tahun\s+((?:19|20)\d{2}))?", item, re.IGNORECASE)
+    if not m:
+        return False
+    got = m.group(1).lower().strip("./-")
+    own = re.sub(r"\s+", "", str(number)).lower().strip("./-")
+    # Judul kop memakai nomor polos ("NOMOR 512") sedangkan nomor dokumen lengkap ("512/KMK.06/2002").
+    if got != own and not own.startswith(got + "/"):
+        return False
+    return not (m.group(2) and year and int(m.group(2)) != int(year))
+
+
+def _extract_legal_basis(text: str, limit: int = 25, *, number: str | None = None,
+                         year: int | None = None) -> list[str]:
     """Collect the 'Mengingat' citations — feeds harmonisation (URD 3.4)."""
     window = text
     m = re.search(r"\bMengingat\s*:", text, re.IGNORECASE)
     if m:
         window = text[m.start(): m.start() + 6000]
+        # "Mengingat" berakhir di "MEMUTUSKAN": Keputusan pendek memuat peraturan lain di
+        # diktumnya (yang dicabut, dsb.), dan itu bukan dasar hukumnya.
+        stop = re.search(r"\bMEMUTUSKAN\b", window)
+        if stop:
+            window = window[: stop.start()]
     # Keyed on the lowercase form to de-duplicate, but the original casing is
     # what gets displayed and cited.
     seen: dict[str, str] = {}
     for match in RE_LEGAL_BASIS.finditer(window):
         item = _norm_space(match.group(1))
+        if _is_self(item, number, year):
+            continue
         seen.setdefault(item.lower(), item)
         if len(seen) >= limit:
             break
@@ -390,8 +454,9 @@ def extract_metadata(
         cands = [int(y) for y in RE_YEAR.findall(head)]
         md.year = max(cands) if cands else None
 
-    md.status = _detect_status(text, md.subject) if text else "unknown"
-    md.legal_basis = _extract_legal_basis(text)
+    md.effective_date = _extract_effective_date(text, md.issued_date) if text else None
+    md.status = _detect_status(text, md.subject, md.effective_date) if text else "unknown"
+    md.legal_basis = _extract_legal_basis(text, number=md.number, year=md.year)
 
     md.title = _build_title(md) or _clean_pdf_title(
         (pdf_metadata or {}).get("title", "")) or (

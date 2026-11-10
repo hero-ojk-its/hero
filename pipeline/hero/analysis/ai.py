@@ -75,6 +75,38 @@ CREATE TABLE IF NOT EXISTS analysis_ai (
 """
 
 _NUM = re.compile(r"\d+(?:[.,]\d+)?")
+# Modalitas: daya ikat sebuah norma. "dikenai" -> "dapat dikenai" mengubah kewajiban menjadi
+# kemungkinan — perubahan makna hukum yang tidak tertangkap pemeriksaan angka maupun pasal
+# (temuan QA #6). Dipakai verifikator produksi dan penilai di ``hero bench-ai``.
+MODAL_PELEMAH = ("dapat", "boleh", "mungkin", "sebaiknya", "umumnya", "biasanya",
+                 "diharapkan", "seharusnya")
+MODAL_WAJIB: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("wajib", ("wajib", "harus", "diwajibkan", "kewajiban", "mewajibkan")),
+    ("dilarang", ("dilarang", "larangan", "tidak boleh", "tidak diperkenankan")),
+    ("dikenai", ("dikenai", "dikenakan", "sanksi")),
+)
+
+
+def _ada_kata(kata: str, teks: str) -> bool:
+    return re.search(rf"\b{re.escape(kata)}\b", teks, re.IGNORECASE) is not None
+
+
+def periksa_modalitas(hasil: str, sumber: str, *, ketat: bool = False) -> list[str]:
+    """Pergeseran daya ikat antara kalimat model dan fakta sumbernya.
+
+    Bawaan hanya melaporkan **pelemahan**: kata seperti "dapat" yang tidak ada di faktanya.
+    Itu dipakai sebagai gerbang produksi karena maknanya jelas salah.
+
+    ``ketat`` menambah arah sebaliknya — kata wajib yang hilang dari parafrase. Itu tidak
+    dipakai sebagai gerbang: satu kalimat ringkasan sah saja merangkum beberapa fakta tanpa
+    mengulang setiap kata wajibnya, dan menolak karenanya justru membuang keluaran yang baik.
+    Dipakai sebagai skor di ``hero bench-ai``."""
+    masalah = [f"menambahkan '{m}'" for m in MODAL_PELEMAH
+               if _ada_kata(m, hasil) and not _ada_kata(m, sumber)]
+    if ketat:
+        masalah += [f"menghilangkan '{asal}'" for asal, padanan in MODAL_WAJIB
+                    if _ada_kata(asal, sumber) and not any(_ada_kata(x, hasil) for x in padanan)]
+    return masalah
 _PASAL = re.compile(r"Pasal\s+(\d+[A-Z]?)")
 
 
@@ -151,6 +183,8 @@ def verify(output: dict[str, Any], facts: list[dict[str, Any]]) -> list[str]:
         bad_pasal = [n for n in _PASAL.findall(s.get("kalimat", "")) if n not in src_pasal]
         if bad_pasal:
             problems.append(f"kalimat {i} menyebut pasal di luar faktanya: {bad_pasal}")
+        for m in periksa_modalitas(s.get("kalimat", ""), source):
+            problems.append(f"kalimat {i} mengubah daya ikat norma: {m}")
     for item in output.get("poin_kunci") or []:
         f = by_id.get(item.get("fakta"))
         if f is None:
@@ -159,6 +193,8 @@ def verify(output: dict[str, Any], facts: list[dict[str, Any]]) -> list[str]:
         extra = [n for n in _NUM.findall(item.get("parafrase", "")) if n not in set(_NUM.findall(f["teks"]))]
         if extra:
             problems.append(f"parafrase {item['fakta']} memuat angka baru: {extra}")
+        for m in periksa_modalitas(item.get("parafrase", ""), f["teks"]):
+            problems.append(f"parafrase {item['fakta']} mengubah daya ikat norma: {m}")
     return problems
 
 
@@ -253,6 +289,13 @@ def _sdk_errors(provider: str = ANTHROPIC) -> dict[str, type[BaseException] | tu
             "koneksi": anthropic.APIConnectionError}
 
 
+def _batas_waktu(exc: BaseException) -> bool:
+    """Apakah galat ini batas waktu klien? Dikenali dari nama kelasnya, bukan isinya, karena
+    SDK membungkus httpx/anyio dengan kelas yang berbeda-beda antarversi."""
+    nama = f"{type(exc).__module__}.{type(exc).__name__}".lower()
+    return "timeout" in nama or "timeout" in str(exc).lower()[:120]
+
+
 def _pilah_galat_gemini(exc: BaseException) -> str:
     """Pesan yang bisa dibaca manusia dari satu APIError Google.
 
@@ -274,6 +317,56 @@ def _pilah_galat_gemini(exc: BaseException) -> str:
     if kode and 500 <= kode < 600:
         return f"Layanan Google AI sedang bermasalah (galat {kode})"
     return f"Galat API Google AI {kode or '?'}"
+
+
+def thinking_config(budget: int | None = None, level: str = "") -> dict[str, Any] | None:
+    """``thinking_config`` Gemini dari dua tuas konfigurasi; None = bawaan model.
+
+    ``budget`` menang atas ``level`` bila keduanya diisi, karena ia yang eksplisit dalam token.
+    ``budget=0`` mematikan berpikir — itu nilai yang sah, jadi dibedakan dari None."""
+    if budget is not None:
+        return {"thinking_budget": int(budget)}
+    if (level or "").strip():
+        return {"thinking_level": level.strip().upper()}
+    return None
+
+
+def gemini_minta(client, model: str, user: str, *, suhu: float | None = 0.0,
+                 berpikir: dict[str, Any] | None = None, batas_keluaran: int | None = None,
+                 batas_detik: float | None = None):
+    """Satu panggilan Gemini dengan konfigurasi produksi. Dipakai juga oleh
+    ``hero bench-ai`` supaya yang diukur benchmark persis yang dijalankan produksi."""
+    config: dict[str, Any] = {
+        "system_instruction": SYSTEM_PROMPT,
+        "response_mime_type": "application/json",
+        # Gemini menolak 'additionalProperties', jadi dibuang di sini.
+        "response_schema": _tanpa_additional_properties(OUTPUT_SCHEMA),
+    }
+    # Parafrase fakta, bukan karangan: jangan beri ruang kreatif.
+    if suhu is not None:
+        config["temperature"] = suhu
+    if berpikir:
+        config["thinking_config"] = berpikir
+    if batas_keluaran:
+        config["max_output_tokens"] = int(batas_keluaran)
+    if batas_detik and batas_detik > 0:
+        # SDK Google meminta milidetik; batas ini menutup kasus permintaan menggantung,
+        # yang di layar Analisa tampak sebagai analisa yang tak pernah selesai.
+        config["http_options"] = {"timeout": int(batas_detik * 1000)}
+    return client.models.generate_content(model=model, contents=user, config=config)
+
+
+def usage_gemini(response) -> dict[str, Any]:
+    """Pemakaian token. ``thinking_tokens`` ditagih sebagai keluaran tetapi TIDAK
+    termasuk ``candidates_token_count``; tanpa ini biaya terbaca terlalu kecil."""
+    meta = getattr(response, "usage_metadata", None)
+    return {
+        "input_tokens": getattr(meta, "prompt_token_count", None),
+        "output_tokens": getattr(meta, "candidates_token_count", None),
+        "thinking_tokens": getattr(meta, "thoughts_token_count", None),
+        "cache_read_input_tokens": getattr(meta, "cached_content_token_count", None),
+        "cache_creation_input_tokens": None,
+    }
 
 
 class AiNarrator:
@@ -426,28 +519,20 @@ class AiNarrator:
         err = _sdk_errors(GEMINI)
         s = self.settings
         try:
-            response = client.models.generate_content(
-                model=s.ai_model,
-                contents=user,
-                config={
-                    "system_instruction": SYSTEM_PROMPT,
-                    "response_mime_type": "application/json",
-                    # Gemini menolak 'additionalProperties', jadi dibuang di sini.
-                    "response_schema": _tanpa_additional_properties(OUTPUT_SCHEMA),
-                    # Parafrase fakta, bukan karangan: jangan beri ruang kreatif.
-                    "temperature": 0,
-                },
-            )
+            response = gemini_minta(
+                client, s.ai_model, user,
+                berpikir=thinking_config(getattr(s, "ai_thinking_budget", None),
+                                         getattr(s, "ai_thinking_level", "")),
+                batas_keluaran=getattr(s, "ai_max_output_tokens", 0) or None,
+                batas_detik=getattr(s, "ai_timeout", 0) or None)
         except err["status"] as exc:
             return None, {}, None, _pilah_galat_gemini(exc)
+        except Exception as exc:                      # noqa: BLE001 — batas waktu klien, DNS, soket
+            if _batas_waktu(exc):
+                return None, {}, None, f"Batas waktu {s.ai_timeout:g} detik terlampaui"
+            raise
 
-        meta = getattr(response, "usage_metadata", None)
-        usage = {
-            "input_tokens": getattr(meta, "prompt_token_count", None),
-            "output_tokens": getattr(meta, "candidates_token_count", None),
-            "cache_read_input_tokens": getattr(meta, "cached_content_token_count", None),
-            "cache_creation_input_tokens": None,
-        }
+        usage = usage_gemini(response)
         model = getattr(response, "model_version", None) or s.ai_model
         alasan = _finish_reason_gemini(response)
         if alasan is not None:

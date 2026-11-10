@@ -22,6 +22,13 @@ RE_PASAL = re.compile(r"^\s*(?:PASAL|ARTICLE)\s+(\d+[A-Za-z]?)\s*$",
                       re.IGNORECASE)
 RE_PASAL_INLINE = re.compile(r"^\s*(?:PASAL|ARTICLE)\s+(\d+[A-Za-z]?)\b\s*(.*)$",
                              re.IGNORECASE)
+# Keputusan (KEPDK, KEPMEN, …) tidak berpasal: isinya diktum KESATU, KEDUA, … yang
+# berkedudukan setara pasal. Huruf besar saja (case-sensitive) — di batang tubuh
+# peraturan berpasal kata itu tidak pernah berdiri di awal baris.
+DIKTUM_ORDINAL = {n: i for i, n in enumerate(
+    "SATU DUA TIGA EMPAT LIMA ENAM TUJUH DELAPAN SEMBILAN SEPULUH SEBELAS DUABELAS TIGABELAS "
+    "EMPATBELAS LIMABELAS".split(), 1)}
+RE_DIKTUM = re.compile(r"^\s*KE(" + "|".join(DIKTUM_ORDINAL) + r")\b\s*[:.\-]?\s*(.*)$")
 # The marker may stand alone on its line, so the text part is optional.
 RE_AYAT = re.compile(r"^\s*\((\d{1,2})\)\s*(.*)$")
 # The closing formula ends the normative body. Matched case-insensitively
@@ -145,6 +152,8 @@ def parse_structure(pages: list[PageText]) -> DocumentStructure:
     pending_bagian: str | None = None
     pending_paragraf: str | None = None
     in_attachment = False
+    saw_pasal = False       # dokumen berpasal tidak pernah memakai diktum
+    diktum_count = 0
     sections_done = False   # body sections finished, lampiran forms follow
 
     current: Article | None = None
@@ -251,7 +260,19 @@ def parse_structure(pages: list[PageText]) -> DocumentStructure:
 
             m = RE_PASAL.match(stripped)
             if m:
+                saw_pasal = True
                 start_article(m.group(1), page.number)
+                continue
+
+            # Diktum harus berurutan (KESATU, KEDUA, …) seperti ayat: kata yang sama di
+            # tengah kalimat atau di lampiran tidak membuka unit baru.
+            m = RE_DIKTUM.match(stripped)
+            if m and not saw_pasal and not in_attachment \
+                    and DIKTUM_ORDINAL[m.group(1)] == diktum_count + 1:
+                diktum_count += 1
+                start_article(f"KE{m.group(1)}", page.number)
+                if m.group(2):
+                    buf.append(m.group(2))
                 continue
 
             # Section headings are recorded but do not interrupt article

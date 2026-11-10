@@ -165,7 +165,7 @@ def test_v2_analysis_of_a_real_pdf(catalog):
     cats = {p.kategori for p in a.poin}
     assert {"Kewajiban", "Larangan", "Sanksi"} <= cats
     assert all(p.pasal.startswith("Pasal ") for p in a.poin)
-    assert "teguran/peringatan tertulis" in a.sanksi
+    assert "teguran tertulis" in a.sanksi        # label mengikuti kata di dokumen (QA #2)
     assert any("Pasal 3" in r for s in a.ringkasan for r in s["rujukan"])
 
 

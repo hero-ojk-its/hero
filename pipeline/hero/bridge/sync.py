@@ -41,8 +41,25 @@ SYNCABLE = ("terindeks", "perlu_koreksi")
 # status_keberlakuan backend → reg_status katalog HERO. Draft (document_role
 # = draft_kajian) selalu menjadi 'rancangan' apa pun status keberlakuannya,
 # karena ADR-03 mengeluarkan rancangan dari korpus pembanding.
-REG_STATUS = {"berlaku": "berlaku", "diubah": "diubah", "dicabut": "dicabut",
+REG_STATUS = {"berlaku": "berlaku", "diubah": "diubah", "dicabut": "dicabut", "belum_berlaku": "belum_berlaku",
               "tidak_diketahui": "unknown"}
+
+
+def versi_backend(extracted_at: Any, updated_at: Any) -> str:
+    """Penanda kesegaran satu dokumen: berubah bila diekstraksi ulang atau metadata/statusnya berubah."""
+    return f"{extracted_at or '-'}|{updated_at or '-'}"
+
+
+def versi_dokumen(document_id: int, dsn: str | None = None) -> str | None:
+    """``versi_backend`` baris Postgres saat ini; None bila dokumennya tak ada."""
+    conn = pg.connect(dsn)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT extracted_at, updated_at FROM documents WHERE id = %s", (int(document_id),))
+            r = cur.fetchone()
+            return versi_backend(r[0], r[1]) if r else None
+    finally:
+        conn.close()
 
 
 @dataclass
@@ -70,10 +87,10 @@ class SyncReport:
 
 DOC_SQL = """
 SELECT d.id, d.title, d.regulation_number, d.regulation_type, d.regulation_year,
-       d.release_date, d.bidang, d.status_keberlakuan, d.document_role,
+       d.release_date, d.effective_date, d.bidang, d.status_keberlakuan, d.document_role,
        d.access_classification, d.processing_status, d.file_hash, d.file_size_bytes,
        d.original_filename, d.standardized_filename, d.file_path_pdf, d.source_url,
-       d.extraction_method, d.extraction_engine, d.full_text, d.created_at
+       d.extraction_method, d.extraction_engine, d.full_text, d.created_at, d.extracted_at, d.updated_at
 FROM documents d
 WHERE d.processing_status = ANY(%s)
 {extra}
@@ -153,7 +170,7 @@ def _record(row: dict[str, Any], doc_id: str,
     is_draft = (row.get("document_role") or "") == "draft_kajian"
     reg_status = "rancangan" if is_draft else REG_STATUS.get(
         row.get("status_keberlakuan") or "", "unknown")
-    if reg_status == "unknown" and local_md.get("status") in ("berlaku", "diubah", "dicabut"):
+    if reg_status == "unknown" and local_md.get("status") in ("berlaku", "belum_berlaku", "diubah", "dicabut"):
         reg_status = local_md["status"]        # terbaca dari teks dokumen
     md = RegulationMetadata(
         title=row.get("title"),
@@ -167,6 +184,7 @@ def _record(row: dict[str, Any], doc_id: str,
         confidence=float(local_md.get("confidence") or 0.0),
     )
     md.issued_date = _parse_date(row.get("release_date")) or _parse_date(local_md.get("issued_date"))
+    md.effective_date = _parse_date(row.get("effective_date")) or _parse_date(local_md.get("effective_date"))
     return IngestRecord(
         doc_id=doc_id,
         sha256=row["file_hash"],
@@ -261,7 +279,7 @@ def mirror(settings: Settings, *, dsn: str | None = None, limit: int | None = No
                 existing = cat.exists(rec.sha256)
                 if existing is not None:
                     doc_id = existing["doc_id"]
-                st.map_document(bid, doc_id, rec.sha256)
+                st.map_document(bid, doc_id, rec.sha256, versi_backend(d.get("extracted_at"), d.get("updated_at")))
 
                 page_map = pages.get(bid, {})
                 rows = []
@@ -308,6 +326,29 @@ def mirror(settings: Settings, *, dsn: str | None = None, limit: int | None = No
             st.close()
     rep.detik = time.perf_counter() - started
     return rep
+
+
+def id_dokumen_untuk_ulang(dsn: str | None = None, *, sebelum: datetime, tanpa_tanggal: bool = False,
+                           jenis: Sequence[str] = (), maks: int = 100) -> list[int]:
+    """Dokumen backend yang layak diekstraksi ulang, paling lama dulu, paling banyak ``maks``.
+
+    ``sebelum`` wajib: hanya dokumen yang terakhir diekstraksi SEBELUM kode baru dipasang. Tanpa
+    batas itu dokumen yang memang tak punya tanggal tertulis akan terpilih lagi di setiap putaran."""
+    where = ["processing_status = ANY(%s)", "is_active", "(extracted_at IS NULL OR extracted_at < %s)"]
+    params: list[Any] = [list(SYNCABLE), sebelum]
+    if tanpa_tanggal:
+        where.append("effective_date IS NULL")
+    if jenis:
+        where.append("regulation_type = ANY(%s)")
+        params.append([j.upper() for j in jenis])
+    params.append(int(maks))
+    conn = pg.connect(dsn)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT id FROM documents WHERE {' AND '.join(where)} ORDER BY id LIMIT %s", params)
+            return [int(r[0]) for r in cur.fetchall()]
+    finally:
+        conn.close()
 
 
 def backend_documents(dsn: str | None = None, *, role: str | None = None,

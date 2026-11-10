@@ -31,12 +31,21 @@ from collections import Counter
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-VERSION = "v2.2"
+from hero.extract.structure import DIKTUM_ORDINAL
+
+VERSION = "v2.5"
 
 # Lower-case only, matched case-sensitively: Indonesian legislative drafting
 # writes obligations in lower case ("wajib menyampaikan") and defined terms in
 # Title Case ("Cuti Wajib", "Wajib Pajak"). Matching case-insensitively is
 # what made v1 read definitions as obligations.
+# Kata kerja tugas Keputusan. Satu daftar: dipakai penanda, pengecualian filter definisi,
+# dan pencari klausa di ringkasan.
+_KERJA_TUGAS = ("membentuk|menugaskan|menunjuk|mengangkat|menyusun|melaksanakan|melakukan|"
+                "menyelenggarakan|mengoordinasikan|menetapkan")
+_TUGAS_AWAL = re.compile(rf"^(?i:{_KERJA_TUGAS})\b")
+_TUGAS_CARI = rf"bertugas|bertanggung jawab|{_KERJA_TUGAS}"
+
 MARKERS: tuple[tuple[str, str, int], ...] = (
     # (regex, category, priority — lower = more consequential)
     (r"\bdikenai sanksi\b|\bdikenakan sanksi\b|\bsanksi administratif\b", "Sanksi", 0),
@@ -44,6 +53,10 @@ MARKERS: tuple[tuple[str, str, int], ...] = (
     (r"\bwajib memperoleh (izin|persetujuan)\b|\bwajib mendapatkan (izin|persetujuan)\b", "Perizinan", 2),
     (r"\bwajib menyampaikan\b|\bwajib melaporkan\b|\bmenyampaikan laporan\b", "Pelaporan", 2),
     (r"\bwajib\b|\bharus\b", "Kewajiban", 3),
+    # Keputusan menugaskan, bukan mewajibkan. Kata kerja tugas hanya dihitung di AWAL unit
+    # (diktum: "Membentuk Tim …") atau sebagai "bertugas/mempunyai tugas" — "melakukan" di
+    # tengah kalimat terlalu umum dan akan menangkap hampir semua kalimat.
+    (rf"\bbertugas\b|\bmempunyai tugas\b|\bbertanggung jawab\b|^(?i:{_KERJA_TUGAS})\b", "Tugas", 3),
     (r"\bpaling lambat\b|\bpaling lama\b|\bdalam jangka waktu\b", "Batas Waktu", 4),
     (r"\bdicabut dan dinyatakan tidak berlaku\b", "Pencabutan", 5),
     (r"\bmulai berlaku pada\b|\bberlaku sejak\b", "Masa Berlaku", 6),
@@ -59,9 +72,21 @@ _DEFINITION = re.compile(r"\byang dimaksud dengan\b|\byang selanjutnya (disebut|
 _AYAT = re.compile(r"(?:^|\n|\s)\((\d{1,2})\)\s")
 _SUBJECT = re.compile(r"^\s*(?:Setiap |Dalam hal )?([A-Z][A-Za-z/\-]*(?: (?:[A-Z][A-Za-z/\-]*|atau|dan|dan/atau)){0,5})"
                       r"\s+(?:yang [^,]{0,80},?\s*)?(wajib|dilarang|harus|dapat)\b")
-_SANCTION_KINDS = (("teguran tertulis|peringatan tertulis", "teguran/peringatan tertulis"),
-                   (r"\bdenda\b", "denda"), ("pembatasan kegiatan", "pembatasan kegiatan usaha"),
-                   ("pembekuan", "pembekuan kegiatan usaha"), ("pencabutan izin", "pencabutan izin usaha"),
+# Label = kata yang DIPAKAI dokumen. Dulu "teguran tertulis" dan "peringatan tertulis" dilebur
+# menjadi "teguran/peringatan tertulis", sehingga ringkasan menyebut bentuk sanksi yang tidak ada
+# di PDF-nya (temuan QA #2). Urutan = urutan tampil.
+_SANCTION_KINDS = (("teguran tertulis", "teguran tertulis"),
+                   ("peringatan tertulis", "peringatan tertulis"),
+                   (r"\bdenda\b", "denda"),
+                   ("pembatasan kegiatan", "pembatasan kegiatan usaha"),
+                   ("pembekuan", "pembekuan kegiatan usaha"),
+                   ("pencabutan izin", "pencabutan izin usaha"),
+                   # Bentuk yang lazim di daftar huruf pasal sanksi dan dulu tak pernah terangkum.
+                   ("larangan (?:untuk )?menerbitkan produk", "larangan menerbitkan produk baru"),
+                   ("larangan melakukan ekspansi|larangan ekspansi", "larangan ekspansi kegiatan usaha"),
+                   ("larangan melakukan kegiatan usaha baru", "larangan kegiatan usaha baru"),
+                   ("larangan sebagai pihak utama", "larangan sebagai pihak utama"),
+                   ("penurunan penilaian faktor tata kelola", "penurunan penilaian faktor tata kelola"),
                    ("penurunan tingkat kesehatan", "penurunan tingkat kesehatan"))
 _LAMPIRAN_REF = re.compile(r"tercantum dalam[:\s]+(?:[a-z]\.\s*)?Lampiran", re.I)
 # Section headings the structure parser sometimes leaves at the end of an ayat.
@@ -127,6 +152,9 @@ class AnalysisV2:
 
 
 def _pasal_order(ref: str) -> tuple[int, int]:
+    diktum = re.search(r"Diktum KE(\w+)", ref)
+    if diktum:
+        return DIKTUM_ORDINAL.get(diktum.group(1), 0), 0
     nums = [int(x) for x in re.findall(r"\d+", ref)[:2]] + [0, 0]
     return nums[0], nums[1]
 
@@ -134,6 +162,23 @@ def _pasal_order(ref: str) -> tuple[int, int]:
 # ---------------------------------------------------------------------------
 # Units: one ayat (or a whole Pasal without ayat) — lists stay attached
 # ---------------------------------------------------------------------------
+def is_diktum(number: Any) -> bool:
+    num = str(number)
+    return num.startswith("KE") and num[2:] in DIKTUM_ORDINAL
+
+
+def unit_ref(number: str, ayat: int | None = None) -> str:
+    """Rujukan unit: "Pasal 4 ayat (2)", "Diktum KESATU", atau "Bagian II" (Surat Edaran)."""
+    num = str(number)
+    if re.fullmatch(r"\d+[A-Z]?", num):
+        base = f"Pasal {num}"
+    elif is_diktum(num):
+        base = f"Diktum {num}"
+    else:
+        base = f"Bagian {num}"
+    return base + (f" ayat ({ayat})" if ayat else "")
+
+
 def split_ayat(text: str) -> list[tuple[int | None, str]]:
     """Split a Pasal into its ayat, accepting "(n)" only as the next number.
 
@@ -172,7 +217,8 @@ def _clean(s: str) -> str:
 
 
 def classify_unit(text: str) -> tuple[str, int] | None:
-    if _DEFINITION.search(text[:300]):
+    # "Membentuk Tim … yang selanjutnya disebut Tim" adalah norma, bukan definisi.
+    if _DEFINITION.search(text[:300]) and not _TUGAS_AWAL.match(text):
         return None
     for rx, cat, pr in _MARKERS:
         if rx.search(text):
@@ -246,40 +292,62 @@ def text_units(full_text: str | None) -> list[dict[str, Any]]:
     return [{"number": NO_PASAL, "page": None, "text": x, "ayat": []} for x in sents if len(x) > 30]
 
 
+MIN_POIN = 3        # FR-ANL-05: minimal 3 poin kunci per dokumen
+MAKS_POIN_CADANGAN = 6
+
+
 def extract_points(articles: list[dict[str, Any]]) -> list[Point]:
     points: list[Point] = []
     seen: set[str] = set()
+    sisa: list[tuple[dict[str, Any], int | None, str]] = []      # unit tanpa penanda norma
+
+    def tambah(art: dict[str, Any], ayat: int | None, teks: str, kategori: str, prioritas: int) -> None:
+        key = teks[:160].lower()
+        if key in seen:
+            return
+        seen.add(key)
+        cut = len(teks) > MAX_POINT_CHARS
+        num = str(art["number"])
+        ref = NO_PASAL if num == NO_PASAL else unit_ref(num, ayat)
+        points.append(Point(id=f"F{len(points) + 1}", kategori=kategori, pasal=ref,
+                            halaman=art.get("page"), prioritas=prioritas, subjek=subject_of(teks),
+                            teks=(teks[:MAX_POINT_CHARS].rsplit(" ", 1)[0] + " …") if cut else teks,
+                            terpotong=cut))
+
     for art in articles:
         for ayat, body in units_of(art):
             teks = _clean(body)
             if len(teks) < 25:
                 continue
             got = classify_unit(teks)
-            if not got:
-                continue
-            key = teks[:160].lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            cut = len(teks) > MAX_POINT_CHARS
-            num = str(art["number"])
-            if num == NO_PASAL:
-                ref = NO_PASAL
-            else:
-                ref = (f"Pasal {num}" if re.fullmatch(r"\d+[A-Z]?", num) else f"Bagian {num}") \
-                    + (f" ayat ({ayat})" if ayat else "")
-            points.append(Point(id=f"F{len(points) + 1}", kategori=got[0], pasal=ref,
-                                halaman=art.get("page"), prioritas=got[1], subjek=subject_of(teks),
-                                teks=(teks[:MAX_POINT_CHARS].rsplit(" ", 1)[0] + " …") if cut else teks,
-                                terpotong=cut))
+            if got:
+                tambah(art, ayat, teks, *got)
+            elif str(art["number"]) != NO_PASAL and not _DEFINITION.search(teks[:300]):
+                sisa.append((art, ayat, teks))
+    # Setiap diktum Keputusan adalah ketetapan tersendiri. Dokumen lain yang normanya tak
+    # memakai kata kunci kita juga tidak boleh berakhir dengan satu-dua poin: isi unitnya
+    # tetap ditampilkan apa adanya, berlabel "Ketentuan", daripada dokumennya tampak kosong.
+    if len(points) < MIN_POIN or any(is_diktum(a["number"]) for a in articles):
+        for art, ayat, teks in sisa[:MAKS_POIN_CADANGAN]:
+            tambah(art, ayat, teks, "Ketentuan", 7)
     return points
 
 
 # ---------------------------------------------------------------------------
 # Framework, lampiran, sanctions
 # ---------------------------------------------------------------------------
+def _awal_kata(teks: str, n: int = 9) -> str:
+    kata = teks.rstrip(" .;:").split()
+    return " ".join(kata[:n]) + (" …" if len(kata) > n else "")
+
+
 def framework(structure: dict[str, Any], articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """BAB outline with the Pasal range each BAB covers."""
+    diktum = [a for a in articles if is_diktum(a["number"])]
+    if diktum and not any(str(a["number"]).isdigit() for a in articles):
+        # Keputusan: kerangkanya adalah daftar diktum, dengan kalimat pembukanya sebagai "judul".
+        return [{"bab": str(a["number"]), "judul": _awal_kata(_clean(a["text"])),
+                 "pasal": unit_ref(a["number"])} for a in diktum]
     ranges: dict[str, list[int]] = {}
     for a in articles:
         if a.get("bab") and str(a["number"]).isdigit():
@@ -392,7 +460,7 @@ def lampiran_profile(full_text: str | None, articles: list[dict[str, Any]]) -> d
     picked up the signature block ("KEPALA EKSEKUTIF PENGAWAS …").
     """
     refs = [a for a in articles if _LAMPIRAN_REF.search(a["text"] or "")]
-    heavy = bool(refs) and len(articles) <= 6
+    heavy = bool(refs) and len(articles) <= (12 if any(is_diktum(a["number"]) for a in articles) else 6)
     headings: list[str] = []
     judul: str | None = None
     if heavy and full_text:
@@ -443,7 +511,15 @@ def sanctions(points: list[Point]) -> list[str]:
 # Short summary: fixed template over the points — every sentence cited
 # ---------------------------------------------------------------------------
 _STATUS_PHRASE = {"berlaku": "masih berlaku", "diubah": "masih berlaku dengan perubahan",
-                  "dicabut": "sudah dicabut", "rancangan": "masih berupa rancangan"}
+                  "dicabut": "sudah dicabut", "rancangan": "masih berupa rancangan",
+                  "belum_berlaku": "belum berlaku"}
+
+
+_SISA_DISELESAIKAN = 6
+_KATA_GANTUNG = re.compile(
+    r"(?:dan|atau|dan/atau|dengan|sesuai|serta|untuk|pada|dalam|dari|oleh|ke|di|yang|"
+    r"sebagaimana|dimaksud|terhadap|antara|bagi|ketentuan|tersebut|paling|secara|huruf|ayat|pasal)",
+    re.I)
 
 
 def _clause(p: Point, marker: str, words: int = 22) -> str:
@@ -461,8 +537,18 @@ def _clause(p: Point, marker: str, words: int = 22) -> str:
         if toks[j].endswith((".", ";", ":")) and j < idx - 1:
             start = j + 1
             break
-    piece = toks[start:start + words]
-    s = " ".join(piece) + ("…" if start + words < len(toks) else "")
+    # Sisa beberapa kata saja: lebih baik diselesaikan daripada diputus dengan elipsis.
+    # Jangan MULAI pada kata sambung ("tersebut sesuai dengan ketentuan …"): maju sampai kata
+    # yang membawa makna, tetapi tidak pernah melewati penanda normatifnya.
+    while start < idx and _KATA_GANTUNG.fullmatch(toks[start].strip(" ,;:.")):
+        start += 1
+    end = len(toks) if len(toks) - (start + words) <= _SISA_DISELESAIKAN else start + words
+    piece = list(toks[start:end])
+    # Jangan berhenti pada kata sambung ("…tersebut sesuai dengan ketentuan…"): potong mundur
+    # sampai kata terakhir membawa makna.
+    while end < len(toks) and len(piece) > 8 and _KATA_GANTUNG.fullmatch(piece[-1].strip(" ,;:.")):
+        piece.pop()
+    s = " ".join(piece) + ("…" if end < len(toks) else "")
     return s.rstrip(" ,;:.")
 
 
@@ -471,12 +557,58 @@ _GENERIC = re.compile(r"ketentuan peraturan perundang-undangan|sesuai dengan (ke
                       r"^pada saat peraturan .{0,80} mulai berlaku", re.I)
 
 
+# Isi yang membuat sebuah ayat layak dikutip meski kalimatnya dibuka rujukan silang:
+# daftar huruf/angka, nominal rupiah, persen, atau jangka waktu.
+_ISI_KHUSUS = re.compile(r"(?:^|[;:])\s*[a-j]\.\s|\bRp\s?[\d.]|\b\d+\s*%|"
+                         r"\b\d+\s*\((?:satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh|"
+                         r"sebelas|dua belas|tiga puluh|enam puluh|sembilan puluh)\)", re.I)
+
+
+def _generik(teks: str) -> bool:
+    """Kalimat rujukan-silang tanpa isi sendiri ("… sesuai dengan ketentuan peraturan …").
+
+    Pembukanya saja tidak cukup: hampir setiap ayat sanksi dibuka "sebagaimana dimaksud pada
+    ayat (1)", lalu justru memuat daftar sanksinya. Dulu pembuka itu membuat seluruh ayat
+    sanksi dianggap generik dan tersingkir dari poin utama (temuan QA #1)."""
+    if not _GENERIC.search(teks):
+        return False
+    # Menyebut bentuk sanksi yang konkret ("berupa teguran tertulis") juga termasuk isi sendiri.
+    return not (_ISI_KHUSUS.search(teks) or any(re.search(rx, teks, re.I) for rx, _ in _SANCTION_KINDS))
+
+
 def _rank_for_summary(points: list[Point], top_subjects: list[str]) -> list[Point]:
     """Most informative first: specific (not "comply with the regulations"),
-    about a principal subject, short enough to quote, earliest Pasal."""
-    return sorted(points, key=lambda p: (bool(_GENERIC.search(p.teks)),
-                                         p.subjek not in top_subjects, len(p.teks) > 400,
+    about a principal subject, earliest Pasal.
+
+    Panjang tidak lagi menjadi penalti: ayat terpanjang justru yang memuat daftar sanksi
+    a–e, dan kutipan di ringkasan toh dipotong ``_clause``."""
+    return sorted(points, key=lambda p: (_generik(p.teks),
+                                         p.subjek not in top_subjects,
                                          _pasal_order(p.pasal)))
+
+
+_BULAN = ("Januari Februari Maret April Mei Juni Juli Agustus September Oktober November Desember").split()
+
+
+def _tanggal_id(iso: str) -> str:
+    """"2027-01-01" → "1 Januari 2027"."""
+    try:
+        t, b, h = (int(x) for x in str(iso)[:10].split("-"))
+        return f"{h} {_BULAN[b - 1]} {t}"
+    except (ValueError, IndexError):
+        return str(iso)
+
+
+def jenis_kata(ident: dict[str, Any]) -> str:
+    """Kata benda dokumennya untuk kalimat ringkasan: "Keputusan ini", bukan selalu "Peraturan ini"."""
+    jenis = (ident.get("jenis") or "").upper()
+    if jenis.startswith("KEP"):
+        return "Keputusan"
+    if jenis.startswith("SE"):
+        return "Surat Edaran"
+    if jenis in ("UU", "PERPPU"):
+        return "Undang-Undang"
+    return "Peraturan"
 
 
 def compose_summary(ident: dict[str, Any], kerangka: list[dict[str, Any]], subjects: list[dict[str, Any]],
@@ -488,12 +620,18 @@ def compose_summary(ident: dict[str, Any], kerangka: list[dict[str, Any]], subje
                     "fakta": [p.id for p in pts]})
 
     status = _STATUS_PHRASE.get(ident.get("status") or "", "status berlakunya belum diketahui")
+    if ident.get("status") == "belum_berlaku" and ident.get("tanggal_berlaku"):
+        status += f", mulai berlaku {_tanggal_id(ident['tanggal_berlaku'])}"
     nomor = f" Nomor {ident['nomor']}" if ident.get("nomor") else ""
     add(f"{ident.get('jenis') or 'Peraturan'}{nomor} tentang {ident.get('tentang') or '—'} {status}.", [])
-    if kerangka:
+    kata = jenis_kata(ident)
+    if kerangka and ident.get("jumlah_diktum"):
+        add(f"{kata} ini memuat {ident['jumlah_diktum']} diktum, antara lain: "
+            + "; ".join(f"{k['bab']} {k['judul']}" for k in kerangka[:4]) + ".", [])
+    elif kerangka:
         judul = [k["judul"] for k in kerangka if k.get("judul")][1:5]      # skip "Ketentuan Umum"
         if judul:
-            add(f"Peraturan ini terdiri atas {len(kerangka)} bab dan {ident.get('jumlah_pasal', 0)} pasal, "
+            add(f"{kata} ini terdiri atas {len(kerangka)} bab dan {ident.get('jumlah_pasal', 0)} pasal, "
                 f"antara lain mengatur {', '.join(j.lower() for j in judul)}.", [])
     by_cat: dict[str, list[Point]] = {}
     for p in _rank_for_summary(points, [s["subjek"] for s in subjects[:3]]):
@@ -502,10 +640,11 @@ def compose_summary(ident: dict[str, Any], kerangka: list[dict[str, Any]], subje
         names = [s["subjek"] for s in subjects[:3]]
         add(f"Pihak yang paling banyak dibebani kewajiban: {', '.join(names)}.", [])
     for cat, marker, lead in (("Kewajiban", "wajib|harus", "Kewajiban utama"),
+                              ("Tugas", _TUGAS_CARI, "Tugas utama"),
                               ("Pelaporan", "wajib menyampaikan|wajib melaporkan|menyampaikan laporan", "Kewajiban pelaporan"),
                               ("Perizinan", "wajib memperoleh|wajib mendapatkan", "Perizinan"),
                               ("Larangan", "dilarang|tidak diperkenankan|tidak boleh", "Larangan")):
-        pts = by_cat.get(cat, [])[:2 if cat == "Kewajiban" else 1]
+        pts = by_cat.get(cat, [])[:2 if cat in ("Kewajiban", "Tugas") else 1]
         if pts:
             clauses = "; ".join(_clause(p, marker, 20) for p in pts)
             add(f"{lead}: {clauses}.", pts)
@@ -522,7 +661,7 @@ def compose_summary(ident: dict[str, Any], kerangka: list[dict[str, Any]], subje
             names += [_clean(m.group(1)) for m in _REVOKED_NAME.finditer(p.teks)]
         names = list(dict.fromkeys(n for n in names if "ini" not in n.split()[:4]))[:3]
         if names:
-            add(f"Peraturan ini mencabut: {'; '.join(names)}.", pts[:3])
+            add(f"{kata} ini mencabut: {'; '.join(names)}.", pts[:3])
         else:
             add(f"Pencabutan: {_clause(pts[0], 'dicabut', 30)}.", [pts[0]])
     if by_cat.get("Masa Berlaku"):
@@ -532,8 +671,8 @@ def compose_summary(ident: dict[str, Any], kerangka: list[dict[str, Any]], subje
         isi = f" Bagian Lampiran antara lain: {'; '.join(lampiran['judul_bagian'][:6])}." if lampiran["judul_bagian"] else ""
         judul = lampiran.get("judul_lampiran")
         apa = f" Lampiran berjudul \"{judul}\"." if judul else ""
-        out.append({"kalimat": "Substansi utama peraturan ini berada di Lampiran, bukan di batang tubuh; "
-                               "ringkasan pasal di atas karenanya tidak lengkap." + apa + isi,
+        out.append({"kalimat": f"Substansi utama {kata.lower()} ini berada di Lampiran, bukan di batang tubuh; "
+                               "ringkasan di atas karenanya tidak lengkap." + apa + isi,
                     "rujukan": lampiran["pasal_rujukan"], "fakta": []})
         # Bukan cuma judul bagian — kutip isinya, supaya PADK yang
         # substansinya di Lampiran tidak berhenti di daftar judul kosong (T3).
@@ -562,8 +701,10 @@ def analyse(doc: sqlite3.Row, text: sqlite3.Row | None, articles: list[dict[str,
     ident = {"jenis": (doc["doc_type"] or "").upper() or None, "nomor": doc["number"], "tahun": doc["year"],
              "tentang": (view["tentang"] if view else None) or doc["subject"],
              "status": doc["reg_status"], "tanggal_terbit": doc["issued_date"],
+             "tanggal_berlaku": md.get("effective_date"),
              "penerbit": doc["issuing_body"],
-             "jumlah_pasal": sum(1 for a in articles if re.fullmatch(r"\d+[A-Z]?", str(a["number"])))}
+             "jumlah_pasal": sum(1 for a in articles if re.fullmatch(r"\d+[A-Z]?", str(a["number"]))),
+             "jumlah_diktum": sum(1 for a in articles if is_diktum(a["number"]))}
     kerangka = framework(structure, articles)
     subjects = [{"subjek": s, "jumlah": n} for s, n in subj.most_common(5)]
     sank = sanctions(points)

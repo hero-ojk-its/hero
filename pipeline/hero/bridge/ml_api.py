@@ -21,7 +21,9 @@ berlabel *Draft / Rekomendasi* — sistem tidak mengambil keputusan.
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
+import threading
 from pathlib import Path
 from typing import Any, Optional
 
@@ -48,6 +50,8 @@ class MlState:
         self._narrator = None
         self._embedder = None
         self._hcfg: dict[str, Any] | None = None
+        self._sync_guard = threading.Lock()
+        self._sync_locks: dict[int, threading.Lock] = {}
 
     def catalog(self) -> sqlite3.Connection:
         """Koneksi baru per permintaan: SQLite + thread server tidak berteman."""
@@ -98,6 +102,80 @@ class MlState:
             from hero.harmonisasi.engine import load_config
             self._hcfg = load_config(self.harmonisasi_config)
         return self._hcfg
+
+    @staticmethod
+    def _mirror(*args: Any, **kwargs: Any):
+        """Titik sambung untuk tes; impor ditunda karena sync.py menarik psycopg."""
+        from hero.bridge.sync import mirror
+
+        return mirror(*args, **kwargs)
+
+    @staticmethod
+    def _versi_backend(document_id: int) -> str | None:
+        from hero.bridge.sync import versi_dokumen
+
+        return versi_dokumen(document_id)
+
+    def _basi(self, document_id: int) -> bool:
+        """Apakah baris backend berubah (ekstraksi ulang, koreksi, status) sejak terakhir disalin?
+
+        Satu kueri ringan per permintaan. Postgres tak terjangkau = anggap segar: lebih baik
+        menjawab dari salinan lama daripada menggagalkan analisa."""
+        try:
+            terkini = self._versi_backend(document_id)
+        except Exception as exc:                                  # noqa: BLE001
+            log.warning("cek kesegaran dokumen %s dilewati: %s", document_id, exc)
+            return False
+        return terkini is not None and terkini != self.state.versi_for(document_id)
+
+    # -- sinkron otomatis -------------------------------------------------
+    def ensure_mapped(self, document_id: int) -> tuple[str | None, str | None]:
+        """``(doc_id, alasan)``: dokumen yang belum tercermin ATAU sudah berubah di backend
+        disalin SEKARANG, sebelum dianalisa.
+
+        Dulu cermin hanya jalan lewat timer ``hero bridge sinkron``, sehingga
+        dokumen yang baru diekstraksi menjawab 404 sampai putaran berikutnya
+        (insiden dokumen 2006, 9 Nov 2026). Kini permintaan analisa/klausul/
+        harmonisasi menyalin satu dokumen itu sendiri — sama persis dengan
+        ``hero bridge sinkron --dokumen N --tanpa-graf`` (idempoten). Graf
+        relasi dan indeks vektor sengaja tidak dibangun di jalur permintaan;
+        keduanya tetap tugas timer.
+
+        ``alasan`` terisi hanya bila tetap tidak bisa dipetakan, supaya 404
+        menjelaskan sebabnya (belum diekstraksi, Postgres tak terjangkau, …).
+        Matikan dengan ``HERO_ML_SINKRON_OTOMATIS=0``.
+        """
+        doc_id = self.state.doc_id_for(document_id)
+        if os.environ.get("HERO_ML_SINKRON_OTOMATIS", "1").strip().lower() in ("0", "false", "off", "tidak"):
+            return doc_id, None
+        if doc_id is not None and not self._basi(document_id):
+            return doc_id, None
+        with self._sync_guard:                       # satu kunci per dokumen, bukan satu untuk semua
+            kunci = self._sync_locks.setdefault(int(document_id), threading.Lock())
+        with kunci:
+            doc_id = self.state.doc_id_for(document_id)      # utas lain mungkin sudah menyalinnya
+            if doc_id is not None and not self._basi(document_id):
+                return doc_id, None
+            lama = doc_id
+            try:
+                rep = self._mirror(self.settings, document_ids=[int(document_id)],
+                                   include_drafts=True)
+            except Exception as exc:                          # Postgres mati, DSN kosong, dsb.
+                log.warning("sinkron otomatis dokumen %s gagal: %s", document_id, exc)
+                if lama is not None:                                # salinan lama masih lebih baik dari 404
+                    return lama, None
+                return None, f"sinkron otomatis gagal ({type(exc).__name__}: {str(exc)[:160]})"
+            doc_id = self.state.doc_id_for(document_id)
+            if doc_id is not None:
+                # Sedang diekstraksi ulang (backend 'diproses') tak disalin oleh mirror; pemetaan lama
+                # tetap dipakai sampai ekstraksinya selesai.
+                log.info("dokumen %s disalin otomatis ke lapisan data (%s pasal)", document_id, rep.pasal)
+                return doc_id, None
+            if rep.dilewati_tanpa_teks:
+                return None, "dokumen belum diekstraksi (belum punya teks maupun pasal)"
+            if rep.galat:
+                return None, "; ".join(str(g) for g in rep.galat[:2])
+            return None, ("dokumen tidak ada di backend atau statusnya belum 'terindeks'/'perlu_koreksi'")
 
     # -- penerjemah identitas -------------------------------------------
     def doc_id(self, document_id: int) -> str | None:
@@ -324,9 +402,10 @@ def create_app(settings: Settings | None = None, bridge: BridgeSettings | None =
 def _require_mapped(st: MlState, document_id: int) -> str:
     from fastapi import HTTPException
 
-    doc_id = st.doc_id(document_id)
+    doc_id, alasan = st.ensure_mapped(document_id)
     if doc_id is None:
-        raise HTTPException(404, f"dokumen {document_id} belum tercermin di lapisan data. "
+        sebab = f" Penyebab: {alasan}." if alasan else ""
+        raise HTTPException(404, f"dokumen {document_id} belum tercermin di lapisan data.{sebab} "
                                  f"Jalankan: hero bridge sinkron --dokumen {document_id}")
     return doc_id
 
