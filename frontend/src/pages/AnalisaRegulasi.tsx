@@ -46,6 +46,9 @@ import AnalisaState2Workspace from '../components/analisa/AnalisaState2Workspace
 import SummaryView from '../components/analisa/SummaryView';
 import AnalysisHistory from '../components/analisa/AnalysisHistory';
 
+/** Setelah durasi ini tanpa hasil, pengguna diberi tahu bahwa proses masih berjalan (polling tidak dihentikan). */
+const POLLING_SOFT_TIMEOUT_MS = 120_000;
+
 export default function AnalisaRegulasi() {
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -137,6 +140,8 @@ export default function AnalisaRegulasi() {
   // 5. State Polling Kesiapan Dokumen
   const [isPollingActive, setIsPollingActive] = useState<boolean>(false);
   const [pollingTimeoutOccurred, setPollingTimeoutOccurred] = useState<boolean>(false);
+  // Galat pemeriksaan status (koneksi terputus 3x beruntun). Dokumen mungkin tetap diproses di peladen.
+  const [pollingError, setPollingError] = useState<string | null>(null);
 
   // 6. State Pemulihan Workspace (Pekerjaan B)
   const [isRestoringWorkspace, setIsRestoringWorkspace] = useState<boolean>(true);
@@ -150,6 +155,8 @@ export default function AnalisaRegulasi() {
     enabled: isPollingActive && uploadedDocumentId !== null && uploadedDocumentId > 0,
     onSuccess: (doc) => {
       setIsPollingActive(false);
+      setPollingTimeoutOccurred(false);
+      setPollingError(null);
       // Baca klasifikasi aktual dari response backend (Pekerjaan A)
       if (doc.access_classification) {
         setAccessClassification(doc.access_classification);
@@ -175,9 +182,19 @@ export default function AnalisaRegulasi() {
       setIsPollingActive(false);
       if (err.message && err.message.toLowerCase().includes('melebihi batas waktu')) {
         setPollingTimeoutOccurred(true);
+      } else {
+        setPollingError(err.message || 'Gagal memeriksa status dokumen di peladen.');
       }
     },
   });
+
+  // Peringatan lunak: bila belum selesai setelah POLLING_SOFT_TIMEOUT_MS, beri tahu pengguna
+  // (polling tetap berjalan; dokumen tebal atau scan memang bisa lama).
+  useEffect(() => {
+    if (!isPollingActive || !uploadedDocumentId) return;
+    const timer = setTimeout(() => setPollingTimeoutOccurred(true), POLLING_SOFT_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [isPollingActive, uploadedDocumentId]);
 
   // Simpan referensi polling terbaru ke dalam ref via effect agar fungsi stop() selalu mutakhir tanpa memicu peringatan render ref
   const documentPollingRef = useRef(documentPolling);
@@ -428,6 +445,7 @@ export default function AnalisaRegulasi() {
     setIsUploading(true);
     setUploadProgress(null);
     setPollingTimeoutOccurred(false);
+    setPollingError(null);
     isExplicitCancelRef.current = false;
 
     if (uploadAbortControllerRef.current) {
@@ -621,6 +639,7 @@ export default function AnalisaRegulasi() {
     setUploadedDocumentId(null);
     lastScrolledDocIdRef.current = null;
     setPollingTimeoutOccurred(false);
+    setPollingError(null);
     setDuplikat(null);
     setSelectedFile(null);
     setTitle('');
@@ -817,7 +836,7 @@ export default function AnalisaRegulasi() {
       )}
 
       {/* 3. MODUL PROGRES & POLLING UNGGAH DRAF (Aktif saat proses upload & ekstraksi berlangsung) */}
-      {(isUploading || isPollingActive || pollingTimeoutOccurred) && (
+      {(isUploading || isPollingActive || pollingTimeoutOccurred || pollingError) && (
         <div
           ref={progressCardRef}
           tabIndex={-1}
@@ -1054,12 +1073,25 @@ export default function AnalisaRegulasi() {
             />
           )}
 
+          {/* Galat pemeriksaan status: kartu tidak boleh menghilang diam-diam */}
+          {pollingError && uploadedDocumentId && !isPollingActive && (
+            <ErrorState
+              title="Status Dokumen Tidak Dapat Diperiksa"
+              message={`Koneksi ke peladen terputus saat memeriksa dokumen #${uploadedDocumentId} (${pollingError}). Dokumen mungkin tetap diproses di peladen.`}
+              retryText="Coba Lagi"
+              onRetry={() => {
+                setPollingError(null);
+                setIsPollingActive(true);
+              }}
+            />
+          )}
+
           {/* Timeout Alert & Tombol Lanjut Paksa */}
           {pollingTimeoutOccurred && uploadedDocumentId && (
             <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 space-y-2">
               <div className="flex items-center gap-2 font-bold">
                 <AlertCircle size={16} className="text-amber-700" />
-                <span>Pemrosesan ekstraksi naskah membutuhkan waktu lebih lama di peladen.</span>
+                <span>Pemrosesan masih berjalan dan lebih lama dari biasanya (lebih dari 2 menit).</span>
               </div>
               <p className="leading-relaxed">
                 Dokumen telah tersimpan dengan aman dengan ID <strong>#{uploadedDocumentId}</strong>.
@@ -1079,6 +1111,7 @@ export default function AnalisaRegulasi() {
                     documentPolling.stop();
                     setIsPollingActive(false);
                     setPollingTimeoutOccurred(false);
+                    setPollingError(null);
                   }}
                   className="px-3.5 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-md text-xs font-semibold cursor-pointer"
                 >
