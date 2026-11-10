@@ -75,6 +75,38 @@ CREATE TABLE IF NOT EXISTS analysis_ai (
 """
 
 _NUM = re.compile(r"\d+(?:[.,]\d+)?")
+# Modalitas: daya ikat sebuah norma. "dikenai" -> "dapat dikenai" mengubah kewajiban menjadi
+# kemungkinan — perubahan makna hukum yang tidak tertangkap pemeriksaan angka maupun pasal
+# (temuan QA #6). Dipakai verifikator produksi dan penilai di ``hero bench-ai``.
+MODAL_PELEMAH = ("dapat", "boleh", "mungkin", "sebaiknya", "umumnya", "biasanya",
+                 "diharapkan", "seharusnya")
+MODAL_WAJIB: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("wajib", ("wajib", "harus", "diwajibkan", "kewajiban", "mewajibkan")),
+    ("dilarang", ("dilarang", "larangan", "tidak boleh", "tidak diperkenankan")),
+    ("dikenai", ("dikenai", "dikenakan", "sanksi")),
+)
+
+
+def _ada_kata(kata: str, teks: str) -> bool:
+    return re.search(rf"\b{re.escape(kata)}\b", teks, re.IGNORECASE) is not None
+
+
+def periksa_modalitas(hasil: str, sumber: str, *, ketat: bool = False) -> list[str]:
+    """Pergeseran daya ikat antara kalimat model dan fakta sumbernya.
+
+    Bawaan hanya melaporkan **pelemahan**: kata seperti "dapat" yang tidak ada di faktanya.
+    Itu dipakai sebagai gerbang produksi karena maknanya jelas salah.
+
+    ``ketat`` menambah arah sebaliknya — kata wajib yang hilang dari parafrase. Itu tidak
+    dipakai sebagai gerbang: satu kalimat ringkasan sah saja merangkum beberapa fakta tanpa
+    mengulang setiap kata wajibnya, dan menolak karenanya justru membuang keluaran yang baik.
+    Dipakai sebagai skor di ``hero bench-ai``."""
+    masalah = [f"menambahkan '{m}'" for m in MODAL_PELEMAH
+               if _ada_kata(m, hasil) and not _ada_kata(m, sumber)]
+    if ketat:
+        masalah += [f"menghilangkan '{asal}'" for asal, padanan in MODAL_WAJIB
+                    if _ada_kata(asal, sumber) and not any(_ada_kata(x, hasil) for x in padanan)]
+    return masalah
 _PASAL = re.compile(r"Pasal\s+(\d+[A-Z]?)")
 
 
@@ -151,6 +183,8 @@ def verify(output: dict[str, Any], facts: list[dict[str, Any]]) -> list[str]:
         bad_pasal = [n for n in _PASAL.findall(s.get("kalimat", "")) if n not in src_pasal]
         if bad_pasal:
             problems.append(f"kalimat {i} menyebut pasal di luar faktanya: {bad_pasal}")
+        for m in periksa_modalitas(s.get("kalimat", ""), source):
+            problems.append(f"kalimat {i} mengubah daya ikat norma: {m}")
     for item in output.get("poin_kunci") or []:
         f = by_id.get(item.get("fakta"))
         if f is None:
@@ -159,6 +193,8 @@ def verify(output: dict[str, Any], facts: list[dict[str, Any]]) -> list[str]:
         extra = [n for n in _NUM.findall(item.get("parafrase", "")) if n not in set(_NUM.findall(f["teks"]))]
         if extra:
             problems.append(f"parafrase {item['fakta']} memuat angka baru: {extra}")
+        for m in periksa_modalitas(item.get("parafrase", ""), f["teks"]):
+            problems.append(f"parafrase {item['fakta']} mengubah daya ikat norma: {m}")
     return problems
 
 

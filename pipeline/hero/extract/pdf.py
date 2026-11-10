@@ -134,7 +134,17 @@ _LIGATURES = {
     "ﬄ": "ffl", "‘": "'", "’": "'", "“": '"',
     "”": '"', "–": "-", "—": "-", " ": " ",
 }
-_HYPHEN_BREAK = re.compile(r"(\w)-\s*\n\s*(\w)")
+# Pemenggalan di ujung baris disambung TANPA tanda hubung ("menyam-\npaikan" -> "menyampaikan"),
+# kecuali bila tanda hubungnya memang bagian dari katanya: kata ulang ("undang-undang",
+# "masing-masing", "sehari-hari") atau nama diri ("Undang-Undang"). Dulu semuanya disambung,
+# sehingga dasar hukum tertulis "UndangUndang" (temuan QA #5).
+_HYPHEN_BREAK = re.compile(r"(\w+)-[ \t]*\n[ \t]*(\w+)")
+
+
+def _sambung_penggalan(m: "re.Match[str]") -> str:
+    kiri, kanan = m.group(1), m.group(2)
+    ulang = kiri.lower() == kanan.lower() or (len(kanan) >= 4 and kiri.lower().endswith(kanan.lower()))
+    return f"{kiri}-{kanan}" if (kanan[:1].isupper() or ulang) else f"{kiri}{kanan}"
 _MULTI_BLANK = re.compile(r"\n{3,}")
 _TRAILING_WS = re.compile(r"[ \t]+\n")
 _MULTI_SPACE = re.compile(r"[ \t]{2,}")
@@ -148,7 +158,7 @@ def clean_text(text: str) -> str:
     for src, dst in _LIGATURES.items():
         text = text.replace(src, dst)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
-    text = _HYPHEN_BREAK.sub(r"\1\2", text)
+    text = _HYPHEN_BREAK.sub(_sambung_penggalan, text)
     text = _TRAILING_WS.sub("\n", text)
     text = _MULTI_SPACE.sub(" ", text)
     text = _MULTI_BLANK.sub("\n\n", text)

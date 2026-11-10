@@ -32,7 +32,7 @@ def test_modalitas_dikenai_menjadi_dapat_dikenai_terdeteksi():
                     [("F3", "Pelanggar dapat dikenai teguran tertulis.")])
     s = B.skor_keluaran(out, FAKTA)
     assert s["modalitas_bergeser"] == 2
-    assert any("'dapat' ditambahkan" in x for x in s["modalitas_rincian"])
+    assert any("menambahkan 'dapat'" in x for x in s["modalitas_rincian"])
 
 
 def test_kata_modal_yang_memang_ada_di_fakta_tidak_dihitung():
