@@ -355,7 +355,7 @@ def test_h06_dokumen_bukan_draft_ditolak(client: TestClient, db_session: Session
 
 
 def test_h07_draft_non_publik_auth_mati_ditolak_403(client: TestClient, db_session: Session, monkeypatch):
-    """H07: Draft non-publik saat login mati -> 403."""
+    """H07: Tanggapan harmonisasi pada draf kajian non-publik dapat diproses di Workspace (200)."""
     monkeypatch.setattr(settings, "auth_enabled", False)
     monkeypatch.setattr(settings, "protect_non_public_when_auth_disabled", True)
 
@@ -371,7 +371,10 @@ def test_h07_draft_non_publik_auth_mati_ditolak_403(client: TestClient, db_sessi
         f"/api/v1/documents/{draft_rahasia.id}/harmonisasi/tanggapan",
         json={"temuan": temuan_payload, "penilaian": "valid"},
     )
-    assert res.status_code == 403
+    assert res.status_code == 200
+    data = res.json()
+    assert data["penilaian"] == "valid"
+    assert data["document_id"] == draft_rahasia.id
 
 
 def test_h08_auth_aktif_peran_dan_penilai(client: TestClient, db_session: Session, monkeypatch):
@@ -1002,9 +1005,21 @@ def test_h13_rekap_respects_access_control(client: TestClient, db_session: Sessi
     data_global = res_rekap_global.json()
     assert data_global["total"]["valid"] == 1  # Hanya draft publik
 
-    # 2. Panggilan rekap dengan filter document_id draft_sec tanpa hak akses -> 403
+    # 2. Panggilan rekap dengan filter document_id draft_sec (draf kajian non-publik dapat diproses sesuai kebijakan baru) -> 200
     res_rekap_sec = client.get(f"/api/v1/harmonisasi/tanggapan/rekap?document_id={draft_sec.id}")
-    assert res_rekap_sec.status_code == 403
+    assert res_rekap_sec.status_code == 200
+    assert res_rekap_sec.json()["total"]["valid"] == 1
+
+    # 2b. Dokumen korpus non-publik tetap dilindungi ketat -> 403 saat diakses tanpa izin
+    corpus_sec = create_test_doc(
+        title="Corpus Rahasia H13",
+        document_role=PeranDokumen.corpus_eksisting,
+        access_classification=KlasifikasiAkses.non_publik,
+    )
+    db_session.add(corpus_sec)
+    db_session.commit()
+    res_rekap_corpus = client.get(f"/api/v1/harmonisasi/tanggapan/rekap?document_id={corpus_sec.id}")
+    assert res_rekap_corpus.status_code == 403
 
     # 3. Panggilan rekap dengan filter document_id draft_pub -> 200
     res_rekap_pub = client.get(f"/api/v1/harmonisasi/tanggapan/rekap?document_id={draft_pub.id}")
