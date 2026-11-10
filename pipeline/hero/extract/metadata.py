@@ -286,20 +286,59 @@ def _extract_issuer(head: str) -> str | None:
     return None
 
 
-def _detect_status(text: str, subject: str | None = None) -> str:
+# "Peraturan ini mulai berlaku pada tanggal 1 Januari 2027" / "… pada tanggal diundangkan" /
+# "Keputusan ini mulai berlaku pada tanggal ditetapkan". Hanya kalimat tentang dokumen itu sendiri
+# ("… ini"); "Pasal 5 mulai berlaku …" dan "Pada saat Peraturan ini mulai berlaku, …" tidak cocok.
+RE_BERLAKU = re.compile(
+    r"\bini\s+(?:mulai\s+)?berlaku\s+(?:efektif\s+)?(?:pada\s+|sejak\s+|mulai\s+)?(?:tanggal\s+|saat\s+)?([^.;]{0,70})",
+    re.IGNORECASE)
+RE_DIUNDANGKAN = re.compile(r"Diundangkan\s+di\s+[\w ]{2,30}?\s+pada\s+tanggal\s+([^\n]{0,40})", re.IGNORECASE)
+
+
+def _extract_effective_date(text: str, issued: date | None) -> date | None:
+    """Tanggal mulai berlaku dokumen ini bila TERTULIS; selain itu None — tidak pernah ditebak.
+
+    Kalimat terakhir yang terbaca menang: "Pasal 8 … mulai berlaku pada tanggal yang ditetapkan
+    dalam Peraturan ini" disusul "Pasal 9 … mulai berlaku pada tanggal 1 Januari 2027".
+    Durasi relatif ("6 bulan sejak diundangkan") sengaja tidak dihitung."""
+    flat = _norm_space(text or "")
+    hasil: date | None = None
+    for m in RE_BERLAKU.finditer(flat):
+        sisa = m.group(1).strip()
+        tgl = RE_DATE_LONG.match(sisa)
+        if tgl:
+            d = _parse_date(tgl.group(0))
+        elif re.match(r"diundangkan\b", sisa, re.IGNORECASE):
+            u = RE_DIUNDANGKAN.search(flat)
+            d = _parse_date(u.group(1)) if u else None
+        elif re.match(r"ditetapkan\b", sisa, re.IGNORECASE):
+            d = issued
+        else:
+            d = None
+        hasil = d or hasil
+    return hasil
+
+
+def _detect_status(text: str, subject: str | None = None, effective: date | None = None,
+                   today: date | None = None) -> str:
     """Status of *this* document, not of the ones it refers to.
 
     A regulation is an amendment only when its own TENTANG clause reads
     "PERUBAHAN ATAS ...". The preamble cites amendments to *other* regulations
     constantly, so it must not be consulted here.
-    """
+
+    Tanpa bukti hasilnya ``unknown`` — dulu bawaannya "berlaku", dan tebakan itu merembes ke layar
+    Analisa untuk dokumen yang backend sendiri tak tahu statusnya. Bukti keberlakuan satu-satunya
+    di sini adalah tanggal mulai berlaku yang tertulis (aturan yang sama dengan backend)."""
     tail = text[-3000:]
     if re.search(r"peraturan\s+ini\s+dinyatakan\s+(?:tidak\s+berlaku|dicabut)",
                  tail, re.IGNORECASE):
         return "dicabut"
     if subject and RE_DIUBAH.search(subject):
         return "diubah"
-    return "berlaku"
+    if effective:
+        return "berlaku" if effective <= (today or date.today()) else "belum_berlaku"
+    return "unknown"
 
 
 def _is_self(item: str, number: str | None, year: int | None) -> bool:
@@ -412,7 +451,8 @@ def extract_metadata(
         cands = [int(y) for y in RE_YEAR.findall(head)]
         md.year = max(cands) if cands else None
 
-    md.status = _detect_status(text, md.subject) if text else "unknown"
+    md.effective_date = _extract_effective_date(text, md.issued_date) if text else None
+    md.status = _detect_status(text, md.subject, md.effective_date) if text else "unknown"
     md.legal_basis = _extract_legal_basis(text, number=md.number, year=md.year)
 
     md.title = _build_title(md) or _clean_pdf_title(

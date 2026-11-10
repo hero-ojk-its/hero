@@ -33,7 +33,7 @@ from typing import Any
 
 from hero.extract.structure import DIKTUM_ORDINAL
 
-VERSION = "v2.3"
+VERSION = "v2.4"
 
 # Lower-case only, matched case-sensitively: Indonesian legislative drafting
 # writes obligations in lower case ("wajib menyampaikan") and defined terms in
@@ -499,7 +499,8 @@ def sanctions(points: list[Point]) -> list[str]:
 # Short summary: fixed template over the points — every sentence cited
 # ---------------------------------------------------------------------------
 _STATUS_PHRASE = {"berlaku": "masih berlaku", "diubah": "masih berlaku dengan perubahan",
-                  "dicabut": "sudah dicabut", "rancangan": "masih berupa rancangan"}
+                  "dicabut": "sudah dicabut", "rancangan": "masih berupa rancangan",
+                  "belum_berlaku": "belum berlaku"}
 
 
 def _clause(p: Point, marker: str, words: int = 22) -> str:
@@ -535,6 +536,18 @@ def _rank_for_summary(points: list[Point], top_subjects: list[str]) -> list[Poin
                                          _pasal_order(p.pasal)))
 
 
+_BULAN = ("Januari Februari Maret April Mei Juni Juli Agustus September Oktober November Desember").split()
+
+
+def _tanggal_id(iso: str) -> str:
+    """"2027-01-01" → "1 Januari 2027"."""
+    try:
+        t, b, h = (int(x) for x in str(iso)[:10].split("-"))
+        return f"{h} {_BULAN[b - 1]} {t}"
+    except (ValueError, IndexError):
+        return str(iso)
+
+
 def jenis_kata(ident: dict[str, Any]) -> str:
     """Kata benda dokumennya untuk kalimat ringkasan: "Keputusan ini", bukan selalu "Peraturan ini"."""
     jenis = (ident.get("jenis") or "").upper()
@@ -556,6 +569,8 @@ def compose_summary(ident: dict[str, Any], kerangka: list[dict[str, Any]], subje
                     "fakta": [p.id for p in pts]})
 
     status = _STATUS_PHRASE.get(ident.get("status") or "", "status berlakunya belum diketahui")
+    if ident.get("status") == "belum_berlaku" and ident.get("tanggal_berlaku"):
+        status += f", mulai berlaku {_tanggal_id(ident['tanggal_berlaku'])}"
     nomor = f" Nomor {ident['nomor']}" if ident.get("nomor") else ""
     add(f"{ident.get('jenis') or 'Peraturan'}{nomor} tentang {ident.get('tentang') or '—'} {status}.", [])
     kata = jenis_kata(ident)
@@ -635,6 +650,7 @@ def analyse(doc: sqlite3.Row, text: sqlite3.Row | None, articles: list[dict[str,
     ident = {"jenis": (doc["doc_type"] or "").upper() or None, "nomor": doc["number"], "tahun": doc["year"],
              "tentang": (view["tentang"] if view else None) or doc["subject"],
              "status": doc["reg_status"], "tanggal_terbit": doc["issued_date"],
+             "tanggal_berlaku": md.get("effective_date"),
              "penerbit": doc["issuing_body"],
              "jumlah_pasal": sum(1 for a in articles if re.fullmatch(r"\d+[A-Z]?", str(a["number"]))),
              "jumlah_diktum": sum(1 for a in articles if is_diktum(a["number"]))}

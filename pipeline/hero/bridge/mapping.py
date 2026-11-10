@@ -295,6 +295,8 @@ def extraction_payload(md, extraction, *, identity=None, quality: dict[str, Any]
         "regulation_number": _fit(md.number, BATAS_KOLOM["regulation_number"]),
         "regulation_type": _fit(md.doc_type, BATAS_KOLOM["regulation_type"]),
         "release_date": md.issued_date.isoformat() if isinstance(md.issued_date, date) else None,
+        # Backend menghitung ulang status_keberlakuan dari tanggal ini (aturan 5a) di PATCH yang sama.
+        "effective_date": md.effective_date.isoformat() if isinstance(getattr(md, "effective_date", None), date) else None,
         "extraction_method": "ocr" if from_ocr else "teks_langsung",
         "extraction_engine": _fit(engine, BATAS_KOLOM["extraction_engine"]),
         "confidence": field_confidence(
