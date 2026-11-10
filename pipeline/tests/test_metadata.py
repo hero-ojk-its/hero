@@ -56,7 +56,7 @@ def test_pojk_identity():
     assert md.issued_date == date(2026, 6, 15)
     assert md.issuing_body == "Otoritas Jasa Keuangan"
     assert md.subject.startswith("PELAPORAN INSIDENTAL")
-    assert md.status == "berlaku"
+    assert md.status == "unknown"       # tak ada tanggal mulai berlaku tertulis: tidak ditebak "berlaku"
     assert md.confidence >= 0.9
 
 

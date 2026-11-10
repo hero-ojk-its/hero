@@ -343,7 +343,9 @@ def classify(d_text: str, match: CorpusArticle, sim: float, explicit_keys: set[s
             return ("menggantikan", above,
                     f"objek sama dengan {match.pasal}, ketentuan berbeda ({'; '.join(diffs)}), "
                     f"dan draft secara eksplisit mengubah/mencabut peraturan tersebut", diffs)
-        if (match.status or "") in ("berlaku", "diubah", ""):
+        # "unknown" ikut: sebelum status bawaan "berlaku" dihapus, pembanding tanpa bukti status
+        # sudah dihitung sebagai berlaku; perilaku (dan recall M3) dipertahankan.
+        if (match.status or "") in ("berlaku", "diubah", "unknown", ""):
             return ("konflik", above * 0.9,
                     f"objek sama dengan {match.pasal}, ketentuan berbeda ({'; '.join(diffs)}), "
                     f"sedangkan peraturan pembanding masih berlaku dan tidak diubah/dicabut draft",

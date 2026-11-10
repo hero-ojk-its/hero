@@ -21,16 +21,18 @@ class RegulationMetadata:
     number_raw: str | None = None
     year: int | None = None
     issued_date: date | None = None
+    effective_date: date | None = None   # tanggal mulai berlaku yang TERTULIS di teks; None = tak tertulis
     issuing_body: str | None = None      # Otoritas Jasa Keuangan, Presiden RI...
-    status: str = "unknown"              # berlaku | dicabut | diubah | unknown
+    status: str = "unknown"              # berlaku | belum_berlaku | dicabut | diubah | unknown
     legal_basis: list[str] = field(default_factory=list)
     confidence: float = 0.0
     warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
-        if isinstance(self.issued_date, date):
-            d["issued_date"] = self.issued_date.isoformat()
+        for kunci in ("issued_date", "effective_date"):
+            if isinstance(getattr(self, kunci), date):
+                d[kunci] = getattr(self, kunci).isoformat()
         return d
 
 

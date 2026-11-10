@@ -203,6 +203,13 @@ def ulang_ekstraksi(
                                                 help="ID dokumen backend (boleh berulang)."),
     semua: bool = typer.Option(False, "--semua",
                                help="Semua dokumen yang pernah selesai diekstraksi di worker ini."),
+    sebelum: Optional[str] = typer.Option(
+        None, "--sebelum", help="Pilih dari Postgres: dokumen terakhir diekstraksi SEBELUM waktu ini "
+                                "(ISO, mis. 2026-11-10T12:00; waktu kode baru dipasang)."),
+    tanpa_tanggal: bool = typer.Option(False, "--tanpa-tanggal",
+                                       help="Dengan --sebelum: hanya dokumen yang tanggal berlakunya masih kosong."),
+    jenis: Optional[list[str]] = typer.Option(None, "--jenis", help="Dengan --sebelum: jenis peraturan (KEPDK, SEOJK, …)."),
+    maks: int = typer.Option(100, "--maks", min=1, help="Dengan --sebelum: batas dokumen per jalan (per batch)."),
     yakin: bool = typer.Option(False, "--yakin", help="Jalankan; tanpa ini hanya menampilkan rencana."),
     config: Path = CONFIG_OPT,
 ) -> None:
@@ -214,13 +221,21 @@ def ulang_ekstraksi(
     from hero.bridge.client import BackendClient, BackendError
     from hero.bridge.state import BridgeState, default_path
 
-    if not dokumen and not semua:
-        console.print("[red]sebutkan --dokumen ID atau --semua[/]")
+    if not dokumen and not semua and not sebelum:
+        console.print("[red]sebutkan --dokumen ID, --semua, atau --sebelum WAKTU[/]")
         raise typer.Exit(2)
     settings, bridge = _ctx(config)
     st = BridgeState(default_path(settings))
     try:
-        ids = sorted(set(dokumen or [])) if dokumen else st.dokumen_selesai()
+        if sebelum:
+            from datetime import datetime
+
+            from hero.bridge.sync import id_dokumen_untuk_ulang
+
+            ids = id_dokumen_untuk_ulang(sebelum=datetime.fromisoformat(sebelum), tanpa_tanggal=tanpa_tanggal,
+                                         jenis=jenis or (), maks=maks)
+        else:
+            ids = sorted(set(dokumen or [])) if dokumen else st.dokumen_selesai()
         console.print(f"{len(ids)} dokumen akan diantre ulang"
                       + ("" if yakin else " [dim](rencana saja; tambahkan --yakin)[/]"))
         if not yakin or not ids:

@@ -48,6 +48,7 @@ Pasal 2
 
 Pasal 3
 {subjek} yang melanggar ketentuan dikenai sanksi administratif berupa teguran tertulis.
+Peraturan ini mulai berlaku pada tanggal ditetapkan.
 
 Ditetapkan di Jakarta
 pada tanggal 3 Maret {tahun}

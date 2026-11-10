@@ -21,6 +21,7 @@ perangkat teknologi informasi.
 Pasal 2
 (1) Bank wajib menerapkan manajemen risiko teknologi informasi.
 (2) Bank dilarang mengalihkan tanggung jawab sebagaimana dimaksud pada ayat (1).
+Peraturan ini mulai berlaku pada tanggal ditetapkan.
 
 Ditetapkan di Jakarta
 pada tanggal 3 Maret 2026
