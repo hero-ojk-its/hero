@@ -276,6 +276,39 @@ def _pilah_galat_gemini(exc: BaseException) -> str:
     return f"Galat API Google AI {kode or '?'}"
 
 
+def gemini_minta(client, model: str, user: str, *, suhu: float | None = 0.0,
+                 berpikir: dict[str, Any] | None = None, batas_keluaran: int | None = None):
+    """Satu panggilan Gemini dengan konfigurasi produksi. Dipakai juga oleh
+    ``hero bench-ai`` supaya yang diukur benchmark persis yang dijalankan produksi."""
+    config: dict[str, Any] = {
+        "system_instruction": SYSTEM_PROMPT,
+        "response_mime_type": "application/json",
+        # Gemini menolak 'additionalProperties', jadi dibuang di sini.
+        "response_schema": _tanpa_additional_properties(OUTPUT_SCHEMA),
+    }
+    # Parafrase fakta, bukan karangan: jangan beri ruang kreatif.
+    if suhu is not None:
+        config["temperature"] = suhu
+    if berpikir:
+        config["thinking_config"] = berpikir
+    if batas_keluaran:
+        config["max_output_tokens"] = batas_keluaran
+    return client.models.generate_content(model=model, contents=user, config=config)
+
+
+def usage_gemini(response) -> dict[str, Any]:
+    """Pemakaian token. ``thinking_tokens`` ditagih sebagai keluaran tetapi TIDAK
+    termasuk ``candidates_token_count``; tanpa ini biaya terbaca terlalu kecil."""
+    meta = getattr(response, "usage_metadata", None)
+    return {
+        "input_tokens": getattr(meta, "prompt_token_count", None),
+        "output_tokens": getattr(meta, "candidates_token_count", None),
+        "thinking_tokens": getattr(meta, "thoughts_token_count", None),
+        "cache_read_input_tokens": getattr(meta, "cached_content_token_count", None),
+        "cache_creation_input_tokens": None,
+    }
+
+
 class AiNarrator:
     def __init__(self, settings: AnalysisSettings, client: Any | None = None):
         self.settings = settings
@@ -426,28 +459,11 @@ class AiNarrator:
         err = _sdk_errors(GEMINI)
         s = self.settings
         try:
-            response = client.models.generate_content(
-                model=s.ai_model,
-                contents=user,
-                config={
-                    "system_instruction": SYSTEM_PROMPT,
-                    "response_mime_type": "application/json",
-                    # Gemini menolak 'additionalProperties', jadi dibuang di sini.
-                    "response_schema": _tanpa_additional_properties(OUTPUT_SCHEMA),
-                    # Parafrase fakta, bukan karangan: jangan beri ruang kreatif.
-                    "temperature": 0,
-                },
-            )
+            response = gemini_minta(client, s.ai_model, user)
         except err["status"] as exc:
             return None, {}, None, _pilah_galat_gemini(exc)
 
-        meta = getattr(response, "usage_metadata", None)
-        usage = {
-            "input_tokens": getattr(meta, "prompt_token_count", None),
-            "output_tokens": getattr(meta, "candidates_token_count", None),
-            "cache_read_input_tokens": getattr(meta, "cached_content_token_count", None),
-            "cache_creation_input_tokens": None,
-        }
+        usage = usage_gemini(response)
         model = getattr(response, "model_version", None) or s.ai_model
         alasan = _finish_reason_gemini(response)
         if alasan is not None:

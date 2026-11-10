@@ -1155,3 +1155,105 @@ def test_lupakan_kiriman_membuat_dokumen_dikirim_ulang(tmp_path):
     assert st.articles_already_sent(5, "h") == 0
     assert st.dokumen_selesai() == []
     st.close()
+
+
+# ---------------------------------------------------------------------------
+# Sinkron otomatis saat analisa (insiden dokumen 2006, 9 Nov 2026)
+#
+# Dokumen yang baru diekstraksi menjawab 404 "belum tercermin" sampai timer
+# `hero bridge sinkron` berputar lagi. Kini permintaan menyalin dokumen itu sendiri.
+# ---------------------------------------------------------------------------
+class _Lap:
+    def __init__(self, pasal=0, tanpa_teks=0, galat=None):
+        self.pasal, self.dilewati_tanpa_teks, self.galat = pasal, tanpa_teks, galat or []
+
+
+def _ml_dengan_mirror(tmp_settings, monkeypatch, fungsi):
+    from hero.bridge.ml_api import MlState
+
+    monkeypatch.delenv("HERO_ML_SINKRON_OTOMATIS", raising=False)
+    ml = MlState(tmp_settings, BridgeSettings(embedder="none"))
+    ml._mirror = fungsi
+    return ml
+
+
+def test_dokumen_belum_tercermin_disalin_lalu_dipetakan(tmp_settings, monkeypatch):
+    panggilan = []
+
+    def mirror(settings, **kw):
+        panggilan.append(kw)
+        ml.state.map_document(2006, "be-2006", "h" * 64)
+        return _Lap(pasal=7)
+
+    ml = _ml_dengan_mirror(tmp_settings, monkeypatch, mirror)
+    assert ml.ensure_mapped(2006) == ("be-2006", None)
+    assert panggilan == [{"document_ids": [2006], "include_drafts": True}]
+    # Pemanggilan kedua tidak menyalin lagi.
+    assert ml.ensure_mapped(2006) == ("be-2006", None)
+    assert len(panggilan) == 1
+
+
+def test_dokumen_yang_sudah_terpeta_tak_menyentuh_postgres(tmp_settings, monkeypatch):
+    def mirror(*a, **k):
+        raise AssertionError("tidak boleh menyalin dokumen yang sudah terpeta")
+
+    ml = _ml_dengan_mirror(tmp_settings, monkeypatch, mirror)
+    ml.state.map_document(5, "be-5", "a" * 64)
+    assert ml.ensure_mapped(5) == ("be-5", None)
+
+
+def test_dokumen_belum_diekstraksi_dijelaskan_bukan_sekadar_404(tmp_settings, monkeypatch):
+    ml = _ml_dengan_mirror(tmp_settings, monkeypatch, lambda s, **k: _Lap(tanpa_teks=1))
+    doc_id, alasan = ml.ensure_mapped(131)
+    assert doc_id is None and "belum diekstraksi" in alasan
+
+
+def test_postgres_mati_tidak_menjatuhkan_layanan(tmp_settings, monkeypatch):
+    def mirror(*a, **k):
+        raise RuntimeError("connection refused")
+
+    ml = _ml_dengan_mirror(tmp_settings, monkeypatch, mirror)
+    doc_id, alasan = ml.ensure_mapped(9)
+    assert doc_id is None and "RuntimeError" in alasan and "connection refused" in alasan
+
+
+def test_sinkron_otomatis_bisa_dimatikan(tmp_settings, monkeypatch):
+    def mirror(*a, **k):
+        raise AssertionError("dimatikan lewat env, tidak boleh menyalin")
+
+    ml = _ml_dengan_mirror(tmp_settings, monkeypatch, mirror)
+    monkeypatch.setenv("HERO_ML_SINKRON_OTOMATIS", "0")
+    assert ml.ensure_mapped(9) == (None, None)
+
+
+def test_dua_permintaan_serentak_menyalin_sekali(tmp_settings, monkeypatch):
+    import threading
+    import time
+
+    jumlah = []
+
+    def mirror(settings, **kw):
+        jumlah.append(1)
+        time.sleep(0.15)                          # beri waktu utas kedua menunggu di kunci
+        ml.state.map_document(77, "be-77", "b" * 64)
+        return _Lap(pasal=1)
+
+    ml = _ml_dengan_mirror(tmp_settings, monkeypatch, mirror)
+    hasil = []
+    ts = [threading.Thread(target=lambda: hasil.append(ml.ensure_mapped(77))) for _ in range(4)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert hasil == [("be-77", None)] * 4
+    assert len(jumlah) == 1
+
+
+def test_404_menyebut_penyebab(tmp_settings, monkeypatch):
+    from fastapi import HTTPException
+
+    from hero.bridge.ml_api import _require_mapped
+
+    ml = _ml_dengan_mirror(tmp_settings, monkeypatch, lambda s, **k: _Lap(tanpa_teks=1))
+    with pytest.raises(HTTPException) as e:
+        _require_mapped(ml, 131)
+    assert e.value.status_code == 404
+    assert "belum diekstraksi" in e.value.detail and "hero bridge sinkron --dokumen 131" in e.value.detail
