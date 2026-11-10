@@ -289,6 +289,13 @@ def _sdk_errors(provider: str = ANTHROPIC) -> dict[str, type[BaseException] | tu
             "koneksi": anthropic.APIConnectionError}
 
 
+def _batas_waktu(exc: BaseException) -> bool:
+    """Apakah galat ini batas waktu klien? Dikenali dari nama kelasnya, bukan isinya, karena
+    SDK membungkus httpx/anyio dengan kelas yang berbeda-beda antarversi."""
+    nama = f"{type(exc).__module__}.{type(exc).__name__}".lower()
+    return "timeout" in nama or "timeout" in str(exc).lower()[:120]
+
+
 def _pilah_galat_gemini(exc: BaseException) -> str:
     """Pesan yang bisa dibaca manusia dari satu APIError Google.
 
@@ -312,8 +319,21 @@ def _pilah_galat_gemini(exc: BaseException) -> str:
     return f"Galat API Google AI {kode or '?'}"
 
 
+def thinking_config(budget: int | None = None, level: str = "") -> dict[str, Any] | None:
+    """``thinking_config`` Gemini dari dua tuas konfigurasi; None = bawaan model.
+
+    ``budget`` menang atas ``level`` bila keduanya diisi, karena ia yang eksplisit dalam token.
+    ``budget=0`` mematikan berpikir — itu nilai yang sah, jadi dibedakan dari None."""
+    if budget is not None:
+        return {"thinking_budget": int(budget)}
+    if (level or "").strip():
+        return {"thinking_level": level.strip().upper()}
+    return None
+
+
 def gemini_minta(client, model: str, user: str, *, suhu: float | None = 0.0,
-                 berpikir: dict[str, Any] | None = None, batas_keluaran: int | None = None):
+                 berpikir: dict[str, Any] | None = None, batas_keluaran: int | None = None,
+                 batas_detik: float | None = None):
     """Satu panggilan Gemini dengan konfigurasi produksi. Dipakai juga oleh
     ``hero bench-ai`` supaya yang diukur benchmark persis yang dijalankan produksi."""
     config: dict[str, Any] = {
@@ -328,7 +348,11 @@ def gemini_minta(client, model: str, user: str, *, suhu: float | None = 0.0,
     if berpikir:
         config["thinking_config"] = berpikir
     if batas_keluaran:
-        config["max_output_tokens"] = batas_keluaran
+        config["max_output_tokens"] = int(batas_keluaran)
+    if batas_detik and batas_detik > 0:
+        # SDK Google meminta milidetik; batas ini menutup kasus permintaan menggantung,
+        # yang di layar Analisa tampak sebagai analisa yang tak pernah selesai.
+        config["http_options"] = {"timeout": int(batas_detik * 1000)}
     return client.models.generate_content(model=model, contents=user, config=config)
 
 
@@ -495,9 +519,18 @@ class AiNarrator:
         err = _sdk_errors(GEMINI)
         s = self.settings
         try:
-            response = gemini_minta(client, s.ai_model, user)
+            response = gemini_minta(
+                client, s.ai_model, user,
+                berpikir=thinking_config(getattr(s, "ai_thinking_budget", None),
+                                         getattr(s, "ai_thinking_level", "")),
+                batas_keluaran=getattr(s, "ai_max_output_tokens", 0) or None,
+                batas_detik=getattr(s, "ai_timeout", 0) or None)
         except err["status"] as exc:
             return None, {}, None, _pilah_galat_gemini(exc)
+        except Exception as exc:                      # noqa: BLE001 — batas waktu klien, DNS, soket
+            if _batas_waktu(exc):
+                return None, {}, None, f"Batas waktu {s.ai_timeout:g} detik terlampaui"
+            raise
 
         usage = usage_gemini(response)
         model = getattr(response, "model_version", None) or s.ai_model

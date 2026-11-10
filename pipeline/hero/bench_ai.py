@@ -40,8 +40,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Callable
 
-from hero.analysis.ai import (_finish_reason_gemini, build_facts, gemini_minta, periksa_modalitas,
-                              usage_gemini, verify)
+from hero.analysis.ai import (_finish_reason_gemini, build_facts, gemini_minta, periksa_modalitas,thinking_config,usage_gemini, verify)
 
 # ---------------------------------------------------------------------------
 # Harga — USD per 1 juta token, kelas Standard berbayar.
@@ -180,6 +179,7 @@ class Varian:
     suhu: float | None = 0.0
     berpikir: dict[str, Any] | None = None         # diteruskan apa adanya sebagai thinking_config
     batas_keluaran: int | None = None
+    batas_detik: float | None = None
 
     @property
     def label(self) -> str:
@@ -190,13 +190,16 @@ class Varian:
             sfx.append("berpikir=" + json.dumps(self.berpikir, separators=(",", ":")))
         if self.batas_keluaran:
             sfx.append(f"maks={self.batas_keluaran}")
+        if self.batas_detik:
+            sfx.append(f"batas={self.batas_detik:g}s")
         return self.model + (f" [{', '.join(sfx)}]" if sfx else "")
 
 
 def panggil_gemini(client: Any, v: Varian, user: str) -> dict[str, Any]:
     t0 = time.perf_counter()
     try:
-        r = gemini_minta(client, v.model, user, suhu=v.suhu, berpikir=v.berpikir, batas_keluaran=v.batas_keluaran)
+        r = gemini_minta(client, v.model, user, suhu=v.suhu, berpikir=v.berpikir,
+                         batas_keluaran=v.batas_keluaran, batas_detik=v.batas_detik)
     except Exception as exc:                                # noqa: BLE001 — setiap galat adalah data benchmark
         return {"galat": f"{type(exc).__name__}: {str(exc)[:300]}", "detik": time.perf_counter() - t0}
     u = usage_gemini(r)
@@ -266,6 +269,7 @@ def ringkas(varian: Varian, runs: list[dict[str, Any]], *, korpus: int) -> dict[
         "usd_per_1000_dokumen": round(usd * 1000, 3) if usd is not None else None,
         "usd_seluruh_korpus": round(usd * korpus, 2) if usd is not None else None,
         "lulus_verifikasi": round(sum(1 for r in ok if r.get("lulus_verifikasi")) / len(runs), 3) if runs else None,
+        "terpotong": sum(1 for r in runs if "terpotong" in str(r.get("galat") or "").lower()),
         "cakupan_poin": _skor_agg(ok, "cakupan_poin"), "cakupan_kategori": _skor_agg(ok, "cakupan_kategori"),
         "recall_butir": _skor_agg(ok, "recall_butir"), "recall_butir_ringkasan": _skor_agg(ok, "recall_butir_ringkasan"),
         "modalitas_bergeser": _skor_agg(ok, "modalitas_bergeser"), "kebaruan": _skor_agg(ok, "kebaruan"),
