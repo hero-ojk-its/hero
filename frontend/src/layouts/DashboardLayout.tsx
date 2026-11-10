@@ -223,10 +223,12 @@ export default function DashboardLayout() {
             <nav className="space-y-1 px-2" aria-label="Menu utama">
               {navItems.map((item) => {
                 const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
+                const isAnalisa = item.path === '/analisa';
                 return (
                   <Link
                     key={item.name}
                     to={item.path}
+                    state={isAnalisa ? { fromSidebar: true } : undefined}
                     title={collapsed ? item.name : undefined}
                     aria-label={item.name}
                     className={`relative flex items-center rounded-md transition-all overflow-hidden ${

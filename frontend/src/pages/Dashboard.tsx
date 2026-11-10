@@ -22,8 +22,6 @@ import {
 import { gayaStatusKeberlakuan, labelStatusKeberlakuan } from '../lib/labelStatus';
 import { LoadingState } from '../components/LoadingState';
 import { ErrorState } from '../components/ErrorState';
-import { PanelErrorBoundary } from '../components/PanelErrorBoundary';
-import CorongIngestCard from '../components/dashboard/CorongIngestCard';
 
 // Data statis untuk mode contoh (fallback saat API tidak aktif)
 const mockStatData = {
@@ -421,13 +419,6 @@ export default function Dashboard() {
             </div>
           </div>
         </>
-      )}
-
-      {/* Corong ingest: fetch, galat, dan muat ulang sendiri, lepas dari ringkasan dashboard */}
-      {isApiConfigured && (
-        <PanelErrorBoundary nama="Corong Ingest">
-          <CorongIngestCard />
-        </PanelErrorBoundary>
       )}
 
       {(!loading || summary) && !error && (

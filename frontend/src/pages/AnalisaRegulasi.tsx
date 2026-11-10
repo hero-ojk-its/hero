@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useLocation } from 'react-router-dom';
 import {
   UploadCloud,
   FileText,
@@ -48,6 +48,7 @@ import AnalysisHistory from '../components/analisa/AnalysisHistory';
 
 export default function AnalisaRegulasi() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
 
   // State Deep Linking URL
   const paramDocId = searchParams.get('documentId');
@@ -139,7 +140,8 @@ export default function AnalisaRegulasi() {
   const [pollingTimeoutOccurred, setPollingTimeoutOccurred] = useState<boolean>(false);
 
   // 6. State Pemulihan Workspace (Pekerjaan B)
-  const [isRestoringWorkspace, setIsRestoringWorkspace] = useState<boolean>(true);
+  const isFromSidebarNav = Boolean((location.state as { fromSidebar?: boolean })?.fromSidebar);
+  const [isRestoringWorkspace, setIsRestoringWorkspace] = useState<boolean>(!isFromSidebarNav && activeDocumentId === null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
 
   // Hook Polling Status Dokumen Backend (Interval 2s, tanpa batas waktu: dokumen tebal tetap dipantau sampai selesai)
@@ -243,6 +245,18 @@ export default function AnalisaRegulasi() {
 
   // Efek Pemulihan Workspace Analisa Regulasi (Pekerjaan B)
   useEffect(() => {
+    const fromSidebar = Boolean((location.state as { fromSidebar?: boolean })?.fromSidebar);
+    if (fromSidebar) {
+      setUploadedDocumentId(null);
+      setSelectedFile(null);
+      setUploadError(null);
+      setIsPollingActive(false);
+      setRestoreError(null);
+      setIsRestoringWorkspace(false);
+    }
+  }, [location.state]);
+
+  useEffect(() => {
     let isCancelled = false;
 
     const restoreWorkspace = async () => {
@@ -257,7 +271,14 @@ export default function AnalisaRegulasi() {
         return;
       }
 
-      // 2. Jika URL tidak punya documentId, periksa apakah ada session yang tersimpan
+      // 2. Jika navigasi berasal dari sidebar, jangan ambil documentId dari sessionStorage (fresh navigation ke upload/pilih draft)
+      const fromSidebar = Boolean((location.state as { fromSidebar?: boolean })?.fromSidebar);
+      if (fromSidebar) {
+        setIsRestoringWorkspace(false);
+        return;
+      }
+
+      // 3. Jika URL tidak punya documentId, periksa apakah ada session yang tersimpan
       const stored = getStoredAnalisaWorkspace();
       if (!stored || !stored.documentId) {
         setIsRestoringWorkspace(false);

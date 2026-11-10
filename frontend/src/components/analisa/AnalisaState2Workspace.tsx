@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   FileText,
   ExternalLink,
   Check,
   ChevronDown,
+  ChevronRight,
   ZoomIn,
   ZoomOut,
   Scale,
@@ -1252,37 +1253,38 @@ export default function AnalisaState2Workspace({
   return (
     <div className="w-full space-y-3 pb-8 font-sans">
       {/* 1. Header Workspace Breadcrumb */}
-      <div className="flex items-center text-xs font-semibold tracking-wider text-gray-500 flex-wrap">
-        <button 
-          type="button"
-          onClick={onBackToState1}
-          className="hover:text-red-700 transition cursor-pointer"
+      <div className="flex items-center gap-1.5 text-xs font-semibold tracking-wider text-gray-500 uppercase flex-wrap">
+        <Link
+          to="/"
+          className="hover:text-red-700 transition cursor-pointer hover:underline"
+          title="Kembali ke Dashboard Utama"
         >
           DASHBOARD
-        </button>
-        <span className="mx-2 text-gray-400">&gt;</span>
-        <button 
+        </Link>
+        <ChevronRight size={12} className="text-gray-400 shrink-0" />
+        <button
           type="button"
           onClick={onBackToState1}
-          className="hover:text-red-700 transition cursor-pointer"
+          className="hover:text-red-700 transition cursor-pointer hover:underline uppercase"
+          title="Kembali ke formulir upload dan daftar draft regulasi"
         >
           ANALISA REGULASI
         </button>
         {onBackToSummary && (
           <>
-            <span className="mx-2 text-gray-400">&gt;</span>
+            <ChevronRight size={12} className="text-gray-400 shrink-0" />
             <button
               type="button"
               onClick={onBackToSummary}
-              className="hover:text-red-700 transition cursor-pointer text-gray-700 font-bold"
+              className="hover:text-red-700 transition cursor-pointer hover:underline text-gray-700 font-bold uppercase"
               title="Kembali ke Ringkasan Eksekutif & Key Takeaways"
             >
               SUMMARY
             </button>
           </>
         )}
-        <span className="mx-2 text-gray-400">&gt;</span>
-        <span className="text-red-700 uppercase">WORKSPACE ANALISA</span>
+        <ChevronRight size={12} className="text-gray-400 shrink-0" />
+        <span className="text-red-700 font-bold uppercase">ANALISA REGULASI</span>
       </div>
 
       {/* 2. Top Header Title & Actions */}

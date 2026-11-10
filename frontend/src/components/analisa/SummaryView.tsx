@@ -9,7 +9,8 @@
  * 5. Tombol utama di footer: "Lanjutkan Analisa" untuk beralih ke Workspace Analisa Regulasi lengkap.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import {
   FileText,
   Sparkles,
@@ -26,6 +27,8 @@ import {
   getMlAnalisaViaJob,
   getDocumentStatus,
   checkMlHealth,
+  parsePasalRef,
+  normalisasiRingkasanAi,
   type MlAnalisaResponse,
   type MlAnalisaPoint,
   type DocumentStatusResponse,
@@ -242,26 +245,92 @@ export default function SummaryView({
     };
   }, [isResizing]);
 
-  // 4. Lompat ke Pasal Tertentu di Panel Kiri
+  // Timer untuk reset highlight pasal target
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Bersihkan timer saat unmount
+  useEffect(() => {
+    return () => {
+      if (highlightTimerRef.current) {
+        clearTimeout(highlightTimerRef.current);
+      }
+    };
+  }, []);
+
+  // 4. Lompat ke Pasal Tertentu di Panel Kiri dengan Smooth Scroll & Highlight
   const handleJumpToPasal = useCallback((pasalStr: string) => {
+    // Alihkan otomatis tab mobile ke naskah jika sedang di layar kecil
+    setMobileActiveTab('naskah');
+    // Alihkan otomatis ke mode teks agar pasal dapat disorot
     setViewMode('teks');
     setActivePasalRef(pasalStr);
 
-    // Cari elemen pasal berdasarkan string (mis. "Pasal 3")
-    const cleanKey = pasalStr.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const targetElement = Object.entries(articleRefs.current).find(([key]) => {
-      const k = key.toLowerCase().replace(/[^a-z0-9]/g, '');
-      return k.includes(cleanKey) || cleanKey.includes(k);
-    })?.[1];
-
-    if (targetElement) {
-      targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (highlightTimerRef.current) {
+      clearTimeout(highlightTimerRef.current);
     }
+    // Highlight aktif selama 4.5 detik
+    highlightTimerRef.current = setTimeout(() => {
+      setActivePasalRef(null);
+    }, 4500);
+
+    // Cari elemen pasal berdasarkan parsePasalRef
+    const parsedTarget = parsePasalRef(pasalStr);
+    const targetNum = parsedTarget.pasalNum?.toLowerCase();
+
+    // Beri sedikit jeda agar DOM ter-mount bila ada peralihan view
+    setTimeout(() => {
+      let targetElement: HTMLElement | null = null;
+      if (targetNum) {
+        for (const [key, el] of Object.entries(articleRefs.current)) {
+          if (el && parsePasalRef(key).pasalNum?.toLowerCase() === targetNum) {
+            targetElement = el;
+            break;
+          }
+        }
+      }
+
+      if (!targetElement && targetNum) {
+        targetElement = document.querySelector(`[data-pasal-num="${targetNum}"]`) as HTMLElement;
+      }
+
+      if (targetElement) {
+        targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 120);
   }, []);
 
   // Data aktif yang ditampilkan (AI bila diaktifkan dan tersedia, atau Deterministik)
   const activeData: MlAnalisaResponse | null = aiEnabled && aiData ? aiData : data;
   const isAiActive = aiEnabled && Boolean(aiData?.mode_dipakai === 'ai');
+
+  // Hitung jumlah kata ringkasan yang sedang tampil (sinkron antara Deterministik dan AI)
+  const displayedWordCount = useMemo(() => {
+    const countWords = (str: string | null | undefined): number => {
+      if (!str) return 0;
+      return str.trim().split(/\s+/).filter(Boolean).length;
+    };
+
+    if (isAiActive) {
+      const aiSentences = normalisasiRingkasanAi(activeData?.ringkasan_ai ?? activeData?.ai?.ringkasan);
+      const aiText = aiSentences.map((s) => s.kalimat).join(' ');
+      if (aiText.trim()) return countWords(aiText);
+      if (typeof activeData?.metrik?.kata_ringkasan === 'number' && activeData.metrik.kata_ringkasan > 0) {
+        return activeData.metrik.kata_ringkasan;
+      }
+      return 0;
+    }
+
+    // Mode Deterministik
+    const detSentences = Array.isArray(activeData?.ringkasan)
+      ? activeData.ringkasan.map((s) => s.kalimat).join(' ')
+      : '';
+    const detText = detSentences || activeData?.ringkasan_teks || '';
+    if (detText.trim()) return countWords(detText);
+    if (typeof activeData?.metrik?.kata_ringkasan === 'number' && activeData.metrik.kata_ringkasan > 0) {
+      return activeData.metrik.kata_ringkasan;
+    }
+    return 0;
+  }, [isAiActive, activeData]);
 
   // Daftar poin utama
   const poinUtama: MlAnalisaPoint[] = activeData?.poin_utama || [];
@@ -271,12 +340,25 @@ export default function SummaryView({
       {/* 1. Header Bar: Breadcrumb, Info Dokumen, & Tombol Tahap */}
       <div className="bg-white rounded-xl shadow-xs border border-gray-200/80 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1 min-w-0">
-          <div className="flex items-center gap-2 text-xs font-semibold tracking-wider text-gray-500 uppercase">
-            <span className="hover:text-red-700 transition">Dashboard</span>
-            <ChevronRight size={12} className="text-gray-400" />
-            <span className="hover:text-red-700 transition">Analisa Regulasi</span>
-            <ChevronRight size={12} className="text-gray-400" />
-            <span className="text-red-700 font-bold">Summary</span>
+          <div className="flex items-center gap-1.5 text-xs font-semibold tracking-wider text-gray-500 uppercase flex-wrap">
+            <Link
+              to="/"
+              className="hover:text-red-700 transition cursor-pointer hover:underline"
+              title="Kembali ke Dashboard Utama"
+            >
+              Dashboard
+            </Link>
+            <ChevronRight size={12} className="text-gray-400 shrink-0" />
+            <button
+              type="button"
+              onClick={onBackToState1}
+              className="hover:text-red-700 transition cursor-pointer hover:underline uppercase"
+              title="Kembali ke formulir upload dan daftar draft regulasi"
+            >
+              Analisa Regulasi
+            </button>
+            <ChevronRight size={12} className="text-gray-400 shrink-0" />
+            <span className="text-red-700 font-bold uppercase">Summary</span>
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
@@ -302,11 +384,11 @@ export default function SummaryView({
           <button
             type="button"
             onClick={onBackToState1}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 shadow-2xs transition-colors cursor-pointer"
-            title="Unggah berkas draf lain"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 shadow-2xs hover:border-gray-400 transition-colors cursor-pointer"
+            title="Ganti dokumen draft regulasi"
           >
-            <ArrowLeft size={13} />
-            <span>Unggah Lain</span>
+            <ArrowLeft size={13} className="text-gray-600" />
+            <span>Ganti Dokumen</span>
           </button>
 
           <button
@@ -442,23 +524,36 @@ export default function SummaryView({
               <div className="space-y-4">
                 {docStatus?.articles && docStatus.articles.length > 0 ? (
                   docStatus.articles.map((art) => {
-                    const isTarget = activePasalRef && art.article_number.toLowerCase().includes(activePasalRef.toLowerCase());
+                    const parsedArt = parsePasalRef(art.article_number);
+                    const artPasalNum = parsedArt.pasalNum?.toLowerCase() || null;
+                    const parsedTarget = activePasalRef ? parsePasalRef(activePasalRef) : null;
+                    const targetPasalNum = parsedTarget?.pasalNum?.toLowerCase() || null;
+                    const isTarget = Boolean(targetPasalNum && artPasalNum && targetPasalNum === artPasalNum);
+
                     return (
                       <div
                         key={art.id || art.article_number}
+                        data-pasal-num={artPasalNum || undefined}
                         ref={(el) => {
                           articleRefs.current[art.article_number] = el;
                         }}
-                        className={`p-4 rounded-xl border transition duration-200 ${
+                        className={`p-4 rounded-xl border transition-all duration-300 ${
                           isTarget
-                            ? 'bg-amber-50/70 border-amber-300 ring-2 ring-amber-200'
+                            ? 'bg-amber-50/95 border-amber-400 ring-4 ring-amber-300/60 shadow-md scale-[1.01]'
                             : 'bg-white border-gray-200 hover:border-gray-300'
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-gray-100">
-                          <span className="font-mono text-xs font-bold text-red-700">
-                            {art.article_number}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold text-red-700">
+                              {art.article_number}
+                            </span>
+                            {isTarget && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-200 text-amber-900 animate-pulse">
+                                Target Rujukan
+                              </span>
+                            )}
+                          </div>
                           {art.chapter_title && (
                             <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider truncate max-w-[240px]">
                               {art.chapter_title}
@@ -521,9 +616,9 @@ export default function SummaryView({
                   }`}>
                     {isAiActive ? 'Mode AI Aktif' : 'Mode Deterministik'}
                   </span>
-                  {activeData?.metrik?.kata_ringkasan && (
+                  {displayedWordCount > 0 && (
                     <span className="text-[10px] text-gray-500 font-medium">
-                      • {activeData.metrik.kata_ringkasan} kata
+                      • {displayedWordCount} kata
                     </span>
                   )}
                 </div>
