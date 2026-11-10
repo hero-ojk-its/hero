@@ -348,7 +348,10 @@ def _is_self(item: str, number: str | None, year: int | None) -> bool:
     m = re.search(r"nomor\s+([0-9a-z./\-]+)(?:\s+tahun\s+((?:19|20)\d{2}))?", item, re.IGNORECASE)
     if not m:
         return False
-    if m.group(1).lower().strip("./-") != re.sub(r"\s+", "", str(number)).lower().strip("./-"):
+    got = m.group(1).lower().strip("./-")
+    own = re.sub(r"\s+", "", str(number)).lower().strip("./-")
+    # Judul kop memakai nomor polos ("NOMOR 512") sedangkan nomor dokumen lengkap ("512/KMK.06/2002").
+    if got != own and not own.startswith(got + "/"):
         return False
     return not (m.group(2) and year and int(m.group(2)) != int(year))
 

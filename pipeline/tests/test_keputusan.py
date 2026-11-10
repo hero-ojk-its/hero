@@ -132,3 +132,11 @@ def test_rujukan_penerbit_tak_dikenal_tidak_dibuang():
     r = _ref_penerbit("Peraturan Badan Siber dan Sandi Negara Nomor 1 Tahun 2024")
     assert (r.key, r.jenis, r.tahun) == ("BSSN|1|2024", "BSSN", 2024)
     assert _ref_penerbit("Peraturan ini Nomor 3") is None
+
+
+def test_judul_sendiri_dengan_nomor_polos_bukan_dasar_hukum():
+    judul = "KEPUTUSAN MENTERI KEUANGAN REPUBLIK INDONESIA NOMOR 512 /KMK.06/2002 TENTANG X"
+    assert _extract_legal_basis("KEPUTUSAN MENTERI KEUANGAN REPUBLIK INDONESIA NOMOR 512 TENTANG X",
+                                number="512/KMK.06/2002", year=2002) == []
+    assert _extract_legal_basis("Keputusan Menteri Keuangan Nomor 40/KMK.017/1997 tentang Y",
+                                number="512/KMK.06/2002", year=2002) == ["Keputusan Menteri Keuangan Nomor 40/KMK.017/1997"]
