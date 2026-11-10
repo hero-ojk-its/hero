@@ -15,9 +15,7 @@ import {
   Info,
   ExternalLink,
   BookOpen,
-  FileCode,
-  Lock,
-  Globe
+  FileCode
 } from 'lucide-react';
 import { 
   uploadManualPdf, 
@@ -30,6 +28,7 @@ import {
 } from '../../lib/ingestApi';
 import { isApiConfigured, ApiError } from '../../lib/api';
 import { labelAlasanGagal } from '../../lib/labelStatus';
+import { extractMetadataFromPdf } from '../../lib/analisaApi';
 import {
   getAppKonfigurasi,
   resolveMaxUploadMb,
@@ -66,19 +65,10 @@ export default function UploadTab() {
   // Peran Dokumen: Wajib dipilih sebelum unggah, TANPA nilai awal
   const [documentRole, setDocumentRole] = useState<'corpus_eksisting' | 'draft_kajian' | null>(null);
 
-  // Parameter Tambahan
-  const [accessClassification, setAccessClassification] = useState<'publik' | 'non_publik'>('publik');
-
-  // Persetujuan Publikasi Draft Kajian (Langkah 35, FR-SCR-04a)
-  const [persetujuanPublikOleh, setPersetujuanPublikOleh] = useState('');
-  const [persetujuanPublikAlasan, setPersetujuanPublikAlasan] = useState('');
-  const [persetujuanTouched, setPersetujuanTouched] = useState(false);
-
-  // Status Validasi Draft Kajian Publik
-  const isDraftPublik = documentRole === 'draft_kajian' && accessClassification === 'publik';
-  const isPersetujuanOlehValid = !isDraftPublik || persetujuanPublikOleh.trim().length > 0;
-  const isPersetujuanAlasanValid = !isDraftPublik || persetujuanPublikAlasan.trim().length >= 10;
-  const isPersetujuanValid = isPersetujuanOlehValid && isPersetujuanAlasanValid;
+  // Parameter Tambahan & Ekstraksi Metadata Otomatis
+  const [accessClassification] = useState<'publik' | 'non_publik'>('publik');
+  const [isExtractingMetadata, setIsExtractingMetadata] = useState(false);
+  const [extractionNote, setExtractionNote] = useState<string | null>(null);
   const [categoryId, setCategoryId] = useState<string>('');
   const [categories, setCategories] = useState<CategoryDetailResponse[]>([]);
   const [namingFormat, setNamingFormat] = useState<string[]>(['jenis', 'nomor', 'tahun']);
@@ -279,6 +269,30 @@ export default function UploadTab() {
         return updated;
       });
 
+      // Otomatis ekstrak metadata bila unggahan 1 berkas
+      if (validItems.length === 1 && queuedFiles.length === 0) {
+        const targetItem = validItems[0];
+        setIsExtractingMetadata(true);
+        setExtractionNote(null);
+        extractMetadataFromPdf(targetItem.file)
+          .then((extracted) => {
+            if (extracted) {
+              if (extracted.title) setMetaTitle(extracted.title);
+              if (extracted.regulation_number) setMetaRegulationNumber(extracted.regulation_number);
+              if (extracted.regulation_type) setMetaRegulationType(extracted.regulation_type);
+              if (extracted.bidang) setMetaBidang(extracted.bidang);
+              if (extracted.release_date) setMetaReleaseDate(extracted.release_date);
+              setExtractionNote('Metadata berhasil terdeteksi otomatis dari naskah PDF.');
+            }
+          })
+          .catch(() => {
+            // Abaikan kesalahan otomatisasi
+          })
+          .finally(() => {
+            setIsExtractingMetadata(false);
+          });
+      }
+
       // Jalankan pra-cek duplikasi untuk berkas baru
       validItems.forEach((item) => runPreCheck(item));
     }
@@ -291,6 +305,8 @@ export default function UploadTab() {
   const handleClearAllFiles = () => {
     setQueuedFiles([]);
     setClientErrors([]);
+    setExtractionNote(null);
+    setIsExtractingMetadata(false);
   };
 
   const handleLoadSampleFiles = () => {
@@ -306,19 +322,6 @@ export default function UploadTab() {
   // Eksekusi Unggah Berkas: 1 request per berkas, paralel maksimal 2
   const handleStartUpload = async () => {
     if (queuedFiles.length === 0 || !documentRole) return;
-
-    if (isDraftPublik && !isPersetujuanValid) {
-      setPersetujuanTouched(true);
-      const errors: string[] = [];
-      if (!persetujuanPublikOleh.trim()) {
-        errors.push('Nama pihak yang menyetujui (Disetujui oleh) wajib diisi untuk draft kajian publik.');
-      }
-      if (persetujuanPublikAlasan.trim().length < 10) {
-        errors.push('Alasan persetujuan wajib diisi minimal 10 karakter untuk draft kajian publik.');
-      }
-      setClientErrors((prev) => [...prev, ...errors]);
-      return;
-    }
 
     setIsUploading(true);
     setUploadStep(2);
@@ -396,19 +399,6 @@ export default function UploadTab() {
         }
         if (namingSeparator) {
           formData.append('naming_separator', namingSeparator);
-        }
-
-        // Persetujuan Publikasi Draft Kajian (Langkah 35, FR-SCR-04a)
-        // Hanya dikirim jika peran draft_kajian dan klasifikasi publik, tanpa nilai whitespace
-        if (isDraftPublik) {
-          const oleh = persetujuanPublikOleh.trim();
-          const alasan = persetujuanPublikAlasan.trim();
-          if (oleh) {
-            formData.append('persetujuan_publik_oleh', oleh);
-          }
-          if (alasan) {
-            formData.append('persetujuan_publik_alasan', alasan);
-          }
         }
 
         // Metadata hanya jika tepat 1 berkas
@@ -539,9 +529,8 @@ export default function UploadTab() {
     setQueuedFiles([]);
     setClientErrors([]);
     setDocumentRole(null);
-    setPersetujuanPublikOleh('');
-    setPersetujuanPublikAlasan('');
-    setPersetujuanTouched(false);
+    setExtractionNote(null);
+    setIsExtractingMetadata(false);
     setMetaTitle('');
     setMetaRegulationNumber('');
     setMetaBidang('');
@@ -926,6 +915,20 @@ export default function UploadTab() {
                   </p>
                 )}
 
+                {isExtractingMetadata && (
+                  <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg text-xs text-blue-800 flex items-center mb-3">
+                    <Loader2 size={15} className="animate-spin text-blue-600 mr-2 shrink-0" />
+                    <span>Mengekstrak metadata dokumen PDF secara otomatis...</span>
+                  </div>
+                )}
+
+                {!isExtractingMetadata && extractionNote && (
+                  <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg text-xs text-emerald-800 flex items-center mb-3">
+                    <CheckCircle2 size={15} className="text-emerald-600 mr-2 shrink-0" />
+                    <span>{extractionNote} Anda dapat memeriksa atau melengkapinya di bawah.</span>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Judul Dokumen */}
                   <div className="md:col-span-2">
@@ -1015,161 +1018,35 @@ export default function UploadTab() {
                 </div>
               </div>
 
-              {/* 5. PENGATURAN AKSES & KATEGORI */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-xs font-bold text-gray-900 mb-2 uppercase tracking-wider flex items-center">
-                    Klasifikasi Akses <span className="text-red-600 ml-1">* (Kepatuhan NDA)</span>
-                  </label>
-                  <select
-                    value={accessClassification}
-                    onChange={(e) => setAccessClassification(e.target.value as 'publik' | 'non_publik')}
-                    className="block w-full py-2.5 px-3 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-red-600 focus:border-red-600 bg-white font-medium"
-                  >
-                    <option value="publik">Publik (Terbuka untuk umum)</option>
-                    <option value="non_publik">Non-Publik (Kerahasiaan / Internal NDA)</option>
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1.5 flex items-center">
-                    {accessClassification === 'non_publik' ? (
-                      <span className="text-amber-700 flex items-center">
-                        <Lock size={12} className="mr-1 text-amber-600" />
-                        Dokumen non-publik dilindungi aksesnya dan memerlukan autentikasi login.
-                      </span>
-                    ) : (
-                      <span className="text-gray-500 flex items-center">
-                        <Globe size={12} className="mr-1 text-gray-400" />
-                        Dapat diakses secara umum di repositori Knowledge Base.
-                      </span>
-                    )}
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-900 mb-2 uppercase tracking-wider">
-                    Kategori Target Knowledge Base (Opsional)
-                  </label>
-                  <select
-                    value={categoryId}
-                    onChange={(e) => setCategoryId(e.target.value)}
-                    className="block w-full py-2.5 px-3 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-red-600 focus:border-red-600 bg-white font-medium"
-                  >
-                    <option value="">-- Tanpa Kategori Khusus (Kategori Default) --</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={String(c.id)}>
-                        {c.name}
-                      </option>
-                    ))}
-                    {categories.length === 0 && (
-                      <>
-                        <option value="perbankan">Perbankan</option>
-                        <option value="pasar_modal">Pasar Modal</option>
-                        <option value="fintech">Fintech</option>
-                        <option value="asuransi">Asuransi</option>
-                      </>
-                    )}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1.5">
-                    Menempatkan berkas pada klasifikasi folder atau sektor tertentu di Knowledge Base.
-                  </p>
-                </div>
-              </div>
-
-              {/* 5b. PERSETUJUAN PUBLIKASI DRAFT KAJIAN (Langkah 35, FR-SCR-04a) */}
-              {isDraftPublik && (
-                <div
-                  id="section-persetujuan-draft-publik"
-                  className="p-5 bg-amber-50/80 border border-amber-300 rounded-xl space-y-4 animate-in fade-in duration-200"
+              {/* 5. KATEGORI TARGET KNOWLEDGE BASE */}
+              <div className="border border-gray-200 rounded-xl p-5 bg-white space-y-2">
+                <label className="block text-xs font-bold text-gray-900 uppercase tracking-wider">
+                  Kategori Target Knowledge Base (Opsional)
+                </label>
+                <select
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                  className="block w-full py-2.5 px-3 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-red-600 focus:border-red-600 bg-white font-medium"
                 >
-                  <div className="flex items-start space-x-3">
-                    <div className="p-2 bg-amber-100 text-amber-800 rounded-lg shrink-0 mt-0.5">
-                      <AlertTriangle size={18} />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wider">
-                        Peringatan: Draft Kajian Publik Membutuhkan Persetujuan
-                      </h4>
-                      <p className="text-xs text-amber-800 mt-1 leading-relaxed">
-                        Draft kajian bersifat sensitif dan internal secara default. Mempublikasikan draft kajian ke klasifikasi publik memerlukan persetujuan dan pertanggungjawaban resmi.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
-                    {/* Input wajib: Disetujui oleh */}
-                    <div>
-                      <label
-                        htmlFor="input-persetujuan-oleh"
-                        className="block text-xs font-bold text-gray-900 mb-1.5"
-                      >
-                        Disetujui oleh <span className="text-red-600">* (Wajib)</span>
-                      </label>
-                      <input
-                        id="input-persetujuan-oleh"
-                        name="persetujuan_publik_oleh"
-                        type="text"
-                        value={persetujuanPublikOleh}
-                        onChange={(e) => {
-                          setPersetujuanPublikOleh(e.target.value);
-                          setPersetujuanTouched(true);
-                        }}
-                        placeholder="Contoh: Direktur Eksekutif Riset"
-                        className={`block w-full py-2.5 px-3 border rounded-lg text-sm text-gray-900 bg-white focus:ring-red-600 focus:border-red-600 font-medium ${
-                          persetujuanTouched && !persetujuanPublikOleh.trim()
-                            ? 'border-red-500 bg-red-50/30 ring-1 ring-red-500'
-                            : 'border-gray-300'
-                        }`}
-                      />
-                      {persetujuanTouched && !persetujuanPublikOleh.trim() && (
-                        <p className="text-[11px] text-red-600 mt-1 font-medium">
-                          Nama pihak yang menyetujui wajib diisi.
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Input wajib: Alasan (minimal 10 karakter) */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label
-                          htmlFor="textarea-persetujuan-alasan"
-                          className="block text-xs font-bold text-gray-900"
-                        >
-                          Alasan Persetujuan <span className="text-red-600">* (Minimal 10 karakter)</span>
-                        </label>
-                        <span
-                          className={`text-[11px] font-mono font-medium ${
-                            persetujuanPublikAlasan.trim().length >= 10
-                              ? 'text-emerald-700'
-                              : 'text-amber-700'
-                          }`}
-                        >
-                          {persetujuanPublikAlasan.trim().length} / 10 karakter
-                        </span>
-                      </div>
-                      <textarea
-                        id="textarea-persetujuan-alasan"
-                        name="persetujuan_publik_alasan"
-                        rows={2}
-                        value={persetujuanPublikAlasan}
-                        onChange={(e) => {
-                          setPersetujuanPublikAlasan(e.target.value);
-                          setPersetujuanTouched(true);
-                        }}
-                        placeholder="Tuliskan justifikasi persetujuan publikasi resmi (minimal 10 karakter)..."
-                        className={`block w-full py-2 px-3 border rounded-lg text-sm text-gray-900 bg-white focus:ring-red-600 focus:border-red-600 font-medium ${
-                          persetujuanTouched && persetujuanPublikAlasan.trim().length < 10
-                            ? 'border-red-500 bg-red-50/30 ring-1 ring-red-500'
-                            : 'border-gray-300'
-                        }`}
-                      />
-                      {persetujuanTouched && persetujuanPublikAlasan.trim().length < 10 && (
-                        <p className="text-[11px] text-red-600 mt-1 font-medium">
-                          Alasan persetujuan wajib diisi minimal 10 karakter (kurang {Math.max(0, 10 - persetujuanPublikAlasan.trim().length)} karakter).
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
+                  <option value="">-- Tanpa Kategori Khusus (Kategori Default) --</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={String(c.id)}>
+                      {c.name}
+                    </option>
+                  ))}
+                  {categories.length === 0 && (
+                    <>
+                      <option value="perbankan">Perbankan</option>
+                      <option value="pasar_modal">Pasar Modal</option>
+                      <option value="fintech">Fintech</option>
+                      <option value="asuransi">Asuransi</option>
+                    </>
+                  )}
+                </select>
+                <p className="text-xs text-gray-500">
+                  Menempatkan berkas pada klasifikasi folder atau sektor tertentu di Knowledge Base.
+                </p>
+              </div>
 
               {/* 6. FORMAT PENAMAAN BERKAS DINAMIS */}
               <div className="border border-gray-200 rounded-xl p-5 bg-white">
@@ -1193,15 +1070,6 @@ export default function UploadTab() {
                   </div>
                 )}
 
-                {isDraftPublik && !isPersetujuanValid && (
-                  <div className="mb-3.5 p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center text-amber-800 text-xs font-medium animate-in fade-in duration-200">
-                    <AlertTriangle size={18} className="text-amber-600 mr-2.5 shrink-0" />
-                    <span>
-                      <strong>Perhatian:</strong> Draft kajian publik memerlukan nama pihak yang menyetujui dan alasan minimal 10 karakter sebelum diunggah.
-                    </span>
-                  </div>
-                )}
-
                 <div className="flex items-center justify-between">
                   <div className="text-xs text-gray-500">
                     {queuedFiles.length > 0
@@ -1213,9 +1081,9 @@ export default function UploadTab() {
                     id="btn-submit-upload"
                     type="button"
                     onClick={handleStartUpload}
-                    disabled={queuedFiles.length === 0 || !documentRole || isUploading || (isDraftPublik && !isPersetujuanValid)}
+                    disabled={queuedFiles.length === 0 || !documentRole || isUploading}
                     className={`font-semibold px-6 py-2.5 rounded-lg flex items-center transition-all shadow-sm ${
-                      queuedFiles.length === 0 || !documentRole || isUploading || (isDraftPublik && !isPersetujuanValid)
+                      queuedFiles.length === 0 || !documentRole || isUploading
                         ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                         : 'bg-red-700 hover:bg-red-800 text-white cursor-pointer active:scale-95'
                     }`}

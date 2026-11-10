@@ -41,7 +41,9 @@ from app.schemas.ingest import (
     DuplicateDocumentInfo,
     format_label_alasan,
     JobSourceInfo,
+    ExtractedMetadataResponse,
 )
+from app.services.metadata_extraction_service import extract_metadata_from_pdf_content
 from app.services.ingest_service import (
     DocumentMetadataInput,
     IngestItem,
@@ -117,6 +119,34 @@ def _format_failure_response(f: IngestFailure) -> FailureResponse:
 
 
 @router.post(
+    "/extract-metadata",
+    response_model=ExtractedMetadataResponse,
+    summary="Ekstraksi metadata otomatis dari file PDF sebelum proses upload/simpan",
+)
+def extract_metadata(
+    file: UploadFile = File(..., description="File PDF untuk diekstrak metadatanya"),
+):
+    """
+    Mengekstrak informasi metadata (Judul, Nomor, Jenis, Bidang/Sektor, Tanggal Terbit)
+    secara otomatis dari halaman awal PDF tanpa menyimpannya ke database.
+    """
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File harus berupa berkas PDF (.pdf)",
+        )
+    try:
+        content = file.file.read()
+        res = extract_metadata_from_pdf_content(content, file.filename)
+        return ExtractedMetadataResponse(**res)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Gagal membaca naskah PDF: {str(exc)}",
+        )
+
+
+@router.post(
     "/upload-pdf",
     response_model=IngestUploadResponse,
     summary="Upload PDF regulasi baru (mendukung berkas tunggal maupun jamak)",
@@ -127,9 +157,9 @@ def upload_pdf(
         ...,
         description="Daftar file PDF regulasi yang diunggah (bisa jamak / multiple files)",
     ),
-    access_classification: KlasifikasiAkses = Form(
-        ...,
-        description="Klasifikasi akses (publik / non_publik) - WAJIB untuk kepatuhan NDA",
+    access_classification: Optional[KlasifikasiAkses] = Form(
+        KlasifikasiAkses.publik,
+        description="Klasifikasi akses (opsional, default: publik)",
     ),
     document_role: PeranDokumen = Form(
         ...,
@@ -201,8 +231,10 @@ def upload_pdf(
             detail="Tidak ada file yang diunggah.",
         )
 
-    # 0. Validasi persetujuan publikasi draft kajian (Langkah 35, FR-SCR-04a)
-    # Harus diperiksa sebelum berkas diproses (tidak ada file tersimpan, tidak ada job jika ditolak)
+    # 0. Resolusi klasifikasi akses default
+    resolved_access_classification = access_classification or KlasifikasiAkses.publik
+
+    # 0a. Validasi persetujuan publikasi draft kajian (Langkah 35, FR-SCR-04a)
     persetujuan_inp = None
     if persetujuan_publik_oleh or persetujuan_publik_alasan:
         persetujuan_inp = {
@@ -211,7 +243,7 @@ def upload_pdf(
         }
     persetujuan_data = periksa_publikasi_draft(
         peran=document_role,
-        klasifikasi=access_classification,
+        klasifikasi=resolved_access_classification,
         persetujuan=persetujuan_inp,
         user=current_user,
     )
@@ -309,7 +341,7 @@ def upload_pdf(
         )
 
     options = IngestOptions(
-        access_classification=access_classification,
+        access_classification=resolved_access_classification,
         document_role=document_role,
         category_id=parsed_category_id,
         metadata=meta_input,

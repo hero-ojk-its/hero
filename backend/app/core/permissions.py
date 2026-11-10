@@ -129,12 +129,14 @@ def punya_izin(user: Optional[Any], izin: Izin) -> bool:
 def check_non_public_access(doc: Any, user: Optional[Any] = None) -> None:
     """
     Memvalidasi akses ke dokumen non-publik.
-    Melempar HTTPException 403 bila dokumen non-publik dan pengguna tidak diizinkan.
-    Pesan galat:
-    - Auth nonaktif: 'Dokumen non-publik hanya dapat dibuka setelah login diaktifkan.'
-    - Auth aktif: {'code': 'akses_ditolak', 'izin': 'KB_BACA_NONPUBLIK'}
+    - Dokumen draft_kajian: tidak dikenakan pembatasan klasifikasi akses Publik/Non-publik.
+    - Dokumen corpus_eksisting: akses non-publik wajib memiliki izin boleh_baca_nonpublik(user).
     """
-    from app.models.enums import KlasifikasiAkses
+    from app.models.enums import KlasifikasiAkses, PeranDokumen
+
+    doc_role = getattr(doc, "document_role", None)
+    if doc_role == PeranDokumen.draft_kajian or (isinstance(doc_role, str) and doc_role == "draft_kajian"):
+        return None
 
     acc_class = getattr(doc, "access_classification", None)
     if acc_class == KlasifikasiAkses.non_publik or (isinstance(acc_class, str) and acc_class == "non_publik"):

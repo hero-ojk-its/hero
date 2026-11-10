@@ -402,20 +402,10 @@ class IngestService:
             if is_att:
                 parent_id_key = fallback_identity_key(doc_reg_type, doc_reg_number, doc_regulation_year)
 
-            # Pengaman pusat Langkah 35b: bila options.document_role == draft_kajian DAN options.access_classification == publik
-            # DAN options.persetujuan_publik kosong -> simpan dokumen sebagai non_publik (jangan gagal),
-            # dan tambahkan 'klasifikasi_diturunkan' ke audit UPLOAD_DOCUMENT.
-            role_val = options.document_role.value if hasattr(options.document_role, "value") else str(options.document_role or "")
-            access_val = options.access_classification.value if hasattr(options.access_classification, "value") else str(options.access_classification or "")
-            final_access_classification = options.access_classification
+            # Resolusi klasifikasi akses dokumen (default: publik dari options)
+            # Alur draft_kajian tidak lagi bergantung pada persetujuan publikasi
+            final_access_classification = options.access_classification or KlasifikasiAkses.publik
             klasifikasi_diturunkan = None
-            if role_val == "draft_kajian" and access_val == "publik" and not options.persetujuan_publik:
-                final_access_classification = KlasifikasiAkses.non_publik
-                klasifikasi_diturunkan = {
-                    "dari": "publik",
-                    "ke": "non_publik",
-                    "alasan": "draft_publik_tanpa_persetujuan",
-                }
 
             # Buat instance Document
             doc = Document(

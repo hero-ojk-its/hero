@@ -20,6 +20,7 @@ import {
   uploadDraftPdf,
   getDocumentStatus,
   checkMlHealth,
+  extractMetadataFromPdf,
   isDocumentReadyForAnalysis,
   isDocumentProcessingFailed,
   getStoredAnalisaWorkspace,
@@ -82,19 +83,13 @@ export default function AnalisaRegulasi() {
   const [releaseDate, setReleaseDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
-  // Klasifikasi akses dokumen: 'publik' | 'non_publik' (Kepatuhan NDA)
-  const [accessClassification, setAccessClassification] = useState<'publik' | 'non_publik'>('non_publik');
-
-  // Persetujuan Publikasi Draft Kajian (Langkah 35, FR-SCR-04a, Kasus B)
-  const [persetujuanPublikOleh, setPersetujuanPublikOleh] = useState<string>('');
-  const [persetujuanPublikAlasan, setPersetujuanPublikAlasan] = useState<string>('');
-  const [persetujuanTouched, setPersetujuanTouched] = useState<boolean>(false);
-
-  // Status Validasi Draft Kajian Publik (Kasus B)
-  const isDraftPublik = accessClassification === 'publik';
-  const isPersetujuanOlehValid = !isDraftPublik || persetujuanPublikOleh.trim().length > 0;
-  const isPersetujuanAlasanValid = !isDraftPublik || persetujuanPublikAlasan.trim().length >= 10;
-  const isPersetujuanValid = isPersetujuanOlehValid && isPersetujuanAlasanValid;
+  // Klasifikasi akses dokumen: default 'publik' untuk analisa terbuka
+  const [accessClassification, setAccessClassification] = useState<'publik' | 'non_publik'>('publik');
+  const [isExtractingMetadata, setIsExtractingMetadata] = useState<boolean>(false);
+  const [extractionNote, setExtractionNote] = useState<{
+    text: string;
+    type: 'success' | 'partial' | 'info';
+  } | null>(null);
 
   // 4. State Layanan ML & Eksekusi Upload
   const [appConfig, setAppConfig] = useState<KonfigurasiResponse | null>(null);
@@ -379,7 +374,7 @@ export default function AnalisaRegulasi() {
     }
   };
 
-  const handleFileSelected = (file: File) => {
+  const handleFileSelected = async (file: File) => {
     // Validasi format PDF
     const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf';
     if (!isPdf) {
@@ -394,17 +389,67 @@ export default function AnalisaRegulasi() {
 
     setUploadError(null);
     setSelectedFile(file);
+    setExtractionNote(null);
+    setIsExtractingMetadata(true);
 
-    // Otomatis isi judul dari nama berkas jika masih kosong
-    if (!title.trim()) {
-      const cleanName = file.name.replace(/\.pdf$/i, '').replace(/[_-]/g, ' ');
-      setTitle(cleanName);
+    // Fallback nama awal dari nama berkas
+    const cleanName = file.name.replace(/\.pdf$/i, '').replace(/[_-]/g, ' ');
+    setTitle(cleanName);
+
+    try {
+      const extracted = await extractMetadataFromPdf(file);
+      if (extracted) {
+        if (extracted.title && extracted.title.trim()) {
+          setTitle(extracted.title.trim());
+        }
+        if (extracted.regulation_number && extracted.regulation_number.trim()) {
+          setRegulationNumber(extracted.regulation_number.trim());
+        }
+        if (extracted.regulation_type && extracted.regulation_type.trim()) {
+          setRegulationType(extracted.regulation_type.trim());
+        }
+        if (extracted.bidang && extracted.bidang.trim()) {
+          setBidang(extracted.bidang.trim());
+        }
+        if (extracted.release_date && extracted.release_date.trim()) {
+          setReleaseDate(extracted.release_date.trim());
+        }
+
+        const foundSubstantial = Boolean(
+          extracted.regulation_number ||
+          (extracted.title && extracted.title !== cleanName) ||
+          extracted.bidang ||
+          extracted.release_date
+        );
+
+        if (foundSubstantial) {
+          setExtractionNote({
+            text: 'Metadata terdeteksi otomatis dari naskah PDF. Anda dapat memeriksa dan mengoreksinya sebelum memulai analisa.',
+            type: 'success',
+          });
+        } else {
+          setExtractionNote({
+            text: 'Teks dokumen terbaca, namun nomor atau sektor spesifik belum ditemukan. Silakan periksa atau lengkapi kolom di bawah.',
+            type: 'partial',
+          });
+        }
+      }
+    } catch {
+      // Tidak memblokir pengguna bila ekstraksi otomatis offline / tidak terurai
+      setExtractionNote({
+        text: 'Ekstraksi otomatis naskah PDF tidak menemukan metadata terstruktur. Silakan lengkapi informasi dokumen di bawah secara manual.',
+        type: 'info',
+      });
+    } finally {
+      setIsExtractingMetadata(false);
     }
   };
 
   const handleRemoveFile = () => {
     setSelectedFile(null);
     setUploadError(null);
+    setExtractionNote(null);
+    setIsExtractingMetadata(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -425,6 +470,8 @@ export default function AnalisaRegulasi() {
     setUploadError(null);
     setIsUploading(false);
     setUploadProgress(null);
+    setExtractionNote(null);
+    setIsExtractingMetadata(false);
     isExplicitCancelRef.current = false;
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -443,19 +490,6 @@ export default function AnalisaRegulasi() {
     }
     if (!title.trim()) {
       setUploadError('Judul draf regulasi wajib diisi.');
-      setTimeout(() => {
-        uploadErrorAlertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 50);
-      return;
-    }
-
-    if (isDraftPublik && !isPersetujuanValid) {
-      setPersetujuanTouched(true);
-      if (!persetujuanPublikOleh.trim()) {
-        setUploadError('Nama pihak yang menyetujui (Disetujui oleh) wajib diisi untuk draft kajian publik.');
-      } else if (persetujuanPublikAlasan.trim().length < 10) {
-        setUploadError('Alasan persetujuan wajib diisi minimal 10 karakter untuk draft kajian publik.');
-      }
       setTimeout(() => {
         uploadErrorAlertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 50);
@@ -483,9 +517,7 @@ export default function AnalisaRegulasi() {
         regulation_type: regulationType.trim() || undefined,
         bidang: bidang.trim() || undefined,
         release_date: releaseDate.trim() || undefined,
-        access_classification: accessClassification,
-        persetujuan_publik_oleh: isDraftPublik ? persetujuanPublikOleh.trim() || undefined : undefined,
-        persetujuan_publik_alasan: isDraftPublik ? persetujuanPublikAlasan.trim() || undefined : undefined,
+        access_classification: 'publik',
       };
 
       // Unggah via API client dengan pemantauan progress byte riil
@@ -666,9 +698,8 @@ export default function AnalisaRegulasi() {
     setSelectedFile(null);
     setTitle('');
     setRegulationNumber('');
-    setPersetujuanPublikOleh('');
-    setPersetujuanPublikAlasan('');
-    setPersetujuanTouched(false);
+    setExtractionNote(null);
+    setIsExtractingMetadata(false);
     setRestoreError(null);
     checkHealthStatus();
   };
@@ -737,7 +768,7 @@ export default function AnalisaRegulasi() {
           ) : mlHealth?.status === 'siap' ? (
             <div
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs"
-              title={`Korpus: ${mlHealth.korpus.dokumen} dokumen, ${mlHealth.korpus.pasal} pasal. Mode AI: ${mlHealth.mode_ai ? 'Aktif' : 'Non-aktif'}`}
+              title={`Korpus: ${mlHealth.korpus?.dokumen ?? 0} dokumen, ${mlHealth.korpus?.pasal ?? 0} pasal. Mode AI: ${mlHealth.mode_ai ? 'Aktif' : 'Non-aktif'}`}
             >
               <Activity size={13} className="text-emerald-600" />
               <span>Layanan ML Siap</span>
@@ -1150,16 +1181,9 @@ export default function AnalisaRegulasi() {
                 Unggah Draft Peraturan untuk Dianalisis
               </h2>
               <p className="text-xs text-gray-500 mt-0.5">
-                Unggah naskah rancangan peraturan baru dalam format PDF. Dokumen diklasifikasikan sebagai {accessClassification === 'non_publik' ? 'Non-Publik' : 'Publik'} untuk kajian telaah dan ekstraksi pasal.
+                Unggah naskah rancangan peraturan baru dalam format PDF untuk telaah intisari, norma, sanksi, dan struktur pasal secara otomatis.
               </p>
             </div>
-            <span className={`self-start sm:self-auto px-2.5 py-1 rounded-full text-[10px] font-semibold border shrink-0 ${
-              accessClassification === 'non_publik'
-                ? 'bg-red-50 text-red-700 border-red-200'
-                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-            }`}>
-              Klasifikasi: {accessClassification === 'non_publik' ? 'Non-Publik (Draf Kajian)' : 'Publik (Terbuka)'}
-            </span>
           </div>
 
           {/* Dropzone File */}
@@ -1241,6 +1265,48 @@ export default function AnalisaRegulasi() {
 
           {/* Form Kolom Metadata Draf */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+            {/* Indikator Status Ekstraksi Metadata Otomatis */}
+            {isExtractingMetadata && (
+              <div className="md:col-span-2 p-3 bg-blue-50/70 border border-blue-200 rounded-xl flex items-center gap-2.5 text-xs text-blue-800 animate-in fade-in duration-200">
+                <Loader2 size={16} className="animate-spin text-blue-600 shrink-0" />
+                <span className="font-medium">
+                  Sedang membaca naskah PDF dan mengekstrak metadata dokumen secara otomatis...
+                </span>
+              </div>
+            )}
+
+            {!isExtractingMetadata && extractionNote && (
+              <div
+                className={`md:col-span-2 p-3 rounded-xl flex items-start gap-2.5 text-xs animate-in fade-in duration-200 ${
+                  extractionNote.type === 'success'
+                    ? 'bg-emerald-50/70 border border-emerald-200 text-emerald-900'
+                    : extractionNote.type === 'partial'
+                    ? 'bg-amber-50/70 border border-amber-200 text-amber-900'
+                    : 'bg-gray-50 border border-gray-200 text-gray-700'
+                }`}
+              >
+                {extractionNote.type === 'success' ? (
+                  <CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                ) : extractionNote.type === 'partial' ? (
+                  <Sparkles size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle size={16} className="text-gray-500 shrink-0 mt-0.5" />
+                )}
+                <div className="space-y-0.5">
+                  <span className="font-semibold block">
+                    {extractionNote.type === 'success'
+                      ? 'Ekstraksi Metadata Berhasil'
+                      : extractionNote.type === 'partial'
+                      ? 'Metadata Terdeteksi Sebagian'
+                      : 'Informasi Dokumen'}
+                  </span>
+                  <span className="text-[11px] leading-relaxed block">
+                    {extractionNote.text}
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Judul Draf */}
             <div className="md:col-span-2 space-y-1">
               <label className="text-xs font-bold text-gray-700">
@@ -1320,149 +1386,6 @@ export default function AnalisaRegulasi() {
                 className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700 transition"
               />
             </div>
-
-            {/* Klasifikasi Dokumen (Publik vs Non-publik) */}
-            <div className="md:col-span-2 space-y-1.5 pt-1">
-              <label className="text-xs font-bold text-gray-700 flex items-center justify-between">
-                <span>Klasifikasi Akses Dokumen <span className="text-red-600">*</span></span>
-                <span className="text-[11px] font-normal text-gray-400">Pilih klasifikasi sesuai kepatuhan NDA regulasi</span>
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setAccessClassification('non_publik')}
-                  className={`p-3 rounded-lg border text-left flex items-start gap-2.5 transition cursor-pointer ${
-                    accessClassification === 'non_publik'
-                      ? 'border-red-700 bg-red-50/40 text-red-900 ring-1 ring-red-700 shadow-2xs'
-                      : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  <div className={`w-4 h-4 rounded-full border mt-0.5 flex items-center justify-center shrink-0 ${
-                    accessClassification === 'non_publik' ? 'border-red-700 bg-red-700' : 'border-gray-300'
-                  }`}>
-                    {accessClassification === 'non_publik' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                  </div>
-                  <div className="space-y-0.5">
-                    <span className="text-xs font-bold block">Non-publik (Draf Kajian)</span>
-                    <span className="text-[11px] text-gray-500 leading-relaxed block">
-                      Tunduk pada NDA / rahasia internal. Hanya dapat dianalisis setelah login diaktifkan.
-                    </span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setAccessClassification('publik')}
-                  className={`p-3 rounded-lg border text-left flex items-start gap-2.5 transition cursor-pointer ${
-                    accessClassification === 'publik'
-                      ? 'border-emerald-700 bg-emerald-50/40 text-emerald-900 ring-1 ring-emerald-700 shadow-2xs'
-                      : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  <div className={`w-4 h-4 rounded-full border mt-0.5 flex items-center justify-center shrink-0 ${
-                    accessClassification === 'publik' ? 'border-emerald-700 bg-emerald-700' : 'border-gray-300'
-                  }`}>
-                    {accessClassification === 'publik' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                  </div>
-                  <div className="space-y-0.5">
-                    <span className="text-xs font-bold block">Publik (Terbuka)</span>
-                    <span className="text-[11px] text-gray-500 leading-relaxed block">
-                      Dokumen regulasi terbuka untuk umum. Wajib menyertakan persetujuan publikasi draf kajian.
-                    </span>
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            {/* Form Persetujuan Publikasi Draft Kajian (Langkah 35, Kasus B) */}
-            {isDraftPublik && (
-              <div className="md:col-span-2 p-4 bg-emerald-50/40 border border-emerald-200 rounded-xl space-y-4 animate-in fade-in duration-200">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-emerald-600" />
-                  <h4 className="text-xs font-bold text-emerald-950 uppercase tracking-wide">
-                    Persetujuan Publikasi Draf Kajian Terbuka
-                  </h4>
-                </div>
-                <p className="text-[11px] text-emerald-900 leading-relaxed -mt-2">
-                  Sesuai kebijakan tata kelola regulasi, draf kajian yang dipublikasikan secara terbuka wajib mencantumkan pihak yang menyetujui dan alasan justifikasi resmi (minimal 10 karakter).
-                </p>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Input: Disetujui oleh */}
-                  <div>
-                    <label
-                      htmlFor="input-persetujuan-oleh"
-                      className="block text-xs font-bold text-gray-900 mb-1"
-                    >
-                      Disetujui oleh <span className="text-red-600">* (Wajib)</span>
-                    </label>
-                    <input
-                      id="input-persetujuan-oleh"
-                      name="persetujuan_publik_oleh"
-                      type="text"
-                      value={persetujuanPublikOleh}
-                      onChange={(e) => {
-                        setPersetujuanPublikOleh(e.target.value);
-                        setPersetujuanTouched(true);
-                      }}
-                      placeholder="Contoh: Direktur Eksekutif Riset"
-                      className={`block w-full py-2 px-3 border rounded-lg text-xs text-gray-900 bg-white focus:ring-emerald-600 focus:border-emerald-600 font-medium ${
-                        persetujuanTouched && !persetujuanPublikOleh.trim()
-                          ? 'border-red-500 bg-red-50/30 ring-1 ring-red-500'
-                          : 'border-gray-300'
-                      }`}
-                    />
-                    {persetujuanTouched && !persetujuanPublikOleh.trim() && (
-                      <p className="text-[11px] text-red-600 mt-1 font-medium">
-                        Nama pihak yang menyetujui wajib diisi.
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Input: Alasan Persetujuan (min 10 karakter) */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label
-                        htmlFor="textarea-persetujuan-alasan"
-                        className="block text-xs font-bold text-gray-900"
-                      >
-                        Alasan Persetujuan <span className="text-red-600">* (Minimal 10 karakter)</span>
-                      </label>
-                      <span
-                        className={`text-[11px] font-mono font-medium ${
-                          persetujuanPublikAlasan.trim().length >= 10
-                            ? 'text-emerald-700'
-                            : 'text-amber-700'
-                        }`}
-                      >
-                        {persetujuanPublikAlasan.trim().length} / 10 karakter
-                      </span>
-                    </div>
-                    <textarea
-                      id="textarea-persetujuan-alasan"
-                      name="persetujuan_publik_alasan"
-                      rows={2}
-                      value={persetujuanPublikAlasan}
-                      onChange={(e) => {
-                        setPersetujuanPublikAlasan(e.target.value);
-                        setPersetujuanTouched(true);
-                      }}
-                      placeholder="Tuliskan justifikasi persetujuan publikasi resmi (minimal 10 karakter)..."
-                      className={`block w-full py-2 px-3 border rounded-lg text-xs text-gray-900 bg-white focus:ring-emerald-600 focus:border-emerald-600 font-medium ${
-                        persetujuanTouched && persetujuanPublikAlasan.trim().length < 10
-                          ? 'border-red-500 bg-red-50/30 ring-1 ring-red-500'
-                          : 'border-gray-300'
-                      }`}
-                    />
-                    {persetujuanTouched && persetujuanPublikAlasan.trim().length < 10 && (
-                      <p className="text-[11px] text-red-600 mt-1 font-medium">
-                        Alasan persetujuan wajib diisi minimal 10 karakter (kurang {Math.max(0, 10 - persetujuanPublikAlasan.trim().length)} karakter).
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
@@ -1481,23 +1404,13 @@ export default function AnalisaRegulasi() {
           </div>
         )}
 
-        {/* Banner Peringatan Persetujuan Publik */}
-        {isDraftPublik && !isPersetujuanValid && (
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center text-amber-800 text-xs font-medium animate-in fade-in duration-200">
-            <AlertCircle size={16} className="text-amber-600 mr-2 shrink-0" />
-            <span>
-              <strong>Perhatian:</strong> Draft kajian publik memerlukan nama pihak yang menyetujui dan alasan minimal 10 karakter sebelum analisis dapat dimulai.
-            </span>
-          </div>
-        )}
-
         {/* Tombol Aksi Mulai Analisis */}
         <div className="pt-2 flex items-center justify-end">
           <button
             type="submit"
-            disabled={!selectedFile || isUploading || isPollingActive || (isDraftPublik && !isPersetujuanValid)}
+            disabled={!selectedFile || isUploading || isPollingActive}
             className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-lg text-xs font-semibold shadow-xs transition ${
-              selectedFile && !isUploading && !isPollingActive && (!isDraftPublik || isPersetujuanValid)
+              selectedFile && !isUploading && !isPollingActive
                 ? 'bg-red-700 hover:bg-red-800 text-white cursor-pointer'
                 : 'bg-gray-200 text-gray-500 cursor-not-allowed'
             }`}

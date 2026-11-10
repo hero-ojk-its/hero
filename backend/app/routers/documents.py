@@ -9,7 +9,7 @@ import re
 from typing import Optional, List, Dict, Any, Literal
 import urllib.parse
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status, File, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, and_, desc
@@ -34,6 +34,8 @@ from app.schemas.article import (
     UpdateDocumentActiveResponse,
 )
 from app.schemas.document import DocumentMetadataPatchResponse
+from app.schemas.ingest import ExtractedMetadataResponse
+from app.services.metadata_extraction_service import extract_metadata_from_pdf_content
 from app.core.permissions import (
     perlu_izin,
     perlu_salah_satu_izin,
@@ -170,6 +172,34 @@ class AnalysisRunDetailResponse(AnalysisRunItemResponse):
     hasil: Optional[Dict[str, Any]] = None
     cara_ulang: str
     catatan: str = "Draft / Rekomendasi — riwayat eksekusi analisa untuk penelusuran."
+
+
+@router.post(
+    "/extract-metadata",
+    response_model=ExtractedMetadataResponse,
+    summary="Ekstraksi metadata otomatis dari file PDF",
+)
+def extract_metadata(
+    file: UploadFile = File(..., description="File PDF untuk diekstrak metadatanya"),
+):
+    """
+    Mengekstrak informasi metadata (Judul, Nomor, Jenis, Bidang/Sektor, Tanggal Terbit)
+    secara otomatis dari halaman awal PDF tanpa menyimpannya ke database.
+    """
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File harus berupa berkas PDF (.pdf)",
+        )
+    try:
+        content = file.file.read()
+        res = extract_metadata_from_pdf_content(content, file.filename)
+        return ExtractedMetadataResponse(**res)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Gagal membaca naskah PDF: {str(exc)}",
+        )
 
 
 @router.get("/", summary="Daftar & pencarian dokumen regulasi")

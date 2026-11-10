@@ -11,7 +11,7 @@
  *    - GET /api/v1/documents/{document_id}: Pengecekan status ekstraksi dan ketersediaan pasal
  */
 
-import { apiFetch, apiJson, apiFetchBlob, API_BASE_URL, buildQueryString } from './api';
+import { apiFetch, apiJson, apiFetchBlob, apiUpload, API_BASE_URL, buildQueryString } from './api';
 import type { DocumentsResponse, DocumentItem, DocumentBlob } from './api';
 import { uploadManualPdf, type IngestUploadResponse, type UploadProgressEvent } from './ingestApi';
 import { labelAlasanGagal } from './labelStatus';
@@ -276,6 +276,16 @@ export interface DraftUploadMetadata {
   persetujuan_publik_alasan?: string;
 }
 
+export interface ExtractedMetadata {
+  title?: string | null;
+  regulation_number?: string | null;
+  regulation_type?: string | null;
+  bidang?: string | null;
+  release_date?: string | null;
+  page_count?: number;
+  raw_preview?: string | null;
+}
+
 export interface UploadDraftResult {
   documentId: number;
   status: 'success' | 'duplicate';
@@ -298,6 +308,33 @@ export interface UploadDraftResult {
 // ============================================================================
 
 /**
+ * Ekstraksi metadata otomatis dari file PDF regulasi sebelum proses simpan / unggah.
+ * Memanggil backend /api/v1/documents/extract-metadata (fallback: /api/v1/ingest/extract-metadata).
+ */
+export async function extractMetadataFromPdf(
+  file: File,
+  signal?: AbortSignal
+): Promise<ExtractedMetadata> {
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    return await apiUpload<ExtractedMetadata>('/api/v1/documents/extract-metadata', formData, {
+      signal,
+      timeout: 30000,
+    });
+  } catch (err) {
+    try {
+      return await apiUpload<ExtractedMetadata>('/api/v1/ingest/extract-metadata', formData, {
+        signal,
+        timeout: 30000,
+      });
+    } catch {
+      throw err;
+    }
+  }
+}
+
+/**
  * Pengecekan status kesiapan layanan ML Lapisan Data.
  * Endpoint: GET /health
  */
@@ -310,7 +347,7 @@ export async function checkMlHealth(signal?: AbortSignal): Promise<MlHealthRespo
  * 
  * Ketentuan Kepatuhan & Arsitektur:
  * - Menggunakan kembali uploadManualPdf (/api/v1/ingest/upload-pdf) dari ingestApi.ts.
- * - Menyematkan access_classification dari formulir ('publik' atau 'non_publik') sesuai kepatuhan NDA.
+ * - Menggunakan access_classification='publik' secara bawaan agar Summary dan Workspace dapat dibuka bebas.
  * - WAJIB menyematkan document_role='draft_kajian' agar tidak disimpan sebagai regulasi eksisting KBS.
  * - Memvalidasi details[0] dan mengekstrak document_id / duplicate_of_document_id secara ketat.
  * - TIDAK PERNAH menggunakan job_id sebagai document_id.
@@ -323,20 +360,15 @@ export async function uploadDraftPdf(
 ): Promise<UploadDraftResult> {
   const formData = new FormData();
   formData.append('files', file);
-  formData.append('access_classification', metadata?.access_classification || 'non_publik');
+  formData.append('access_classification', metadata?.access_classification || 'publik');
   formData.append('document_role', 'draft_kajian');
 
-  // Persetujuan Publikasi Draft Kajian (Langkah 35, FR-SCR-04a, Kasus B)
-  // Hanya dikirim jika peran draft_kajian dan klasifikasi publik, tanpa nilai whitespace
-  if (metadata?.access_classification === 'publik') {
-    const oleh = metadata.persetujuan_publik_oleh?.trim();
-    const alasan = metadata.persetujuan_publik_alasan?.trim();
-    if (oleh) {
-      formData.append('persetujuan_publik_oleh', oleh);
-    }
-    if (alasan) {
-      formData.append('persetujuan_publik_alasan', alasan);
-    }
+  // Persetujuan opsional jika dikirimkan
+  if (metadata?.persetujuan_publik_oleh?.trim()) {
+    formData.append('persetujuan_publik_oleh', metadata.persetujuan_publik_oleh.trim());
+  }
+  if (metadata?.persetujuan_publik_alasan?.trim()) {
+    formData.append('persetujuan_publik_alasan', metadata.persetujuan_publik_alasan.trim());
   }
 
   if (metadata?.title && metadata.title.trim() !== '') {

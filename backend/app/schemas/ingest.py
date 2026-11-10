@@ -53,6 +53,16 @@ class DuplicateCheckResponse(BaseModel):
     regulation_number: Optional[str] = None
 
 
+class ExtractedMetadataResponse(BaseModel):
+    title: Optional[str] = None
+    regulation_number: Optional[str] = None
+    regulation_type: Optional[str] = None
+    bidang: Optional[str] = None
+    release_date: Optional[str] = None
+    page_count: int = 0
+    raw_preview: Optional[str] = None
+
+
 class JobDocumentSummary(BaseModel):
     id: int
     title: str
