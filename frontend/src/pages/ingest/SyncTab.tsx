@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import AppBreadcrumb from '../../components/common/AppBreadcrumb';
 import { 
   FolderOpen, 
   Folder, 
@@ -691,9 +692,22 @@ function MockSyncTab() {
 
           {syncStep === 3 && (
             <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="text-sm font-medium text-gray-500 mb-4 flex items-center space-x-2">
-                <span>Dashboard</span> <span className="text-gray-400">&gt;</span> <span>Ingest Dokumen</span> <span className="text-gray-400">&gt;</span> <span>Sinkronisasi</span> <span className="text-gray-400">&gt;</span> <span className="text-gray-900 font-bold">Proses Ingest Dokumen</span>
-              </div>
+              <AppBreadcrumb
+                items={[
+                  {
+                    label: 'Ingest Dokumen',
+                    onClick: () => setSyncStep(1),
+                    title: 'Kembali ke tab sinkronisasi',
+                  },
+                  {
+                    label: 'Sinkronisasi',
+                    onClick: () => setSyncStep(1),
+                    title: 'Kembali ke pemilihan folder',
+                  },
+                  { label: 'Proses Ingest Dokumen', isCurrent: true },
+                ]}
+                className="mb-4"
+              />
               <div className="mb-6">
                 <h3 className="text-2xl font-bold text-gray-900 tracking-tight">Proses Ingest Dokumen</h3>
                 <p className="text-gray-600 mt-1 text-sm">Memproses dan menambahkan dokumen ke Knowledge Base.</p>
@@ -806,9 +820,22 @@ function MockSyncTab() {
 
           {syncStep === 4 && (
             <div className="animate-in fade-in duration-300">
-              <div className="text-sm font-medium text-gray-500 mb-4 flex items-center space-x-2">
-                <span>Dashboard</span> <span className="text-gray-400">&gt;</span> <span>Ingest Dokumen</span> <span className="text-gray-400">&gt;</span> <span>Sinkronisasi</span> <span className="text-gray-400">&gt;</span> <span className="text-gray-900 font-bold">Dokumen Berhasil Ditambahkan</span>
-              </div>
+              <AppBreadcrumb
+                items={[
+                  {
+                    label: 'Ingest Dokumen',
+                    onClick: () => setSyncStep(1),
+                    title: 'Kembali ke tab sinkronisasi',
+                  },
+                  {
+                    label: 'Sinkronisasi',
+                    onClick: () => setSyncStep(1),
+                    title: 'Kembali ke pemilihan folder',
+                  },
+                  { label: 'Dokumen Berhasil Ditambahkan', isCurrent: true },
+                ]}
+                className="mb-4"
+              />
               <div className="mb-6">
                 <h3 className="text-2xl font-bold text-gray-900 tracking-tight">Dokumen Berhasil Ditambahkan</h3>
                 <p className="text-gray-600 mt-1 text-sm">5 dokumen berhasil ditambahkan ke Knowledge Base.</p>

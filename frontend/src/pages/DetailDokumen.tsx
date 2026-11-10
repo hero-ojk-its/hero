@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import AppBreadcrumb from '../components/common/AppBreadcrumb';
 import { 
   ArrowLeft, 
   FileText, 
@@ -509,9 +510,12 @@ export default function DetailDokumen() {
   if (loading) {
     return (
       <div className="max-w-[1200px] mx-auto space-y-6">
-        <div className="text-xs text-gray-500">
-          Dashboard / Knowledge Base / <span className="font-semibold text-gray-900">Detail</span>
-        </div>
+        <AppBreadcrumb
+          items={[
+            { label: 'Knowledge Base', to: '/knowledge' },
+            { label: 'Detail Dokumen', isCurrent: true },
+          ]}
+        />
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
           <LoadingState message="Memuat detail dokumen dari server..." />
         </div>
@@ -522,9 +526,12 @@ export default function DetailDokumen() {
   if (notFound) {
     return (
       <div className="max-w-[1200px] mx-auto space-y-6">
-        <div className="text-xs text-gray-500">
-          Dashboard / Knowledge Base / <span className="font-semibold text-gray-900">Detail</span>
-        </div>
+        <AppBreadcrumb
+          items={[
+            { label: 'Knowledge Base', to: '/knowledge' },
+            { label: 'Detail Dokumen', isCurrent: true },
+          ]}
+        />
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
           <h2 className="text-xl font-bold text-gray-900 mb-2">Dokumen tidak ditemukan</h2>
           <p className="text-sm text-gray-500 mb-6">
@@ -545,9 +552,12 @@ export default function DetailDokumen() {
   if (apiError) {
     return (
       <div className="max-w-[1200px] mx-auto space-y-6">
-        <div className="text-xs text-gray-500">
-          Dashboard / Knowledge Base / <span className="font-semibold text-gray-900">Detail</span>
-        </div>
+        <AppBreadcrumb
+          items={[
+            { label: 'Knowledge Base', to: '/knowledge' },
+            { label: 'Detail Dokumen', isCurrent: true },
+          ]}
+        />
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
           <ErrorState
             title="Gagal Memuat Dokumen"
@@ -563,9 +573,12 @@ export default function DetailDokumen() {
   if (!regulasi) {
     return (
       <div className="max-w-[1200px] mx-auto space-y-6">
-        <div className="text-xs text-gray-500">
-          Dashboard / Knowledge Base / <span className="font-semibold text-gray-900">Detail</span>
-        </div>
+        <AppBreadcrumb
+          items={[
+            { label: 'Knowledge Base', to: '/knowledge' },
+            { label: 'Detail Dokumen', isCurrent: true },
+          ]}
+        />
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
           <h2 className="text-xl font-bold text-gray-900 mb-2">Dokumen tidak ditemukan</h2>
           <p className="text-sm text-gray-500 mb-6">Data dokumen tidak dapat ditemukan.</p>
@@ -1341,22 +1354,16 @@ export default function DetailDokumen() {
       <div className="max-w-[1200px] mx-auto space-y-6 pb-12 font-sans animate-in fade-in duration-200">
         {/* Breadcrumb and Back Button */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="text-xs text-gray-500 font-medium flex items-center gap-1.5 flex-wrap">
-            <span>Dashboard</span>
-            <span className="text-gray-300">/</span>
-            <button 
-              onClick={() => navigate('/knowledge')} 
-              className="hover:text-red-700 hover:underline transition-colors font-medium text-gray-600"
-            >
-              Knowledge Base
-            </button> 
-            <span className="text-gray-300">/</span> 
-            <span className="font-semibold text-gray-900">Detail Dokumen</span>
-          </div>
+          <AppBreadcrumb
+            items={[
+              { label: 'Knowledge Base', to: '/knowledge' },
+              { label: 'Detail Dokumen', isCurrent: true },
+            ]}
+          />
           
           <button 
             onClick={() => navigate('/knowledge')} 
-            className="flex items-center gap-1.5 text-gray-600 hover:text-red-700 font-semibold transition-colors text-xs group self-start sm:self-auto"
+            className="flex items-center gap-1.5 text-gray-600 hover:text-red-700 font-semibold transition-colors text-xs group self-start sm:self-auto cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" />
             Kembali ke Knowledge Base

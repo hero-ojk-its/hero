@@ -1,4 +1,5 @@
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
+import AppBreadcrumb from '../../components/common/AppBreadcrumb';
 import { Globe, RefreshCw, UploadCloud, History } from 'lucide-react';
 import ScrapingTab from './ScrapingTab';
 import SyncTab from './SyncTab';
@@ -26,13 +27,10 @@ export default function IngestDokumen() {
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* Breadcrumb & Header */}
       <div>
-        <div className="flex items-center text-xs text-gray-500 mb-2">
-          <Link to="/" className="hover:text-red-700 transition-colors">
-            Dashboard
-          </Link>
-          <span className="mx-2 text-gray-300">/</span>
-          <span className="text-gray-900 font-medium">Ingest Dokumen</span>
-        </div>
+        <AppBreadcrumb
+          items={[{ label: 'Ingest Dokumen', isCurrent: true }]}
+          className="mb-2"
+        />
         <div className="flex justify-between items-start">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">

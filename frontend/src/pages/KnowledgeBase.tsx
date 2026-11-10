@@ -14,6 +14,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import AppBreadcrumb from '../components/common/AppBreadcrumb';
 
 import { regulasiData } from '../data/regulasiData';
 import type { RegulasiItem } from '../data/regulasiData';
@@ -522,9 +523,7 @@ export default function KnowledgeBase() {
   return (
     <div className="max-w-[1200px] mx-auto space-y-6 relative">
       {/* Breadcrumb */}
-      <div className="text-xs text-gray-500">
-        Dashboard / <span className="font-semibold text-gray-900">Knowledge Base</span>
-      </div>
+      <AppBreadcrumb items={[{ label: 'Knowledge Base', isCurrent: true }]} />
 
       {/* Header */}
       <div>

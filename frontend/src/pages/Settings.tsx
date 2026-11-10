@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom';
 import { History, Users } from 'lucide-react';
+import AppBreadcrumb from '../components/common/AppBreadcrumb';
 
 export default function Settings() {
   return (
     <div className="space-y-6">
+      <AppBreadcrumb items={[{ label: 'Pengaturan', isCurrent: true }]} />
       <h2 className="text-xl font-bold">Pengaturan Sistem</h2>
       
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-6">

@@ -1,8 +1,11 @@
 import { AlertTriangle } from 'lucide-react';
+import AppBreadcrumb from '../components/common/AppBreadcrumb';
 
 export default function Harmonisasi() {
   return (
     <div className="space-y-6">
+      <AppBreadcrumb items={[{ label: 'Harmonisasi', isCurrent: true }]} />
+
       {/* Banner Pratinjau Desain Fase 2 */}
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start space-x-3">
         <AlertTriangle className="text-amber-700 shrink-0 mt-0.5" size={20} />

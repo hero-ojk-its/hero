@@ -45,6 +45,7 @@ import {
 import AnalisaState2Workspace from '../components/analisa/AnalisaState2Workspace';
 import SummaryView from '../components/analisa/SummaryView';
 import AnalysisHistory from '../components/analisa/AnalysisHistory';
+import AnalisaBreadcrumb from '../components/analisa/AnalisaBreadcrumb';
 
 /** Setelah durasi ini tanpa hasil, pengguna diberi tahu bahwa proses masih berjalan (polling tidak dihentikan). */
 const POLLING_SOFT_TIMEOUT_MS = 120_000;
@@ -714,11 +715,7 @@ export default function AnalisaRegulasi() {
   return (
     <div className="max-w-[1240px] mx-auto space-y-6 font-sans pb-16">
       {/* 1. Breadcrumb Navigasi */}
-      <div className="flex items-center text-xs font-semibold tracking-wider text-gray-500">
-        <span className="hover:text-red-700 transition">DASHBOARD</span>
-        <span className="mx-2 text-gray-400">&gt;</span>
-        <span className="text-red-700 uppercase">ANALISA REGULASI</span>
-      </div>
+      <AnalisaBreadcrumb stage="initial" />
 
       {/* 2. Top Header Title & Service Status */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">

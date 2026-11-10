@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import AppBreadcrumb from '../../components/common/AppBreadcrumb';
 import { 
   UploadCloud, 
   FileText, 
@@ -1248,13 +1249,17 @@ export default function UploadTab() {
         <div className="space-y-6 animate-in fade-in duration-300">
           {/* Header breadcrumb & title */}
           <div>
-            <div className="text-sm font-medium text-gray-500 mb-2 flex items-center space-x-2">
-              <span>Dashboard</span>
-              <span className="text-gray-400">&gt;</span>
-              <span>Ingest Dokumen</span>
-              <span className="text-gray-400">&gt;</span>
-              <span className="text-gray-900 font-bold">Hasil Upload Manual</span>
-            </div>
+            <AppBreadcrumb
+              items={[
+                {
+                  label: 'Ingest Dokumen',
+                  onClick: isUploading ? undefined : handleResetForm,
+                  title: isUploading ? undefined : 'Kembali ke formulir upload',
+                },
+                { label: 'Hasil Upload Manual', isCurrent: true },
+              ]}
+              className="mb-2"
+            />
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h3 className="text-2xl font-bold text-gray-900 tracking-tight">

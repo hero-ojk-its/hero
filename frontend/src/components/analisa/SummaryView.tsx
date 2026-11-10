@@ -10,7 +10,6 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Link } from 'react-router-dom';
 import {
   FileText,
   Sparkles,
@@ -19,7 +18,6 @@ import {
   ExternalLink,
   RefreshCw,
   AlertCircle,
-  ChevronRight,
 } from 'lucide-react';
 
 import {
@@ -37,6 +35,7 @@ import {
 import { apiFetch, apiFetchBlob } from '../../lib/api';
 import type { DocumentTextResponse } from '../../lib/api';
 import RingkasanAiPanel from './RingkasanAiPanel';
+import AnalisaBreadcrumb from './AnalisaBreadcrumb';
 
 /**
  * Rujukan yang tidak menunjuk ke Pasal tertentu, mis. dokumen berbentuk
@@ -387,26 +386,7 @@ export default function SummaryView({
       {/* 1. Header Bar: Breadcrumb, Info Dokumen, & Tombol Tahap */}
       <div className="bg-white rounded-xl shadow-xs border border-gray-200/80 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1 min-w-0">
-          <div className="flex items-center gap-1.5 text-xs font-semibold tracking-wider text-gray-500 uppercase flex-wrap">
-            <Link
-              to="/"
-              className="hover:text-red-700 transition cursor-pointer hover:underline"
-              title="Kembali ke Dashboard Utama"
-            >
-              Dashboard
-            </Link>
-            <ChevronRight size={12} className="text-gray-400 shrink-0" />
-            <button
-              type="button"
-              onClick={onBackToState1}
-              className="hover:text-red-700 transition cursor-pointer hover:underline uppercase"
-              title="Kembali ke formulir upload dan daftar draft regulasi"
-            >
-              Analisa Regulasi
-            </button>
-            <ChevronRight size={12} className="text-gray-400 shrink-0" />
-            <span className="text-red-700 font-bold uppercase">Summary</span>
-          </div>
+          <AnalisaBreadcrumb stage="summary" onBackToState1={onBackToState1} />
 
           <div className="flex items-center gap-2.5 flex-wrap">
             <h1 className="text-lg sm:text-xl font-bold text-gray-900 truncate" title={docStatus?.title || data?.identitas?.title || 'Draf Regulasi'}>

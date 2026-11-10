@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import AppBreadcrumb from '../components/common/AppBreadcrumb';
 import { ArrowLeft, FolderPlus, FolderTree, Info, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { isApiConfigured } from '../lib/api';
 import {
@@ -49,11 +50,12 @@ type PilihSetelahMuat = (rata: KategoriTerindeks[]) => number | null;
 export default function KelolaKategori() {
   return (
     <div className="max-w-[1200px] mx-auto space-y-6">
-      <div className="text-xs text-gray-500">
-        <Link to="/" className="hover:underline">Dashboard</Link> /{' '}
-        <Link to="/knowledge" className="hover:underline">Knowledge Base</Link> /{' '}
-        <span className="font-semibold text-gray-900">Kelola Kategori</span>
-      </div>
+      <AppBreadcrumb
+        items={[
+          { label: 'Knowledge Base', to: '/knowledge' },
+          { label: 'Kelola Kategori', isCurrent: true },
+        ]}
+      />
       {isApiConfigured ? (
         <KelolaKategoriApi />
       ) : (

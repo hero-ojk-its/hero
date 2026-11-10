@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   FileText,
   ExternalLink,
   Check,
   ChevronDown,
-  ChevronRight,
   ZoomIn,
   ZoomOut,
   Scale,
@@ -55,6 +54,7 @@ import { ApiError, API_BASE_URL, apiFetchBlob } from '../../lib/api';
 import { PanelErrorBoundary } from '../PanelErrorBoundary';
 import { DraftLabel } from '../DraftLabel';
 import RingkasanAiPanel from './RingkasanAiPanel';
+import AnalisaBreadcrumb from './AnalisaBreadcrumb';
 import HarmonisasiPanel from './HarmonisasiPanel';
 import KemiripanDraftBanner from './KemiripanDraftBanner';
 import StatusPasalKb from './StatusPasalKb';
@@ -1253,39 +1253,11 @@ export default function AnalisaState2Workspace({
   return (
     <div className="w-full space-y-3 pb-8 font-sans">
       {/* 1. Header Workspace Breadcrumb */}
-      <div className="flex items-center gap-1.5 text-xs font-semibold tracking-wider text-gray-500 uppercase flex-wrap">
-        <Link
-          to="/"
-          className="hover:text-red-700 transition cursor-pointer hover:underline"
-          title="Kembali ke Dashboard Utama"
-        >
-          DASHBOARD
-        </Link>
-        <ChevronRight size={12} className="text-gray-400 shrink-0" />
-        <button
-          type="button"
-          onClick={onBackToState1}
-          className="hover:text-red-700 transition cursor-pointer hover:underline uppercase"
-          title="Kembali ke formulir upload dan daftar draft regulasi"
-        >
-          ANALISA REGULASI
-        </button>
-        {onBackToSummary && (
-          <>
-            <ChevronRight size={12} className="text-gray-400 shrink-0" />
-            <button
-              type="button"
-              onClick={onBackToSummary}
-              className="hover:text-red-700 transition cursor-pointer hover:underline text-gray-700 font-bold uppercase"
-              title="Kembali ke Ringkasan Eksekutif & Key Takeaways"
-            >
-              SUMMARY
-            </button>
-          </>
-        )}
-        <ChevronRight size={12} className="text-gray-400 shrink-0" />
-        <span className="text-red-700 font-bold uppercase">ANALISA REGULASI</span>
-      </div>
+      <AnalisaBreadcrumb
+        stage="analisa"
+        onBackToState1={onBackToState1}
+        onBackToSummary={onBackToSummary}
+      />
 
       {/* 2. Top Header Title & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
