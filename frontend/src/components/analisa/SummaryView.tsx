@@ -35,6 +35,45 @@ import { apiFetch, apiFetchBlob } from '../../lib/api';
 import type { DocumentTextResponse } from '../../lib/api';
 import RingkasanAiPanel from './RingkasanAiPanel';
 
+/**
+ * Rujukan yang tidak menunjuk ke Pasal tertentu, mis. dokumen berbentuk
+ * Keputusan (diktum KESATU, KEDUA, ...) yang diberi label
+ * "Teks dokumen (pasal tidak terbaca)" oleh mesin analisis.
+ */
+const isNoPasalRef = (ref: string): boolean => /pasal\s+tidak\s+terbaca/i.test(ref);
+
+interface RujukanChipProps {
+  refStr: string;
+  onJump: (ref: string) => void;
+  iconSize?: number;
+  title?: string;
+}
+
+/** Chip rujukan. Rujukan tanpa Pasal tampil netral (abu-abu), bukan seperti galat. */
+function RujukanChip({ refStr, onJump, iconSize = 9, title }: RujukanChipProps) {
+  if (isNoPasalRef(refStr)) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 font-mono text-[10px] font-medium text-gray-600 bg-gray-100 px-2 py-0.5 rounded border border-gray-200"
+        title="Bagian ini tidak berasal dari satu Pasal tertentu (mis. dokumen berbentuk Keputusan atau tanpa pasal). Periksa langsung pada Naskah."
+      >
+        Rujukan umum
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onJump(refStr)}
+      className="inline-flex items-center gap-1 font-mono text-[10px] font-bold text-red-700 hover:text-red-900 bg-white hover:bg-red-50 px-2 py-0.5 rounded border border-red-200 transition cursor-pointer"
+      title={title ?? `Lompat ke ${refStr}`}
+    >
+      <span>{refStr}</span>
+      <ExternalLink size={iconSize} />
+    </button>
+  );
+}
+
 export interface SummaryViewProps {
   documentId: number;
   onBackToState1: () => void;
@@ -265,6 +304,14 @@ export default function SummaryView({
 
   // Daftar poin utama
   const poinUtama: MlAnalisaPoint[] = activeData?.poin_utama || [];
+
+  // Dokumen tanpa pasal yang dapat dikenali (mis. Keputusan dengan diktum):
+  // semua rujukan bertanda "pasal tidak terbaca". Ringkasan bisa tidak lengkap.
+  const semuaRujukan: string[] = [
+    ...(activeData?.ringkasan || []).flatMap((k) => k.rujukan || []),
+    ...poinUtama.map((p) => p.pasal).filter((x): x is string => Boolean(x)),
+  ];
+  const dokumenTanpaPasal = semuaRujukan.length > 0 && semuaRujukan.every(isNoPasalRef);
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-4 font-sans pb-12">
@@ -598,6 +645,20 @@ export default function SummaryView({
             </div>
           )}
 
+          {/* Catatan: dokumen tanpa pasal yang dapat dikenali */}
+          {!loading && !error && dokumenTanpaPasal && (
+            <div className="m-4 mb-0 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2">
+              <AlertCircle size={15} className="text-amber-700 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold">Dokumen ini tidak memiliki pasal yang dapat dikenali. </span>
+                <span>
+                  Ringkasan disusun dari kalimat dokumen dan mungkin belum mencakup seluruh isi
+                  (mis. dokumen berbentuk Keputusan). Mohon periksa langsung pada tab Naskah.
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Body Panel Kanan */}
           <div className="flex-1 p-4 sm:p-6 overflow-y-auto max-h-[720px] space-y-6">
             {loading ? (
@@ -653,16 +714,7 @@ export default function SummaryView({
                             <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                               <span className="text-[10px] font-medium text-gray-500">Rujukan:</span>
                               {sentence.rujukan.map((refStr, rIdx) => (
-                                <button
-                                  key={rIdx}
-                                  type="button"
-                                  onClick={() => handleJumpToPasal(refStr)}
-                                  className="inline-flex items-center gap-1 font-mono text-[10px] font-bold text-red-700 bg-white hover:bg-red-50 px-2 py-0.5 rounded border border-red-200 transition cursor-pointer"
-                                  title={`Lompat ke ${refStr}`}
-                                >
-                                  <span>{refStr}</span>
-                                  <ExternalLink size={9} />
-                                </button>
+                                <RujukanChip key={rIdx} refStr={refStr} onJump={handleJumpToPasal} />
                               ))}
                             </div>
                           )}
@@ -763,15 +815,12 @@ export default function SummaryView({
                               </div>
 
                               {point.pasal && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleJumpToPasal(point.pasal!)}
-                                  className="inline-flex items-center gap-1 font-mono text-[10px] font-bold text-red-700 hover:text-red-900 bg-white hover:bg-red-50 px-2 py-0.5 rounded border border-red-200 transition cursor-pointer"
+                                <RujukanChip
+                                  refStr={point.pasal}
+                                  onJump={handleJumpToPasal}
+                                  iconSize={10}
                                   title={`Lihat teks di ${point.pasal}`}
-                                >
-                                  <span>{point.pasal}</span>
-                                  <ExternalLink size={10} />
-                                </button>
+                                />
                               )}
                             </div>
 
