@@ -33,7 +33,7 @@ from typing import Any
 
 from hero.extract.structure import DIKTUM_ORDINAL
 
-VERSION = "v2.4"
+VERSION = "v2.5"
 
 # Lower-case only, matched case-sensitively: Indonesian legislative drafting
 # writes obligations in lower case ("wajib menyampaikan") and defined terms in
@@ -72,9 +72,21 @@ _DEFINITION = re.compile(r"\byang dimaksud dengan\b|\byang selanjutnya (disebut|
 _AYAT = re.compile(r"(?:^|\n|\s)\((\d{1,2})\)\s")
 _SUBJECT = re.compile(r"^\s*(?:Setiap |Dalam hal )?([A-Z][A-Za-z/\-]*(?: (?:[A-Z][A-Za-z/\-]*|atau|dan|dan/atau)){0,5})"
                       r"\s+(?:yang [^,]{0,80},?\s*)?(wajib|dilarang|harus|dapat)\b")
-_SANCTION_KINDS = (("teguran tertulis|peringatan tertulis", "teguran/peringatan tertulis"),
-                   (r"\bdenda\b", "denda"), ("pembatasan kegiatan", "pembatasan kegiatan usaha"),
-                   ("pembekuan", "pembekuan kegiatan usaha"), ("pencabutan izin", "pencabutan izin usaha"),
+# Label = kata yang DIPAKAI dokumen. Dulu "teguran tertulis" dan "peringatan tertulis" dilebur
+# menjadi "teguran/peringatan tertulis", sehingga ringkasan menyebut bentuk sanksi yang tidak ada
+# di PDF-nya (temuan QA #2). Urutan = urutan tampil.
+_SANCTION_KINDS = (("teguran tertulis", "teguran tertulis"),
+                   ("peringatan tertulis", "peringatan tertulis"),
+                   (r"\bdenda\b", "denda"),
+                   ("pembatasan kegiatan", "pembatasan kegiatan usaha"),
+                   ("pembekuan", "pembekuan kegiatan usaha"),
+                   ("pencabutan izin", "pencabutan izin usaha"),
+                   # Bentuk yang lazim di daftar huruf pasal sanksi dan dulu tak pernah terangkum.
+                   ("larangan (?:untuk )?menerbitkan produk", "larangan menerbitkan produk baru"),
+                   ("larangan melakukan ekspansi|larangan ekspansi", "larangan ekspansi kegiatan usaha"),
+                   ("larangan melakukan kegiatan usaha baru", "larangan kegiatan usaha baru"),
+                   ("larangan sebagai pihak utama", "larangan sebagai pihak utama"),
+                   ("penurunan penilaian faktor tata kelola", "penurunan penilaian faktor tata kelola"),
                    ("penurunan tingkat kesehatan", "penurunan tingkat kesehatan"))
 _LAMPIRAN_REF = re.compile(r"tercantum dalam[:\s]+(?:[a-z]\.\s*)?Lampiran", re.I)
 # Section headings the structure parser sometimes leaves at the end of an ayat.
@@ -503,6 +515,13 @@ _STATUS_PHRASE = {"berlaku": "masih berlaku", "diubah": "masih berlaku dengan pe
                   "belum_berlaku": "belum berlaku"}
 
 
+_SISA_DISELESAIKAN = 6
+_KATA_GANTUNG = re.compile(
+    r"(?:dan|atau|dan/atau|dengan|sesuai|serta|untuk|pada|dalam|dari|oleh|ke|di|yang|"
+    r"sebagaimana|dimaksud|terhadap|antara|bagi|ketentuan|tersebut|paling|secara|huruf|ayat|pasal)",
+    re.I)
+
+
 def _clause(p: Point, marker: str, words: int = 22) -> str:
     """A short, quotable clause around the normative marker.
 
@@ -518,8 +537,18 @@ def _clause(p: Point, marker: str, words: int = 22) -> str:
         if toks[j].endswith((".", ";", ":")) and j < idx - 1:
             start = j + 1
             break
-    piece = toks[start:start + words]
-    s = " ".join(piece) + ("…" if start + words < len(toks) else "")
+    # Sisa beberapa kata saja: lebih baik diselesaikan daripada diputus dengan elipsis.
+    # Jangan MULAI pada kata sambung ("tersebut sesuai dengan ketentuan …"): maju sampai kata
+    # yang membawa makna, tetapi tidak pernah melewati penanda normatifnya.
+    while start < idx and _KATA_GANTUNG.fullmatch(toks[start].strip(" ,;:.")):
+        start += 1
+    end = len(toks) if len(toks) - (start + words) <= _SISA_DISELESAIKAN else start + words
+    piece = list(toks[start:end])
+    # Jangan berhenti pada kata sambung ("…tersebut sesuai dengan ketentuan…"): potong mundur
+    # sampai kata terakhir membawa makna.
+    while end < len(toks) and len(piece) > 8 and _KATA_GANTUNG.fullmatch(piece[-1].strip(" ,;:.")):
+        piece.pop()
+    s = " ".join(piece) + ("…" if end < len(toks) else "")
     return s.rstrip(" ,;:.")
 
 
@@ -528,11 +557,33 @@ _GENERIC = re.compile(r"ketentuan peraturan perundang-undangan|sesuai dengan (ke
                       r"^pada saat peraturan .{0,80} mulai berlaku", re.I)
 
 
+# Isi yang membuat sebuah ayat layak dikutip meski kalimatnya dibuka rujukan silang:
+# daftar huruf/angka, nominal rupiah, persen, atau jangka waktu.
+_ISI_KHUSUS = re.compile(r"(?:^|[;:])\s*[a-j]\.\s|\bRp\s?[\d.]|\b\d+\s*%|"
+                         r"\b\d+\s*\((?:satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh|"
+                         r"sebelas|dua belas|tiga puluh|enam puluh|sembilan puluh)\)", re.I)
+
+
+def _generik(teks: str) -> bool:
+    """Kalimat rujukan-silang tanpa isi sendiri ("… sesuai dengan ketentuan peraturan …").
+
+    Pembukanya saja tidak cukup: hampir setiap ayat sanksi dibuka "sebagaimana dimaksud pada
+    ayat (1)", lalu justru memuat daftar sanksinya. Dulu pembuka itu membuat seluruh ayat
+    sanksi dianggap generik dan tersingkir dari poin utama (temuan QA #1)."""
+    if not _GENERIC.search(teks):
+        return False
+    # Menyebut bentuk sanksi yang konkret ("berupa teguran tertulis") juga termasuk isi sendiri.
+    return not (_ISI_KHUSUS.search(teks) or any(re.search(rx, teks, re.I) for rx, _ in _SANCTION_KINDS))
+
+
 def _rank_for_summary(points: list[Point], top_subjects: list[str]) -> list[Point]:
     """Most informative first: specific (not "comply with the regulations"),
-    about a principal subject, short enough to quote, earliest Pasal."""
-    return sorted(points, key=lambda p: (bool(_GENERIC.search(p.teks)),
-                                         p.subjek not in top_subjects, len(p.teks) > 400,
+    about a principal subject, earliest Pasal.
+
+    Panjang tidak lagi menjadi penalti: ayat terpanjang justru yang memuat daftar sanksi
+    a–e, dan kutipan di ringkasan toh dipotong ``_clause``."""
+    return sorted(points, key=lambda p: (_generik(p.teks),
+                                         p.subjek not in top_subjects,
                                          _pasal_order(p.pasal)))
 
 

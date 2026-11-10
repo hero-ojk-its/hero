@@ -40,8 +40,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Callable
 
-from hero.analysis.ai import (_finish_reason_gemini, build_facts, gemini_minta, thinking_config,
-                              usage_gemini, verify)
+from hero.analysis.ai import (_finish_reason_gemini, build_facts, gemini_minta, periksa_modalitas,thinking_config,usage_gemini, verify)
 
 # ---------------------------------------------------------------------------
 # Harga — USD per 1 juta token, kelas Standard berbayar.
@@ -73,10 +72,6 @@ BUTIR_WAJIB: dict[str, list[str]] = {
             "ekspansi", "kegiatan usaha baru", "penilaian faktor tata kelola", "denda"],
 }
 
-_MODAL_BARU = ("dapat", "boleh", "sebaiknya", "mungkin", "umumnya", "biasanya", "diharapkan", "seharusnya")
-_MODAL_ASAL = (("wajib", ("wajib", "harus", "diwajibkan", "kewajiban")),
-               ("dilarang", ("dilarang", "tidak boleh", "larangan", "tidak diperkenankan")),
-               ("dikenai", ("dikenai", "dikenakan", "sanksi")))
 _STOP = frozenset("yang dalam dengan untuk pada atau dari oleh adalah akan telah dapat serta bagi tersebut "
                   "sebagaimana dimaksud ayat pasal peraturan antara lain ini itu para juga sesuai".split())
 _KATA = re.compile(r"[a-zA-Z]{5,}")
@@ -91,10 +86,6 @@ def _norm(s: str) -> str:
 
 def _kata(s: str) -> set[str]:
     return {w for w in _KATA.findall((s or "").lower()) if w not in _STOP}
-
-
-def _ada(kata: str, teks: str) -> bool:
-    return re.search(rf"\b{re.escape(kata)}\b", teks) is not None
 
 
 def kategori_fakta(f: dict[str, Any]) -> str | None:
@@ -126,13 +117,7 @@ def skor_keluaran(output: dict[str, Any], facts: list[dict[str, Any]], *,
         sumber = " ".join(by_id[i]["teks"] for i in (s.get("fakta") or []) if i in by_id)
         pasangan.append((s.get("kalimat", ""), sumber, "+".join(s.get("fakta") or [])))
     for hasil, sumber, ref in pasangan:
-        h, s_ = _norm(hasil), _norm(sumber)
-        for m in _MODAL_BARU:
-            if _ada(m, h) and not _ada(m, s_):
-                bergeser.append(f"{ref}: '{m}' ditambahkan")
-        for asal, pengganti in _MODAL_ASAL:
-            if _ada(asal, s_) and not any(_ada(x, h) for x in pengganti):
-                bergeser.append(f"{ref}: '{asal}' hilang")
+        bergeser += [f"{ref}: {m}" for m in periksa_modalitas(hasil, sumber, ketat=True)]
 
     sumber_kal = set()
     for s in kal:
