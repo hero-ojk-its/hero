@@ -33,7 +33,7 @@ from typing import Any
 
 from hero.extract.structure import DIKTUM_ORDINAL
 
-VERSION = "v2.2"
+VERSION = "v2.3"
 
 # Lower-case only, matched case-sensitively: Indonesian legislative drafting
 # writes obligations in lower case ("wajib menyampaikan") and defined terms in
