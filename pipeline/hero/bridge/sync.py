@@ -45,6 +45,23 @@ REG_STATUS = {"berlaku": "berlaku", "diubah": "diubah", "dicabut": "dicabut", "b
               "tidak_diketahui": "unknown"}
 
 
+def versi_backend(extracted_at: Any, updated_at: Any) -> str:
+    """Penanda kesegaran satu dokumen: berubah bila diekstraksi ulang atau metadata/statusnya berubah."""
+    return f"{extracted_at or '-'}|{updated_at or '-'}"
+
+
+def versi_dokumen(document_id: int, dsn: str | None = None) -> str | None:
+    """``versi_backend`` baris Postgres saat ini; None bila dokumennya tak ada."""
+    conn = pg.connect(dsn)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT extracted_at, updated_at FROM documents WHERE id = %s", (int(document_id),))
+            r = cur.fetchone()
+            return versi_backend(r[0], r[1]) if r else None
+    finally:
+        conn.close()
+
+
 @dataclass
 class SyncReport:
     dokumen: int = 0
@@ -73,7 +90,7 @@ SELECT d.id, d.title, d.regulation_number, d.regulation_type, d.regulation_year,
        d.release_date, d.effective_date, d.bidang, d.status_keberlakuan, d.document_role,
        d.access_classification, d.processing_status, d.file_hash, d.file_size_bytes,
        d.original_filename, d.standardized_filename, d.file_path_pdf, d.source_url,
-       d.extraction_method, d.extraction_engine, d.full_text, d.created_at
+       d.extraction_method, d.extraction_engine, d.full_text, d.created_at, d.extracted_at, d.updated_at
 FROM documents d
 WHERE d.processing_status = ANY(%s)
 {extra}
@@ -262,7 +279,7 @@ def mirror(settings: Settings, *, dsn: str | None = None, limit: int | None = No
                 existing = cat.exists(rec.sha256)
                 if existing is not None:
                     doc_id = existing["doc_id"]
-                st.map_document(bid, doc_id, rec.sha256)
+                st.map_document(bid, doc_id, rec.sha256, versi_backend(d.get("extracted_at"), d.get("updated_at")))
 
                 page_map = pages.get(bid, {})
                 rows = []

@@ -126,6 +126,8 @@ class BridgeState:
             ("extraction", {"backend_status": "TEXT", "vectors": "INTEGER DEFAULT 0",
                             "embedder": "TEXT", "articles_hash": "TEXT"}),
             ("scan", {"pages_visited": "INTEGER DEFAULT 0"}),
+            # Versi baris backend saat disalin ("extracted_at|updated_at"); pembanding kesegaran cermin.
+            ("doc_map", {"versi": "TEXT"}),
         ):
             have = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
             for col, ddl in cols.items():
@@ -278,13 +280,19 @@ class BridgeState:
         return out
 
     # -- peta identitas --------------------------------------------------
-    def map_document(self, document_id: int, doc_id: str, file_hash: str | None = None) -> None:
+    def map_document(self, document_id: int, doc_id: str, file_hash: str | None = None,
+                     versi: str | None = None) -> None:
         self.conn.execute(
-            "INSERT INTO doc_map (document_id, doc_id, file_hash, synced_at) VALUES (?,?,?,?) "
+            "INSERT INTO doc_map (document_id, doc_id, file_hash, synced_at, versi) VALUES (?,?,?,?,?) "
             "ON CONFLICT(document_id) DO UPDATE SET doc_id=excluded.doc_id, "
-            "file_hash=excluded.file_hash, synced_at=excluded.synced_at",
-            (int(document_id), str(doc_id), file_hash, now()))
+            "file_hash=excluded.file_hash, synced_at=excluded.synced_at, versi=excluded.versi",
+            (int(document_id), str(doc_id), file_hash, now(), versi))
         self.conn.commit()
+
+    def versi_for(self, document_id: int) -> str | None:
+        """Versi backend dokumen ini saat terakhir disalin; None = belum dicatat (cermin lama)."""
+        row = self.conn.execute("SELECT versi FROM doc_map WHERE document_id = ?", (int(document_id),)).fetchone()
+        return row["versi"] if row else None
 
     def doc_id_for(self, document_id: int) -> str | None:
         row = self.conn.execute("SELECT doc_id FROM doc_map WHERE document_id = ?",

@@ -1257,3 +1257,101 @@ def test_404_menyebut_penyebab(tmp_settings, monkeypatch):
         _require_mapped(ml, 131)
     assert e.value.status_code == 404
     assert "belum diekstraksi" in e.value.detail and "hero bridge sinkron --dokumen 131" in e.value.detail
+
+
+# ---------------------------------------------------------------------------
+# Dokumen yang sudah tercermin lalu berubah di backend (ekstraksi ulang, koreksi, status)
+# disalin ulang SEBELUM dianalisa — bukan menunggu timer sinkron.
+# ---------------------------------------------------------------------------
+def _ml_basi(tmp_settings, monkeypatch, versi_backend, mirror):
+    ml = _ml_dengan_mirror(tmp_settings, monkeypatch, mirror)
+    ml._versi_backend = versi_backend if callable(versi_backend) else (lambda _id: versi_backend)
+    return ml
+
+
+def test_dokumen_berubah_di_backend_disalin_ulang_sebelum_dianalisa(tmp_settings, monkeypatch):
+    panggilan = []
+
+    def mirror(settings, **kw):
+        panggilan.append(kw)
+        ml.state.map_document(5, "be-5", "a" * 64, "V2")        # mirror mencatat versi terbaru
+        return _Lap(pasal=3)
+
+    ml = _ml_basi(tmp_settings, monkeypatch, "V2", mirror)
+    ml.state.map_document(5, "be-5", "a" * 64, "V1")              # salinan lama
+    assert ml.ensure_mapped(5) == ("be-5", None)
+    assert len(panggilan) == 1 and panggilan[0]["document_ids"] == [5]
+    assert ml.ensure_mapped(5) == ("be-5", None)                  # sudah segar: tak menyalin lagi
+    assert len(panggilan) == 1
+
+
+def test_salinan_segar_tidak_menyentuh_mirror(tmp_settings, monkeypatch):
+    def mirror(*a, **k):
+        raise AssertionError("tidak boleh menyalin dokumen yang masih segar")
+
+    ml = _ml_basi(tmp_settings, monkeypatch, "V1", mirror)
+    ml.state.map_document(5, "be-5", "a" * 64, "V1")
+    assert ml.ensure_mapped(5) == ("be-5", None)
+
+
+def test_cermin_lama_tanpa_catatan_versi_disalin_sekali_lalu_dicatat(tmp_settings, monkeypatch):
+    """Pemetaan dari sebelum kolom versi ada (versi NULL) menyembuhkan dirinya pada permintaan pertama."""
+    jumlah = []
+
+    def mirror(settings, **kw):
+        jumlah.append(1)
+        ml.state.map_document(8, "be-8", "b" * 64, "V1")
+        return _Lap(pasal=1)
+
+    ml = _ml_basi(tmp_settings, monkeypatch, "V1", mirror)
+    ml.state.map_document(8, "be-8", "b" * 64)                    # versi NULL
+    assert ml.state.versi_for(8) is None
+    ml.ensure_mapped(8)
+    ml.ensure_mapped(8)
+    assert len(jumlah) == 1 and ml.state.versi_for(8) == "V1"
+
+
+def test_postgres_tak_terjangkau_memakai_salinan_lama_bukan_gagal(tmp_settings, monkeypatch):
+    def versi(_id):
+        raise RuntimeError("connection refused")
+
+    def mirror(*a, **k):
+        raise AssertionError("tanpa kepastian berubah, tidak menyalin")
+
+    ml = _ml_basi(tmp_settings, monkeypatch, versi, mirror)
+    ml.state.map_document(5, "be-5", "a" * 64, "V1")
+    assert ml.ensure_mapped(5) == ("be-5", None)
+
+
+def test_dokumen_sedang_diekstraksi_ulang_tetap_dilayani_dari_salinan_lama(tmp_settings, monkeypatch):
+    """Backend 'diproses' tak disalin mirror (dilewati); analisa jangan jadi 404 selama itu."""
+    ml = _ml_basi(tmp_settings, monkeypatch, "V2", lambda s, **k: _Lap())
+    ml.state.map_document(5, "be-5", "a" * 64, "V1")
+    assert ml.ensure_mapped(5) == ("be-5", None)
+
+    ml2 = _ml_basi(tmp_settings, monkeypatch, "V2", lambda s, **k: (_ for _ in ()).throw(RuntimeError("pg mati")))
+    ml2.state.map_document(6, "be-6", "c" * 64, "V1")
+    assert ml2.ensure_mapped(6) == ("be-6", None)                 # gagal menyalin pun: salinan lama, bukan 404
+
+
+def test_migrasi_menambah_kolom_versi_tanpa_merusak_pemetaan_lama(tmp_path):
+    import sqlite3
+
+    db = tmp_path / "lama.db"
+    c = sqlite3.connect(db)
+    c.executescript("CREATE TABLE doc_map (document_id INTEGER PRIMARY KEY, doc_id TEXT NOT NULL, "
+                    "file_hash TEXT, synced_at TEXT); INSERT INTO doc_map VALUES (1, 'be-1', 'h', 't');")
+    c.commit()
+    c.close()
+    st = BridgeState(db)
+    assert st.doc_id_for(1) == "be-1" and st.versi_for(1) is None
+    st.map_document(1, "be-1", "h", "V9")
+    assert st.versi_for(1) == "V9"
+
+
+def test_versi_backend_berubah_bila_ekstraksi_atau_metadata_berubah():
+    from hero.bridge.sync import versi_backend
+
+    assert versi_backend("2026-11-10T10:00", "2026-11-10T11:00") != versi_backend("2026-11-10T12:00", "2026-11-10T11:00")
+    assert versi_backend("2026-11-10T10:00", "2026-11-10T11:00") != versi_backend("2026-11-10T10:00", "2026-11-10T13:00")
+    assert versi_backend(None, None) == "-|-"

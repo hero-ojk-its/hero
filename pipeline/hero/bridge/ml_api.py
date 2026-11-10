@@ -110,9 +110,28 @@ class MlState:
 
         return mirror(*args, **kwargs)
 
+    @staticmethod
+    def _versi_backend(document_id: int) -> str | None:
+        from hero.bridge.sync import versi_dokumen
+
+        return versi_dokumen(document_id)
+
+    def _basi(self, document_id: int) -> bool:
+        """Apakah baris backend berubah (ekstraksi ulang, koreksi, status) sejak terakhir disalin?
+
+        Satu kueri ringan per permintaan. Postgres tak terjangkau = anggap segar: lebih baik
+        menjawab dari salinan lama daripada menggagalkan analisa."""
+        try:
+            terkini = self._versi_backend(document_id)
+        except Exception as exc:                                  # noqa: BLE001
+            log.warning("cek kesegaran dokumen %s dilewati: %s", document_id, exc)
+            return False
+        return terkini is not None and terkini != self.state.versi_for(document_id)
+
     # -- sinkron otomatis -------------------------------------------------
     def ensure_mapped(self, document_id: int) -> tuple[str | None, str | None]:
-        """``(doc_id, alasan)``: dokumen yang belum tercermin disalin SEKARANG.
+        """``(doc_id, alasan)``: dokumen yang belum tercermin ATAU sudah berubah di backend
+        disalin SEKARANG, sebelum dianalisa.
 
         Dulu cermin hanya jalan lewat timer ``hero bridge sinkron``, sehingga
         dokumen yang baru diekstraksi menjawab 404 sampai putaran berikutnya
@@ -127,24 +146,29 @@ class MlState:
         Matikan dengan ``HERO_ML_SINKRON_OTOMATIS=0``.
         """
         doc_id = self.state.doc_id_for(document_id)
-        if doc_id is not None:
-            return doc_id, None
         if os.environ.get("HERO_ML_SINKRON_OTOMATIS", "1").strip().lower() in ("0", "false", "off", "tidak"):
-            return None, None
+            return doc_id, None
+        if doc_id is not None and not self._basi(document_id):
+            return doc_id, None
         with self._sync_guard:                       # satu kunci per dokumen, bukan satu untuk semua
             kunci = self._sync_locks.setdefault(int(document_id), threading.Lock())
         with kunci:
             doc_id = self.state.doc_id_for(document_id)      # utas lain mungkin sudah menyalinnya
-            if doc_id is not None:
+            if doc_id is not None and not self._basi(document_id):
                 return doc_id, None
+            lama = doc_id
             try:
                 rep = self._mirror(self.settings, document_ids=[int(document_id)],
                                    include_drafts=True)
             except Exception as exc:                          # Postgres mati, DSN kosong, dsb.
                 log.warning("sinkron otomatis dokumen %s gagal: %s", document_id, exc)
+                if lama is not None:                                # salinan lama masih lebih baik dari 404
+                    return lama, None
                 return None, f"sinkron otomatis gagal ({type(exc).__name__}: {str(exc)[:160]})"
             doc_id = self.state.doc_id_for(document_id)
             if doc_id is not None:
+                # Sedang diekstraksi ulang (backend 'diproses') tak disalin oleh mirror; pemetaan lama
+                # tetap dipakai sampai ekstraksinya selesai.
                 log.info("dokumen %s disalin otomatis ke lapisan data (%s pasal)", document_id, rep.pasal)
                 return doc_id, None
             if rep.dilewati_tanpa_teks:
