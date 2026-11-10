@@ -1338,8 +1338,14 @@ def bench_ai_cmd(
                                               help="Boleh berulang. Kosong = semua model berharga yang terlihat kunci ini."),
     ulangan: int = typer.Option(3, "--ulangan", "-n", min=1, help="Pengulangan per model."),
     suhu: Optional[list[float]] = typer.Option(None, "--suhu", help="Boleh berulang; bawaan produksi 0."),
-    berpikir: Optional[str] = typer.Option(None, "--berpikir-json",
-                                           help='thinking_config apa adanya, mis. \'{"thinking_budget":0}\'.'),
+    berpikir: Optional[list[str]] = typer.Option(
+        None, "--berpikir", help="Anggaran berpikir; boleh berulang untuk dibandingkan: "
+                                 "angka token (0 = mati), nama level (minimal|low|medium|high), "
+                                 "atau 'bawaan'."),
+    maks_token: Optional[list[int]] = typer.Option(
+        None, "--maks-token", help="Batas token keluaran; boleh berulang. 0 = tanpa batas."),
+    batas_detik: Optional[float] = typer.Option(
+        None, "--batas-detik", help="Batas waktu per panggilan (detik). Panggilan yang lewat dicatat galat."),
     butir: Optional[list[str]] = typer.Option(None, "--butir", help="Butir wajib dokumen uji (boleh berulang)."),
     keluar: Path = typer.Option(Path("docs"), "--keluar", help="Folder laporan."),
     korpus: int = typer.Option(1529, "--korpus", help="Jumlah dokumen untuk proyeksi biaya."),
@@ -1407,8 +1413,19 @@ def bench_ai_cmd(
     tak_berharga = [m for m in tersedia if m.startswith("gemini") and m not in B.HARGA]
     if tak_berharga and not model:
         console.print(f"[dim]Model terlihat tapi belum ada di tabel harga (tidak diuji): {', '.join(tak_berharga[:12])}[/]")
-    thinking = _json.loads(berpikir) if berpikir else None
-    varian = [B.Varian(m, s, thinking) for m in pilih for s in (suhu or [0.0])]
+    def _berpikir(nilai: str):
+        teks = (nilai or "").strip().lower()
+        if teks in ("", "bawaan", "default"):
+            return None
+        if teks.startswith("{"):
+            return _json.loads(nilai)
+        return B.thinking_config(int(teks), "") if teks.lstrip("-").isdigit() else B.thinking_config(None, teks)
+
+    varian = [B.Varian(m, s, _berpikir(b), t or None, batas_detik)
+              for m in pilih
+              for s in (suhu or [0.0])
+              for b in (berpikir or ["bawaan"])
+              for t in (maks_token or [0])]
     ref = B.BUTIR_WAJIB.get(str(dokumen)) if dokumen is not None else None
     rep = B.jalankan(client, a, varian, ulangan=ulangan, dokumen=nama, butir=list(butir) if butir else ref,
                      korpus=korpus, jeda=jeda, progress=lambda m: console.print(f"[dim]{m}[/]"))
@@ -1416,11 +1433,12 @@ def bench_ai_cmd(
     for k, p in paths.items():
         console.print(f"[green]{k}:[/] {p}")
     t = Table(title="Ringkasan")
-    for c in ("Model", "median s", "USD/dok", "Lulus", "Cakupan poin", "Recall butir", "Modalitas"):
+    for c in ("Model", "median s", "USD/dok", "Lulus", "Terpotong", "Cakupan poin", "Recall butir", "Modalitas"):
         t.add_column(c)
     for r in rep.ringkasan:
         t.add_row(r["model"], B._fmt(r["detik_median"]), B._fmt(r["usd_per_dokumen"], 5), B._fmt(r["lulus_verifikasi"]),
-                  B._fmt(r["cakupan_poin"]), B._fmt(r["recall_butir"]), B._fmt(r["modalitas_bergeser"], 1))
+                  str(r["terpotong"]), B._fmt(r["cakupan_poin"]), B._fmt(r["recall_butir"]),
+                  B._fmt(r["modalitas_bergeser"], 1))
     console.print(t)
     if tmp:
         tmp.cleanup()

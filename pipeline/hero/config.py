@@ -187,6 +187,16 @@ class AnalysisSettings:
     # is explicitly turned on (Project Charter: data DPEA confidential).
     ai_allow_internal: bool = False
     ai_max_facts: int = 24
+    # Batas keluaran model. 0 = bawaan model (tanpa batas kami). Narasi 4–7 kalimat + 24 parafrase
+    # muat di ±1.500 token; batas ini mencegah satu dokumen aneh menghabiskan biaya dan waktu.
+    # Keluaran yang terpotong DITOLAK (bukan ditampilkan separuh) dan jatuh ke hasil Deterministik.
+    ai_max_output_tokens: int = 0
+    # Anggaran token "berpikir" Gemini: None = bawaan model, 0 = dimatikan, >0 = batas token.
+    # Token berpikir ditagih sebagai keluaran dan tidak terlihat di hasil, jadi inilah tuas
+    # biaya/latensi terbesar pada model Gemini 3 ke atas.
+    ai_thinking_budget: int | None = None
+    # Alternatif deklaratif anggaran berpikir: minimal | low | medium | high (Gemini 3+).
+    ai_thinking_level: str = ""
     # Detik menunggu jawaban model; 0 = tanpa batas (bawaan). Dokumen tebal
     # tidak boleh dipotong di tengah narasi; kegagalan nyata (auth, laju,
     # koneksi) tetap kembali ke hasil Deterministik tanpa menunggu.
