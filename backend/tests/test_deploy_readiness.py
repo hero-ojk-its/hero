@@ -128,7 +128,7 @@ def test_r05_non_public_protection_matrix(client, db_session: Session):
         file_hash="hash_nonpub_456",
         file_size_bytes=len(pdf_nonpub_bytes),
         access_classification=KlasifikasiAkses.non_publik,
-        document_role=PeranDokumen.draft_kajian,
+        document_role=PeranDokumen.corpus_eksisting,
         status_keberlakuan=StatusKeberlakuan.berlaku,
         processing_status=StatusPemrosesan.terindeks,
         full_text="Teks sensitif rahasia pasal khusus internal perusahaan.",

@@ -743,7 +743,7 @@ def test_p19_draft_kajian_nonpublik_accessible_without_kb_baca_nonpublik(
     try:
         res_noauth = client.get(f"/api/v1/documents/{draft_nonpub.id}/text")
         assert res_noauth.status_code == 200
-        assert "Teks draf kajian non-publik" in res_noauth.json().get("full_text", "")
+        assert "Teks draf kajian non-publik" in res_noauth.json().get("text", "")
     finally:
         settings.auth_enabled = orig_auth
 

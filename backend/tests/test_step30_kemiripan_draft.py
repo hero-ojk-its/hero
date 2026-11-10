@@ -453,10 +453,11 @@ def test_d09_draft_lain_nonpublik_auth_mati(client: TestClient, db_session: Sess
 
 
 # ============================================================================
-# D10: Draft target non-publik saat auth mati
-# Ekspektasi: 403 (sama seperti membuka dokumen)
+# D10: Draft target non-publik saat auth mati dapat dianalisa (kebijakan baru)
+# Ekspektasi: 200 (draft kajian non-publik dapat dianalisa kemiripannya)
 # ============================================================================
 def test_d10_target_nonpublik_auth_mati_403(client: TestClient, db_session: Session, monkeypatch):
+    """D10: Draft target non-publik kini dapat dianalisa kemiripannya (200 OK) sesuai kebijakan baru."""
     monkeypatch.setattr(settings, "auth_enabled", False)
     monkeypatch.setattr(settings, "protect_non_public_when_auth_disabled", True)
 
@@ -469,7 +470,10 @@ def test_d10_target_nonpublik_auth_mati_403(client: TestClient, db_session: Sess
     )
 
     resp = client.get(f"/api/v1/documents/{doc_rahasia.id}/kemiripan-draft")
-    assert resp.status_code == 403, resp.text
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["document_id"] == doc_rahasia.id
+    assert "draft_mirip" in data
 
 
 # ============================================================================
