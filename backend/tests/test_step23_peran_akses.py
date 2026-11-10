@@ -104,7 +104,7 @@ def sample_docs(db_session: Session) -> tuple[Document, Document]:
         regulation_type="POJK",
         regulation_year=2026,
         access_classification=KlasifikasiAkses.non_publik,
-        document_role=PeranDokumen.draft_kajian,
+        document_role=PeranDokumen.corpus_eksisting,
         status_keberlakuan=StatusKeberlakuan.berlaku,
         processing_status=StatusPemrosesan.terindeks,
         file_path_pdf="kb/test_nonpub_23.pdf",
@@ -707,3 +707,57 @@ def test_p18_legacy_create_admin_script(db_session: Session):
     admin_db = db_session.query(User).filter(User.username == "admin").first()
     assert admin_db is not None
     assert admin_db.role == "admin_sistem"
+
+
+# ==============================================================================
+# P19 - Draft Kajian non-publik dapat diakses tanpa pembatasan KB_BACA_NONPUBLIK
+# ==============================================================================
+def test_p19_draft_kajian_nonpublik_accessible_without_kb_baca_nonpublik(
+    client: TestClient,
+    db_session: Session,
+    user_tokens,
+):
+    """P19: Draft kajian non-publik dapat dibaca tanpa memerlukan izin KB_BACA_NONPUBLIK, baik auth aktif maupun mati."""
+    draft_nonpub = Document(
+        title="Draft Kajian Uji Non-Publik Step 23",
+        regulation_number="DRAFT-TEST-NONPUB-23",
+        regulation_type="POJK",
+        regulation_year=2026,
+        access_classification=KlasifikasiAkses.non_publik,
+        document_role=PeranDokumen.draft_kajian,
+        status_keberlakuan=StatusKeberlakuan.tidak_diketahui,
+        processing_status=StatusPemrosesan.terindeks,
+        file_path_pdf="kb/draft_nonpub_23.pdf",
+        file_hash="hash_draft_nonpub_step23",
+        file_size_bytes=1024,
+        full_text="Teks draf kajian non-publik untuk pengujian akses analis.",
+        is_active=True,
+    )
+    db_session.add(draft_nonpub)
+    db_session.commit()
+    db_session.refresh(draft_nonpub)
+
+    # 1. Saat auth mati -> akses 200 (tidak ditolak 403)
+    orig_auth = settings.auth_enabled
+    settings.auth_enabled = False
+    try:
+        res_noauth = client.get(f"/api/v1/documents/{draft_nonpub.id}/text")
+        assert res_noauth.status_code == 200
+        assert "Teks draf kajian non-publik" in res_noauth.json().get("full_text", "")
+    finally:
+        settings.auth_enabled = orig_auth
+
+    # 2. Saat auth aktif -> pengguna admin_kb yang dicabut izin KB_BACA_NONPUBLIK tetap dapat membaca draft kajian
+    settings.auth_enabled = True
+    token_kb = user_tokens[PeranPengguna.admin_kb]
+    orig_kb_perms = HAK_AKSES_PERAN[PeranPengguna.admin_kb].copy()
+    try:
+        HAK_AKSES_PERAN[PeranPengguna.admin_kb] = orig_kb_perms - {Izin.KB_BACA_NONPUBLIK}
+        res_auth = client.get(
+            f"/api/v1/documents/{draft_nonpub.id}/text",
+            headers={"Authorization": f"Bearer {token_kb}"},
+        )
+        assert res_auth.status_code == 200
+    finally:
+        HAK_AKSES_PERAN[PeranPengguna.admin_kb] = orig_kb_perms
+        settings.auth_enabled = orig_auth
