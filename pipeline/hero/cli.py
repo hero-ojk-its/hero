@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -1323,6 +1324,106 @@ def bench_vector_cmd(
     pgv = rep.get("pgvector") or {}
     if pgv.get("galat"):
         console.print(f"[yellow]pgvector tidak diukur:[/] {pgv['galat']}")
+
+
+@app.command("bench-ai")
+def bench_ai_cmd(
+    config: Path = typer.Option("config/sources.yaml", "--config", "-c"),
+    dokumen: Optional[int] = typer.Option(None, "--dokumen", "-d",
+                                          help="ID dokumen BACKEND yang sudah tercermin di katalog."),
+    pdf: Optional[Path] = typer.Option(None, "--pdf", help="PDF lokal; diolah di katalog sementara."),
+    publik: bool = typer.Option(False, "--publik",
+                                help="Wajib untuk --pdf: tegaskan dokumen ini PUBLIK (teksnya dikirim ke Google)."),
+    model: Optional[list[str]] = typer.Option(None, "--model", "-m",
+                                              help="Boleh berulang. Kosong = semua model berharga yang terlihat kunci ini."),
+    ulangan: int = typer.Option(3, "--ulangan", "-n", min=1, help="Pengulangan per model."),
+    suhu: Optional[list[float]] = typer.Option(None, "--suhu", help="Boleh berulang; bawaan produksi 0."),
+    berpikir: Optional[str] = typer.Option(None, "--berpikir-json",
+                                           help='thinking_config apa adanya, mis. \'{"thinking_budget":0}\'.'),
+    butir: Optional[list[str]] = typer.Option(None, "--butir", help="Butir wajib dokumen uji (boleh berulang)."),
+    keluar: Path = typer.Option(Path("docs"), "--keluar", help="Folder laporan."),
+    korpus: int = typer.Option(1529, "--korpus", help="Jumlah dokumen untuk proyeksi biaya."),
+    jeda: float = typer.Option(1.0, "--jeda", help="Detik antar-panggilan (hindari batas laju)."),
+) -> None:
+    """Banding model Gemini untuk mode AI pada SATU dokumen: latensi, biaya, kualitas."""
+    import json as _json
+    import sqlite3
+    import tempfile
+    from dataclasses import replace
+
+    from hero import bench_ai as B
+    from hero.analysis import analyse_document
+
+    if (dokumen is None) == (pdf is None):
+        raise typer.BadParameter("pilih salah satu: --dokumen atau --pdf")
+    settings = load_settings(config)
+    tmp = None
+    if pdf is not None:
+        if not publik:
+            raise typer.BadParameter("--pdf mengirim teks ke layanan Google; tegaskan dokumen publik dengan --publik")
+        tmp = tempfile.TemporaryDirectory()
+        t = Path(tmp.name)
+        st = replace(settings, knowledge_base=t / "kb", staging_dir=t / "staging", catalog_db=t / "catalog.db")
+        pipe = IngestPipeline(st)
+        try:
+            pipe.run_upload([pdf])
+        finally:
+            pipe.close()
+        settings, nama = st, pdf.name
+    else:
+        from hero.bridge.state import BridgeState, default_path
+
+        bs = BridgeState(default_path(settings))
+        try:
+            did = bs.doc_id_for(dokumen)
+        finally:
+            bs.close()
+        if did is None:
+            raise typer.BadParameter(f"dokumen {dokumen} belum tercermin: jalankan hero bridge sinkron --dokumen {dokumen}")
+        nama = f"dokumen backend {dokumen}"
+    conn = sqlite3.connect(settings.catalog_db)
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT doc_id, COALESCE(access_class, 'publik') FROM documents "
+                       + ("" if pdf is not None else "WHERE doc_id = ?"), () if pdf is not None else (did,)).fetchone()
+    if row is None:
+        raise typer.BadParameter("dokumen tidak ditemukan di katalog")
+    if row[1] != "publik":
+        raise typer.BadParameter(f"dokumen berklasifikasi '{row[1]}': tidak boleh dikirim ke layanan eksternal")
+    a = analyse_document(conn, row[0])
+    if a is None:
+        raise typer.BadParameter("dokumen belum punya pasal terbaca")
+
+    from google import genai  # type: ignore[import-not-found]
+
+    client = genai.Client()
+    tersedia = B.model_tersedia(client)
+    pilih = list(model) if model else [m for m in tersedia if m in B.HARGA]
+    hilang = [m for m in pilih if m not in tersedia]
+    if hilang:
+        console.print(f"[yellow]Tidak terlihat oleh kunci ini, dilewati:[/] {', '.join(hilang)}")
+        pilih = [m for m in pilih if m in tersedia]
+    if not pilih:
+        raise typer.BadParameter(f"tidak ada model yang bisa diuji. Terlihat: {', '.join(tersedia[:30])}")
+    tak_berharga = [m for m in tersedia if m.startswith("gemini") and m not in B.HARGA]
+    if tak_berharga and not model:
+        console.print(f"[dim]Model terlihat tapi belum ada di tabel harga (tidak diuji): {', '.join(tak_berharga[:12])}[/]")
+    thinking = _json.loads(berpikir) if berpikir else None
+    varian = [B.Varian(m, s, thinking) for m in pilih for s in (suhu or [0.0])]
+    ref = B.BUTIR_WAJIB.get(str(dokumen)) if dokumen is not None else None
+    rep = B.jalankan(client, a, varian, ulangan=ulangan, dokumen=nama, butir=list(butir) if butir else ref,
+                     korpus=korpus, jeda=jeda, progress=lambda m: console.print(f"[dim]{m}[/]"))
+    paths = rep.tulis(keluar, f"BENCH_AI_{time.strftime('%Y%m%d_%H%M')}")
+    for k, p in paths.items():
+        console.print(f"[green]{k}:[/] {p}")
+    t = Table(title="Ringkasan")
+    for c in ("Model", "median s", "USD/dok", "Lulus", "Cakupan poin", "Recall butir", "Modalitas"):
+        t.add_column(c)
+    for r in rep.ringkasan:
+        t.add_row(r["model"], B._fmt(r["detik_median"]), B._fmt(r["usd_per_dokumen"], 5), B._fmt(r["lulus_verifikasi"]),
+                  B._fmt(r["cakupan_poin"]), B._fmt(r["recall_butir"]), B._fmt(r["modalitas_bergeser"], 1))
+    console.print(t)
+    if tmp:
+        tmp.cleanup()
 
 
 @app.command("loadtest")
