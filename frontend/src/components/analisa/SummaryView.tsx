@@ -1350,17 +1350,15 @@ export default function SummaryView({
                     </p>
                   </div>
 
-                  {/* Narasi Ringkasan AI (bila AI aktif) */}
-                  {isAiActive && activeData?.ringkasan_ai && (
+                  {/* Kondisi A: Mode AI Aktif & Narasi AI Tersedia -> Tampilkan hanya Hasil Ringkasan AI */}
+                  {isAiActive && activeData?.ringkasan_ai ? (
                     <RingkasanAiPanel
                       ai={activeData.ai}
                       ringkasanAi={activeData.ringkasan_ai}
                       modeDipakai="ai"
                     />
-                  )}
-
-                  {/* Laporan Terstruktur (8 Kelompok Informasi Berurutan) */}
-                  {structuredSections.length > 0 ? (
+                  ) : structuredSections.length > 0 ? (
+                    /* Kondisi B: Mode Deterministik (atau fallback saat AI mati/gagal) -> Tampilkan 8 Kelompok Terstruktur */
                     <div className="space-y-3.5">
                       {structuredSections.map((sec, idx) => (
                         <div
