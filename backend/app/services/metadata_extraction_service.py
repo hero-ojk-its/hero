@@ -14,8 +14,8 @@ MONTHS_ID = {
     "januari": 1, "februari": 2, "pebruari": 2, "maret": 3, "april": 4,
     "mei": 5, "juni": 6, "juli": 7, "agustus": 8, "september": 9,
     "oktober": 10, "november": 11, "nopember": 11, "desember": 12,
-    "january": 1, "february": 2, "march": 3, "april": 4, "may": 5,
-    "june": 6, "july": 7, "august": 8, "september": 9, "october": 10,
+    "january": 1, "february": 2, "march": 3, "may": 5,
+    "june": 6, "july": 7, "august": 8, "october": 10,
     "december": 12,
 }
 
@@ -159,10 +159,40 @@ def _detect_type(text: str, filename: Optional[str] = None) -> Optional[str]:
 def _detect_number(text: str, filename: Optional[str] = None) -> Optional[str]:
     """
     Mengekstrak nomor regulasi.
-    Prioritas pencarian berada pada teks kepala dokumen (sebelum TENTANG)
-    untuk mencegah salah tangkap nomor regulasi lain yang dikutip dalam konsiderans Mengingat.
-    Mengambil kemunculan pertama (m[0]) pada bagian kepala.
+    Aturan:
+    - Bila kepala dokumen (sebelum TENTANG pertama) berhasil ditemukan, nomor HANYA boleh
+      diambil dari kepala itu. Jangan lanjut mencari ke text[:2500].
+      Bila kepala memuat "NOMOR" yang isinya kosong atau placeholder ("...", "…", "___", "-", "xx"),
+      kembalikan None.
+    - Pencarian ke text[:2500] dan fallback nama berkas hanya dipakai bila kepala dokumen
+      TIDAK ditemukan sama sekali.
     """
+    m_tentang = RE_TENTANG.search(text[:3500])
+    if m_tentang:
+        header = text[: m_tentang.start()]
+
+        # 1. Pola slash (e.g. 12/POJK.03/2024)
+        m_slash = list(RE_NUMBER_SLASH.finditer(header))
+        if m_slash:
+            raw = m_slash[0].group(1)
+            return re.sub(r"\s+", "", raw).strip(" ./-")
+
+        # 2. Pola tahun (e.g. Nomor 12 Tahun 2024)
+        m_tahun = list(RE_NUMBER_TAHUN.finditer(header))
+        if m_tahun:
+            n, y = m_tahun[0].groups()
+            return f"{n} Tahun {y}"
+
+        # 3. Pola bare slash
+        m_bare = RE_BARE_SLASH.search(header)
+        if m_bare:
+            raw = m_bare.group(1)
+            return re.sub(r"\s+", "", raw).strip(" ./-")
+
+        # Kepala dokumen ada tapi tidak memuat nomor valid -> None
+        return None
+
+    # Kepala dokumen TIDAK ditemukan sama sekali (dokumen tanpa TENTANG):
     header = _extract_header_text(text)
     search_targets = [header] if header.strip() else []
     search_targets.append(text[:2500])
@@ -198,11 +228,82 @@ def _detect_number(text: str, filename: Optional[str] = None) -> Optional[str]:
     return None
 
 
+def _detect_year(text: str, filename: Optional[str] = None) -> Optional[int]:
+    """
+    Mengekstrak tahun regulasi / draf regulasi.
+    Aturan:
+    - Bila kepala dokumen (sebelum TENTANG pertama) berhasil ditemukan, tahun HANYA boleh
+      diambil dari kepala itu (misal "TAHUN 2026"). Jangan lanjut mencari ke text[:2500].
+      Bila tidak ada tahun di kepala, biarkan kosong (None).
+    - Pencarian ke text[:2500] dan fallback nama berkas hanya dipakai bila kepala dokumen
+      TIDAK ditemukan sama sekali.
+    """
+    m_tentang = RE_TENTANG.search(text[:3500])
+    if m_tentang:
+        header = text[: m_tentang.start()]
+        # 1. Cari pola eksplisit TAHUN YYYY di kepala dokumen
+        m_tahun = re.search(r"\b(?:TAHUN|YEAR)\s+((?:19|20)\d{2})\b", header, re.IGNORECASE)
+        if m_tahun:
+            return int(m_tahun.group(1))
+
+        # 2. Cari tahun dari nomor pola slash di kepala dokumen (misal /2024)
+        m_slash = list(RE_NUMBER_SLASH.finditer(header))
+        if m_slash:
+            raw = m_slash[0].group(1)
+            y_matches = re.findall(r"\b((?:19|20)\d{2})\b", raw)
+            if y_matches:
+                return int(y_matches[-1])
+
+        m_bare = RE_BARE_SLASH.search(header)
+        if m_bare:
+            raw = m_bare.group(1)
+            y_matches = re.findall(r"\b((?:19|20)\d{2})\b", raw)
+            if y_matches:
+                return int(y_matches[-1])
+
+        # Bila tidak ada tahun di kepala, biarkan kosong (None)
+        return None
+
+    # Kepala dokumen TIDAK ditemukan sama sekali (dokumen tanpa TENTANG):
+    m_tahun = re.search(r"\b(?:TAHUN|YEAR)\s+((?:19|20)\d{2})\b", text[:2500], re.IGNORECASE)
+    if m_tahun:
+        return int(m_tahun.group(1))
+
+    m_slash = list(RE_NUMBER_SLASH.finditer(text[:2500]))
+    if m_slash:
+        raw = m_slash[0].group(1)
+        y_matches = re.findall(r"\b((?:19|20)\d{2})\b", raw)
+        if y_matches:
+            return int(y_matches[-1])
+
+    m_bare = RE_BARE_SLASH.search(text[:2500])
+    if m_bare:
+        raw = m_bare.group(1)
+        y_matches = re.findall(r"\b((?:19|20)\d{2})\b", raw)
+        if y_matches:
+            return int(y_matches[-1])
+
+    if filename:
+        fn_matches = re.findall(r"\b((?:19|20)\d{2})\b", filename)
+        if fn_matches:
+            return int(fn_matches[-1])
+
+    return None
+
+
+def _format_title(title_raw: str) -> str:
+    """Format string judul menjadi Title Case rapi dengan akronim regulasi tetap kapital."""
+    res = title_raw.title()
+    for acr in ("Ojk", "Pojk", "Seojk", "Pdk", "Sedk", "Pbi", "Sebi", "Uu", "Pp", "Perpres", "Perpu", "Pmk", "Ri"):
+        res = re.sub(rf"\b{acr}\b", acr.upper(), res)
+    return res
+
+
 def _detect_title(text: str, filename: Optional[str] = None) -> Optional[str]:
     """Mengekstrak judul regulasi (klausa setelah kata TENTANG)."""
     m = RE_TENTANG.search(text[:3500])
     if m:
-        tail = text[m.end() : m.end() + 700]
+        tail = text[m.end() : m.end() + 1000]
         lines = []
         for raw in tail.split("\n"):
             line = raw.strip()
@@ -217,24 +318,36 @@ def _detect_title(text: str, filename: Optional[str] = None) -> Optional[str]:
                 re.IGNORECASE,
             ):
                 break
+            # Penanda berhenti tambahan (Langkah fix draf perubahan):
+            # 1. Baris yang diawali "Nomor"/"No." diikuti titik dua (misal "Nomor: SIM-01/2026")
+            if re.match(r"^No(?:mor)?\.?\s*:", line, re.IGNORECASE):
+                break
+            # 2. Baris yang diawali tanda butir (•, -, *)
+            if re.match(r"^[•\*\-]", line):
+                break
+            # 3. Baris berpola label "Kata Kunci: nilai" atau label metadata sejenis
+            if re.match(r"^(?:Kata\s+Kunci|Keywords?|Versi|Catatan|Keterangan|Penulis|Status|Tanggal|Dokumen)\s*:\s*", line, re.IGNORECASE):
+                break
+            if re.match(r"^[A-Za-z\s]{2,25}\s*:\s*\S+", line):
+                break
+
             lines.append(line)
-            if len(" ".join(lines)) > 250:
+            if len(" ".join(lines)) > 400:
                 break
 
         if lines:
             subject = re.sub(r"\s+", " ", " ".join(lines)).strip(" ,.;:-")
             if len(subject) >= 5:
-                # Format Title Case yang rapi untuk antarmuka
-                return subject.title()
+                return _format_title(subject)
 
     # Fallback dari nama berkas jika TENTANG tidak terdeteksi
     if filename:
         clean = filename.replace(".pdf", "").replace(".PDF", "")
-        # Buang prefix nomor umum jika ada
-        clean = re.sub(r"^(?:POJK|SEOJK|PDK|UU|PP)[-_0-9A-Za-z.]+[-_]", "", clean)
+        # Buang prefix jenis dan nomor umum jika ada (misal SEOJK_05_, POJK_12_2024_)
+        clean = re.sub(r"^(?:POJK|SEOJK|PDK|SEDK|UU|PP|PBI)[-_0-9.]+[-_]", "", clean, flags=re.IGNORECASE)
         clean = clean.replace("_", " ").replace("-", " ").strip()
         if len(clean) >= 5:
-            return clean.title()
+            return _format_title(clean)
 
     return None
 
@@ -287,6 +400,8 @@ def extract_metadata_from_pdf_content(
     - title: Optional[str]
     - regulation_number: Optional[str]
     - regulation_type: Optional[str]
+    - regulation_year: Optional[int]
+    - year: Optional[int]
     - bidang: Optional[str]
     - release_date: Optional[str] (YYYY-MM-DD)
     - page_count: int
@@ -296,6 +411,7 @@ def extract_metadata_from_pdf_content(
 
     reg_type = _detect_type(head_text, filename)
     reg_number = _detect_number(head_text, filename)
+    reg_year = _detect_year(head_text, filename)
     title = _detect_title(head_text, filename)
     release_date = _detect_date(full_sample_text)
     bidang = _detect_sector(head_text, title)
@@ -304,9 +420,36 @@ def extract_metadata_from_pdf_content(
         "title": title,
         "regulation_number": reg_number,
         "regulation_type": reg_type,
+        "regulation_year": reg_year,
+        "year": reg_year,
         "bidang": bidang,
         "release_date": release_date,
         "page_count": total_pages,
         "raw_preview": head_text[:500] if head_text else None,
+    }
+
+
+def extract_metadata_from_text(
+    text: str,
+    filename: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Mengekstrak metadata langsung dari teks (berguna untuk pengujian tanpa file PDF)."""
+    reg_type = _detect_type(text, filename)
+    reg_number = _detect_number(text, filename)
+    reg_year = _detect_year(text, filename)
+    title = _detect_title(text, filename)
+    release_date = _detect_date(text)
+    bidang = _detect_sector(text, title)
+
+    return {
+        "title": title,
+        "regulation_number": reg_number,
+        "regulation_type": reg_type,
+        "regulation_year": reg_year,
+        "year": reg_year,
+        "bidang": bidang,
+        "release_date": release_date,
+        "page_count": 1,
+        "raw_preview": text[:500] if text else None,
     }
 

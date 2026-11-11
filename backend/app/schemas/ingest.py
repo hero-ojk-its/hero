@@ -57,6 +57,7 @@ class ExtractedMetadataResponse(BaseModel):
     title: Optional[str] = None
     regulation_number: Optional[str] = None
     regulation_type: Optional[str] = None
+    regulation_year: Optional[int] = None
     bidang: Optional[str] = None
     release_date: Optional[str] = None
     page_count: int = 0
