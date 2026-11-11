@@ -18,6 +18,10 @@ import {
   ExternalLink,
   RefreshCw,
   AlertCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
+  BookOpen,
+  X,
 } from 'lucide-react';
 
 import {
@@ -44,36 +48,11 @@ import AnalisaBreadcrumb from './AnalisaBreadcrumb';
  */
 const isNoPasalRef = (ref: string): boolean => /pasal\s+tidak\s+terbaca/i.test(ref);
 
-interface RujukanChipProps {
+export interface DetailPasalModalState {
   refStr: string;
-  onJump: (ref: string) => void;
-  iconSize?: number;
-  title?: string;
-}
-
-/** Chip rujukan. Rujukan tanpa Pasal tampil netral (abu-abu), bukan seperti galat. */
-function RujukanChip({ refStr, onJump, iconSize = 9, title }: RujukanChipProps) {
-  if (isNoPasalRef(refStr)) {
-    return (
-      <span
-        className="inline-flex items-center gap-1 font-mono text-[10px] font-medium text-gray-600 bg-gray-100 px-2 py-0.5 rounded border border-gray-200"
-        title="Bagian ini tidak berasal dari satu Pasal tertentu (mis. dokumen berbentuk Keputusan atau tanpa pasal). Periksa langsung pada Naskah."
-      >
-        Rujukan umum
-      </span>
-    );
-  }
-  return (
-    <button
-      type="button"
-      onClick={() => onJump(refStr)}
-      className="inline-flex items-center gap-1 font-mono text-[10px] font-bold text-red-700 hover:text-red-900 bg-white hover:bg-red-50 px-2 py-0.5 rounded border border-red-200 transition cursor-pointer"
-      title={title ?? `Lompat ke ${refStr}`}
-    >
-      <span>{refStr}</span>
-      <ExternalLink size={iconSize} />
-    </button>
-  );
+  articleNumber: string;
+  chapterTitle?: string | null;
+  contentText: string;
 }
 
 export interface SummaryViewProps {
@@ -114,13 +93,17 @@ export default function SummaryView({
   const [activePasalRef, setActivePasalRef] = useState<string | null>(null);
   const articleRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  // Layout Resizable (Desktop)
-  const [leftWidthPercent, setLeftWidthPercent] = useState<number>(52);
+  // Layout Resizable (Desktop) & Toggle Tampilan Panel Naskah
+  const [showNaskahPanel, setShowNaskahPanel] = useState<boolean>(false);
+  const [leftWidthPercent, setLeftWidthPercent] = useState<number>(50);
   const [isResizing, setIsResizing] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Layout Responsif (Mobile / Tablet < 1024px)
   const [mobileActiveTab, setMobileActiveTab] = useState<'naskah' | 'summary'>('summary');
+
+  // State Modal Detail Pasal
+  const [pasalModal, setPasalModal] = useState<DetailPasalModalState | null>(null);
 
   // 1. Memuat Data Deterministik & Berkas Dokumen saat mount / documentId berubah
   useEffect(() => {
@@ -337,6 +320,89 @@ export default function SummaryView({
     }, 120);
   }, []);
 
+  // 5. Handler Membuka Modal Detail Pasal dari Key Takeaways
+  const handleOpenPasalModal = useCallback((pasalStr: string) => {
+    if (!pasalStr) return;
+
+    if (isNoPasalRef(pasalStr)) {
+      setPasalModal({
+        refStr: pasalStr,
+        articleNumber: 'Rujukan Umum',
+        chapterTitle: 'Ketentuan Regulasi',
+        contentText:
+          'Poin ini merujuk pada ketentuan umum dokumen (tidak secara spesifik terikat pada satu nomor pasal, misalnya pada dokumen berbentuk Keputusan atau Diktum). Silakan periksa naskah regulasi untuk membaca bagian terkait.',
+      });
+      return;
+    }
+
+    const parsedTarget = parsePasalRef(pasalStr);
+    const targetNum = parsedTarget.pasalNum?.toLowerCase();
+
+    // Cari pada daftar pasal terstruktur
+    const matchedArticle = docStatus?.articles?.find((art) => {
+      if (!art.article_number) return false;
+      if (art.article_number.trim().toLowerCase() === pasalStr.trim().toLowerCase()) return true;
+      const parsedArt = parsePasalRef(art.article_number);
+      return Boolean(targetNum && parsedArt.pasalNum?.toLowerCase() === targetNum);
+    });
+
+    if (matchedArticle) {
+      setPasalModal({
+        refStr: pasalStr,
+        articleNumber: matchedArticle.article_number,
+        chapterTitle: matchedArticle.chapter_title,
+        contentText: matchedArticle.content_text,
+      });
+      return;
+    }
+
+    // Jika tidak ditemukan dalam articles terstruktur, cari potongan di docText
+    if (docText?.text && targetNum) {
+      const regex = new RegExp(`(?:Pasal|PASAL)\\s+${targetNum}\\b([\\s\\S]*?)(?=(?:Pasal|PASAL)\\s+[0-9]+|$)`, 'i');
+      const match = docText.text.match(regex);
+      if (match && match[0]) {
+        setPasalModal({
+          refStr: pasalStr,
+          articleNumber: `Pasal ${parsedTarget.pasalNum}`,
+          chapterTitle: 'Hasil Ekstraksi Teks',
+          contentText: match[0].trim(),
+        });
+        return;
+      }
+    }
+
+    // Fallback jika teks belum terindeks penuh
+    setPasalModal({
+      refStr: pasalStr,
+      articleNumber: pasalStr,
+      chapterTitle: 'Rujukan Naskah Regulasi',
+      contentText:
+        'Teks lengkap untuk pasal ini belum dapat dimuat secara terpisah. Anda dapat membuka naskah lengkap melalui tombol di bawah untuk menelusuri isi dokumen.',
+    });
+  }, [docStatus?.articles, docText]);
+
+  // Handler Buka di Naskah Lengkap dari Modal
+  const handleViewInNaskahFromModal = useCallback(() => {
+    if (!pasalModal) return;
+    const targetRef = pasalModal.refStr;
+    setPasalModal(null);
+    setShowNaskahPanel(true);
+    setTimeout(() => {
+      handleJumpToPasal(targetRef);
+    }, 120);
+  }, [handleJumpToPasal, pasalModal]);
+
+  // Keyboard shortcut: Escape untuk menutup modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && pasalModal) {
+        setPasalModal(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [pasalModal]);
+
   // Data aktif yang ditampilkan (AI bila diaktifkan dan tersedia, atau Deterministik)
   const activeData: MlAnalisaResponse | null = aiEnabled && aiData ? aiData : data;
   const isAiActive = aiEnabled && Boolean(aiData?.mode_dipakai === 'ai');
@@ -407,7 +473,7 @@ export default function SummaryView({
         </div>
 
         {/* Tombol Aksi Cepat Header */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
           <button
             type="button"
             onClick={onBackToState1}
@@ -460,60 +526,57 @@ export default function SummaryView({
         className="relative flex flex-col lg:flex-row gap-0 bg-white rounded-xl shadow-xs border border-gray-200 overflow-hidden min-h-[680px]"
       >
         {/* ============================================================== */}
-        {/* PANEL KIRI: NASKAH REGULASI (~52%)                             */}
+        {/* PANEL KIRI: NASKAH REGULASI (~50% atau disembunyikan)          */}
         {/* ============================================================== */}
         <div
           style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${leftWidthPercent}%` : '100%' }}
           className={`flex flex-col border-b lg:border-b-0 lg:border-r border-gray-200 bg-gray-50/40 min-w-0 ${
-            mobileActiveTab !== 'naskah' ? 'hidden lg:flex' : 'flex'
+            !showNaskahPanel ? 'hidden' : mobileActiveTab !== 'naskah' ? 'hidden lg:flex' : 'flex'
           }`}
         >
           {/* Header Panel Kiri: Switcher Naskah Teks vs PDF Asli */}
           <div className="p-3.5 sm:p-4 bg-white border-b border-gray-200 flex items-center justify-between gap-3 shrink-0">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="p-1.5 bg-red-50 text-red-700 rounded-lg shrink-0">
-                <FileText size={16} />
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-xs sm:text-sm font-bold text-gray-900 truncate">Naskah Regulasi</h2>
-                <p className="text-[11px] text-gray-500 truncate">
-                  {docStatus?.articles?.length ? `${docStatus.articles.length} Pasal Terindeks` : 'Naskah draf regulasi'}
-                </p>
-              </div>
+            <div className="min-w-0">
+              <h2 className="text-xs sm:text-sm font-bold text-gray-900 truncate">Naskah Regulasi</h2>
+              <p className="text-[11px] text-gray-500 truncate">
+                {docStatus?.articles?.length ? `${docStatus.articles.length} Pasal Terindeks` : 'Naskah draf regulasi'}
+              </p>
             </div>
 
-            {/* Switcher Teks vs PDF */}
-            <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-lg border border-gray-200 text-xs shrink-0">
-              <button
-                type="button"
-                onClick={() => setViewMode('teks')}
-                className={`px-3 py-1 rounded-md font-semibold transition cursor-pointer ${
-                  viewMode === 'teks' ? 'bg-white text-gray-900 shadow-2xs' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Naskah Teks
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('pdf')}
-                className={`px-3 py-1 rounded-md font-semibold transition cursor-pointer ${
-                  viewMode === 'pdf' ? 'bg-white text-gray-900 shadow-2xs' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Berkas PDF
-              </button>
-
-              {pdfBlobUrl && viewMode === 'pdf' && (
-                <a
-                  href={pdfBlobUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-1 text-gray-500 hover:text-red-700 rounded transition"
-                  title="Buka PDF di jendela baru"
+            <div className="flex items-center gap-2">
+              {/* Switcher Teks vs PDF */}
+              <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-lg border border-gray-200 text-xs shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('teks')}
+                  className={`px-3 py-1 rounded-md font-semibold transition cursor-pointer ${
+                    viewMode === 'teks' ? 'bg-white text-gray-900 shadow-2xs' : 'text-gray-600 hover:text-gray-900'
+                  }`}
                 >
-                  <ExternalLink size={13} />
-                </a>
-              )}
+                  Naskah Teks
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('pdf')}
+                  className={`px-3 py-1 rounded-md font-semibold transition cursor-pointer ${
+                    viewMode === 'pdf' ? 'bg-white text-gray-900 shadow-2xs' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Berkas PDF
+                </button>
+
+                {pdfBlobUrl && viewMode === 'pdf' && (
+                  <a
+                    href={pdfBlobUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1 text-gray-500 hover:text-red-700 rounded transition"
+                    title="Buka PDF di jendela baru"
+                  >
+                    <ExternalLink size={13} />
+                  </a>
+                )}
+              </div>
             </div>
           </div>
 
@@ -587,7 +650,7 @@ export default function SummaryView({
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-800 leading-relaxed font-serif whitespace-pre-line">
+                        <p className="text-sm text-gray-800 leading-relaxed font-sans whitespace-pre-line">
                           {art.content_text}
                         </p>
                       </div>
@@ -610,92 +673,117 @@ export default function SummaryView({
         {/* ============================================================== */}
         {/* RESIZE DIVIDER (DESKTOP)                                       */}
         {/* ============================================================== */}
-        <div
-          onMouseDown={handleMouseDown}
-          className="hidden lg:flex items-center justify-center w-1.5 bg-gray-200 hover:bg-red-500 transition-colors cursor-col-resize select-none shrink-0"
-          title="Geser untuk mengatur lebar panel"
-        >
-          <div className="w-0.5 h-8 bg-gray-400 rounded-full" />
-        </div>
+        {showNaskahPanel && (
+          <div
+            onMouseDown={handleMouseDown}
+            className="hidden lg:flex items-center justify-center w-1.5 bg-gray-200 hover:bg-red-500 transition-colors cursor-col-resize select-none shrink-0"
+            title="Geser untuk mengatur lebar panel"
+          >
+            <div className="w-0.5 h-8 bg-gray-400 rounded-full" />
+          </div>
+        )}
 
         {/* ============================================================== */}
-        {/* PANEL KANAN: HASIL SUMMARY (~48%)                              */}
+        {/* PANEL KANAN: HASIL SUMMARY (Full-width saat naskah disembunyikan)*/}
         {/* ============================================================== */}
         <div
-          style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${100 - leftWidthPercent}%` : '100%' }}
-          className={`flex flex-col bg-white min-w-0 ${
+          style={{
+            width: !showNaskahPanel
+              ? '100%'
+              : typeof window !== 'undefined' && window.innerWidth >= 1024
+              ? `${100 - leftWidthPercent}%`
+              : '100%',
+          }}
+          className={`flex flex-col bg-white min-w-0 transition-all duration-200 ${
             mobileActiveTab !== 'summary' ? 'hidden lg:flex' : 'flex'
           }`}
         >
           {/* Header Panel Kanan: Judul & Toggle AI */}
           <div className="p-3.5 sm:p-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gray-50/50 shrink-0">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="p-1.5 bg-red-100 text-red-800 rounded-lg shrink-0">
-                <Sparkles size={16} />
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-xs sm:text-sm font-bold text-gray-900 truncate">Ringkasan & Key Takeaways</h2>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
-                    isAiActive
-                      ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                      : 'bg-blue-100 text-blue-800 border border-blue-200'
-                  }`}>
-                    {isAiActive ? 'Mode AI Aktif' : 'Mode Deterministik'}
+            <div className="min-w-0">
+              <h2 className="text-xs sm:text-sm font-bold text-gray-900 truncate">Ringkasan & Key Takeaways</h2>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
+                  isAiActive
+                    ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                    : 'bg-blue-100 text-blue-800 border border-blue-200'
+                }`}>
+                  {isAiActive ? 'Mode AI Aktif' : 'Mode Deterministik'}
+                </span>
+                {displayedWordCount > 0 && (
+                  <span className="text-[10px] text-gray-500 font-medium">
+                    • {displayedWordCount} kata
                   </span>
-                  {displayedWordCount > 0 && (
-                    <span className="text-[10px] text-gray-500 font-medium">
-                      • {displayedWordCount} kata
-                    </span>
-                  )}
-                </div>
+                )}
               </div>
             </div>
 
-            {/* TOGGLE SWITCH AI */}
-            {(() => {
-              const isAiAvailable = mlHealth?.mode_ai === true;
-              return (
-                <div className="flex items-center gap-2.5 self-start sm:self-auto bg-white px-3 py-1.5 rounded-xl border border-gray-200 shadow-2xs">
-                  <div className="flex flex-col text-right">
-                    <span className="text-[11px] font-bold text-gray-800 leading-tight">Analisis AI</span>
-                    <span className="text-[9px] text-gray-500">
-                      {!isAiAvailable
-                        ? 'Tidak Tersedia'
-                        : aiLoading
-                        ? `Memproses (${aiSecondsElapsed}s)`
-                        : aiEnabled
-                        ? 'Aktif'
-                        : 'Nonaktif'}
-                    </span>
-                  </div>
+            <div className="flex items-center gap-2.5 self-start sm:self-auto flex-wrap">
+              {/* Tombol Tunggal Toggle Naskah Regulasi di samping Toggle AI */}
+              <button
+                type="button"
+                onClick={() => setShowNaskahPanel((prev) => !prev)}
+                className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:text-gray-900 bg-white hover:bg-gray-50 rounded-lg border border-gray-300 shadow-2xs transition-colors cursor-pointer"
+                title={showNaskahPanel ? 'Sembunyikan panel naskah regulasi' : 'Tampilkan panel naskah regulasi di sisi kiri'}
+              >
+                {showNaskahPanel ? (
+                  <>
+                    <PanelLeftClose size={14} className="text-gray-500" />
+                    <span>Sembunyikan Naskah</span>
+                  </>
+                ) : (
+                  <>
+                    <PanelLeftOpen size={14} className="text-gray-500" />
+                    <span>Tampilkan Naskah</span>
+                  </>
+                )}
+              </button>
 
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={aiEnabled}
-                    disabled={loading || aiLoading || !isAiAvailable}
-                    onClick={handleToggleAi}
-                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-hidden disabled:opacity-50 cursor-pointer ${
-                      aiEnabled ? 'bg-red-700' : 'bg-gray-300'
-                    }`}
-                    title={
-                      !isAiAvailable
-                        ? 'Layanan model AI tidak tersedia atau sedang dinonaktifkan di peladen.'
-                        : aiEnabled
-                        ? 'Matikan mode AI (kembali ke Deterministik)'
-                        : 'Aktifkan narasi AI (Gemini)'
-                    }
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 shadow-sm ${
-                        aiEnabled ? 'translate-x-6' : 'translate-x-1'
+              {/* TOGGLE SWITCH AI */}
+              {(() => {
+                const isAiAvailable = mlHealth?.mode_ai === true;
+                return (
+                  <div className="flex items-center gap-2.5 bg-white px-3 py-1.5 rounded-xl border border-gray-200 shadow-2xs">
+                    <div className="flex flex-col text-right">
+                      <span className="text-[11px] font-bold text-gray-800 leading-tight">Analisis AI</span>
+                      <span className="text-[9px] text-gray-500">
+                        {!isAiAvailable
+                          ? 'Tidak Tersedia'
+                          : aiLoading
+                          ? `Memproses (${aiSecondsElapsed}s)`
+                          : aiEnabled
+                          ? 'Aktif'
+                          : 'Nonaktif'}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={aiEnabled}
+                      disabled={loading || aiLoading || !isAiAvailable}
+                      onClick={handleToggleAi}
+                      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-hidden disabled:opacity-50 cursor-pointer ${
+                        aiEnabled ? 'bg-red-700' : 'bg-gray-300'
                       }`}
-                    />
-                  </button>
-                </div>
-              );
-            })()}
+                      title={
+                        !isAiAvailable
+                          ? 'Layanan model AI tidak tersedia atau sedang dinonaktifkan di peladen.'
+                          : aiEnabled
+                          ? 'Matikan mode AI (kembali ke Deterministik)'
+                          : 'Aktifkan narasi AI (Gemini)'
+                      }
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 shadow-sm ${
+                          aiEnabled ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                );
+              })()}
+            </div>
           </div>
 
           {/* Banner Peringatan Galat AI (Jika AI gagal, fallback ke Deterministik) */}
@@ -755,15 +843,17 @@ export default function SummaryView({
                 {/* -------------------------------------------------------- */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-red-700" />
-                      <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                    <div>
+                      <h3 className="text-sm font-bold text-gray-900 tracking-tight">
                         Ringkasan Eksekutif
                       </h3>
+                      <p className="text-xs text-gray-500">
+                        Gambaran umum isi dan tujuan regulasi secara menyeluruh.
+                      </p>
                     </div>
 
                     {isAiActive && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
                         <Sparkles size={11} />
                         Narasi AI Terverifikasi
                       </span>
@@ -776,54 +866,45 @@ export default function SummaryView({
                       ai={activeData.ai}
                       ringkasanAi={activeData.ringkasan_ai}
                       modeDipakai="ai"
-                      onJumpToPasal={handleJumpToPasal}
                     />
                   ) : activeData?.ringkasan && activeData.ringkasan.length > 0 ? (
-                    <div className="bg-gray-50/80 rounded-xl p-4 border border-gray-200/80 space-y-2.5">
-                      {activeData.ringkasan.map((sentence, sIdx) => (
-                        <div key={sIdx} className="space-y-1">
-                          <p className="text-xs text-gray-800 leading-relaxed font-serif">
+                    <div className="bg-slate-50/70 rounded-xl p-4 sm:p-5 border border-gray-200/90 space-y-3">
+                      <div className="text-sm font-normal text-gray-700 leading-relaxed font-sans space-y-2.5">
+                        {activeData.ringkasan.map((sentence, sIdx) => (
+                          <p key={sIdx} className="leading-relaxed">
                             {sentence.kalimat}
                           </p>
-                          {sentence.rujukan && sentence.rujukan.length > 0 && (
-                            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                              <span className="text-[10px] font-medium text-gray-500">Rujukan:</span>
-                              {sentence.rujukan.map((refStr, rIdx) => (
-                                <RujukanChip key={rIdx} refStr={refStr} onJump={handleJumpToPasal} />
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   ) : activeData?.ringkasan_teks ? (
-                    <div className="bg-gray-50/80 rounded-xl p-4 border border-gray-200 text-xs text-gray-800 leading-relaxed font-serif whitespace-pre-line">
+                    <div className="bg-slate-50/70 rounded-xl p-4 sm:p-5 border border-gray-200/90 text-sm font-normal text-gray-700 leading-relaxed font-sans whitespace-pre-line">
                       {activeData.ringkasan_teks}
                     </div>
                   ) : (
-                    <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 text-xs text-gray-500 text-center">
+                    <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 text-xs text-gray-500 text-center font-sans">
                       Ringkasan eksekutif belum tersedia untuk dokumen ini.
                     </div>
                   )}
 
-                  {/* Subjek yang Diatur */}
+                  {/* Pihak yang Terlibat & Diatur */}
                   {activeData?.subjek_diatur && activeData.subjek_diatur.length > 0 && (
                     <div className="pt-2">
-                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">
-                        Subjek yang Diatur
+                      <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block mb-2">
+                        Pihak yang Terlibat & Diatur
                       </span>
-                      <div className="flex flex-wrap gap-1.5">
+                      <div className="flex flex-wrap gap-2">
                         {activeData.subjek_diatur.map((subj, idx) => {
                           const label = typeof subj === 'string' ? subj : subj.subjek;
                           const count = typeof subj === 'object' && subj ? subj.jumlah : null;
                           return (
                             <span
                               key={idx}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200"
+                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200 shadow-2xs font-sans"
                             >
                               <span>{label}</span>
                               {count !== null && (
-                                <span className="text-[10px] bg-gray-200 text-gray-600 px-1 rounded-full font-mono">
+                                <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.2 rounded-full font-semibold font-mono">
                                   {count}
                                 </span>
                               )}
@@ -836,23 +917,25 @@ export default function SummaryView({
                 </div>
 
                 {/* -------------------------------------------------------- */}
-                {/* 2. SECTION: KEY TAKEAWAYS (POIN KUNCI)                   */}
+                {/* 2. SECTION: KEY TAKEAWAYS (FOKUS UTAMA)                  */}
                 {/* -------------------------------------------------------- */}
-                <div className="space-y-3 pt-2">
-                  <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-blue-600" />
-                      <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                <div className="space-y-3.5 pt-4">
+                  <div className="flex items-center justify-between pb-2.5 border-b border-gray-200">
+                    <div>
+                      <h3 className="text-base font-bold text-gray-900 tracking-tight">
                         Key Takeaways
                       </h3>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Poin-poin penting, norma, kewajiban, dan sanksi utama yang diatur dalam regulasi ini.
+                      </p>
                     </div>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-700 border border-gray-200">
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
                       {poinUtama.length} Poin Kunci
                     </span>
                   </div>
 
                   {poinUtama.length > 0 ? (
-                    <div className="space-y-2.5">
+                    <div className="space-y-3">
                       {poinUtama.map((point, pIdx) => {
                         const kat = (point.kategori || 'umum').toLowerCase();
                         const isKewajiban = kat.includes('kewajiban');
@@ -861,52 +944,68 @@ export default function SummaryView({
                         const isHak = kat.includes('hak');
 
                         const badgeColor = isKewajiban
-                          ? 'bg-blue-50 text-blue-800 border-blue-200'
+                          ? 'bg-blue-50 text-blue-700 border-blue-200'
                           : isLarangan
-                          ? 'bg-rose-50 text-rose-800 border-rose-200'
+                          ? 'bg-rose-50 text-rose-700 border-rose-200'
                           : isSanksi
-                          ? 'bg-amber-50 text-amber-800 border-amber-200'
+                          ? 'bg-amber-50 text-amber-700 border-amber-200'
                           : isHak
-                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                           : 'bg-gray-100 text-gray-700 border-gray-200';
+
+                        const leftBorderColor = isKewajiban
+                          ? 'border-l-blue-500'
+                          : isLarangan
+                          ? 'border-l-rose-500'
+                          : isSanksi
+                          ? 'border-l-amber-500'
+                          : isHak
+                          ? 'border-l-emerald-500'
+                          : 'border-l-gray-400';
 
                         const displayText = isAiActive && point.parafrase ? point.parafrase : point.teks || point.poin || '-';
 
                         return (
                           <div
                             key={point.id || pIdx}
-                            className="p-3.5 bg-gray-50/60 hover:bg-gray-50 border border-gray-200 rounded-xl transition duration-150 space-y-1.5"
+                            className={`p-4 sm:p-5 bg-white hover:bg-slate-50/50 border border-gray-200/90 border-l-4 ${leftBorderColor} rounded-xl shadow-2xs hover:shadow-xs transition-all space-y-3`}
                           >
-                            <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <div className="flex items-center gap-1.5">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${badgeColor}`}>
+                            <div className="flex items-center justify-between gap-3 flex-wrap">
+                              <div className="flex items-center gap-2">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold border ${badgeColor}`}>
                                   {point.kategori || 'Norma'}
                                 </span>
                                 {point.urgensi && (
-                                  <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
                                     • Urgensi: {point.urgensi}
                                   </span>
                                 )}
                               </div>
 
                               {point.pasal && (
-                                <RujukanChip
-                                  refStr={point.pasal}
-                                  onJump={handleJumpToPasal}
-                                  iconSize={10}
-                                  title={`Lihat teks di ${point.pasal}`}
-                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenPasalModal(point.pasal!)}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-red-700 hover:text-red-900 bg-red-50 hover:bg-red-100 border border-red-200/90 transition-colors cursor-pointer shadow-2xs group"
+                                  title={`Klik untuk membaca isi lengkap ${point.pasal}`}
+                                >
+                                  <BookOpen size={13} className="text-red-600 group-hover:text-red-800" />
+                                  <span>{point.pasal}</span>
+                                  <span className="text-[11px] text-red-600 font-medium underline ml-0.5">
+                                    Lihat Pasal
+                                  </span>
+                                </button>
                               )}
                             </div>
 
-                            <p className="text-xs text-gray-800 leading-relaxed font-serif">
+                            <p className="text-sm font-normal text-gray-800 leading-relaxed font-sans">
                               {displayText}
                             </p>
 
                             {isAiActive && point.parafrase && point.parafrase !== point.teks && (
-                              <div className="flex items-center gap-1 text-[10px] text-purple-700 font-medium pt-0.5">
-                                <Sparkles size={10} />
-                                <span>Diparafrase oleh AI</span>
+                              <div className="flex items-center gap-1.5 text-xs text-purple-700 font-medium pt-1">
+                                <Sparkles size={12} />
+                                <span>Diparafrase oleh AI untuk kemudahan pemahaman</span>
                               </div>
                             )}
                           </div>
@@ -914,7 +1013,7 @@ export default function SummaryView({
                       })}
                     </div>
                   ) : (
-                    <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 text-xs text-gray-500 text-center">
+                    <div className="p-6 bg-gray-50 rounded-xl border border-gray-200 text-xs text-gray-500 text-center font-sans">
                       Belum ada poin kunci yang teridentifikasi.
                     </div>
                   )}
@@ -924,6 +1023,75 @@ export default function SummaryView({
           </div>
         </div>
       </div>
+
+      {/* 4. MODAL DETAIL PASAL */}
+      {pasalModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => setPasalModal(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-pasal-title"
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-xl max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-gray-200 flex items-start justify-between gap-3 bg-gray-50/80">
+              <div className="min-w-0">
+                <h3 id="modal-pasal-title" className="text-base font-bold text-gray-900 truncate">
+                  Detail {pasalModal.articleNumber || pasalModal.refStr}
+                </h3>
+                {pasalModal.chapterTitle && (
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mt-0.5 truncate">
+                    {pasalModal.chapterTitle}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setPasalModal(null)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                title="Tutup (Esc)"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 sm:p-6 overflow-y-auto max-h-[55vh] space-y-4">
+              <div className="bg-slate-50/80 rounded-xl p-4 sm:p-5 border border-gray-200/90 text-sm font-normal text-gray-800 leading-relaxed font-sans whitespace-pre-line selection:bg-red-100">
+                {pasalModal.contentText}
+              </div>
+              <p className="text-[11px] text-gray-500 italic font-sans">
+                * Isi pasal diekstraksi dari naskah regulasi resmi draf ini sebagai dasar pendukung Key Takeaway.
+              </p>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 sm:px-6 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={handleViewInNaskahFromModal}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold text-red-800 hover:text-red-900 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors cursor-pointer"
+                title="Buka dan sorot pasal ini di panel naskah regulasi"
+              >
+                <FileText size={14} />
+                <span>Buka di Naskah Lengkap</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPasalModal(null)}
+                className="px-4 py-2 rounded-lg text-xs font-semibold bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 shadow-2xs transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
