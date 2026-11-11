@@ -1263,7 +1263,7 @@ export default function AnalisaState2Workspace({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Analisa Regulasi</h1>
-          <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+          <p className="text-sm text-gray-500 mt-1 leading-relaxed">
             Telaah mendalam dan analisis dampak regulasi sektor jasa keuangan berbasis struktur pasal.
           </p>
         </div>

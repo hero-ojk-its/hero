@@ -533,7 +533,6 @@ export default function HistoryTab() {
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-semibold uppercase tracking-wider">
-                      <th className="py-3 px-4 w-16">ID</th>
                       <th className="py-3 px-4">Jenis Pekerjaan</th>
                       <th className="py-3 px-4">Sumber / Target</th>
                       <th className="py-3 px-4">Waktu Mulai</th>
@@ -545,9 +544,6 @@ export default function HistoryTab() {
                   <tbody className="divide-y divide-gray-100">
                     {jobs.map((j) => (
                       <tr key={j.id} className="hover:bg-gray-50/80 transition-colors">
-                        <td className="py-3 px-4 font-mono font-bold text-gray-900">
-                          #{j.id}
-                        </td>
                         <td className="py-3 px-4">
                           <span className="font-medium text-gray-900 block">
                             {getJenisJobIngestLabel(j.job_type)}

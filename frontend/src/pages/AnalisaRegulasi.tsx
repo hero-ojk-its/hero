@@ -752,7 +752,7 @@ export default function AnalisaRegulasi() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Analisa Regulasi</h1>
-          <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+          <p className="text-sm text-gray-500 mt-1 leading-relaxed">
             Unggah dan analisis rancangan regulasi untuk mengidentifikasi kewajiban, larangan, sanksi, dan struktur pasal.
           </p>
         </div>
@@ -1175,7 +1175,7 @@ export default function AnalisaRegulasi() {
       <form onSubmit={handleSubmitUpload} className="space-y-6">
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-2xs space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-gray-100">
-            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider">
+            <h2 className="text-base font-semibold text-gray-900 tracking-tight">
               Unggah Draft Peraturan untuk Dianalisis
             </h2>
           </div>
@@ -1258,7 +1258,7 @@ export default function AnalisaRegulasi() {
           )}
 
           {/* Form Kolom Metadata Draf */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 items-start">
             {/* Indikator Status Ekstraksi Metadata Otomatis */}
             {isExtractingMetadata && (
               <div className="md:col-span-2 p-3 bg-blue-50/70 border border-blue-200 rounded-xl flex items-center gap-2.5 text-xs text-blue-800 animate-in fade-in duration-200">
@@ -1302,8 +1302,8 @@ export default function AnalisaRegulasi() {
             )}
 
             {/* Judul Draf */}
-            <div className="md:col-span-2 space-y-1">
-              <label className="text-xs font-bold text-gray-700">
+            <div className="md:col-span-2">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">
                 Judul Draf Regulasi <span className="text-red-600">*</span>
               </label>
               <input
@@ -1311,14 +1311,14 @@ export default function AnalisaRegulasi() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Contoh: Ketahanan dan Keamanan Siber bagi Bank Umum"
-                className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700 transition"
+                className="block w-full h-9 px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700 transition"
                 required
               />
             </div>
 
             {/* Nomor Regulasi */}
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-gray-700">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">
                 Nomor / Kode Draf Regulasi (Opsional)
               </label>
               <input
@@ -1326,19 +1326,19 @@ export default function AnalisaRegulasi() {
                 value={regulationNumber}
                 onChange={(e) => setRegulationNumber(e.target.value)}
                 placeholder="Contoh: RPOJK-Siber-2024 (kosongkan jika belum ada)"
-                className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700 transition"
+                className="block w-full h-9 px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700 transition"
               />
             </div>
 
             {/* Jenis Regulasi */}
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-gray-700">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">
                 Jenis Regulasi
               </label>
               <select
                 value={regulationType}
                 onChange={(e) => setRegulationType(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700 transition"
+                className="block w-full h-9 px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700 transition text-gray-800"
               >
                 <option value="POJK">Peraturan OJK (POJK)</option>
                 <option value="SEOJK">Surat Edaran OJK (SEOJK)</option>
@@ -1349,14 +1349,14 @@ export default function AnalisaRegulasi() {
             </div>
 
             {/* Bidang / Sektor */}
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-gray-700 flex items-center justify-between">
-                <span>Sektor / Bidang Regulasi (Opsional)</span>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                Sektor / Bidang Regulasi (Opsional)
               </label>
               <select
                 value={bidang}
                 onChange={(e) => setBidang(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700 transition text-gray-800"
+                className="block w-full h-9 px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700 transition text-gray-800"
               >
                 <option value="">-- Pilih Sektor / Bidang Regulasi (Opsional) --</option>
                 <option value="Perbankan">Perbankan</option>
@@ -1369,15 +1369,15 @@ export default function AnalisaRegulasi() {
             </div>
 
             {/* Tanggal Rilis / Draf */}
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-gray-700">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">
                 Tanggal Kajian / Draf
               </label>
               <input
                 type="date"
                 value={releaseDate}
                 onChange={(e) => setReleaseDate(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700 transition"
+                className="block w-full h-9 px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700 transition text-gray-800"
               />
             </div>
           </div>

@@ -1419,7 +1419,7 @@ export default function DetailDokumen() {
         {/* 1. Header Card (Nomor, Status, Judul, Metadata Singkat) */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-6 sm:p-7 space-y-3.5">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight leading-tight">
               {regulasi.nomor}
             </h1>
             <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${statusGaya.badge}`}>
@@ -1558,7 +1558,7 @@ export default function DetailDokumen() {
                 <ShieldCheck className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="font-bold text-amber-950 text-base">Persetujuan Publikasi Draft Kajian</h3>
+                <h2 className="text-lg font-bold text-amber-950 tracking-tight">Persetujuan Publikasi Draft Kajian</h2>
                 <p className="text-xs text-amber-800 mt-0.5">
                   Informasi persetujuan resmi publikasi rancangan peraturan ke klasifikasi publik.
                 </p>
@@ -1599,7 +1599,7 @@ export default function DetailDokumen() {
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="font-bold text-gray-900 text-base">Riwayat & Relasi</h3>
+                  <h2 className="text-lg font-bold text-gray-900 tracking-tight">Riwayat & Relasi</h2>
                   {versiData && (
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
                       {versiData.jumlah_relasi} Relasi
@@ -1784,7 +1784,7 @@ export default function DetailDokumen() {
               <Paperclip className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-gray-900 text-base">Dokumen Asli</h3>
+              <h2 className="text-lg font-bold text-gray-900 tracking-tight">Dokumen Asli</h2>
               <p className="text-xs text-gray-500 mt-0.5">Buka berkas PDF asli di browser atau unduh ke perangkat lokal.</p>
             </div>
           </div>
@@ -1904,7 +1904,7 @@ export default function DetailDokumen() {
                 <FileText className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="font-bold text-gray-900 text-base">Teks Dokumen</h3>
+                <h2 className="text-lg font-bold text-gray-900 tracking-tight">Teks Dokumen</h2>
                 <p className="text-xs text-gray-500 mt-0.5">Teks mentah hasil ekstraksi dokumen regulasi.</p>
               </div>
             </div>

@@ -183,8 +183,8 @@ export default function Dashboard() {
       {/* Header Section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Selamat datang di HERO</h2>
-          <p className="text-gray-500 mt-1 text-sm">
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Selamat datang di HERO</h1>
+          <p className="text-sm text-gray-500 mt-1">
             Pantau kondisi regulasi dan aktivitas sistem dalam satu tempat.
           </p>
         </div>
@@ -425,7 +425,7 @@ export default function Dashboard() {
         <>
           {/* Bottom Row: Ringkasan Aktivitas Sistem */}
           <div className="pt-2">
-            <h3 className="text-base font-bold text-gray-900">Ringkasan Aktivitas Sistem</h3>
+            <h2 className="text-lg font-bold text-gray-900 tracking-tight">Ringkasan Aktivitas Sistem</h2>
             <p className="text-xs text-gray-500 mt-1 mb-4">
               Status pemrosesan alur kerja dan antrean telaah regulasi saat ini
             </p>

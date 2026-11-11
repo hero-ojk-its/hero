@@ -1361,10 +1361,10 @@ export default function SummaryView({
                 {/* -------------------------------------------------------- */}
                 <div className="space-y-4">
                   <div className="pb-2 border-b border-gray-100">
-                    <h3 className="text-sm font-bold text-gray-900 tracking-tight">
+                    <h3 className="text-base font-bold text-gray-900 tracking-tight">
                       Ringkasan Eksekutif
                     </h3>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-gray-500 mt-0.5">
                       Intisari dan kerangka regulasi terstruktur berdasarkan ekstraksi naskah.
                     </p>
                   </div>
