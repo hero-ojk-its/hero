@@ -22,6 +22,8 @@ import {
   PanelLeftOpen,
   BookOpen,
   X,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 import {
@@ -121,6 +123,9 @@ export default function SummaryView({
   // State Filter Kategori Key Takeaways
   const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
 
+  // State Ekspansi Key Takeaways (default: maksimal 10 poin pertama)
+  const [isExpandedTakeaways, setIsExpandedTakeaways] = useState<boolean>(false);
+
   // 1. Memuat Data Deterministik & Berkas Dokumen saat mount / documentId berubah
   useEffect(() => {
     let isMounted = true;
@@ -138,6 +143,7 @@ export default function SummaryView({
     setAiData(null);
     setAiEnabled(false);
     setAiError(null);
+    setIsExpandedTakeaways(false);
 
     setPdfLoading(true);
     setPdfError(null);
@@ -920,6 +926,19 @@ export default function SummaryView({
     });
   }, [poinUtama, selectedCategory]);
 
+  // Key Takeaways dibatasi maksimal 10 poin secara default; dapat diperluas untuk menampilkan semua poin
+  const visiblePoints = useMemo(() => {
+    if (isExpandedTakeaways || filteredPoints.length <= 10) {
+      return filteredPoints;
+    }
+    return filteredPoints.slice(0, 10);
+  }, [filteredPoints, isExpandedTakeaways]);
+
+  // Reset ekspansi Key Takeaways ke 10 poin default saat kategori filter atau mode AI berganti
+  useEffect(() => {
+    setIsExpandedTakeaways(false);
+  }, [selectedCategory, isAiActive]);
+
   useEffect(() => {
     if (selectedCategory !== 'Semua' && !availableCategories.includes(selectedCategory)) {
       setSelectedCategory('Semua');
@@ -1437,7 +1456,7 @@ export default function SummaryView({
 
                   {filteredPoints.length > 0 ? (
                     <div className="space-y-3">
-                      {filteredPoints.map((point, pIdx) => {
+                      {visiblePoints.map((point, pIdx) => {
                         const displayText = isAiActive && point.parafrase ? point.parafrase : point.teks || point.poin || '-';
 
                         return (
@@ -1479,6 +1498,28 @@ export default function SummaryView({
                           </div>
                         );
                       })}
+
+                      {filteredPoints.length > 10 && (
+                        <div className="pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setIsExpandedTakeaways((prev) => !prev)}
+                            className="w-full py-2.5 px-4 bg-gray-50 hover:bg-gray-100 active:bg-gray-200 border border-gray-200 text-xs font-semibold text-gray-700 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
+                          >
+                            {isExpandedTakeaways ? (
+                              <>
+                                <span>Tampilkan lebih sedikit</span>
+                                <ChevronUp size={14} className="text-gray-500" />
+                              </>
+                            ) : (
+                              <>
+                                <span>Lihat semua poin ({filteredPoints.length})</span>
+                                <ChevronDown size={14} className="text-gray-500" />
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="p-6 bg-gray-50 rounded-xl border border-gray-200 text-xs text-gray-500 text-center font-sans">
