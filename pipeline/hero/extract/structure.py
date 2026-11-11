@@ -52,6 +52,11 @@ RE_LAMPIRAN = re.compile(r"^\s*(?:LAMPIRAN|PENJELASAN)\b")
 
 _MAX_HEADING_LEN = 120
 
+# Kata yang menyusul nomor pasal dalam RUJUKAN, bukan dalam judul pasal:
+# "… sebagaimana dimaksud dalam Pasal 5 ayat (2) huruf a".
+_RUJUKAN_LANJUTAN = re.compile(
+    r"^(?:ayat|huruf|angka|sampai|s\.d\.|dan|atau|serta|tersebut|ini)\b", re.IGNORECASE)
+
 
 _ROMAN_VALUES = {"I": 1, "V": 5, "X": 10}
 
@@ -136,8 +141,36 @@ def _split_ayat(body: str) -> list[tuple[str, str]]:
     return [(n, t) for n, t in ayat if t]
 
 
-def parse_structure(pages: list[PageText]) -> DocumentStructure:
-    """Walk the document line by line, tracking the current heading context."""
+def _inline_pasal_heading(stripped: str, expected: int) -> re.Match[str] | None:
+    """Is ``stripped`` a "Pasal N" heading glued to its body by the extractor?
+
+    Only told apart from a citation by context, so three signals must agree:
+    the number continues the run of articles (like diktum and section
+    numbering elsewhere here), the body does not read as the rest of a
+    citation, and it opens the way a provision does — a capital or "(1)".
+    """
+    m = RE_PASAL_INLINE.match(stripped)
+    if m is None:
+        return None
+    rest = m.group(2).strip()
+    if not rest or _RUJUKAN_LANJUTAN.match(rest) or not (rest[0].isupper() or rest[0] == "("):
+        return None
+    number = m.group(1)
+    digits = int(re.sub(r"\D", "", number) or 0)
+    suffix = number[len(str(digits)):].strip()
+    # "Pasal 12A" is inserted after Pasal 12, so it does not advance the run.
+    if digits != expected and not (suffix and digits == expected - 1):
+        return None
+    return m
+
+
+def parse_structure(pages: list[PageText], *, pasal_sebaris: bool = False) -> DocumentStructure:
+    """Walk the document line by line, tracking the current heading context.
+
+    ``pasal_sebaris`` accepts "Pasal N" headings that share a line with their
+    body. It is off by default and turned on only by the retry below, when the
+    strict pass found no structure at all.
+    """
     struct = DocumentStructure()
     if not pages:
         return struct
@@ -154,6 +187,7 @@ def parse_structure(pages: list[PageText]) -> DocumentStructure:
     in_attachment = False
     saw_pasal = False       # dokumen berpasal tidak pernah memakai diktum
     diktum_count = 0
+    pasal_sebaris_count = 0   # pasal yang sudah dibuka oleh lintasan sebaris
     sections_done = False   # body sections finished, lampiran forms follow
 
     current: Article | None = None
@@ -259,9 +293,19 @@ def parse_structure(pages: list[PageText]) -> DocumentStructure:
                 continue
 
             m = RE_PASAL.match(stripped)
+            inline_body = ""
+            if m is None and pasal_sebaris and not in_attachment:
+                m = _inline_pasal_heading(stripped, pasal_sebaris_count + 1)
+                if m is not None:
+                    inline_body = m.group(2).strip()
+                    # Nomor pokok, bukan jumlah pasal: "Pasal 2A" menyisip di
+                    # antara 2 dan 3, jadi ia tidak memajukan urutan.
+                    pasal_sebaris_count = int(re.sub(r"\D", "", m.group(1)) or 0)
             if m:
                 saw_pasal = True
                 start_article(m.group(1), page.number)
+                if inline_body:
+                    buf.append(inline_body)
                 continue
 
             # Diktum harus berurutan (KESATU, KEDUA, …) seperti ayat: kata yang sama di
@@ -317,6 +361,13 @@ def parse_structure(pages: list[PageText]) -> DocumentStructure:
 
     close_current()
     struct.has_structure = bool(struct.articles or struct.sections)
+    if not struct.has_structure and not pasal_sebaris:
+        # Tak satu pun "Pasal N" berdiri sendiri: ekstraktor merekatkan setiap
+        # judul ke badan pasalnya. Coba sekali lagi menerima bentuk sebaris —
+        # lebih baik daripada analisa jatuh ke kalimat tanpa rujukan pasal.
+        retry = parse_structure(pages, pasal_sebaris=True)
+        if retry.articles:
+            return retry
     return struct
 
 
