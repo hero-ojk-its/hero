@@ -1,4 +1,4 @@
-import { Sparkles, Info } from 'lucide-react';
+import { Info } from 'lucide-react';
 import { normalisasiRingkasanAi } from '../../lib/analisaApi';
 import type { MlAnalisaAiDetails, MlAnalisaAiSentence } from '../../lib/analisaApi';
 
@@ -20,10 +20,9 @@ export default function RingkasanAiPanel({ ai, ringkasanAi, modeDipakai }: Ringk
 
     return (
       <div className="bg-purple-50/40 rounded-xl p-4 sm:p-5 border border-purple-200/80 space-y-3 shadow-2xs">
-        <div className="flex items-center gap-1.5">
-          <Sparkles size={14} className="text-purple-700" />
+        <div>
           <span className="text-xs font-bold text-purple-900 tracking-tight">
-            Narasi Eksekutif AI
+            Hasil Ringkasan AI
           </span>
         </div>
         <div className="text-sm font-normal text-gray-800 leading-relaxed font-sans space-y-2.5">
