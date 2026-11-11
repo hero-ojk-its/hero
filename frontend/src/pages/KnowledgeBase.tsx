@@ -528,7 +528,7 @@ export default function KnowledgeBase() {
       {/* Header */}
       <div>
         <div className="flex items-center gap-3">
-          <h2 className="text-2xl font-bold text-gray-900">Knowledge Base</h2>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Knowledge Base</h1>
           <span className="bg-red-50 text-red-700 px-2.5 py-1 rounded-full text-xs font-semibold border border-red-100">
             {totalDocuments} dokumen
           </span>
@@ -546,7 +546,7 @@ export default function KnowledgeBase() {
             </Link>
           )}
         </div>
-        <p className="text-gray-500 mt-2 text-sm">Kelola dan temukan regulasi yang tersimpan dalam sistem.</p>
+        <p className="text-sm text-gray-500 mt-1">Kelola dan temukan regulasi yang tersimpan dalam sistem.</p>
       </div>
 
       {/* Search and Filters Container */}

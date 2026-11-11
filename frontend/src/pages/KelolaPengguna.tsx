@@ -79,8 +79,8 @@ export default function KelolaPengguna() {
               <Users size={20} />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900 tracking-tight">Kelola Pengguna</h1>
-              <p className="text-xs text-gray-500 mt-0.5">
+              <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Kelola Pengguna</h1>
+              <p className="text-sm text-gray-500 mt-1">
                 Daftar akun, peran otorisasi, dan status aktif pengguna sistem HERO.
               </p>
             </div>

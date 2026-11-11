@@ -19,18 +19,18 @@ export default function Harmonisasi() {
         </div>
       </div>
 
-      <h2 className="text-xl font-bold">Harmonisasi Draft vs Eksisting</h2>
+      <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Harmonisasi Draft vs Eksisting</h1>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <h3 className="font-semibold mb-4 text-gray-700">Draft Baru</h3>
+          <h3 className="text-base font-semibold text-gray-900 mb-4">Draft Baru</h3>
           <div className="border-2 border-dashed border-gray-300 rounded-lg h-40 flex items-center justify-center text-gray-500 cursor-not-allowed bg-gray-50/50">
             Klik atau Drag & Drop Draft Baru (PDF)
           </div>
         </div>
 
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <h3 className="font-semibold mb-4 text-gray-700">Peraturan Eksisting</h3>
+          <h3 className="text-base font-semibold text-gray-900 mb-4">Peraturan Eksisting</h3>
           <button disabled className="w-full border border-gray-300 rounded-lg p-3 text-left text-gray-400 bg-gray-50 cursor-not-allowed">
             Pilih dari Knowledge Base...
           </button>
