@@ -186,7 +186,7 @@ class AnalysisSettings:
     # Documents classified internal/rahasia never leave the server unless this
     # is explicitly turned on (Project Charter: data DPEA confidential).
     ai_allow_internal: bool = False
-    ai_max_facts: int = 24
+    ai_max_facts: int | None = None    # None = semua poin dikirim ke model
     # Batas keluaran model. 0 = bawaan model (tanpa batas kami). Narasi 4–7 kalimat + 24 parafrase
     # muat di ±1.500 token; batas ini mencegah satu dokumen aneh menghabiskan biaya dan waktu.
     # Keluaran yang terpotong DITOLAK (bukan ditampilkan separuh) dan jatuh ke hasil Deterministik.

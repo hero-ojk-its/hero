@@ -128,7 +128,7 @@ class AiResult:
 
 
 # ---------------------------------------------------------------------------
-def build_facts(a: AnalysisV2, max_points: int = 24) -> list[dict[str, Any]]:
+def build_facts(a: AnalysisV2, max_points: int | None = None) -> list[dict[str, Any]]:
     """The only material the model may use. Ids are stable per analysis."""
     ident = a.identitas
     facts: list[dict[str, Any]] = []
