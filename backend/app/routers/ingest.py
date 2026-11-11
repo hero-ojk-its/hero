@@ -232,7 +232,17 @@ def upload_pdf(
         )
 
     # 0. Resolusi klasifikasi akses default
-    resolved_access_classification = access_classification or KlasifikasiAkses.publik
+    # Aturan rapat 10 Nov 2026: setiap dokumen dengan document_role = draft_kajian selalu disimpan
+    # access_classification = non_publik, apa pun nilai yang dikirim klien (FE saat ini mengirim 'publik').
+    # Dokumen corpus_eksisting tidak berubah.
+    if (
+        document_role == PeranDokumen.draft_kajian
+        or getattr(document_role, "value", None) == "draft_kajian"
+        or str(document_role) == "draft_kajian"
+    ):
+        resolved_access_classification = KlasifikasiAkses.non_publik
+    else:
+        resolved_access_classification = access_classification or KlasifikasiAkses.publik
 
     # 0a. Validasi persetujuan publikasi draft kajian (Langkah 35, FR-SCR-04a)
     persetujuan_inp = None
@@ -747,6 +757,12 @@ def retry_failure(
     if body:
         acc_enum = KlasifikasiAkses(body.access_classification) if body.access_classification else None
         role_enum = PeranDokumen(body.document_role) if body.document_role else None
+        if (
+            role_enum == PeranDokumen.draft_kajian
+            or getattr(role_enum, "value", None) == "draft_kajian"
+            or str(role_enum) == "draft_kajian"
+        ):
+            acc_enum = KlasifikasiAkses.non_publik
         overrides = RetryOverrides(
             category_id=body.category_id,
             access_classification=acc_enum,

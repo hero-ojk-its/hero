@@ -402,9 +402,20 @@ class IngestService:
             if is_att:
                 parent_id_key = fallback_identity_key(doc_reg_type, doc_reg_number, doc_regulation_year)
 
-            # Resolusi klasifikasi akses dokumen (default: publik dari options)
-            # Alur draft_kajian tidak lagi bergantung pada persetujuan publikasi
-            final_access_classification = options.access_classification or KlasifikasiAkses.publik
+            # Resolusi klasifikasi akses dokumen:
+            # Aturan rapat 10 Nov 2026: setiap dokumen dengan document_role = draft_kajian
+            # selalu disimpan access_classification = non_publik, apa pun nilai yang dikirim klien.
+            # Dokumen corpus_eksisting tidak berubah (default: publik dari options).
+            doc_role = options.document_role
+            if (
+                doc_role == PeranDokumen.draft_kajian
+                or getattr(doc_role, "value", None) == "draft_kajian"
+                or str(doc_role) == "draft_kajian"
+            ):
+                final_access_classification = KlasifikasiAkses.non_publik
+            else:
+                final_access_classification = options.access_classification or KlasifikasiAkses.publik
+            options.access_classification = final_access_classification
             klasifikasi_diturunkan = None
 
             # Buat instance Document

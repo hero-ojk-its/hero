@@ -65,7 +65,7 @@ analysis:
   # kredensial: GOOGLE_API_KEY (lihat deploy/systemd/hero-ml.service: EnvironmentFile)
   # pip install -e ".[ai-gemini]" di .venv server sebelum menyalakan
   ai_effort: medium              # tidak dipakai jalur Gemini (ai_effort khusus Anthropic); dibiarkan utk jalur balik ke Claude
-  ai_allow_internal: false      # dokumen berklasifikasi internal tidak dikirim ke layanan AI
+  ai_allow_internal: true       # dokumen berklasifikasi internal boleh dikirim ke layanan AI (Aturan rapat 10 Nov 2026)
   ai_max_facts: 24
   ai_timeout: 0             # detik menunggu model; 0 = tanpa batas (jatuh ke Deterministik hanya bila galat nyata)
 

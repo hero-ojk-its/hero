@@ -831,6 +831,16 @@ def patch_document_metadata(
     target_class_str = target_class.value if hasattr(target_class, "value") else str(target_class or "")
     is_target_draft_publik = (target_role_str == "draft_kajian" and target_class_str == "publik")
 
+    # Aturan rapat 10 Nov 2026: draft_kajian tidak boleh diubah menjadi publik.
+    if ("access_classification" in fields_set or "document_role" in fields_set) and is_target_draft_publik:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "draft_publik_tidak_diizinkan",
+                "message": "Dokumen draf kajian tidak boleh diubah menjadi publik. Draf kajian selalu non-publik.",
+            },
+        )
+
     # Aturan otorisasi Langkah 35b:
     # Bila pengguna TIDAK punya METADATA_KOREKSI (hanya DRAFT_PUBLIKASI),
     # field yang dikirim hanya boleh subset dari {"access_classification", "persetujuan_publik"}

@@ -126,6 +126,8 @@ class FailureService:
             ),
             "category_id": options.category_id,
         }
+        if opts_dict.get("document_role") == "draft_kajian":
+            opts_dict["access_classification"] = KlasifikasiAkses.non_publik.value
         if options.metadata:
             opts_dict["metadata"] = {
                 "title": options.metadata.title,
@@ -666,15 +668,15 @@ class FailureService:
             if overrides.category_id is not None:
                 cat_id = overrides.category_id
 
-        # Validasi draft kajian + publik saat retry (Langkah 35)
-        if doc_role_val == "draft_kajian" and acc_class_val == "publik":
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail={
-                    "code": "draft_publik_butuh_persetujuan",
-                    "message": "Draft kajian hanya boleh publik dengan persetujuan (disetujui_oleh dan alasan wajib diisi).",
-                },
-            )
+        # Aturan rapat 10 Nov 2026: setiap dokumen dengan document_role = draft_kajian
+        # selalu disimpan access_classification = non_publik, apa pun nilai yang dikirim klien.
+        # Dokumen corpus_eksisting tidak berubah.
+        if (
+            doc_role_val == "draft_kajian"
+            or doc_role_val == PeranDokumen.draft_kajian
+            or getattr(doc_role_val, "value", None) == "draft_kajian"
+        ):
+            acc_class_val = KlasifikasiAkses.non_publik.value
 
         options = IngestOptions(
             access_classification=KlasifikasiAkses(acc_class_val),
