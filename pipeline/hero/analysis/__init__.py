@@ -23,7 +23,7 @@ def analysis_payload(conn: sqlite3.Connection, doc_id: str, *, mode: str, narrat
     akses = (conn.execute("SELECT COALESCE(access_class, 'publik') FROM documents WHERE doc_id = ?",
                           (doc_id,)).fetchone() or ["publik"])[0]
     out = a.to_dict()
-    out["poin_utama"] = [vars(p) for p in a.poin_utama(10)]
+    out["poin_utama"] = [vars(p) for p in a.poin_utama()]
     out["jumlah_poin"] = len(a.poin)
     out.pop("poin")
     out["mode_diminta"] = mode

@@ -128,19 +128,21 @@ class AnalysisV2:
     def ringkasan_teks(self) -> str:
         return " ".join(s["kalimat"] for s in self.ringkasan)
 
-    def poin_utama(self, n: int = 10) -> list[Point]:
-        """The points to show first: round-robin across categories in order of
-        legal weight, most specific point of each category first — so ten
-        near-identical "dikenai sanksi administratif …" never fill the list."""
+    def poin_utama(self, n: int | None = None) -> list[Point]:
+        """Points ordered for display: round-robin across categories in order of
+        legal weight, most specific point of each category first — so near-identical
+        "dikenai sanksi administratif …" points never crowd out other categories.
+        ``n=None`` returns every point; a number caps the list (AI facts, evaluation)."""
         top = [s["subjek"] for s in self.subjek_diatur[:3]]
         by_cat: dict[str, list[Point]] = {}
         for p in _rank_for_summary(self.poin, top):
             by_cat.setdefault(p.kategori, []).append(p)
         order = sorted(by_cat, key=lambda c: min(p.prioritas for p in by_cat[c]))
+        limit = len(self.poin) if n is None else n
         out: list[Point] = []
-        while len(out) < n and any(by_cat.values()):
+        while len(out) < limit and any(by_cat.values()):
             for c in order:
-                if by_cat[c] and len(out) < n:
+                if by_cat[c] and len(out) < limit:
                     out.append(by_cat[c].pop(0))
         return out
 

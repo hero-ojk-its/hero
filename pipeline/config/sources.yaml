@@ -66,7 +66,7 @@ analysis:
   # pip install -e ".[ai-gemini]" di .venv server sebelum menyalakan
   ai_effort: medium              # tidak dipakai jalur Gemini (ai_effort khusus Anthropic); dibiarkan utk jalur balik ke Claude
   ai_allow_internal: true       # dokumen berklasifikasi internal boleh dikirim ke layanan AI (Aturan rapat 10 Nov 2026)
-  ai_max_facts: 24
+  ai_max_facts: null        # null = semua poin utama dikirim ke model (tanpa batas)
   ai_timeout: 0             # detik menunggu model; 0 = tanpa batas (jatuh ke Deterministik hanya bila galat nyata)
 
 # US-20a — penamaan berkas baku sebelum masuk folder KB. OJK belum punya format
