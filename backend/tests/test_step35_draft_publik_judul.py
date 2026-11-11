@@ -2,22 +2,22 @@
 tests/test_step35_draft_publik_judul.py
 Pengujian HERO Backend Langkah 35: Draft Kajian Publik Wajib Persetujuan & Pengaman Judul Hasil Ekstraksi.
 Kasus Uji:
-- D01: Unggah draft_kajian + publik tanpa persetujuan -> 200 (tanpa blocking)
-- D02: Sama, alasan tidak wajib / pendek -> 200
-- D03: Sama, persetujuan lengkap (auth mati) -> 200/201; tiga kolom terisi; audit UPLOAD_DOCUMENT & PUBLIKASI_DRAFT
+- D01: Unggah draft_kajian + publik tanpa persetujuan -> 200 (tersimpan non_publik)
+- D02: Sama, alasan tidak wajib / pendek -> 200 (tersimpan non_publik)
+- D03: Sama, persetujuan lengkap (auth mati) -> 200/201; tiga kolom terisi; audit UPLOAD_DOCUMENT & PUBLIKASI_DRAFT (tersimpan non_publik)
 - D04: Unggah draft_kajian + non_publik dan corpus_eksisting + publik tanpa persetujuan -> diterima
-- D05: PATCH draft non_publik -> publik tanpa persetujuan -> 200
-- D06: PATCH dengan persetujuan -> 200; kolom terisi; persetujuan_publik ada di respons & detail
-- D07: PATCH corpus_eksisting + publik -> draft_kajian tanpa persetujuan -> 200
+- D05: PATCH draft non_publik -> publik tanpa persetujuan -> ditolak 422
+- D06: PATCH dengan persetujuan -> ditolak 422
+- D07: PATCH corpus_eksisting + publik -> draft_kajian tanpa persetujuan -> ditolak 422
 - D08: PATCH draft yang sudah disetujui -> non_publik -> 200; tiga kolom dikosongkan
 - D09: PATCH judul saja pada draft yang sudah disetujui publik -> 200 tanpa persetujuan ulang
-- D10: AUTH_ENABLED=true, pengguna analis -> 200; pengguna tanpa izin (pilot_user) -> 403 akses_ditolak
-- D11: AUTH_ENABLED=true, pengguna admin_kb -> diterima; disetujui_oleh = username login
+- D10: AUTH_ENABLED=true, pengguna analis PATCH ke publik -> 422; pengguna tanpa izin (pilot_user) -> 403 akses_ditolak
+- D11: AUTH_ENABLED=true, pengguna admin_kb PATCH ke publik -> ditolak 422
 - D12: Buat/ubah sumber dengan default draft_kajian + publik -> 422 sumber_draft_publik_tidak_diizinkan
 - D13: periksa_draft_publik.py dry-run lalu --apply (seed: 2 draft publik tanpa persetujuan, 1 dengan persetujuan)
-- D14: IngestService draft_kajian + publik tanpa persetujuan -> klasifikasi publik dipertahankan (tidak didemosi)
+- D14: IngestService draft_kajian + publik tanpa persetujuan -> selalu disimpan non_publik
 - D15: periksa_draft_publik_sumber periksa dan koreksi default sumber
-- D16: AUTH_ENABLED=true, admin_kb PATCH draft non_publik ke publik -> 200
+- D16: AUTH_ENABLED=true, admin_kb PATCH draft non_publik ke publik -> ditolak 422
 - D17: AUTH_ENABLED=true, admin_kb PATCH title pada draft publik ditolak 403
 - D18: AUTH_ENABLED=true, analis PATCH title pada draft publik diterima 200
 - J01: periksa_judul judul OJK wajar (No. dan POJK.03) -> ok
@@ -119,7 +119,7 @@ def _seed_doc(
 
 
 def test_d01_unggah_draft_publik_tanpa_persetujuan(client: TestClient, db: Session):
-    """D01: Unggah draft_kajian + publik tanpa persetujuan -> 200 (kini diizinkan tanpa blocking)."""
+    """D01: Unggah draft_kajian + kirim 'publik' -> 200, selalu disimpan non_publik (Aturan 10 Nov 2026)."""
     doc_count_before = db.query(Document).count()
     job_count_before = db.query(JobIngest).count()
 
@@ -144,11 +144,20 @@ def test_d01_unggah_draft_publik_tanpa_persetujuan(client: TestClient, db: Sessi
     doc = db.query(Document).filter(Document.id == doc_id).first()
     assert doc is not None
     assert doc.document_role == PeranDokumen.draft_kajian
-    assert doc.access_classification == KlasifikasiAkses.publik
+    assert doc.access_classification == KlasifikasiAkses.non_publik
+
+    # Verifikasi draf non_publik tetap bisa dibuka tanpa login (permissions.py PR #205)
+    orig_auth = settings.auth_enabled
+    settings.auth_enabled = False
+    try:
+        res_open = client.get(f"/api/v1/documents/{doc.id}/text")
+        assert res_open.status_code == 200
+    finally:
+        settings.auth_enabled = orig_auth
 
 
 def test_d02_unggah_draft_publik_alasan_kurang_panjang(client: TestClient, db: Session):
-    """D02: Alasan persetujuan tidak lagi menjadi validasi wajib -> tetap 200."""
+    """D02: Unggah draft_kajian kirim 'publik' + persetujuan -> 200, selalu disimpan non_publik."""
     pdf_bytes = make_pdf("Draft Kajian Alasan Pendek")
     files = [("files", ("draft2.pdf", io.BytesIO(pdf_bytes), "application/pdf"))]
     data = {
@@ -167,11 +176,11 @@ def test_d02_unggah_draft_publik_alasan_kurang_panjang(client: TestClient, db: S
     doc = db.query(Document).filter(Document.id == doc_id).first()
     assert doc is not None
     assert doc.document_role == PeranDokumen.draft_kajian
-    assert doc.access_classification == KlasifikasiAkses.publik
+    assert doc.access_classification == KlasifikasiAkses.non_publik
 
 
 def test_d03_unggah_draft_publik_persetujuan_lengkap_auth_mati(client: TestClient, db: Session):
-    """D03: Persetujuan lengkap (auth mati) -> 200; 3 kolom terisi; audit UPLOAD_DOCUMENT & PUBLIKASI_DRAFT."""
+    """D03: Persetujuan lengkap (auth mati) -> 200; 3 kolom terisi; tersimpan non_publik."""
     orig_auth = settings.auth_enabled
     settings.auth_enabled = False
     try:
@@ -191,6 +200,8 @@ def test_d03_unggah_draft_publik_persetujuan_lengkap_auth_mati(client: TestClien
 
         doc = db.query(Document).filter(Document.id == doc_id).first()
         assert doc is not None
+        assert doc.document_role == PeranDokumen.draft_kajian
+        assert doc.access_classification == KlasifikasiAkses.non_publik
         assert doc.publik_disetujui_oleh == "Kepala Departemen DPEA"
         assert doc.publik_disetujui_alasan == "Telah disetujui untuk uji publik sesuai disposisi"
         assert doc.publik_disetujui_pada is not None
@@ -228,8 +239,11 @@ def test_d04_unggah_kombinasi_valid_tanpa_persetujuan(client: TestClient, db: Se
         data={"access_classification": "non_publik", "document_role": "draft_kajian", "title": "Draft Internal"},
     )
     assert resp1.status_code == 200
+    doc1_id = resp1.json()["details"][0]["document_id"]
+    doc1 = db.query(Document).filter(Document.id == doc1_id).first()
+    assert doc1.access_classification == KlasifikasiAkses.non_publik
 
-    # 2. corpus_eksisting + publik
+    # 2. corpus_eksisting + publik (tetap publik)
     pdf2 = make_pdf("Corpus Regulasi Publik")
     resp2 = client.post(
         "/api/v1/ingest/upload-pdf",
@@ -237,10 +251,13 @@ def test_d04_unggah_kombinasi_valid_tanpa_persetujuan(client: TestClient, db: Se
         data={"access_classification": "publik", "document_role": "corpus_eksisting", "title": "POJK Publik"},
     )
     assert resp2.status_code == 200
+    doc2_id = resp2.json()["details"][0]["document_id"]
+    doc2 = db.query(Document).filter(Document.id == doc2_id).first()
+    assert doc2.access_classification == KlasifikasiAkses.publik
 
 
 def test_d05_patch_draft_nonpublik_ke_publik_tanpa_persetujuan(client: TestClient, db: Session):
-    """D05: PATCH draft non_publik -> publik tanpa persetujuan -> 200 (tidak lagi butuh persetujuan)."""
+    """D05: PATCH draft non_publik -> publik tanpa persetujuan ditolak 422 (draft_kajian tidak boleh publik)."""
     doc = _seed_doc(
         db,
         title="Draft Awal Non Publik",
@@ -252,14 +269,16 @@ def test_d05_patch_draft_nonpublik_ke_publik_tanpa_persetujuan(client: TestClien
         f"/api/v1/documents/{doc.id}/metadata",
         json={"access_classification": "publik"},
     )
-    assert resp.status_code == 200, resp.text
+    assert resp.status_code == 422, resp.text
+    body = resp.json()
+    assert body.get("detail", {}).get("code") == "draft_publik_tidak_diizinkan"
 
     db.refresh(doc)
-    assert doc.access_classification == KlasifikasiAkses.publik
+    assert doc.access_classification == KlasifikasiAkses.non_publik
 
 
 def test_d06_patch_draft_ke_publik_dengan_persetujuan(client: TestClient, db: Session):
-    """D06: PATCH dengan persetujuan -> 200; kolom terisi; persetujuan_publik ada di respons & detail."""
+    """D06: PATCH draft ke publik dengan persetujuan ditolak 422 (draft_kajian tidak boleh publik)."""
     doc = _seed_doc(
         db,
         title="Draft Awal Non Publik",
@@ -277,28 +296,16 @@ def test_d06_patch_draft_ke_publik_dengan_persetujuan(client: TestClient, db: Se
             },
         },
     )
-    assert resp.status_code == 200, resp.text
-    data = resp.json()
-    assert "persetujuan_publik" in data
-    assert data["persetujuan_publik"]["disetujui_oleh"] == "Direktur Pengaturan"
+    assert resp.status_code == 422, resp.text
+    body = resp.json()
+    assert body.get("detail", {}).get("code") == "draft_publik_tidak_diizinkan"
 
-    # Periksa endpoint GET detail
-    resp_get = client.get(f"/api/v1/documents/{doc.id}")
-    assert resp_get.status_code == 200
-    assert resp_get.json()["persetujuan_publik"]["disetujui_oleh"] == "Direktur Pengaturan"
-
-    # Periksa audit log PUBLIKASI_DRAFT dengan jalur koreksi_metadata
-    audit_patch = (
-        db.query(AuditLog)
-        .filter(AuditLog.target_resource == f"document:{doc.id}", AuditLog.action == "PUBLIKASI_DRAFT")
-        .first()
-    )
-    assert audit_patch is not None
-    assert audit_patch.detail["jalur"] == "koreksi_metadata"
+    db.refresh(doc)
+    assert doc.access_classification == KlasifikasiAkses.non_publik
 
 
 def test_d07_patch_corpus_ke_draft_tanpa_persetujuan(client: TestClient, db: Session):
-    """D07: PATCH dokumen corpus_eksisting + publik -> document_role=draft_kajian tanpa persetujuan -> 200."""
+    """D07: PATCH dokumen corpus_eksisting + publik -> draft_kajian ditolak 422 (menjadikan draf publik ditolak)."""
     doc = _seed_doc(
         db,
         title="Dokumen Corpus Publik",
@@ -311,10 +318,22 @@ def test_d07_patch_corpus_ke_draft_tanpa_persetujuan(client: TestClient, db: Ses
         f"/api/v1/documents/{doc.id}/metadata",
         json={"document_role": "draft_kajian"},
     )
-    assert resp.status_code == 200, resp.text
+    assert resp.status_code == 422, resp.text
+    body = resp.json()
+    assert body.get("detail", {}).get("code") == "draft_publik_tidak_diizinkan"
 
     db.refresh(doc)
+    assert doc.document_role == PeranDokumen.corpus_eksisting
+
+    # Jika diubah bersamaan dengan access_classification: non_publik -> diterima 200
+    resp2 = client.patch(
+        f"/api/v1/documents/{doc.id}/metadata",
+        json={"document_role": "draft_kajian", "access_classification": "non_publik"},
+    )
+    assert resp2.status_code == 200, resp2.text
+    db.refresh(doc)
     assert doc.document_role == PeranDokumen.draft_kajian
+    assert doc.access_classification == KlasifikasiAkses.non_publik
 
 
 def test_d08_patch_draft_disetujui_ke_nonpublik_kosongkan_kolom(client: TestClient, db: Session):
@@ -398,15 +417,16 @@ def test_d10_auth_aktif_pengguna_analis_diterima_dan_tanpa_izin_ditolak(client: 
             access=KlasifikasiAkses.non_publik,
         )
 
-        # 1. Analis (punya METADATA_KOREKSI) -> 200 (alur draf tidak lagi diblokir persetujuan)
+        # 1. Analis (punya METADATA_KOREKSI) coba ubah draft ke publik -> ditolak 422
         resp_analis = client.patch(
             f"/api/v1/documents/{doc.id}/metadata",
             headers={"Authorization": f"Bearer {token_analis}"},
             json={"access_classification": "publik"},
         )
-        assert resp_analis.status_code == 200, resp_analis.text
+        assert resp_analis.status_code == 422, resp_analis.text
+        assert resp_analis.json().get("detail", {}).get("code") == "draft_publik_tidak_diizinkan"
         db.refresh(doc)
-        assert doc.access_classification == KlasifikasiAkses.publik
+        assert doc.access_classification == KlasifikasiAkses.non_publik
 
         # 2. Pilot user (tidak punya METADATA_KOREKSI maupun DRAFT_PUBLIKASI) -> 403 akses_ditolak
         resp_pilot = client.patch(
@@ -421,7 +441,7 @@ def test_d10_auth_aktif_pengguna_analis_diterima_dan_tanpa_izin_ditolak(client: 
 
 
 def test_d11_auth_aktif_pengguna_admin_kb_diterima(client: TestClient, db: Session):
-    """D11: AUTH_ENABLED=true, pengguna admin_kb -> diterima; disetujui_oleh = username login."""
+    """D11: AUTH_ENABLED=true: admin_kb PATCH draft ke publik ditolak 422 (draft_kajian tidak boleh publik)."""
     orig_auth = settings.auth_enabled
     settings.auth_enabled = True
     try:
@@ -453,11 +473,10 @@ def test_d11_auth_aktif_pengguna_admin_kb_diterima(client: TestClient, db: Sessi
                 },
             },
         )
-        assert resp.status_code == 200, resp.text
+        assert resp.status_code == 422, resp.text
+        assert resp.json().get("detail", {}).get("code") == "draft_publik_tidak_diizinkan"
         db.refresh(doc)
-        # Nama dari klien diabaikan, otomatis diisi dari username pengguna login
-        assert doc.publik_disetujui_oleh == "admin_kb_d11"
-        assert doc.access_classification == KlasifikasiAkses.publik
+        assert doc.access_classification == KlasifikasiAkses.non_publik
     finally:
         settings.auth_enabled = orig_auth
 
@@ -554,7 +573,7 @@ def test_d13_skrip_periksa_draft_publik(db: Session):
 
 
 def test_d14_ingest_service_pertahankan_klasifikasi_draft_publik_tanpa_persetujuan(db: Session, test_storage: Any):
-    """D14: IngestService dengan options draft_kajian+publik tanpa persetujuan -> klasifikasi publik dipertahankan (tidak didemosikan ke non_publik)."""
+    """D14: IngestService dengan options draft_kajian + publik -> selalu disimpan non_publik (Aturan 10 Nov 2026)."""
     ingest_svc = IngestService(db=db, storage=test_storage)
     job = JobIngest(
         job_type=JenisJobIngest.scraping,
@@ -585,16 +604,7 @@ def test_d14_ingest_service_pertahankan_klasifikasi_draft_publik_tanpa_persetuju
     doc = db.query(Document).filter(Document.id == res.document_id).first()
     assert doc is not None
     assert doc.document_role == PeranDokumen.draft_kajian
-    assert doc.access_classification == KlasifikasiAkses.publik
-
-    # Periksa audit log UPLOAD_DOCUMENT: tidak ada klasifikasi_diturunkan
-    audit = (
-        db.query(AuditLog)
-        .filter(AuditLog.target_resource == f"document:{doc.id}", AuditLog.action == "UPLOAD_DOCUMENT")
-        .first()
-    )
-    assert audit is not None
-    assert "klasifikasi_diturunkan" not in audit.detail
+    assert doc.access_classification == KlasifikasiAkses.non_publik
 
 
 def test_d15_skrip_periksa_draft_publik_sumber(db: Session):
@@ -641,7 +651,7 @@ def test_d15_skrip_periksa_draft_publik_sumber(db: Session):
 
 
 def test_d16_auth_aktif_admin_kb_patch_draft_ke_publik_diterima(client: TestClient, db: Session):
-    """D16: AUTH_ENABLED=true, admin_kb PATCH {access_classification: publik, persetujuan_publik} pada draft non_publik -> 200."""
+    """D16: AUTH_ENABLED=true, admin_kb PATCH draft ke publik ditolak 422 (draft_kajian selalu non-publik)."""
     orig_auth = settings.auth_enabled
     settings.auth_enabled = True
     try:
@@ -673,15 +683,11 @@ def test_d16_auth_aktif_admin_kb_patch_draft_ke_publik_diterima(client: TestClie
                 },
             },
         )
-        assert resp.status_code == 200, resp.text
-        data = resp.json()
-        assert data["access_classification"] == "publik"
-        assert data["persetujuan_publik"] is not None
-        assert data["persetujuan_publik"]["disetujui_oleh"] == user_admin.username
+        assert resp.status_code == 422, resp.text
+        assert resp.json().get("detail", {}).get("code") == "draft_publik_tidak_diizinkan"
 
         db.refresh(doc)
-        assert doc.access_classification == KlasifikasiAkses.publik
-        assert doc.publik_disetujui_oleh == user_admin.username
+        assert doc.access_classification == KlasifikasiAkses.non_publik
     finally:
         settings.auth_enabled = orig_auth
 
