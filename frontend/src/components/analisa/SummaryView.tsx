@@ -99,11 +99,27 @@ export default function SummaryView({
   const [isResizing, setIsResizing] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
+  // Deteksi layar desktop (>= 1024px) untuk animasi collapse/expand naskah secara smooth
+  const [isDesktop, setIsDesktop] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
+  );
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsDesktop(window.innerWidth >= 1024);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Layout Responsif (Mobile / Tablet < 1024px)
   const [mobileActiveTab, setMobileActiveTab] = useState<'naskah' | 'summary'>('summary');
 
   // State Modal Detail Pasal
   const [pasalModal, setPasalModal] = useState<DetailPasalModalState | null>(null);
+
+  // State Filter Kategori Key Takeaways
+  const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
 
   // 1. Memuat Data Deterministik & Berkas Dokumen saat mount / documentId berubah
   useEffect(() => {
@@ -439,6 +455,477 @@ export default function SummaryView({
   // Daftar poin utama
   const poinUtama: MlAnalisaPoint[] = activeData?.poin_utama || [];
 
+  // Helper membersihkan rujukan pasal teknis dari narasi Ringkasan Eksekutif
+  const cleanPasalRefs = (text: string): string => {
+    if (!text) return '';
+    return text
+      .replace(/\s*\((?:lihat\s+)?(?:pasal|ps\.)\s+[0-9a-zA-Z\s,–\-\(\)]+\)/gi, '')
+      .replace(/\s*\[(?:lihat\s+)?(?:pasal|ps\.)\s+[0-9a-zA-Z\s,–\-\(\)]+\]/gi, '')
+      .replace(/(?:sebagaimana\s+dimaksud\s+(?:dalam|pada)\s+)?(?:pasal|ps\.)\s+[0-9]+(?:\s+ayat\s+\([0-9]+\))?/gi, 'ketentuan yang berlaku')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  };
+
+  // Ekstraksi data terstruktur untuk Ringkasan Eksekutif (8 Kelompok Informasi Berurutan)
+  const structuredSummary = useMemo(() => {
+    if (!activeData && !docStatus) return null;
+
+    // 1. Identitas Dokumen
+    const namaJudul = docStatus?.title || activeData?.identitas?.title || activeData?.identitas?.tentang || null;
+    const nomorReg = docStatus?.regulation_number || activeData?.identitas?.nomor || activeData?.identitas?.number || null;
+    const tahunReg = docStatus?.regulation_year || activeData?.identitas?.tahun || activeData?.identitas?.year || null;
+    const jenisReg = docStatus?.regulation_type || activeData?.identitas?.jenis || activeData?.identitas?.doc_type || null;
+    let statusKeberlakuan: string | null = null;
+    const rawStatus = docStatus?.status_keberlakuan || activeData?.identitas?.status;
+    if (rawStatus) {
+      if (rawStatus === 'belum_berlaku') statusKeberlakuan = 'Belum Berlaku';
+      else if (rawStatus === 'berlaku') statusKeberlakuan = 'Berlaku';
+      else if (rawStatus === 'dicabut') statusKeberlakuan = 'Dicabut';
+      else statusKeberlakuan = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).replace(/_/g, ' ');
+    }
+    const hasIdentitas = Boolean(namaJudul || nomorReg);
+
+    // 2. Kerangka Regulasi
+    const jumlahBab = activeData?.metrik?.jumlah_bab || (activeData?.kerangka && activeData.kerangka.length > 0 ? activeData.kerangka.length : null) || null;
+    const jumlahPasal = activeData?.metrik?.jumlah_pasal || docStatus?.articles?.length || activeData?.identitas?.jumlah_pasal || null;
+    const babList = activeData?.kerangka?.map((k) => `${k.bab}: ${k.judul}`).filter(Boolean) || [];
+    let cakupanUmum: string | null = null;
+    if (activeData?.ringkasan && activeData.ringkasan.length > 0) {
+      cakupanUmum = cleanPasalRefs(activeData.ringkasan[0].kalimat);
+    } else if (activeData?.ringkasan_teks) {
+      cakupanUmum = cleanPasalRefs(activeData.ringkasan_teks.split('\n')[0] || '');
+    }
+    const hasKerangka = Boolean(jumlahBab || jumlahPasal || babList.length > 0 || cakupanUmum);
+
+    // 3. Pihak yang Diatur
+    const subjekList: Array<{ nama: string; jumlah?: number }> = [];
+    if (activeData?.subjek_diatur && activeData.subjek_diatur.length > 0) {
+      for (const s of activeData.subjek_diatur) {
+        if (typeof s === 'string' && s.trim()) {
+          subjekList.push({ nama: s.trim() });
+        } else if (s && typeof s === 'object' && s.subjek) {
+          subjekList.push({ nama: s.subjek.trim(), jumlah: s.jumlah });
+        }
+      }
+    }
+    const hasSubjek = subjekList.length > 0;
+
+    // 4. Kewajiban Utama
+    const kewajibanItems: string[] = [];
+    if (activeData?.poin_utama) {
+      for (const p of activeData.poin_utama) {
+        const kat = (p.kategori || '').toLowerCase();
+        if (kat.includes('kewajiban')) {
+          const text = cleanPasalRefs(p.teks || p.poin || '');
+          if (text && !kewajibanItems.includes(text)) {
+            kewajibanItems.push(text);
+          }
+        }
+      }
+    }
+    if (kewajibanItems.length === 0 && activeData?.ringkasan) {
+      for (const r of activeData.ringkasan) {
+        if (/(?:wajib|kewajiban|keharusan)/i.test(r.kalimat)) {
+          const text = cleanPasalRefs(r.kalimat);
+          if (text && !kewajibanItems.includes(text)) {
+            kewajibanItems.push(text);
+          }
+        }
+      }
+    }
+    const hasKewajiban = kewajibanItems.length > 0;
+
+    // 5. Kewajiban Pelaporan
+    const pelaporanItems: string[] = [];
+    if (activeData?.poin_utama) {
+      for (const p of activeData.poin_utama) {
+        const kat = (p.kategori || '').toLowerCase();
+        const txt = (p.teks || p.poin || '').toLowerCase();
+        if (kat.includes('lapor') || /(?:pelaporan|laporan|melapor|pemberitahuan\s+insiden)/i.test(txt)) {
+          const text = cleanPasalRefs(p.teks || p.poin || '');
+          if (text && !pelaporanItems.includes(text)) {
+            pelaporanItems.push(text);
+          }
+        }
+      }
+    }
+    if (pelaporanItems.length === 0 && activeData?.ringkasan) {
+      for (const r of activeData.ringkasan) {
+        if (/(?:laporan|pelaporan|melaporkan|pemberitahuan\s+insiden)/i.test(r.kalimat)) {
+          const text = cleanPasalRefs(r.kalimat);
+          if (text && !pelaporanItems.includes(text)) {
+            pelaporanItems.push(text);
+          }
+        }
+      }
+    }
+    const hasPelaporan = pelaporanItems.length > 0;
+
+    // 6. Sanksi
+    const sanksiItems: string[] = [];
+    if (Array.isArray(activeData?.sanksi) && activeData.sanksi.length > 0) {
+      for (const s of activeData.sanksi) {
+        const text = cleanPasalRefs(typeof s === 'string' ? s : JSON.stringify(s));
+        if (text && !sanksiItems.includes(text)) {
+          sanksiItems.push(text);
+        }
+      }
+    }
+    if (activeData?.poin_utama) {
+      for (const p of activeData.poin_utama) {
+        const kat = (p.kategori || '').toLowerCase();
+        const txt = (p.teks || p.poin || '').toLowerCase();
+        if (kat.includes('sanksi') || /(?:sanksi|denda|peringatan\s+tertulis|pembatasan\s+kegiatan)/i.test(txt)) {
+          const text = cleanPasalRefs(p.teks || p.poin || '');
+          if (text && !sanksiItems.includes(text)) {
+            sanksiItems.push(text);
+          }
+        }
+      }
+    }
+    if (sanksiItems.length === 0 && activeData?.ringkasan) {
+      for (const r of activeData.ringkasan) {
+        if (/(?:sanksi|denda|hukuman|teguran)/i.test(r.kalimat)) {
+          const text = cleanPasalRefs(r.kalimat);
+          if (text && !sanksiItems.includes(text)) {
+            sanksiItems.push(text);
+          }
+        }
+      }
+    }
+    const hasSanksi = sanksiItems.length > 0;
+
+    // 7. Pencabutan atau Perubahan Regulasi
+    const pencabutanItems: string[] = [];
+    if (docStatus?.legal_references) {
+      for (const ref of docStatus.legal_references) {
+        const cited = ref.cited_text?.toLowerCase() || '';
+        if (/(?:cabut|mencabut|tidak\s+berlaku|ubah|mengubah|perubahan)/i.test(cited)) {
+          const text = ref.cited_text.trim();
+          if (text && !pencabutanItems.includes(text)) {
+            pencabutanItems.push(text);
+          }
+        }
+      }
+    }
+    if (activeData?.poin_utama) {
+      for (const p of activeData.poin_utama) {
+        const kat = (p.kategori || '').toLowerCase();
+        const txt = (p.teks || p.poin || '').toLowerCase();
+        if (kat.includes('cabut') || kat.includes('ubah') || /(?:mencabut|dinyatakan\s+tidak\s+berlaku|perubahan\s+atas)/i.test(txt)) {
+          const text = cleanPasalRefs(p.teks || p.poin || '');
+          if (text && !pencabutanItems.includes(text)) {
+            pencabutanItems.push(text);
+          }
+        }
+      }
+    }
+    const hasPencabutan = pencabutanItems.length > 0;
+
+    // 8. Masa Berlaku
+    const masaBerlakuItems: string[] = [];
+    if (activeData?.poin_utama) {
+      for (const p of activeData.poin_utama) {
+        const kat = (p.kategori || '').toLowerCase();
+        const txt = (p.teks || p.poin || '').toLowerCase();
+        if (kat.includes('masa') || kat.includes('berlaku') || /(?:mulai\s+berlaku|masa\s+transisi|tanggal\s+pengundangan|diundangkan\s+pada)/i.test(txt)) {
+          const text = cleanPasalRefs(p.teks || p.poin || '');
+          if (text && !masaBerlakuItems.includes(text)) {
+            masaBerlakuItems.push(text);
+          }
+        }
+      }
+    }
+    if (masaBerlakuItems.length === 0 && activeData?.identitas?.tanggal_terbit) {
+      masaBerlakuItems.push(`Ditetapkan / diterbitkan pada tanggal ${activeData.identitas.tanggal_terbit}.`);
+    }
+    const hasMasaBerlaku = masaBerlakuItems.length > 0;
+
+    return {
+      identitas: hasIdentitas ? { namaJudul, nomorReg, tahunReg, jenisReg, statusKeberlakuan } : null,
+      kerangka: hasKerangka ? { jumlahBab, jumlahPasal, babList, cakupanUmum } : null,
+      pihakDiatur: hasSubjek ? subjekList : null,
+      kewajiban: hasKewajiban ? kewajibanItems : null,
+      pelaporan: hasPelaporan ? pelaporanItems : null,
+      sanksi: hasSanksi ? sanksiItems : null,
+      pencabutan: hasPencabutan ? pencabutanItems : null,
+      masaBerlaku: hasMasaBerlaku ? masaBerlakuItems : null,
+    };
+  }, [activeData, docStatus]);
+
+  // Ekstraksi laporan terstruktur (Hanya tampilkan bagian yang memiliki data)
+  const structuredSections = useMemo(() => {
+    if (!structuredSummary) return [];
+    const list: Array<{ id: string; title: string; extraHeader?: React.ReactNode; content: React.ReactNode }> = [];
+
+    // 1. Identitas Dokumen
+    if (structuredSummary.identitas) {
+      const iden = structuredSummary.identitas;
+      list.push({
+        id: 'identitas',
+        title: 'Identitas Dokumen',
+        extraHeader: iden.statusKeberlakuan ? (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-gray-200/80 text-gray-700 font-sans">
+            {iden.statusKeberlakuan}
+          </span>
+        ) : undefined,
+        content: (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-sans">
+            <div className="sm:col-span-2">
+              <span className="text-gray-500 font-medium block mb-0.5">Judul Regulasi:</span>
+              <span className="text-gray-900 font-semibold text-sm leading-snug block">
+                {iden.namaJudul}
+              </span>
+            </div>
+            {iden.nomorReg && (
+              <div>
+                <span className="text-gray-500 font-medium block mb-0.5">Nomor Regulasi:</span>
+                <span className="text-gray-800 font-mono font-medium">
+                  {iden.nomorReg}
+                </span>
+              </div>
+            )}
+            {iden.tahunReg && (
+              <div>
+                <span className="text-gray-500 font-medium block mb-0.5">Tahun Regulasi:</span>
+                <span className="text-gray-800 font-medium">
+                  {iden.tahunReg}
+                </span>
+              </div>
+            )}
+            {iden.jenisReg && (
+              <div>
+                <span className="text-gray-500 font-medium block mb-0.5">Bentuk Regulasi:</span>
+                <span className="text-gray-800 font-medium">
+                  {iden.jenisReg}
+                </span>
+              </div>
+            )}
+          </div>
+        ),
+      });
+    }
+
+    // 2. Kerangka Regulasi
+    if (structuredSummary.kerangka) {
+      const kr = structuredSummary.kerangka;
+      list.push({
+        id: 'kerangka',
+        title: 'Kerangka Regulasi',
+        extraHeader: (
+          <div className="flex items-center gap-2 text-xs font-semibold text-gray-700">
+            {kr.jumlahBab && (
+              <span className="bg-gray-200/70 px-2 py-0.5 rounded">
+                {kr.jumlahBab} Bab
+              </span>
+            )}
+            {kr.jumlahPasal && (
+              <span className="bg-gray-200/70 px-2 py-0.5 rounded">
+                {kr.jumlahPasal} Pasal
+              </span>
+            )}
+          </div>
+        ),
+        content: (
+          <div className="space-y-2.5 font-sans">
+            {kr.cakupanUmum && (
+              <p className="text-sm text-gray-800 leading-relaxed">
+                {kr.cakupanUmum}
+              </p>
+            )}
+            {kr.babList.length > 0 && (
+              <div className="pt-1">
+                <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">
+                  Struktur Bab Dokumen:
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs text-gray-700">
+                  {kr.babList.map((bab, bIdx) => (
+                    <div key={bIdx} className="bg-white/80 border border-gray-200/80 px-2.5 py-1.5 rounded-lg truncate" title={bab}>
+                      <span className="font-semibold text-gray-900">{bab}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ),
+      });
+    }
+
+    // 3. Pihak yang Diatur
+    if (structuredSummary.pihakDiatur && structuredSummary.pihakDiatur.length > 0) {
+      const phk = structuredSummary.pihakDiatur;
+      list.push({
+        id: 'pihak_diatur',
+        title: 'Pihak yang Diatur',
+        content: (
+          <div className="flex flex-wrap gap-2 font-sans">
+            {phk.map((p, idx) => (
+              <span
+                key={idx}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-gray-200 text-gray-800 shadow-2xs"
+              >
+                <span className="font-semibold">{p.nama}</span>
+                {p.jumlah !== undefined && p.jumlah !== null && (
+                  <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.2 rounded-full font-mono font-medium">
+                    {p.jumlah} ketentuan
+                  </span>
+                )}
+              </span>
+            ))}
+          </div>
+        ),
+      });
+    }
+
+    // 4. Kewajiban Utama
+    if (structuredSummary.kewajiban && structuredSummary.kewajiban.length > 0) {
+      const kwj = structuredSummary.kewajiban;
+      list.push({
+        id: 'kewajiban',
+        title: 'Kewajiban Utama',
+        content: (
+          <ul className="space-y-2 text-sm text-gray-800 leading-relaxed font-sans">
+            {kwj.map((item, idx) => (
+              <li key={idx} className="flex items-start gap-2.5 bg-white/80 p-3 rounded-lg border border-gray-200/80">
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-500 mt-2 shrink-0" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        ),
+      });
+    }
+
+    // 5. Kewajiban Pelaporan
+    if (structuredSummary.pelaporan && structuredSummary.pelaporan.length > 0) {
+      const pel = structuredSummary.pelaporan;
+      list.push({
+        id: 'pelaporan',
+        title: 'Kewajiban Pelaporan',
+        content: (
+          <ul className="space-y-2 text-sm text-gray-800 leading-relaxed font-sans">
+            {pel.map((item, idx) => (
+              <li key={idx} className="flex items-start gap-2.5 bg-white/80 p-3 rounded-lg border border-gray-200/80">
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-500 mt-2 shrink-0" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        ),
+      });
+    }
+
+    // 6. Sanksi
+    if (structuredSummary.sanksi && structuredSummary.sanksi.length > 0) {
+      const snk = structuredSummary.sanksi;
+      list.push({
+        id: 'sanksi',
+        title: 'Sanksi',
+        content: (
+          <ul className="space-y-2 text-sm text-gray-800 leading-relaxed font-sans">
+            {snk.map((item, idx) => (
+              <li key={idx} className="flex items-start gap-2.5 bg-white/80 p-3 rounded-lg border border-gray-200/80">
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-500 mt-2 shrink-0" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        ),
+      });
+    }
+
+    // 7. Pencabutan atau Perubahan Regulasi
+    if (structuredSummary.pencabutan && structuredSummary.pencabutan.length > 0) {
+      const pcb = structuredSummary.pencabutan;
+      list.push({
+        id: 'pencabutan',
+        title: 'Pencabutan atau Perubahan Regulasi',
+        content: (
+          <ul className="space-y-2 text-sm text-gray-800 leading-relaxed font-sans">
+            {pcb.map((item, idx) => (
+              <li key={idx} className="flex items-start gap-2.5 bg-white/80 p-3 rounded-lg border border-gray-200/80">
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-500 mt-2 shrink-0" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        ),
+      });
+    }
+
+    // 8. Masa Berlaku
+    if (structuredSummary.masaBerlaku && structuredSummary.masaBerlaku.length > 0) {
+      const msb = structuredSummary.masaBerlaku;
+      list.push({
+        id: 'masa_berlaku',
+        title: 'Masa Berlaku',
+        content: (
+          <ul className="space-y-2 text-sm text-gray-800 leading-relaxed font-sans">
+            {msb.map((item, idx) => (
+              <li key={idx} className="flex items-start gap-2.5 bg-white/80 p-3 rounded-lg border border-gray-200/80">
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-500 mt-2 shrink-0" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        ),
+      });
+    }
+
+    return list;
+  }, [structuredSummary]);
+
+  // Perhitungan Kategori Key Takeaways
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { Semua: poinUtama.length };
+    for (const p of poinUtama) {
+      const rawCat = p.kategori?.trim() || 'Norma';
+      const formattedCat = rawCat.charAt(0).toUpperCase() + rawCat.slice(1);
+      counts[formattedCat] = (counts[formattedCat] || 0) + 1;
+    }
+    return counts;
+  }, [poinUtama]);
+
+  const availableCategories = useMemo(() => {
+    const priority = [
+      'Semua',
+      'Kewajiban',
+      'Pelaporan',
+      'Larangan',
+      'Sanksi',
+      'Perizinan',
+      'Pencabutan',
+      'Masa Berlaku',
+      'Hak',
+      'Norma',
+    ];
+    const present = Object.keys(categoryCounts).filter((cat) => categoryCounts[cat] > 0);
+    return present.sort((a, b) => {
+      const idxA = priority.indexOf(a);
+      const idxB = priority.indexOf(b);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return a.localeCompare(b);
+    });
+  }, [categoryCounts]);
+
+  const filteredPoints = useMemo(() => {
+    if (selectedCategory === 'Semua') return poinUtama;
+    return poinUtama.filter((p) => {
+      const rawCat = p.kategori?.trim() || 'Norma';
+      const formattedCat = rawCat.charAt(0).toUpperCase() + rawCat.slice(1);
+      return formattedCat.toLowerCase() === selectedCategory.toLowerCase();
+    });
+  }, [poinUtama, selectedCategory]);
+
+  useEffect(() => {
+    if (selectedCategory !== 'Semua' && !availableCategories.includes(selectedCategory)) {
+      setSelectedCategory('Semua');
+    }
+  }, [availableCategories, selectedCategory]);
+
   // Dokumen tanpa pasal yang dapat dikenali (mis. Keputusan dengan diktum):
   // semua rujukan bertanda "pasal tidak terbaca". Ringkasan bisa tidak lengkap.
   const semuaRujukan: string[] = [
@@ -526,16 +1013,22 @@ export default function SummaryView({
         className="relative flex flex-col lg:flex-row gap-0 bg-white rounded-xl shadow-xs border border-gray-200 overflow-hidden min-h-[680px]"
       >
         {/* ============================================================== */}
-        {/* PANEL KIRI: NASKAH REGULASI (~50% atau disembunyikan)          */}
+        {/* PANEL KIRI: NASKAH REGULASI (~50% atau collapse kanan-ke-kiri) */}
         {/* ============================================================== */}
         <div
-          style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${leftWidthPercent}%` : '100%' }}
-          className={`flex flex-col border-b lg:border-b-0 lg:border-r border-gray-200 bg-gray-50/40 min-w-0 ${
-            !showNaskahPanel ? 'hidden' : mobileActiveTab !== 'naskah' ? 'hidden lg:flex' : 'flex'
+          style={{
+            width: isDesktop ? (showNaskahPanel ? `${leftWidthPercent}%` : '0%') : '100%',
+            opacity: isDesktop ? (showNaskahPanel ? 1 : 0) : 1,
+            pointerEvents: isDesktop && !showNaskahPanel ? 'none' : 'auto',
+            borderRightWidth: isDesktop && showNaskahPanel ? '1px' : '0px',
+          }}
+          className={`flex flex-col bg-gray-50/40 min-w-0 overflow-hidden border-gray-200 transition-all duration-300 ease-in-out ${
+            mobileActiveTab !== 'naskah' ? 'hidden lg:flex' : 'flex'
           }`}
         >
-          {/* Header Panel Kiri: Switcher Naskah Teks vs PDF Asli */}
-          <div className="p-3.5 sm:p-4 bg-white border-b border-gray-200 flex items-center justify-between gap-3 shrink-0">
+          <div className="w-full h-full flex flex-col min-w-[360px] lg:min-w-[400px] max-w-full">
+            {/* Header Panel Kiri: Switcher Naskah Teks vs PDF Asli */}
+            <div className="p-3.5 sm:p-4 bg-white border-b border-gray-200 flex items-center justify-between gap-3 shrink-0">
             <div className="min-w-0">
               <h2 className="text-xs sm:text-sm font-bold text-gray-900 truncate">Naskah Regulasi</h2>
               <p className="text-[11px] text-gray-500 truncate">
@@ -669,11 +1162,12 @@ export default function SummaryView({
             )}
           </div>
         </div>
+      </div>
 
         {/* ============================================================== */}
         {/* RESIZE DIVIDER (DESKTOP)                                       */}
         {/* ============================================================== */}
-        {showNaskahPanel && (
+        {isDesktop && showNaskahPanel && (
           <div
             onMouseDown={handleMouseDown}
             className="hidden lg:flex items-center justify-center w-1.5 bg-gray-200 hover:bg-red-500 transition-colors cursor-col-resize select-none shrink-0"
@@ -684,17 +1178,10 @@ export default function SummaryView({
         )}
 
         {/* ============================================================== */}
-        {/* PANEL KANAN: HASIL SUMMARY (Full-width saat naskah disembunyikan)*/}
+        {/* PANEL KANAN: HASIL SUMMARY (Flex-1 mengambil seluruh lebar secara smooth) */}
         {/* ============================================================== */}
         <div
-          style={{
-            width: !showNaskahPanel
-              ? '100%'
-              : typeof window !== 'undefined' && window.innerWidth >= 1024
-              ? `${100 - leftWidthPercent}%`
-              : '100%',
-          }}
-          className={`flex flex-col bg-white min-w-0 transition-all duration-200 ${
+          className={`flex-1 flex flex-col bg-white min-w-0 transition-all duration-300 ease-in-out ${
             mobileActiveTab !== 'summary' ? 'hidden lg:flex' : 'flex'
           }`}
         >
@@ -839,16 +1326,16 @@ export default function SummaryView({
             ) : (
               <>
                 {/* -------------------------------------------------------- */}
-                {/* 1. SECTION: RINGKASAN EKSEKUTIF                          */}
+                {/* 1. SECTION: RINGKASAN EKSEKUTIF (LAPORAN TERSTRUKTUR)     */}
                 {/* -------------------------------------------------------- */}
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div className="flex items-center justify-between pb-2 border-b border-gray-100">
                     <div>
                       <h3 className="text-sm font-bold text-gray-900 tracking-tight">
                         Ringkasan Eksekutif
                       </h3>
                       <p className="text-xs text-gray-500">
-                        Gambaran umum isi dan tujuan regulasi secara menyeluruh.
+                        Intisari dan kerangka regulasi terstruktur berdasarkan ekstraksi naskah.
                       </p>
                     </div>
 
@@ -860,58 +1347,40 @@ export default function SummaryView({
                     )}
                   </div>
 
-                  {/* Narasi Ringkasan AI (bila AI aktif) atau Ringkasan Deterministik */}
-                  {isAiActive && activeData?.ringkasan_ai ? (
+                  {/* Narasi Ringkasan AI (bila AI aktif) */}
+                  {isAiActive && activeData?.ringkasan_ai && (
                     <RingkasanAiPanel
                       ai={activeData.ai}
                       ringkasanAi={activeData.ringkasan_ai}
                       modeDipakai="ai"
                     />
-                  ) : activeData?.ringkasan && activeData.ringkasan.length > 0 ? (
-                    <div className="bg-slate-50/70 rounded-xl p-4 sm:p-5 border border-gray-200/90 space-y-3">
-                      <div className="text-sm font-normal text-gray-700 leading-relaxed font-sans space-y-2.5">
-                        {activeData.ringkasan.map((sentence, sIdx) => (
-                          <p key={sIdx} className="leading-relaxed">
-                            {sentence.kalimat}
-                          </p>
-                        ))}
-                      </div>
+                  )}
+
+                  {/* Laporan Terstruktur (8 Kelompok Informasi Berurutan) */}
+                  {structuredSections.length > 0 ? (
+                    <div className="space-y-3.5">
+                      {structuredSections.map((sec, idx) => (
+                        <div
+                          key={sec.id}
+                          className="bg-gray-50/70 border border-gray-200/90 rounded-xl p-4 sm:p-5 space-y-3"
+                        >
+                          <div className="flex items-center justify-between pb-2 border-b border-gray-200/70">
+                            <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                              {idx + 1}. {sec.title}
+                            </h4>
+                            {sec.extraHeader}
+                          </div>
+                          {sec.content}
+                        </div>
+                      ))}
                     </div>
                   ) : activeData?.ringkasan_teks ? (
                     <div className="bg-slate-50/70 rounded-xl p-4 sm:p-5 border border-gray-200/90 text-sm font-normal text-gray-700 leading-relaxed font-sans whitespace-pre-line">
                       {activeData.ringkasan_teks}
                     </div>
                   ) : (
-                    <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 text-xs text-gray-500 text-center font-sans">
+                    <div className="p-6 bg-gray-50 rounded-xl border border-gray-200 text-xs text-gray-500 text-center font-sans">
                       Ringkasan eksekutif belum tersedia untuk dokumen ini.
-                    </div>
-                  )}
-
-                  {/* Pihak yang Terlibat & Diatur */}
-                  {activeData?.subjek_diatur && activeData.subjek_diatur.length > 0 && (
-                    <div className="pt-2">
-                      <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block mb-2">
-                        Pihak yang Terlibat & Diatur
-                      </span>
-                      <div className="flex flex-wrap gap-2">
-                        {activeData.subjek_diatur.map((subj, idx) => {
-                          const label = typeof subj === 'string' ? subj : subj.subjek;
-                          const count = typeof subj === 'object' && subj ? subj.jumlah : null;
-                          return (
-                            <span
-                              key={idx}
-                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200 shadow-2xs font-sans"
-                            >
-                              <span>{label}</span>
-                              {count !== null && (
-                                <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.2 rounded-full font-semibold font-mono">
-                                  {count}
-                                </span>
-                              )}
-                            </span>
-                          );
-                        })}
-                      </div>
                     </div>
                   )}
                 </div>
@@ -929,54 +1398,59 @@ export default function SummaryView({
                         Poin-poin penting, norma, kewajiban, dan sanksi utama yang diatur dalam regulasi ini.
                       </p>
                     </div>
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-800 border border-gray-200 shadow-2xs">
                       {poinUtama.length} Poin Kunci
                     </span>
                   </div>
 
-                  {poinUtama.length > 0 ? (
+                  {/* Filter Kategori Key Takeaways */}
+                  {availableCategories.length > 1 && (
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 pt-0.5 -mx-1 px-1 scrollbar-thin">
+                      {availableCategories.map((cat) => {
+                        const count = categoryCounts[cat] || 0;
+                        const isActive = selectedCategory.toLowerCase() === cat.toLowerCase();
+                        return (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setSelectedCategory(cat)}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
+                              isActive
+                                ? 'bg-red-800 text-white shadow-xs'
+                                : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                            }`}
+                          >
+                            <span>{cat}</span>
+                            <span
+                              className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                                isActive ? 'bg-red-950/40 text-red-100' : 'bg-gray-200 text-gray-600'
+                              }`}
+                            >
+                              {count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {filteredPoints.length > 0 ? (
                     <div className="space-y-3">
-                      {poinUtama.map((point, pIdx) => {
-                        const kat = (point.kategori || 'umum').toLowerCase();
-                        const isKewajiban = kat.includes('kewajiban');
-                        const isLarangan = kat.includes('larangan');
-                        const isSanksi = kat.includes('sanksi');
-                        const isHak = kat.includes('hak');
-
-                        const badgeColor = isKewajiban
-                          ? 'bg-blue-50 text-blue-700 border-blue-200'
-                          : isLarangan
-                          ? 'bg-rose-50 text-rose-700 border-rose-200'
-                          : isSanksi
-                          ? 'bg-amber-50 text-amber-700 border-amber-200'
-                          : isHak
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : 'bg-gray-100 text-gray-700 border-gray-200';
-
-                        const leftBorderColor = isKewajiban
-                          ? 'border-l-blue-500'
-                          : isLarangan
-                          ? 'border-l-rose-500'
-                          : isSanksi
-                          ? 'border-l-amber-500'
-                          : isHak
-                          ? 'border-l-emerald-500'
-                          : 'border-l-gray-400';
-
+                      {filteredPoints.map((point, pIdx) => {
                         const displayText = isAiActive && point.parafrase ? point.parafrase : point.teks || point.poin || '-';
 
                         return (
                           <div
                             key={point.id || pIdx}
-                            className={`p-4 sm:p-5 bg-white hover:bg-slate-50/50 border border-gray-200/90 border-l-4 ${leftBorderColor} rounded-xl shadow-2xs hover:shadow-xs transition-all space-y-3`}
+                            className="p-4 sm:p-5 bg-white hover:bg-gray-50/50 border border-gray-200 rounded-xl shadow-2xs hover:shadow-xs transition-all space-y-2.5"
                           >
                             <div className="flex items-center justify-between gap-3 flex-wrap">
                               <div className="flex items-center gap-2">
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold border ${badgeColor}`}>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200">
                                   {point.kategori || 'Norma'}
                                 </span>
                                 {point.urgensi && (
-                                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                                  <span className="text-[11px] font-medium text-gray-500">
                                     • Urgensi: {point.urgensi}
                                   </span>
                                 )}
@@ -986,7 +1460,7 @@ export default function SummaryView({
                                 <button
                                   type="button"
                                   onClick={() => handleOpenPasalModal(point.pasal!)}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-red-700 hover:text-red-900 bg-red-50 hover:bg-red-100 border border-red-200/90 transition-colors cursor-pointer shadow-2xs group"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-red-700 hover:text-red-900 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors cursor-pointer shadow-2xs group"
                                   title={`Klik untuk membaca isi lengkap ${point.pasal}`}
                                 >
                                   <BookOpen size={13} className="text-red-600 group-hover:text-red-800" />
@@ -1001,20 +1475,15 @@ export default function SummaryView({
                             <p className="text-sm font-normal text-gray-800 leading-relaxed font-sans">
                               {displayText}
                             </p>
-
-                            {isAiActive && point.parafrase && point.parafrase !== point.teks && (
-                              <div className="flex items-center gap-1.5 text-xs text-purple-700 font-medium pt-1">
-                                <Sparkles size={12} />
-                                <span>Diparafrase oleh AI untuk kemudahan pemahaman</span>
-                              </div>
-                            )}
                           </div>
                         );
                       })}
                     </div>
                   ) : (
                     <div className="p-6 bg-gray-50 rounded-xl border border-gray-200 text-xs text-gray-500 text-center font-sans">
-                      Belum ada poin kunci yang teridentifikasi.
+                      {selectedCategory === 'Semua'
+                        ? 'Belum ada poin kunci yang teridentifikasi.'
+                        : `Tidak ada poin kunci untuk kategori "${selectedCategory}".`}
                     </div>
                   )}
                 </div>
