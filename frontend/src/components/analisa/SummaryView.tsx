@@ -934,6 +934,21 @@ export default function SummaryView({
   ];
   const dokumenTanpaPasal = semuaRujukan.length > 0 && semuaRujukan.every(isNoPasalRef);
 
+  const nomorTahunRegulasi = useMemo(() => {
+    const nomor = docStatus?.regulation_number || data?.identitas?.nomor || data?.identitas?.number || null;
+    const tahun = docStatus?.regulation_year || data?.identitas?.tahun || data?.identitas?.year || null;
+
+    if (nomor && tahun) {
+      if (nomor.toLowerCase().includes(String(tahun).toLowerCase())) {
+        return nomor;
+      }
+      return `${nomor} Tahun ${tahun}`;
+    }
+    if (nomor) return nomor;
+    if (tahun) return `Tahun ${tahun}`;
+    return null;
+  }, [docStatus?.regulation_number, docStatus?.regulation_year, data?.identitas]);
+
   return (
     <div className="max-w-[1600px] mx-auto space-y-4 font-sans pb-12">
       {/* 1. Header Bar: Breadcrumb, Info Dokumen, & Tombol Tahap */}
@@ -945,17 +960,14 @@ export default function SummaryView({
             <h1 className="text-lg sm:text-xl font-bold text-gray-900 truncate" title={docStatus?.title || data?.identitas?.title || 'Draf Regulasi'}>
               {docStatus?.title || data?.identitas?.title || 'Draf Regulasi'}
             </h1>
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-50 text-red-700 border border-red-200">
-              Dokumen #{documentId}
-            </span>
-            {docStatus?.regulation_number && (
+            {nomorTahunRegulasi && (
               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
-                {docStatus.regulation_number}
+                {nomorTahunRegulasi}
               </span>
             )}
           </div>
           <p className="text-xs text-gray-500">
-            Tahap awal penelaahan naskah: Ringkasan Eksekutif dan Key Takeaways dokumen mandiri sebelum komparasi Knowledge Base.
+            Ringkasan Dokumen dan Key Takeaways.
           </p>
         </div>
 
@@ -1329,22 +1341,13 @@ export default function SummaryView({
                 {/* 1. SECTION: RINGKASAN EKSEKUTIF (LAPORAN TERSTRUKTUR)     */}
                 {/* -------------------------------------------------------- */}
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-                    <div>
-                      <h3 className="text-sm font-bold text-gray-900 tracking-tight">
-                        Ringkasan Eksekutif
-                      </h3>
-                      <p className="text-xs text-gray-500">
-                        Intisari dan kerangka regulasi terstruktur berdasarkan ekstraksi naskah.
-                      </p>
-                    </div>
-
-                    {isAiActive && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
-                        <Sparkles size={11} />
-                        Narasi AI Terverifikasi
-                      </span>
-                    )}
+                  <div className="pb-2 border-b border-gray-100">
+                    <h3 className="text-sm font-bold text-gray-900 tracking-tight">
+                      Ringkasan Eksekutif
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      Intisari dan kerangka regulasi terstruktur berdasarkan ekstraksi naskah.
+                    </p>
                   </div>
 
                   {/* Narasi Ringkasan AI (bila AI aktif) */}

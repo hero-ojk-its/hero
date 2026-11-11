@@ -752,9 +752,8 @@ export default function AnalisaRegulasi() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Analisa Regulasi</h1>
-          <p className="text-xs text-gray-600 mt-1 leading-relaxed max-w-2xl">
-            Unggah dan analisis rancangan regulasi baru untuk mengekstraksi kewajiban, larangan, sanksi,
-            serta memetakan norma hukum dan struktur pasal secara otomatis.
+          <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+            Unggah dan analisis rancangan regulasi untuk mengidentifikasi kewajiban, larangan, sanksi, dan struktur pasal.
           </p>
         </div>
 
@@ -1175,15 +1174,10 @@ export default function AnalisaRegulasi() {
       {/* 4. FORMULIR UTAMA: UNGGAH DRAFT PERATURAN UNTUK DIANALISIS */}
       <form onSubmit={handleSubmitUpload} className="space-y-6">
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-2xs space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-4 border-b border-gray-100">
-            <div>
-              <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider">
-                Unggah Draft Peraturan untuk Dianalisis
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Unggah naskah rancangan peraturan baru dalam format PDF untuk telaah intisari, norma, sanksi, dan struktur pasal secara otomatis.
-              </p>
-            </div>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-gray-100">
+            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider">
+              Unggah Draft Peraturan untuk Dianalisis
+            </h2>
           </div>
 
           {/* Dropzone File */}
