@@ -198,7 +198,7 @@ export default function DashboardLayout() {
             'bg-white border-r border-gray-200 flex flex-col shrink-0 z-10 overflow-hidden',
             'transition-[width] duration-200 ease-in-out',
             'motion-reduce:transition-none',
-            collapsed ? 'w-16' : 'w-48',
+            collapsed ? 'w-16' : 'w-56',
           ].join(' ')}
           aria-label="Navigasi utama"
         >
@@ -229,10 +229,10 @@ export default function DashboardLayout() {
                     key={item.name}
                     to={item.path}
                     state={isAnalisa ? { fromSidebar: true } : undefined}
-                    title={collapsed ? item.name : undefined}
+                    title={item.name}
                     aria-label={item.name}
                     className={`relative flex items-center rounded-md transition-all overflow-hidden ${
-                      collapsed ? 'justify-center px-0 py-2.5' : 'space-x-3 px-3 py-2.5'
+                      collapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'
                     } ${
                       isActive
                         ? 'bg-red-50 text-red-700 font-semibold'
@@ -246,7 +246,7 @@ export default function DashboardLayout() {
                       {item.icon}
                     </span>
                     {!collapsed && (
-                      <span className="text-sm truncate">{item.name}</span>
+                      <span className="text-sm whitespace-nowrap">{item.name}</span>
                     )}
                   </Link>
                 );
@@ -256,36 +256,45 @@ export default function DashboardLayout() {
           </div>
 
           {/* Bottom links */}
-          <div className="p-2 space-y-1 shrink-0">
-            <Link
-              to="/settings"
-              title={collapsed ? 'Pengaturan' : undefined}
-              aria-label="Pengaturan"
-              className={`relative flex items-center rounded-md transition-colors overflow-hidden ${
-                collapsed ? 'justify-center px-0 py-2.5' : 'space-x-3 px-3 py-2.5'
-              } ${
-                location.pathname.startsWith('/settings')
-                  ? 'bg-red-50 text-red-700 font-semibold'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium'
-              }`}
-            >
-              {location.pathname.startsWith('/settings') && (
-                <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-700 rounded-r-sm" />
-              )}
-              <Settings size={18} className="shrink-0 text-gray-500" aria-hidden="true" />
-              {!collapsed && <span className="text-sm">Pengaturan</span>}
-            </Link>
+          <div className="p-2 pt-3 border-t border-gray-100 space-y-1 shrink-0">
+            {(() => {
+              const isSettingsActive = location.pathname.startsWith('/settings');
+              return (
+                <Link
+                  to="/settings"
+                  title="Pengaturan"
+                  aria-label="Pengaturan"
+                  className={`relative flex items-center rounded-md transition-colors overflow-hidden ${
+                    collapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'
+                  } ${
+                    isSettingsActive
+                      ? 'bg-red-50 text-red-700 font-semibold'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium'
+                  }`}
+                >
+                  {isSettingsActive && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-700 rounded-r-sm" />
+                  )}
+                  <Settings
+                    size={18}
+                    className={`shrink-0 ${isSettingsActive ? 'text-red-700' : 'text-gray-500'}`}
+                    aria-hidden="true"
+                  />
+                  {!collapsed && <span className="text-sm whitespace-nowrap">Pengaturan</span>}
+                </Link>
+              );
+            })()}
             <button
               type="button"
               onClick={handleLogout}
               aria-label="Keluar"
-              title={collapsed ? 'Keluar' : undefined}
+              title="Keluar"
               className={`w-full flex items-center rounded-md transition-colors text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium overflow-hidden ${
-                collapsed ? 'justify-center px-0 py-2.5' : 'space-x-3 px-3 py-2.5'
+                collapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'
               }`}
             >
               <LogOut size={18} className="shrink-0 text-gray-500" aria-hidden="true" />
-              {!collapsed && <span className="text-sm">Keluar</span>}
+              {!collapsed && <span className="text-sm whitespace-nowrap">Keluar</span>}
             </button>
           </div>
         </aside>
