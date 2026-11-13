@@ -251,7 +251,7 @@ def test_cd01_docx_ekspor_dengan_isian_form_lengkap(client: TestClient, db_sessi
     assert "3. " in full_text
     assert "Pasal 5 mengatur bahwa Manajer investasi wajib mengelola portofolio secara terukur." in full_text
     assert "Temuan Menggantikan" in full_text
-    assert "POJK 4 2023 Pasal 10" in full_text
+    assert "peraturan Nomor POJK 4 2023, Pasal 10" in full_text
     assert "tinggi (0,88)" in full_text
 
     assert "4. " in full_text
@@ -621,4 +621,279 @@ def test_cd08_nilai_form_tidak_tersimpan_di_db_maupun_audit(client: TestClient, 
         assert nama_rahasia not in res_str
         assert nip_rahasia not in res_str
         assert catatan_pribadi not in res_str
+
+
+def test_cd09_ai_format_asli_list_of_dict(client: TestClient, db_session: Session):
+    """1. pakai_ai=true dengan cache AI berbentuk asli list of dict -> header 'dipakai', teks memuat kalimat di DOCX & PDF."""
+    draft = create_test_doc(title="Draf Format Asli AI")
+    db_session.add(draft)
+    db_session.commit()
+
+    seed_harmonisasi_result(db_session, draft, {"versi": "1.0", "temuan": []})
+
+    # Cache AI dengan struktur asli pipeline / frontend: list of dict {"kalimat": "...", "rujukan": [...]}
+    ai_payload = {
+        "mode_dipakai": "ai",
+        "ringkasan_ai": [
+            {"kalimat": "Regulasi ini mengatur tata kelola instrumen pasar uang terpadu.", "rujukan": [1]},
+            {"kalimat": "Manajer investasi wajib menerapkan manajemen risiko secara berkala.", "rujukan": [2, 3]},
+        ],
+    }
+    seed_analisa_result(
+        db_session,
+        draft,
+        ai_payload,
+        mode=ModeAnalisa.ai,
+    )
+
+    # A. Ekspor DOCX
+    resp_docx = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={"format": "docx", "pakai_ai": True},
+    )
+    assert resp_docx.status_code == 200
+    assert resp_docx.headers.get("X-Catatan-Dinas-AI") == "dipakai"
+    text_docx = extract_docx_text(resp_docx.content)
+    assert "Regulasi ini mengatur tata kelola instrumen pasar uang terpadu. Manajer investasi wajib menerapkan manajemen risiko secara berkala." in text_docx
+    assert "Butir 1 disusun dengan bantuan AI dari hasil analisa terverifikasi." in text_docx
+
+    # B. Ekspor PDF
+    resp_pdf = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={"format": "pdf", "pakai_ai": True},
+    )
+    assert resp_pdf.status_code == 200
+    assert resp_pdf.headers.get("X-Catatan-Dinas-AI") == "dipakai"
+    assert resp_pdf.content.startswith(b"%PDF-")
+    text_pdf = extract_pdf_text(resp_pdf.content)
+    assert "Regulasi ini mengatur tata kelola instrumen pasar uang terpadu. Manajer investasi wajib menerapkan manajemen risiko secara berkala." in " ".join(text_pdf.split())
+    assert "Butir 1 disusun dengan bantuan AI dari hasil analisa terverifikasi." in text_pdf
+
+
+def test_cd10_ai_fallback_deterministik_abaikan_narasi(client: TestClient, db_session: Session):
+    """2. pakai_ai=true dengan cache AI fallback deterministik -> header 'tidak_tersedia', teks memakai template."""
+    draft = create_test_doc(title="Draf AI Fallback Deterministik")
+    db_session.add(draft)
+    db_session.commit()
+
+    seed_harmonisasi_result(db_session, draft, {"versi": "1.0", "temuan": []})
+
+    # Cache AI tersimpan namun hasilnya menunjukkan fallback deterministik
+    fallback_payload = {
+        "mode_dipakai": "deterministik",
+        "ringkasan_ai": [
+            {"kalimat": "Kalimat yang tidak boleh muncul karena fallback.", "rujukan": []}
+        ],
+    }
+    seed_analisa_result(
+        db_session,
+        draft,
+        fallback_payload,
+        mode=ModeAnalisa.ai,
+    )
+
+    resp = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={"pakai_ai": True},
+    )
+    assert resp.status_code == 200
+    assert resp.headers.get("X-Catatan-Dinas-AI") == "tidak_tersedia"
+    text = extract_docx_text(resp.content)
+    assert "Kalimat yang tidak boleh muncul karena fallback." not in text
+    assert "disusun dengan bantuan AI" not in text
+    assert "POJK tentang Draf AI Fallback Deterministik" in text
+
+
+def test_cd11_ai_format_tak_dikenal_kembali_200_tidak_galat(client: TestClient, db_session: Session):
+    """3. pakai_ai=true dengan cache AI berbentuk tak-dikenal (int atau dict) -> 200, header tidak_tersedia."""
+    draft = create_test_doc(title="Draf AI Bentuk Aneh")
+    db_session.add(draft)
+    db_session.commit()
+
+    seed_harmonisasi_result(db_session, draft, {"versi": "1.0", "temuan": []})
+
+    # A. ringkasan_ai bertipe integer
+    seed_analisa_result(
+        db_session,
+        draft,
+        {"mode_dipakai": "ai", "ringkasan_ai": 99999},
+        mode=ModeAnalisa.ai,
+    )
+
+    resp = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={"pakai_ai": True},
+    )
+    assert resp.status_code == 200
+    assert resp.headers.get("X-Catatan-Dinas-AI") == "tidak_tersedia"
+
+    # B. ringkasan_ai bertipe dict aneh
+    draft2 = create_test_doc(title="Draf AI Dict Aneh")
+    db_session.add(draft2)
+    db_session.commit()
+    seed_harmonisasi_result(db_session, draft2, {"versi": "1.0", "temuan": []})
+    seed_analisa_result(
+        db_session,
+        draft2,
+        {"mode_dipakai": "ai", "ringkasan_ai": {"bukan_list": True, "nilai": [1, 2]}},
+        mode=ModeAnalisa.ai,
+    )
+
+    resp2 = client.post(
+        f"/api/v1/documents/{draft2.id}/harmonisasi/ekspor/catatan-dinas",
+        json={"pakai_ai": True},
+    )
+    assert resp2.status_code == 200
+    assert resp2.headers.get("X-Catatan-Dinas-AI") == "tidak_tersedia"
+
+
+def test_cd12_nama_pembanding_format_dan_tanpa_internal_key(client: TestClient, db_session: Session):
+    """4. Pembanding dengan nomor: '21', judul: 'LAPORAN BERKALA DANA PENSIUN', pasal: 'Pasal 14', key: 'internal-key' -> format benar, key disembunyikan."""
+    draft = create_test_doc()
+    comp = create_test_doc(
+        title="LAPORAN BERKALA DANA PENSIUN",
+        regulation_type="POJK",
+        regulation_number="21",
+        regulation_year=2024,
+    )
+    db_session.add_all([draft, comp])
+    db_session.commit()
+
+    seed_harmonisasi_result(
+        db_session,
+        draft,
+        {
+            "versi": "1.0",
+            "temuan": [
+                {
+                    "id": "t-1",
+                    "jenis": "konflik",
+                    "pasal_draft": "Pasal 8",
+                    "kutipan_draft": "Laporan disampaikan tiap triwulan.",
+                    "pembanding": {
+                        "document_id": comp.id,
+                        "nomor": "21",
+                        "judul": "LAPORAN BERKALA DANA PENSIUN",
+                        "pasal": "Pasal 14",
+                        "key": "internal-pembanding-key-12345",
+                    },
+                    "alasan": "Terdapat benturan jadwal penyampaian laporan.",
+                    "tingkat": "tinggi",
+                    "keyakinan": 0.95,
+                }
+            ],
+        },
+    )
+
+    resp = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={"format": "docx"},
+    )
+    assert resp.status_code == 200
+    text = extract_docx_text(resp.content)
+    assert "LAPORAN BERKALA DANA PENSIUN (Nomor 21), Pasal 14" in text
+    assert "internal-pembanding-key-12345" not in text
+
+
+def test_cd13_cors_expose_headers_x_catatan_dinas_ai(client: TestClient, db_session: Session):
+    """5. Request dengan Origin: http://localhost:5173 mengembalikan X-Catatan-Dinas-AI di Access-Control-Expose-Headers."""
+    draft = create_test_doc()
+    db_session.add(draft)
+    db_session.commit()
+    seed_harmonisasi_result(db_session, draft, {"versi": "1.0", "temuan": []})
+
+    resp = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={"pakai_ai": True},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert resp.status_code == 200
+    expose_hdr = resp.headers.get("access-control-expose-headers") or ""
+    # Header harus memuat X-Catatan-Dinas-AI (case-insensitive)
+    assert "x-catatan-dinas-ai" in expose_hdr.lower()
+
+
+def test_cd14_catatan_tambahan_multiline_pdf_berhasil(client: TestClient, db_session: Session):
+    """6. catatan_tambahan multi-baris -> PDF berhasil dibuat (awalan %PDF-), tidak galat."""
+    draft = create_test_doc()
+    db_session.add(draft)
+    db_session.commit()
+    seed_harmonisasi_result(db_session, draft, {"versi": "1.0", "temuan": []})
+
+    catatan_multiline = (
+        "Poin A: Perlu koordinasi dengan OJK Regional.\n"
+        "Poin B: Sosialisasi dilakukan sebelum Q3.\r\n"
+        "Poin C: Penyesuaian sistem IT membutuhkan masa transisi 6 bulan."
+    )
+
+    resp = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={"format": "pdf", "catatan_tambahan": catatan_multiline},
+    )
+    assert resp.status_code == 200
+    assert resp.content.startswith(b"%PDF-")
+    text_pdf = extract_pdf_text(resp.content)
+    assert "Poin A: Perlu koordinasi dengan OJK Regional." in text_pdf
+    assert "Poin B: Sosialisasi dilakukan sebelum Q3." in text_pdf
+    assert "Poin C: Penyesuaian sistem IT membutuhkan masa transisi 6 bulan." in text_pdf
+
+
+def test_cd15_temuan_disaring_akses_menampilkan_kalimat_penutup(client: TestClient, db_session: Session):
+    """7. Temuan disaring akses -> Butir 3 ditutup dengan kalimat: '<n> temuan tidak ditampilkan karena pembandingnya tidak dapat diakses.'"""
+    draft = create_test_doc()
+    comp_terbuka = create_test_doc(title="POJK Terbuka", regulation_number="1")
+    db_session.add_all([draft, comp_terbuka])
+    db_session.commit()
+
+    # Harmonisasi dengan 1 temuan terbuka dan 2 temuan yang pembandingnya tidak ada di allowed_ids (akses dibatasi)
+    seed_harmonisasi_result(
+        db_session,
+        draft,
+        {
+            "versi": "1.0",
+            "temuan": [
+                {
+                    "id": "t-1",
+                    "jenis": "sama",
+                    "pasal_draft": "Pasal 3",
+                    "kutipan_draft": "Ketentuan batas modal disetor.",
+                    "pembanding": {"document_id": comp_terbuka.id, "nomor": "1", "pasal": "Pasal 2"},
+                    "alasan": "Ketentuan identik.",
+                    "tingkat": "tinggi",
+                    "keyakinan": 0.9,
+                },
+                {
+                    "id": "t-2",
+                    "jenis": "konflik",
+                    "pasal_draft": "Pasal 4",
+                    "pembanding": {"document_id": 999999, "nomor": "99", "pasal": "Pasal 1"},
+                    "alasan": "Ketentuan rahasia 1.",
+                },
+                {
+                    "id": "t-3",
+                    "jenis": "konflik",
+                    "pasal_draft": "Pasal 5",
+                    "pembanding": {"document_id": 999998, "nomor": "98", "pasal": "Pasal 2"},
+                    "alasan": "Ketentuan rahasia 2.",
+                },
+            ],
+        },
+    )
+
+    resp_docx = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={"format": "docx"},
+    )
+    assert resp_docx.status_code == 200
+    text_docx = extract_docx_text(resp_docx.content)
+    assert "2 temuan tidak ditampilkan karena pembandingnya tidak dapat diakses." in text_docx
+
+    resp_pdf = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={"format": "pdf"},
+    )
+    assert resp_pdf.status_code == 200
+    text_pdf = extract_pdf_text(resp_pdf.content)
+    assert "2 temuan tidak ditampilkan karena pembandingnya tidak dapat diakses." in " ".join(text_pdf.split())
+
 

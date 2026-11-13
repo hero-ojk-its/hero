@@ -140,6 +140,7 @@ class ButirItem:
     judul_butir: str
     paragraf_utama: str
     pasal_groups: Optional[List[PasalGroupItem]] = None
+    paragraf_penutup: Optional[str] = None
 
 
 @dataclass
@@ -177,6 +178,81 @@ def generate_catatan_dinas_filename(doc: Document, ext: str) -> Tuple[str, str]:
         cleaned_ascii = f"catatan_dinas_dokumen_{doc.id}.{ext}"
 
     return cleaned_ascii, cleaned_utf8
+
+
+def _normalkan_narasi_ai(val: Any) -> Optional[str]:
+    """
+    Menormalkan nilai narasi AI menjadi teks string.
+    Menerima str, list of str, atau list of dict (mengambil field 'kalimat').
+    Abaikan item kosong atau bentuk lain. Bila data tidak dikenali atau kosong, kembalikan None.
+    """
+    if val is None:
+        return None
+    if isinstance(val, str):
+        cleaned = val.strip()
+        return cleaned if cleaned else None
+    if isinstance(val, list):
+        sentences: List[str] = []
+        for item in val:
+            if isinstance(item, str) and item.strip():
+                sentences.append(item.strip())
+            elif isinstance(item, dict):
+                kalimat = item.get("kalimat")
+                if isinstance(kalimat, str) and kalimat.strip():
+                    sentences.append(kalimat.strip())
+        if sentences:
+            joined = " ".join(sentences).strip()
+            return joined if joined else None
+    return None
+
+
+def _format_nama_pembanding(
+    pembanding_obj: Optional[Dict[str, Any]],
+    pasal_fallback: Optional[str] = None,
+    allowed_ids: Optional[Set[int]] = None,
+) -> Optional[str]:
+    """
+    Menyusun nama peraturan pembanding:
+    - akses dibatasi: 'peraturan pembanding (akses dibatasi)'
+    - ada judul dan nomor: '<judul> (Nomor <nomor>), <pasal>'
+    - hanya judul: '<judul>, <pasal>'
+    - hanya nomor: 'peraturan Nomor <nomor>, <pasal>'
+    - tidak ada keduanya: 'peraturan pembanding' (+ ', <pasal>' bila ada)
+    Jangan menampilkan pembanding.key (pengenal internal). Judul dipotong maks 200 karakter.
+    """
+    if pembanding_obj and isinstance(pembanding_obj, dict):
+        p_doc_id = pembanding_obj.get("document_id")
+        if allowed_ids is not None and isinstance(p_doc_id, int) and p_doc_id not in allowed_ids:
+            return "peraturan pembanding (akses dibatasi)"
+        if pembanding_obj.get("restricted") or pembanding_obj.get("akses_dibatasi"):
+            return "peraturan pembanding (akses dibatasi)"
+
+        judul_raw = pembanding_obj.get("judul")
+        judul = potong_teks_di_batas_kata(str(judul_raw).strip(), 200) if judul_raw and str(judul_raw).strip() else None
+
+        nomor_raw = pembanding_obj.get("nomor")
+        nomor = str(nomor_raw).strip() if nomor_raw and str(nomor_raw).strip() else None
+
+        pasal_raw = pembanding_obj.get("pasal") or pasal_fallback
+        pasal = str(pasal_raw).strip() if pasal_raw and str(pasal_raw).strip() else None
+
+        if judul and nomor:
+            base = f"{judul} (Nomor {nomor})"
+        elif judul:
+            base = judul
+        elif nomor:
+            base = f"peraturan Nomor {nomor}"
+        else:
+            base = "peraturan pembanding"
+
+        if pasal:
+            return f"{base}, {pasal}"
+        return base
+
+    if pasal_fallback and str(pasal_fallback).strip():
+        return f"peraturan pembanding, {str(pasal_fallback).strip()}"
+
+    return None
 
 
 def _get_butir_1_content(
@@ -232,25 +308,32 @@ def _get_butir_1_content(
                     if isinstance(b, dict) and b.get("judul") and str(b.get("judul")).strip()
                 ]
 
-    # Fallback ke tabel articles bila belum didapat
+    # Fallback ke tabel articles bila belum didapat (urutkan mengikuti urutan pasal pertama tiap bab)
     if jumlah_pasal is None:
         count_art = db.query(Article).filter(Article.document_id == doc.id).count()
         if count_art > 0:
             jumlah_pasal = count_art
 
     if jumlah_bab is None:
-        distinct_ch = (
+        articles = (
             db.query(Article.chapter_title)
             .filter(Article.document_id == doc.id, Article.chapter_title.isnot(None))
-            .distinct()
+            .order_by(Article.order_index.asc().nullslast(), Article.id.asc())
             .all()
         )
-        if distinct_ch:
-            jumlah_bab = len(distinct_ch)
+        ordered_chapters: List[str] = []
+        seen_chapters = set()
+        for (ch,) in articles:
+            if ch and str(ch).strip():
+                ch_clean = str(ch).strip()
+                if ch_clean not in seen_chapters:
+                    seen_chapters.add(ch_clean)
+                    ordered_chapters.append(ch_clean)
+
+        if ordered_chapters:
+            jumlah_bab = len(ordered_chapters)
             if not bab_titles:
-                bab_titles = [str(c[0]).strip() for c in distinct_ch[1:5] if c[0] and str(c[0]).strip()]
-                if not bab_titles:
-                    bab_titles = [str(c[0]).strip() for c in distinct_ch[:4] if c[0] and str(c[0]).strip()]
+                bab_titles = ordered_chapters[1:5] if len(ordered_chapters) > 1 else ordered_chapters[:4]
 
     # Susun template bawaan
     if jumlah_bab and jumlah_pasal:
@@ -286,23 +369,16 @@ def _get_butir_1_content(
         narasi_ai: Optional[str] = None
         if ai_cached and isinstance(ai_cached.result, dict):
             res_ai = ai_cached.result
-            if res_ai.get("ringkasan_ai"):
-                val = res_ai["ringkasan_ai"]
-                narasi_ai = " ".join(val) if isinstance(val, list) else str(val).strip()
-            elif isinstance(res_ai.get("ai"), dict) and res_ai["ai"].get("ringkasan"):
-                val = res_ai["ai"]["ringkasan"]
-                narasi_ai = " ".join(val) if isinstance(val, list) else str(val).strip()
-            elif isinstance(res_ai.get("ringkasan"), list):
-                sentences = []
-                for item in res_ai["ringkasan"]:
-                    if isinstance(item, dict) and item.get("kalimat"):
-                        sentences.append(str(item["kalimat"]).strip())
-                    elif isinstance(item, str) and item.strip():
-                        sentences.append(item.strip())
-                if sentences:
-                    narasi_ai = " ".join(sentences)
-            elif isinstance(res_ai.get("ringkasan"), str) and res_ai["ringkasan"].strip():
-                narasi_ai = res_ai["ringkasan"].strip()
+            mode_dipakai = res_ai.get("mode_dipakai")
+            ai_dict = res_ai.get("ai") if isinstance(res_ai.get("ai"), dict) else {}
+            ai_status_field = ai_dict.get("status")
+
+            # Narasi AI hanya dipakai jika AI benar-benar dipakai (bukan fallback deterministik)
+            if mode_dipakai == "ai" or ai_status_field == "ai":
+                if res_ai.get("ringkasan_ai") is not None:
+                    narasi_ai = _normalkan_narasi_ai(res_ai["ringkasan_ai"])
+                if not narasi_ai and ai_dict.get("ringkasan") is not None:
+                    narasi_ai = _normalkan_narasi_ai(ai_dict["ringkasan"])
 
         if narasi_ai:
             footnote = "Butir 1 disusun dengan bantuan AI dari hasil analisa terverifikasi."
@@ -418,25 +494,11 @@ def build_catatan_dinas_data(
 
             # Peraturan pembanding
             pembanding_obj = t.get("pembanding")
-            pembanding_str: Optional[str] = None
-            if pembanding_obj and isinstance(pembanding_obj, dict):
-                p_doc_id = pembanding_obj.get("document_id")
-                # Bila document_id ada dan tidak diizinkan, atau restricted
-                if allowed_ids is not None and isinstance(p_doc_id, int) and p_doc_id not in allowed_ids:
-                    pembanding_str = "peraturan pembanding (akses dibatasi)"
-                elif pembanding_obj.get("restricted") or pembanding_obj.get("akses_dibatasi"):
-                    pembanding_str = "peraturan pembanding (akses dibatasi)"
-                else:
-                    nomor_p = pembanding_obj.get("nomor") or pembanding_obj.get("key") or pembanding_obj.get("judul")
-                    pasal_p = pembanding_obj.get("pasal") or t.get("pasal_pembanding")
-                    parts_p = []
-                    if nomor_p:
-                        parts_p.append(str(nomor_p).strip())
-                    if pasal_p:
-                        parts_p.append(str(pasal_p).strip())
-                    pembanding_str = " ".join(parts_p) if parts_p else "peraturan pembanding"
-            elif t.get("pasal_pembanding"):
-                pembanding_str = f"peraturan pembanding {t.get('pasal_pembanding')}"
+            pembanding_str = _format_nama_pembanding(
+                pembanding_obj=pembanding_obj,
+                pasal_fallback=t.get("pasal_pembanding"),
+                allowed_ids=allowed_ids,
+            )
 
             # Alasan
             alasan_raw = t.get("alasan") or t.get("deskripsi") or t.get("judul") or "-"
@@ -486,6 +548,25 @@ def build_catatan_dinas_data(
     else:
         butir_3_intro = "Berdasarkan hasil harmonisasi, tidak ditemukan adanya temuan disharmonisasi pada draf regulasi ini."
 
+    # Cek apakah ada temuan yang disembunyikan karena pembatasan akses
+    butir_3_penutup: Optional[str] = None
+    disaring_count: Optional[int] = None
+    rincian = filtered_data.get("disaring_rincian")
+    if isinstance(rincian, dict) and isinstance(rincian.get("temuan"), int) and rincian["temuan"] > 0:
+        disaring_count = rincian["temuan"]
+    elif isinstance(filtered_data.get("ringkasan"), dict):
+        ringkasan = filtered_data["ringkasan"]
+        for k in ("temuan_disaring", "disaring_temuan", "temuan_tersembunyi", "jumlah_disaring"):
+            if isinstance(ringkasan.get(k), int) and ringkasan[k] > 0:
+                disaring_count = ringkasan[k]
+                break
+    if disaring_count is None and isinstance(filtered_data.get("disaring_backend"), int) and filtered_data["disaring_backend"] > 0:
+        if not (isinstance(rincian, dict) and rincian.get("temuan") == 0):
+            disaring_count = filtered_data["disaring_backend"]
+
+    if disaring_count is not None and disaring_count > 0:
+        butir_3_penutup = f"{disaring_count} temuan tidak ditampilkan karena pembandingnya tidak dapat diakses."
+
     # 5. Susun daftar ButirItem
     butir_list: List[ButirItem] = []
     # Butir 1
@@ -511,6 +592,7 @@ def build_catatan_dinas_data(
             judul_butir="Tanggapan",
             paragraf_utama=butir_3_intro,
             pasal_groups=pasal_group_items,
+            paragraf_penutup=butir_3_penutup,
         )
     )
 
@@ -724,6 +806,14 @@ def render_catatan_dinas_docx(data: CatatanDinasData) -> bytes:
                     if t.catatan_analis:
                         p_temuan.add_run(f". Catatan analis: {t.catatan_analis}")
 
+        if butir.paragraf_penutup:
+            p_penutup = doc.add_paragraph()
+            p_penutup.paragraph_format.left_indent = Mm(7)
+            p_penutup.paragraph_format.space_before = Pt(4)
+            p_penutup.paragraph_format.space_after = Pt(6)
+            p_penutup.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            p_penutup.add_run(butir.paragraf_penutup)
+
     # 5. Kalimat Penutup
     p_tutup = doc.add_paragraph(data.kalimat_penutup)
     p_tutup.paragraph_format.space_before = Pt(8)
@@ -928,7 +1018,8 @@ def render_catatan_dinas_pdf(data: CatatanDinasData) -> bytes:
 
     # 4. Butir Bernomor
     for butir in data.butir_items:
-        text_b = f"<b>{butir.nomor}.</b> {html.escape(butir.paragraf_utama)}"
+        escaped_utama = html.escape(butir.paragraf_utama).replace("\r\n", "<br/>").replace("\n", "<br/>")
+        text_b = f"<b>{butir.nomor}.</b> {escaped_utama}"
         story.append(Paragraph(text_b, style_butir))
 
         if butir.pasal_groups:
@@ -961,6 +1052,10 @@ def render_catatan_dinas_pdf(data: CatatanDinasData) -> bytes:
                     parts_t.append(pen_str)
 
                     story.append(Paragraph("".join(parts_t), style_temuan))
+
+        if butir.paragraf_penutup:
+            escaped_penutup = html.escape(butir.paragraf_penutup).replace("\r\n", "<br/>").replace("\n", "<br/>")
+            story.append(Paragraph(escaped_penutup, style_butir))
 
     # 5. Kalimat Penutup
     story.append(Spacer(1, 4))
