@@ -205,8 +205,8 @@ Mendukung pendaftaran situs web dan folder lokal sebagai sumber regulasi.
 {
   "id": 2,
   "name": "Folder Regulasi Lokal Perbankan",
-  "url": "C:\\Hero\\hero-backend\\sources",
-  "address": "C:\\Hero\\hero-backend\\sources",
+  "url": "C:\\Hero\\hero-frontend\\sources",
+  "address": "C:\\Hero\\hero-frontend\\sources",
   "source_type": "folder_lokal",
   "crawler_adapter": null,
   "crawl_depth": null,
@@ -264,8 +264,8 @@ Mendukung pendaftaran situs web dan folder lokal sebagai sumber regulasi.
   {
     "id": 2,
     "name": "Folder Regulasi Lokal Perbankan",
-    "url": "C:\\Hero\\hero-backend\\sources",
-    "address": "C:\\Hero\\hero-backend\\sources",
+    "url": "C:\\Hero\\hero-frontend\\sources",
+    "address": "C:\\Hero\\hero-frontend\\sources",
     "source_type": "folder_lokal",
     "crawler_adapter": null,
     "crawl_depth": null,
@@ -341,6 +341,7 @@ Mendukung pendaftaran situs web dan folder lokal sebagai sumber regulasi.
     "mungkin_ada": 0,
     "terpilih": 1
   },
+  "candidates_total_live": 2,
   "truncated": false,
   "stats": {
     "max_pages": 10

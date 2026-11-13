@@ -1,0 +1,624 @@
+"""
+tests/test_ekspor_catatan_dinas.py
+Pengujian ekspor harmonisasi format "Catatan Dinas" (DOCX + PDF).
+Kasus uji:
+1. DOCX memuat CATATAN DINAS, nomor, blok identitas, kelima butir, penandatangan; nilai form muncul.
+2. Form kosong -> placeholder muncul; butir 4 dilewati dan penomoran menyesuaikan (total 4 butir).
+3. Butir 3 memuat SEMUA temuan (valid, tidak relevan, belum dinilai), urut nomor pasal draf, termasuk pasal_baru.
+4. PDF: diawali %PDF-, tidak kosong, dan teks memuat CATATAN DINAS serta tanda baca Indonesia yang benar.
+5. Akses: dokumen bukan draf -> 422; belum diharmonisasi -> 404; izin ekspor tidak ada -> 403; pembanding non-publik/restricted -> tersaring (peraturan pembanding (akses dibatasi)).
+6. pakai_ai=true tanpa cache AI -> template + header tidak_tersedia; dengan cache AI rekaan -> narasi dipakai + header dipakai + catatan kaki.
+7. Batas panjang field -> 422 berbahasa Indonesia; karakter kontrol dibuang.
+8. Nilai form tidak tersimpan: tidak ada data pribadi (nama/NIP) di tabel audit_logs maupun analysis_results.
+"""
+from datetime import datetime, timezone, timedelta
+import io
+import uuid
+
+import docx
+from fastapi.testclient import TestClient
+import jwt
+import pypdf
+import pytest
+from sqlalchemy.orm import Session
+
+from app.config import settings
+from app.core.permissions import PeranPengguna
+from app.main import app
+from app.models.analysis_result import AnalysisResult
+from app.models.audit_log import AuditLog
+from app.models.document import Document
+from app.models.enums import (
+    JenisAnalisa,
+    KlasifikasiAkses,
+    ModeAnalisa,
+    PeranDokumen,
+    StatusKeberlakuan,
+    StatusPemrosesan,
+)
+from app.models.user import User
+from app.routers.auth import ALGORITHM
+from app.routers.ml_gateway import get_ml_client
+from app.services.audit_service import EXPORT_HARMONIZATION
+
+
+@pytest.fixture(autouse=True)
+def setup_ml_env(monkeypatch: pytest.MonkeyPatch):
+    """Pastikan konfigurasi ML aktif dan terisolasi untuk pengujian."""
+    monkeypatch.setattr(settings, "ml_service_url", "http://ml-test:8100")
+    monkeypatch.setattr(settings, "ml_cache_enabled", True)
+    monkeypatch.setattr(settings, "protect_non_public_when_auth_disabled", True)
+    monkeypatch.setattr(settings, "auth_enabled", False)
+    yield
+    app.dependency_overrides.pop(get_ml_client, None)
+
+
+def _buat_token_auth(user: User) -> str:
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": user.username,
+        "exp": now + timedelta(hours=2),
+        "iat": now,
+    }
+    return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
+
+
+def create_test_doc(**kwargs) -> Document:
+    rnd = uuid.uuid4().hex
+    data = {
+        "title": "Draf Kajian Reksa Dana Pasar Uang",
+        "regulation_type": "POJK",
+        "regulation_number": "12/POJK.03/2026",
+        "regulation_year": 2026,
+        "document_role": PeranDokumen.draft_kajian,
+        "access_classification": KlasifikasiAkses.publik,
+        "file_path_pdf": f"pdf/test_{rnd[:8]}.pdf",
+        "file_hash": (rnd * 2)[:64],
+        "file_size_bytes": 2048,
+        "processing_status": StatusPemrosesan.terindeks,
+        "status_keberlakuan": StatusKeberlakuan.berlaku,
+        "is_active": True,
+    }
+    data.update(kwargs)
+    return Document(**data)
+
+
+def seed_harmonisasi_result(
+    db: Session,
+    doc: Document,
+    payload: dict,
+    mode: ModeAnalisa = ModeAnalisa.deterministik,
+) -> AnalysisResult:
+    res = AnalysisResult(
+        document_id=doc.id,
+        kind=JenisAnalisa.harmonisasi,
+        mode=mode,
+        params_hash="params-" + uuid.uuid4().hex[:16],
+        source_fingerprint=f"hash:{doc.file_hash or 'nohash'}",
+        result=payload,
+        ml_version="1.0",
+        duration_ms=100,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(res)
+    db.commit()
+    db.refresh(res)
+    return res
+
+
+def seed_analisa_result(
+    db: Session,
+    doc: Document,
+    payload: dict,
+    mode: ModeAnalisa = ModeAnalisa.deterministik,
+) -> AnalysisResult:
+    res = AnalysisResult(
+        document_id=doc.id,
+        kind=JenisAnalisa.analisa,
+        mode=mode,
+        params_hash="params-analisa-" + uuid.uuid4().hex[:16],
+        source_fingerprint=f"hash:{doc.file_hash or 'nohash'}",
+        result=payload,
+        ml_version="1.0",
+        duration_ms=150,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(res)
+    db.commit()
+    db.refresh(res)
+    return res
+
+
+def extract_docx_text(content: bytes) -> str:
+    doc = docx.Document(io.BytesIO(content))
+    lines = []
+    for p in doc.paragraphs:
+        lines.append(p.text)
+    for tbl in doc.tables:
+        for row in tbl.rows:
+            for cell in row.cells:
+                lines.append(cell.text)
+    return "\n".join(lines)
+
+
+def extract_pdf_text(content: bytes) -> str:
+    reader = pypdf.PdfReader(io.BytesIO(content))
+    return "\n".join(page.extract_text() or "" for page in reader.pages)
+
+
+def test_cd01_docx_ekspor_dengan_isian_form_lengkap(client: TestClient, db_session: Session):
+    """1. DOCX: memuat CATATAN DINAS, nomor, blok identitas, kelima butir, penandatangan; nilai form muncul."""
+    draft = create_test_doc()
+    comp = create_test_doc(
+        title="POJK 4 Tahun 2023",
+        regulation_type="POJK",
+        regulation_number="4",
+        regulation_year=2023,
+    )
+    db_session.add_all([draft, comp])
+    db_session.commit()
+
+    # Seed hasil analisa (untuk butir 1)
+    seed_analisa_result(
+        db_session,
+        draft,
+        {
+            "identitas": {"jumlah_pasal": 25},
+            "kerangka": [
+                {"bab": "I", "judul": "Ketentuan Umum"},
+                {"bab": "II", "judul": "Tata Kelola Investasi"},
+                {"bab": "III", "judul": "Batasan Penempatan Dana"},
+            ],
+        },
+    )
+
+    # Seed hasil harmonisasi (untuk butir 3)
+    seed_harmonisasi_result(
+        db_session,
+        draft,
+        {
+            "versi": "1.0",
+            "temuan": [
+                {
+                    "id": "t-1",
+                    "jenis": "menggantikan",
+                    "pasal_draft": "Pasal 5",
+                    "kutipan_draft": "Manajer investasi wajib mengelola portofolio secara terukur.",
+                    "pembanding": {"document_id": comp.id, "nomor": "POJK 4 2023", "pasal": "Pasal 10"},
+                    "alasan": "Menggantikan ketentuan diversifikasi portofolio.",
+                    "tingkat": "tinggi",
+                    "keyakinan": 0.88,
+                }
+            ],
+        },
+    )
+
+    req_body = {
+        "format": "docx",
+        "nomor_cd": "CD-10/DPEA/XI/2026",
+        "yth": "Direktur Pengaturan Perbankan",
+        "dari": "Kepala Departemen Penelaahan Regulasi",
+        "sifat": "Segera",
+        "lampiran": "1 (satu) Berkas",
+        "hal": "Tanggapan Draf Regulasi Reksa Dana",
+        "tanggal": "2026-11-13",
+        "unit_peminta": "Departemen Pengawasan Pasar Modal",
+        "nomor_nd": "ND-99/DPPM/X/2026",
+        "tanggal_nd": "2026-10-25",
+        "hal_nd": "Permintaan Masukan Harmonisasi Draf",
+        "catatan_tambahan": "Perlu koordinasi lebih lanjut dengan Departemen Hukum terkait sanksi.",
+        "penandatangan_jabatan": "Direktur Harmonisasi",
+        "penandatangan_nama": "Budi Santoso, S.H.",
+        "penandatangan_nip": "198001012005011001",
+    }
+
+    resp = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json=req_body,
+    )
+    assert resp.status_code == 200
+    assert "application/vnd.openxmlformats-officedocument" in resp.headers["content-type"]
+    assert "catatan_dinas_" in resp.headers["content-disposition"]
+    assert ".docx" in resp.headers["content-disposition"]
+
+    full_text = extract_docx_text(resp.content)
+
+    # 1. Judul & Konsep
+    assert "CATATAN DINAS" in full_text
+    assert "NOMOR CD-10/DPEA/XI/2026" in full_text
+    assert "KONSEP — dihasilkan sistem HERO sebagai Draft / Rekomendasi; belum ditandatangani." in full_text
+
+    # 2. Blok Identitas
+    assert "Direktur Pengaturan Perbankan" in full_text
+    assert "Kepala Departemen Penelaahan Regulasi" in full_text
+    assert "Segera" in full_text
+    assert "1 (satu) Berkas" in full_text
+    assert "Tanggapan Draf Regulasi Reksa Dana" in full_text
+    assert "13 November 2026" in full_text
+
+    # 3. Kalimat Pembuka
+    assert "Sehubungan dengan nota dinas Departemen Pengawasan Pasar Modal nomor ND-99/DPPM/X/2026" in full_text
+    assert "tanggal 25 Oktober 2026 hal Permintaan Masukan Harmonisasi Draf" in full_text
+
+    # 4. Kelima butir bernomor
+    assert "1. " in full_text
+    assert "terdiri atas 3 bab dan 25 pasal" in full_text
+    assert "Tata Kelola Investasi, Batasan Penempatan Dana" in full_text
+
+    assert "2. " in full_text
+    assert "meminta tanggapan atas Draf Kajian Reksa Dana Pasar Uang" in full_text
+
+    assert "3. " in full_text
+    assert "Pasal 5 mengatur bahwa Manajer investasi wajib mengelola portofolio secara terukur." in full_text
+    assert "Temuan Menggantikan" in full_text
+    assert "POJK 4 2023 Pasal 10" in full_text
+    assert "tinggi (0,88)" in full_text
+
+    assert "4. " in full_text
+    assert "Perlu koordinasi lebih lanjut dengan Departemen Hukum terkait sanksi." in full_text
+
+    assert "5. " in full_text
+    assert "Apabila Bapak/Ibu sependapat, terlampir konsep nota dinas tanggapan untuk ditindaklanjuti." in full_text
+
+    # 5. Kalimat Penutup & Penandatangan
+    assert "Demikian kami sampaikan, atas perhatian Bapak/Ibu kami ucapkan terima kasih." in full_text
+    assert "Direktur Harmonisasi" in full_text
+    assert "Budi Santoso, S.H." in full_text
+    assert "NIP 198001012005011001" in full_text
+    assert "Keputusan final tetap kewenangan Pengawas / unit terkait." in full_text
+
+
+def test_cd02_form_kosong_placeholder_dan_butir4_dilewati(client: TestClient, db_session: Session):
+    """2. Form kosong -> placeholder muncul; butir 4 dilewati dan penomoran menyesuaikan."""
+    draft = create_test_doc(title="Draf Perbankan Digital")
+    db_session.add(draft)
+    db_session.commit()
+
+    seed_harmonisasi_result(
+        db_session,
+        draft,
+        {
+            "versi": "1.0",
+            "temuan": [],
+        },
+    )
+
+    resp = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={},
+    )
+    assert resp.status_code == 200
+
+    full_text = extract_docx_text(resp.content)
+
+    # Placeholder default
+    assert "NOMOR CD-xx/…/xxxx" in full_text
+    assert "…" in full_text
+    assert "Biasa" in full_text
+    assert "-" in full_text
+    assert f"Tanggapan atas {draft.title}" in full_text
+
+    # Penomoran menyesuaikan: ada 1, 2, 3, 4, dan TIDAK ada 5
+    assert "1. " in full_text
+    assert "2. " in full_text
+    assert "3. " in full_text
+    assert "4. Apabila Bapak/Ibu sependapat, terlampir konsep nota dinas tanggapan untuk ditindaklanjuti." in full_text
+    assert "5. " not in full_text
+
+
+def test_cd03_butir3_memuat_semua_temuan_urut_pasal_termasuk_pasal_baru(client: TestClient, db_session: Session):
+    """3. Butir 3 memuat SEMUA temuan (valid, tidak relevan, belum dinilai), urut nomor pasal draf, termasuk pasal_baru."""
+    draft = create_test_doc(title="Draf multi temuan")
+    comp = create_test_doc(title="POJK Pembanding", regulation_number="1/POJK.03/2020")
+    db_session.add_all([draft, comp])
+    db_session.commit()
+
+    # Beri 3 temuan dengan pasal tidak urut dan status berbeda
+    raw_temuan = [
+        {
+            "id": "t-pasal-14",
+            "jenis": "menggantikan",
+            "pasal_draft": "Pasal 14",
+            "pembanding": {"document_id": comp.id, "nomor": "POJK 1/2020", "pasal": "Pasal 2"},
+            "alasan": "Ketentuan batas maksimum penyaluran dana.",
+            "tingkat": "tinggi",
+            "keyakinan": 0.85,
+        },
+        {
+            "id": "t-pasal-2",
+            "jenis": "pasal_baru",
+            "pasal_draft": "Pasal 2",
+            "pembanding": None,  # pasal baru: pembanding null
+            "alasan": "Pengaturan pasal baru definisi aset kripto.",
+            "tingkat": "sedang",
+            "keyakinan": 0.60,
+        },
+        {
+            "id": "t-pasal-5",
+            "jenis": "konflik",
+            "pasal_draft": "Pasal 5 ayat (1)",
+            "pembanding": {"document_id": comp.id, "nomor": "POJK 1/2020", "pasal": "Pasal 15"},
+            "alasan": "Potensi konflik kewenangan audit internal.",
+            "tingkat": "rendah",
+            "keyakinan": 0.40,
+        },
+    ]
+
+    # Beri tanggapan analis pada temuan pertama & ketiga via endpoint tanggapan
+    seed_harmonisasi_result(db_session, draft, {"versi": "1.0", "temuan": raw_temuan})
+
+    # Tanggapan analis untuk pasal 14: valid
+    client.put(
+        f"/api/v1/documents/{draft.id}/harmonisasi/tanggapan",
+        json={"temuan": raw_temuan[0], "penilaian": "valid", "catatan": "Perlu sinkronisasi"},
+    )
+    # Tanggapan analis untuk pasal 5: tidak_relevan
+    client.put(
+        f"/api/v1/documents/{draft.id}/harmonisasi/tanggapan",
+        json={"temuan": raw_temuan[2], "penilaian": "tidak_relevan", "catatan": "Konteks pasal berbeda"},
+    )
+
+    resp = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={"format": "docx"},
+    )
+    assert resp.status_code == 200
+    full_text = extract_docx_text(resp.content)
+
+    # Verifikasi urutan: Pasal 2 harus muncul SEBELUM Pasal 5, dan Pasal 5 SEBELUM Pasal 14
+    idx_p2 = full_text.find("Pasal 2")
+    idx_p5 = full_text.find("Pasal 5")
+    idx_p14 = full_text.find("Pasal 14")
+    assert idx_p2 != -1 and idx_p5 != -1 and idx_p14 != -1
+    assert idx_p2 < idx_p5 < idx_p14, "Temuan harus terurut secara alami berdasarkan nomor pasal"
+
+    # Verifikasi temuan pasal_baru (pembanding null) tidak error dan tampil benar
+    assert "Temuan Baru" in full_text
+    assert "Pengaturan pasal baru definisi aset kripto" in full_text
+    assert "Penilaian analis: Belum dinilai" in full_text
+
+    # Verifikasi temuan konflik dengan penilaian tidak relevan
+    assert "Temuan Konflik" in full_text
+    assert "Penilaian analis: Tidak Relevan. Catatan analis: Konteks pasal berbeda" in full_text
+
+    # Verifikasi temuan menggantikan dengan penilaian valid
+    assert "Temuan Menggantikan" in full_text
+    assert "Penilaian analis: Valid. Catatan analis: Perlu sinkronisasi" in full_text
+
+
+def test_cd04_pdf_valid_dan_memuat_catatan_dinas(client: TestClient, db_session: Session):
+    """4. PDF: diawali %PDF-, tidak kosong, dan teksnya memuat CATATAN DINAS."""
+    draft = create_test_doc(title="Draf Uji PDF")
+    db_session.add(draft)
+    db_session.commit()
+
+    seed_harmonisasi_result(db_session, draft, {"versi": "1.0", "temuan": []})
+
+    resp = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={"format": "pdf", "nomor_cd": "CD-PDF/01/2026"},
+    )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/pdf"
+    assert "catatan_dinas_" in resp.headers["content-disposition"]
+    assert ".pdf" in resp.headers["content-disposition"]
+
+    content = resp.content
+    assert content.startswith(b"%PDF-"), "Berkas PDF harus diawali dengan %PDF-"
+    assert len(content) > 1000
+
+    pdf_text = extract_pdf_text(content)
+    assert "CATATAN DINAS" in pdf_text
+    assert "CD-PDF/01/2026" in pdf_text
+    assert "KONSEP — dihasilkan sistem HERO sebagai Draft / Rekomendasi; belum ditandatangani." in pdf_text
+    assert "Apabila Bapak/Ibu sependapat, terlampir konsep nota dinas tanggapan untuk ditindaklanjuti." in pdf_text
+
+
+def test_cd05_akses_dan_keamanan(client: TestClient, db_session: Session):
+    """5. Akses: dokumen bukan draf -> 422; belum diharmonisasi -> 404; izin ekspor tidak ada -> ditolak; pembanding tidak boleh dilihat -> tersaring."""
+    # A. Bukan draf (corpus_eksisting) -> 422
+    corpus_doc = create_test_doc(document_role=PeranDokumen.corpus_eksisting)
+    db_session.add(corpus_doc)
+    db_session.commit()
+
+    resp_bukan_draft = client.post(
+        f"/api/v1/documents/{corpus_doc.id}/harmonisasi/ekspor/catatan-dinas",
+        json={},
+    )
+    assert resp_bukan_draft.status_code == 422
+    assert resp_bukan_draft.json().get("detail", {}).get("code") == "bukan_draft"
+
+    # B. Belum diharmonisasi -> 404
+    draft_unanalysed = create_test_doc()
+    db_session.add(draft_unanalysed)
+    db_session.commit()
+
+    resp_belum = client.post(
+        f"/api/v1/documents/{draft_unanalysed.id}/harmonisasi/ekspor/catatan-dinas",
+        json={},
+    )
+    assert resp_belum.status_code == 404
+    assert resp_belum.json().get("detail", {}).get("code") == "harmonisasi_belum_ada"
+
+    # C. Auth aktif, user tanpa izin ANALISA_EKSPOR -> 403
+    orig_auth = settings.auth_enabled
+    settings.auth_enabled = True
+    try:
+        user_pilot = User(
+            username=f"pilot_{uuid.uuid4().hex[:6]}",
+            hashed_password="$2b$12$dummyhashforpilotuserwithoutperms",
+            role=PeranPengguna.pilot_user,
+            is_active=True,
+        )
+        db_session.add(user_pilot)
+        db_session.commit()
+        token_pilot = _buat_token_auth(user_pilot)
+
+        draft_auth = create_test_doc(access_classification=KlasifikasiAkses.publik)
+        db_session.add(draft_auth)
+        db_session.commit()
+        seed_harmonisasi_result(db_session, draft_auth, {"versi": "1.0", "temuan": []})
+
+        resp_403 = client.post(
+            f"/api/v1/documents/{draft_auth.id}/harmonisasi/ekspor/catatan-dinas",
+            headers={"Authorization": f"Bearer {token_pilot}"},
+            json={},
+        )
+        assert resp_403.status_code == 403
+    finally:
+        settings.auth_enabled = orig_auth
+
+    # D. Pembanding nonaktif / tidak boleh dilihat -> tersaring (peraturan pembanding (akses dibatasi))
+    draft_filter = create_test_doc()
+    comp_nonaktif = create_test_doc(title="Pembanding Rahasia", is_active=False)
+    db_session.add_all([draft_filter, comp_nonaktif])
+    db_session.commit()
+
+    seed_harmonisasi_result(
+        db_session,
+        draft_filter,
+        {
+            "versi": "1.0",
+            "temuan": [
+                {
+                    "id": "t-secret",
+                    "jenis": "konflik",
+                    "pasal_draft": "Pasal 9",
+                    "pembanding": {"document_id": comp_nonaktif.id, "restricted": True},
+                    "alasan": "Ketentuan bertentangan dengan standar internal.",
+                }
+            ],
+        },
+    )
+
+    resp_filter = client.post(
+        f"/api/v1/documents/{draft_filter.id}/harmonisasi/ekspor/catatan-dinas",
+        json={},
+    )
+    assert resp_filter.status_code == 200
+    text_filter = extract_docx_text(resp_filter.content)
+    # Judul/rahasia pembanding tidak boleh bocor
+    assert "Pembanding Rahasia" not in text_filter
+
+
+def test_cd06_toggle_pakai_ai(client: TestClient, db_session: Session):
+    """6. pakai_ai=true tanpa cache AI -> template + header tidak_tersedia; dengan cache AI rekaan -> narasi dipakai + header dipakai."""
+    draft = create_test_doc(title="Draf AI Toggle")
+    db_session.add(draft)
+    db_session.commit()
+
+    seed_harmonisasi_result(db_session, draft, {"versi": "1.0", "temuan": []})
+
+    # 1. Tanpa cache AI -> template + header X-Catatan-Dinas-AI: tidak_tersedia
+    resp1 = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={"pakai_ai": True},
+    )
+    assert resp1.status_code == 200
+    assert resp1.headers.get("X-Catatan-Dinas-AI") == "tidak_tersedia"
+    text1 = extract_docx_text(resp1.content)
+    assert "disusun dengan bantuan AI" not in text1
+
+    # 2. Dengan cache AI segar (mode=ai, kind=analisa)
+    ai_narasi = "Draf regulasi ini menetapkan arsitektur pengawasan berbasis teknologi digital secara terpadu."
+    seed_analisa_result(
+        db_session,
+        draft,
+        {"mode_dipakai": "ai", "ringkasan_ai": ai_narasi},
+        mode=ModeAnalisa.ai,
+    )
+
+    resp2 = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={"pakai_ai": True},
+    )
+    assert resp2.status_code == 200
+    assert resp2.headers.get("X-Catatan-Dinas-AI") == "dipakai"
+    text2 = extract_docx_text(resp2.content)
+    assert ai_narasi in text2
+    assert "Butir 1 disusun dengan bantuan AI dari hasil analisa terverifikasi." in text2
+
+
+def test_cd07_validasi_batas_panjang_dan_karakter_kontrol(client: TestClient, db_session: Session):
+    """7. Batas panjang field -> 422 berbahasa Indonesia; karakter kontrol dibuang."""
+    draft = create_test_doc()
+    db_session.add(draft)
+    db_session.commit()
+    seed_harmonisasi_result(db_session, draft, {"versi": "1.0", "temuan": []})
+
+    # A. Nomor CD melebihi 60 karakter -> 422
+    resp_panjang = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={"nomor_cd": "A" * 65},
+    )
+    assert resp_panjang.status_code == 422
+    assert "melebihi batas maksimum" in resp_panjang.text
+
+    # B. Format tidak didukung -> 422
+    resp_fmt = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={"format": "xlsx_invalid"},
+    )
+    assert resp_fmt.status_code == 422
+    assert "tidak didukung" in resp_fmt.text
+
+    # C. Karakter kontrol disanitasi dan tidak menimbulkan error
+    resp_ctrl = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={
+            "nomor_cd": "CD-01\x00\x08/DPEA/2026",
+            "penandatangan_nama": "Budi\x07 Santoso",
+        },
+    )
+    assert resp_ctrl.status_code == 200
+    text_ctrl = extract_docx_text(resp_ctrl.content)
+    assert "CD-01/DPEA/2026" in text_ctrl
+    assert "Budi Santoso" in text_ctrl
+
+
+def test_cd08_nilai_form_tidak_tersimpan_di_db_maupun_audit(client: TestClient, db_session: Session):
+    """8. Nilai form tidak tersimpan: tidak ada data pribadi (nama/NIP) di tabel audit maupun analysis_results."""
+    draft = create_test_doc()
+    db_session.add(draft)
+    db_session.commit()
+    seed_harmonisasi_result(db_session, draft, {"versi": "1.0", "temuan": []})
+
+    nama_rahasia = "Prof. Dr. Rahasia Negara, S.H."
+    nip_rahasia = "199912312020011001"
+    catatan_pribadi = "Catatan rahasia pengawas perbankan non publik"
+
+    resp = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={
+            "penandatangan_nama": nama_rahasia,
+            "penandatangan_nip": nip_rahasia,
+            "catatan_tambahan": catatan_pribadi,
+        },
+    )
+    assert resp.status_code == 200
+
+    # Periksa audit log terbaru
+    audit = (
+        db_session.query(AuditLog)
+        .filter(AuditLog.target_resource == f"document:{draft.id}", AuditLog.action == EXPORT_HARMONIZATION)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    assert audit is not None
+    assert audit.detail.get("format") == "catatan_dinas_docx"
+    assert audit.detail.get("pakai_ai") is False
+
+    # Pastikan data pribadi TIDAK masuk ke audit detail
+    audit_detail_str = str(audit.detail)
+    assert nama_rahasia not in audit_detail_str
+    assert nip_rahasia not in audit_detail_str
+    assert catatan_pribadi not in audit_detail_str
+
+    # Pastikan juga tidak tersimpan ke tabel analysis_results
+    results = db_session.query(AnalysisResult).filter(AnalysisResult.document_id == draft.id).all()
+    for r in results:
+        res_str = str(r.result)
+        assert nama_rahasia not in res_str
+        assert nip_rahasia not in res_str
+        assert catatan_pribadi not in res_str
+

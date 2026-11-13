@@ -580,6 +580,48 @@
         }
       }
     },
+    "/api/v1/ingest/extract-metadata": {
+      "post": {
+        "tags": [
+          "Ingest"
+        ],
+        "summary": "Ekstraksi metadata otomatis dari file PDF sebelum proses upload/simpan",
+        "description": "Mengekstrak informasi metadata (Judul, Nomor, Jenis, Bidang/Sektor, Tanggal Terbit)\nsecara otomatis dari halaman awal PDF tanpa menyimpannya ke database.",
+        "operationId": "extract_metadata_api_v1_ingest_extract_metadata_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_extract_metadata_api_v1_ingest_extract_metadata_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractedMetadataResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/ingest/upload-pdf": {
       "post": {
         "tags": [
@@ -1274,6 +1316,48 @@
             "OAuth2PasswordBearer": []
           }
         ]
+      }
+    },
+    "/api/v1/documents/extract-metadata": {
+      "post": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Ekstraksi metadata otomatis dari file PDF",
+        "description": "Mengekstrak informasi metadata (Judul, Nomor, Jenis, Bidang/Sektor, Tanggal Terbit)\nsecara otomatis dari halaman awal PDF tanpa menyimpannya ke database.",
+        "operationId": "extract_metadata_api_v1_documents_extract_metadata_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_extract_metadata_api_v1_documents_extract_metadata_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractedMetadataResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/documents/": {
@@ -5695,6 +5779,70 @@
         }
       }
     },
+    "/api/v1/documents/{document_id}/harmonisasi/ekspor/catatan-dinas": {
+      "post": {
+        "tags": [
+          "Harmonisasi"
+        ],
+        "summary": "Ekspor laporan harmonisasi format Catatan Dinas (DOCX, PDF)",
+        "description": "Mengekspor laporan hasil harmonisasi draft regulasi ke format Catatan Dinas (DOCX atau PDF).\nMengikuti tata naskah dinas resmi DPEA / OJK.",
+        "operationId": "export_document_harmonization_catatan_dinas_api_v1_documents__document_id__harmonisasi_ekspor_catatan_dinas_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CatatanDinasExportIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Berkas ekspor Catatan Dinas dalam format DOCX atau PDF.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {},
+              "application/pdf": {}
+            }
+          },
+          "403": {
+            "description": "Akses ditolak (dokumen non-publik memerlukan otentikasi atau peran tidak berizin)"
+          },
+          "404": {
+            "description": "Dokumen tidak ditemukan atau belum pernah diharmonisasi"
+          },
+          "422": {
+            "description": "Bukan dokumen draft kajian atau parameter tidak valid"
+          }
+        }
+      }
+    },
     "/api/v1/users/": {
       "get": {
         "tags": [
@@ -6520,6 +6668,36 @@
         ],
         "title": "BatchRetryResponse"
       },
+      "Body_extract_metadata_api_v1_documents_extract_metadata_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "File PDF untuk diekstrak metadatanya"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_extract_metadata_api_v1_documents_extract_metadata_post"
+      },
+      "Body_extract_metadata_api_v1_ingest_extract_metadata_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "File PDF untuk diekstrak metadatanya"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_extract_metadata_api_v1_ingest_extract_metadata_post"
+      },
       "Body_login_api_v1_auth_login_post": {
         "properties": {
           "grant_type": {
@@ -6592,8 +6770,16 @@
             "description": "Daftar file PDF regulasi yang diunggah (bisa jamak / multiple files)"
           },
           "access_classification": {
-            "$ref": "#/components/schemas/KlasifikasiAkses",
-            "description": "Klasifikasi akses (publik / non_publik) - WAJIB untuk kepatuhan NDA"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KlasifikasiAkses"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Klasifikasi akses (opsional, default: publik)",
+            "default": "publik"
           },
           "document_role": {
             "$ref": "#/components/schemas/PeranDokumen",
@@ -6752,7 +6938,6 @@
         "type": "object",
         "required": [
           "files",
-          "access_classification",
           "document_role"
         ],
         "title": "Body_upload_pdf_api_v1_ingest_upload_pdf_post"
@@ -7240,6 +7425,214 @@
         ],
         "title": "CandidateResponse",
         "description": "Detail satu kandidat PDF hasil pemindaian."
+      },
+      "CatatanDinasExportIn": {
+        "properties": {
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format",
+            "default": "docx"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "pakai_ai": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pakai Ai",
+            "default": false
+          },
+          "nomor_cd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nomor Cd"
+          },
+          "yth": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Yth"
+          },
+          "dari": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dari"
+          },
+          "sifat": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sifat"
+          },
+          "lampiran": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lampiran"
+          },
+          "hal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hal"
+          },
+          "tanggal": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tanggal"
+          },
+          "unit_peminta": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Peminta"
+          },
+          "nomor_nd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nomor Nd"
+          },
+          "tanggal_nd": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tanggal Nd"
+          },
+          "hal_nd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hal Nd"
+          },
+          "catatan_tambahan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catatan Tambahan"
+          },
+          "penandatangan_jabatan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Penandatangan Jabatan"
+          },
+          "penandatangan_nama": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Penandatangan Nama"
+          },
+          "penandatangan_nip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Penandatangan Nip"
+          }
+        },
+        "type": "object",
+        "title": "CatatanDinasExportIn"
       },
       "CategoryCreateRequest": {
         "properties": {
@@ -8788,6 +9181,94 @@
           "title"
         ],
         "title": "DuplicateDocumentInfo"
+      },
+      "ExtractedMetadataResponse": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "regulation_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Number"
+          },
+          "regulation_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Type"
+          },
+          "regulation_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Year"
+          },
+          "bidang": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bidang"
+          },
+          "release_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Date"
+          },
+          "page_count": {
+            "type": "integer",
+            "title": "Page Count",
+            "default": 0
+          },
+          "raw_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Preview"
+          }
+        },
+        "type": "object",
+        "title": "ExtractedMetadataResponse"
       },
       "ExtractionErrorIn": {
         "properties": {
@@ -11613,6 +12094,17 @@
           },
           "candidates_summary": {
             "$ref": "#/components/schemas/ScanSummaryCount"
+          },
+          "candidates_total_live": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidates Total Live"
           },
           "truncated": {
             "type": "boolean",

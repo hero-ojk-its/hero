@@ -283,19 +283,19 @@ def export_harmonisasi_to_csv(data: Dict[str, Any]) -> bytes:
     return b"\xef\xbb\xbf" + csv_text.encode("utf-8")
 
 
-def export_harmonisasi(
+def muat_data_harmonisasi_tersimpan(
     db: Session,
     doc: Document,
-    format_type: str,
     run_id: Optional[int] = None,
-    current_user: Optional[Any] = None,
     allowed_ids: Optional[Set[int]] = None,
     saring_rujukan_lengkap_fn: Optional[Any] = None,
     sesuaikan_ringkasan_harmonisasi_fn: Optional[Any] = None,
-) -> Tuple[bytes, str, Dict[str, str], int]:
+) -> Tuple[Dict[str, Any], str, Optional[datetime], Optional[int]]:
     """
-    Mengambil hasil harmonisasi tersimpan (cache atau run), menyaring rujukan rahasia/nonaktif,
-    menggabungkan tanggapan analis, dan menghasilkan bytes berkas ekspor sesuai format (DOCX/CSV/JSON).
+    Mengambil data harmonisasi tersimpan (dari run_id atau cache AnalysisResult),
+    menandai kunci temuan, menyaring rujukan dokumen nonaktif / non-publik,
+    dan menggabungkan tanggapan analis.
+    Mengembalikan (filtered_data, actual_mode, dibuat_at, resolved_run_id).
     """
     raw_data: Optional[Dict[str, Any]] = None
     dibuat_at: Optional[datetime] = None
@@ -424,6 +424,32 @@ def export_harmonisasi(
 
     # 4. Gabungkan tanggapan analis
     filtered_data = gabungkan_tanggapan_ke_harmonisasi(db, doc.id, filtered_data)
+
+    return filtered_data, actual_mode, dibuat_at, resolved_run_id
+
+
+def export_harmonisasi(
+    db: Session,
+    doc: Document,
+    format_type: str,
+    run_id: Optional[int] = None,
+    current_user: Optional[Any] = None,
+    allowed_ids: Optional[Set[int]] = None,
+    saring_rujukan_lengkap_fn: Optional[Any] = None,
+    sesuaikan_ringkasan_harmonisasi_fn: Optional[Any] = None,
+) -> Tuple[bytes, str, Dict[str, str], int]:
+    """
+    Mengambil hasil harmonisasi tersimpan (cache atau run), menyaring rujukan rahasia/nonaktif,
+    menggabungkan tanggapan analis, dan menghasilkan bytes berkas ekspor sesuai format (DOCX/CSV/JSON).
+    """
+    filtered_data, actual_mode, dibuat_at, resolved_run_id = muat_data_harmonisasi_tersimpan(
+        db=db,
+        doc=doc,
+        run_id=run_id,
+        allowed_ids=allowed_ids,
+        saring_rujukan_lengkap_fn=saring_rujukan_lengkap_fn,
+        sesuaikan_ringkasan_harmonisasi_fn=sesuaikan_ringkasan_harmonisasi_fn,
+    )
 
     temuan_count = len(filtered_data.get("temuan", [])) if isinstance(filtered_data.get("temuan"), list) else 0
     now_utc = datetime.now(timezone.utc)
