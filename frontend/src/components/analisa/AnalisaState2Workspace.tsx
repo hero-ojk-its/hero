@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   FileText,
   ArrowLeft,
@@ -314,15 +314,32 @@ export default function AnalisaState2Workspace({
     ? `Tahun ${data.identitas.tahun}`
     : '-';
 
-  const displayJumlahBab =
-    data?.kerangka && Array.isArray(data.kerangka) && data.kerangka.length > 0
-      ? data.kerangka.length
-      : '-';
+  // Deteksi struktur dokumen dinamis (Diktum vs Bab/Pasal vs Pasal saja)
+  const isDiktumDoc = Boolean(
+    (data?.identitas?.jumlah_diktum && data.identitas.jumlah_diktum > 0) ||
+    (articles.length > 0 && articles.every((a) => /^(?:DIKTUM\s+)?KE[A-Za-z0-9]+/i.test(a.article_number.trim()))) ||
+    (data?.kerangka && data.kerangka.length > 0 && data.kerangka.every((k) => /^(?:DIKTUM\s+)?KE[A-Za-z0-9]+/i.test(k.bab.trim())))
+  );
 
-  const displayJumlahPasal =
-    articles.length > 0
-      ? articles.length
-      : data?.jumlah_poin || (data?.poin_utama ? data.poin_utama.length : '-');
+  const displayStruktur = useMemo(() => {
+    if (isDiktumDoc) {
+      const diktumCount = data?.identitas?.jumlah_diktum || (articles.length > 0 ? articles.length : (data?.kerangka?.length || 0));
+      return `${diktumCount} Diktum`;
+    }
+    const babCount = data?.metrik?.jumlah_bab || (data?.kerangka && Array.isArray(data.kerangka) ? data.kerangka.length : 0);
+    const pasalCount = articles.length > 0 ? articles.length : (data?.metrik?.jumlah_pasal || data?.identitas?.jumlah_pasal || 0);
+
+    if (babCount > 0 && pasalCount > 0) {
+      return `${babCount} Bab • ${pasalCount} Pasal`;
+    }
+    if (pasalCount > 0) {
+      return `${pasalCount} Pasal`;
+    }
+    if (babCount > 0) {
+      return `${babCount} Bab`;
+    }
+    return '-';
+  }, [isDiktumDoc, data, articles]);
 
   const effectiveStatusKeberlakuan = docStatus?.status_keberlakuan;
   const actualMode: 'deterministik' | 'ai' =
@@ -444,7 +461,7 @@ export default function AnalisaState2Workspace({
               )}
             </div>
             <p className="text-xs text-gray-500 mt-0.5 truncate">
-              {displayTanggalTerbit} • {data?.identitas?.jenis || docStatus?.regulation_type || 'Regulasi'} {data?.identitas?.nomor ? `No. ${data.identitas.nomor}` : ''} • {displayJumlahBab} Bab • {displayJumlahPasal} Pasal
+              {displayTanggalTerbit} • {data?.identitas?.jenis || docStatus?.regulation_type || 'Regulasi'} {data?.identitas?.nomor ? `No. ${data.identitas.nomor}` : ''} • {displayStruktur}
             </p>
           </div>
         </div>
