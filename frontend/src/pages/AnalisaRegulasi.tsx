@@ -1095,7 +1095,15 @@ export default function AnalisaRegulasi() {
                   )}
                   {(documentPolling.data.processing_status === 'terindeks' || documentPolling.data.processing_status === 'perlu_koreksi') && (
                     <span>
-                      Ekstraksi tuntas: <strong>{documentPolling.data.articles?.length || 0} pasal</strong> terdeteksi •
+                      Ekstraksi tuntas: <strong>
+                        {documentPolling.data.articles?.length || 0}{' '}
+                        {documentPolling.data.articles?.length &&
+                        documentPolling.data.articles.every((a) =>
+                          /^(?:DIKTUM\s+)?KE[A-Za-z0-9]+/i.test(a.article_number.trim())
+                        )
+                          ? 'diktum'
+                          : 'pasal'}
+                      </strong> terdeteksi •
                       Teks lengkap: <strong>{documentPolling.data.full_text_length || 0} karakter</strong>
                     </span>
                   )}
