@@ -55,6 +55,7 @@ from app.services.duplicate_service import check_identity_duplicate
 from app.services.version_service import recompute_status, sync_relations
 from app.services.attachment_service import detect_attachment_heuristic, link_attachment, link_pending_children
 from app.services.judul_service import periksa_judul
+from app.services.document_service import tandai_ekstraksi_kehabisan_percobaan
 
 logger = logging.getLogger("hero")
 router = APIRouter()
@@ -354,6 +355,9 @@ def claim_extraction_batch(
     Mengambil dan mengunci dokumen dalam antrean ekstraksi (SELECT FOR UPDATE SKIP LOCKED).
     Mencakup status 'diterima' dan status 'diproses' yang telah kedaluwarsa (claim timeout).
     """
+    # 1. Tandai dokumen yang sudah kehabisan percobaan sebagai gagal sebelum memilih dokumen yang diklaim
+    tandai_ekstraksi_kehabisan_percobaan(db, commit=False)
+
     timeout_minutes = settings.extraction_claim_timeout_minutes
     cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
 
@@ -1035,7 +1039,10 @@ def requeue_document_extraction(
     """
     Mengembalikan dokumen ke status 'diterima' dan mereset claimed_at (tidak mereset attempt count).
     """
-    doc = db.query(Document).filter(Document.id == document_id).first()
+    doc = db.query(Document).filter(
+        Document.id == document_id,
+        Document.is_active == True,  # noqa: E712
+    ).first()
     if not doc:
         raise HTTPException(status_code=404, detail=f"Dokumen ID {document_id} tidak ditemukan.")
 
@@ -1049,6 +1056,11 @@ def requeue_document_extraction(
         detail={"document_id": doc.id, "attempt": doc.extraction_attempts},
         commit=False,
     )
+    db.flush()
+
+    # Bila setelah requeue hitungannya sudah mencapai batas, dokumen langsung ditandai gagal
+    if doc.extraction_attempts >= settings.extraction_max_attempts:
+        tandai_ekstraksi_kehabisan_percobaan(db, document_ids=[doc.id], commit=False)
 
     db.commit()
     return {
