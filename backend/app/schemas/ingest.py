@@ -91,6 +91,7 @@ LABEL_ALASAN_MAP = {
     "teks_kosong": "Teks tidak terbaca",
     "teks_kosong_ocr": "Teks tidak terbaca",
     "duplikat": "Duplikat",
+    "percobaan_ekstraksi_habis": "Percobaan ekstraksi habis",
 }
 
 
