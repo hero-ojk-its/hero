@@ -66,6 +66,9 @@ class ExtractionResult:
     error: str | None = None
     duration_seconds: float = 0.0
     repaired: bool = False   # opened only after a pikepdf repair pass
+    # Judul kolom bila berkasnya matriks tanggapan (kolom Penjelasan/Tanggapan
+    # dibuang saat ekstraksi); kosong untuk dokumen biasa.
+    matriks_kolom: list[str] = field(default_factory=list)
 
     @property
     def text(self) -> str:
