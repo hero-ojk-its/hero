@@ -109,3 +109,46 @@ def test_subject_is_hard_capped():
     text = "TENTANG\n" + " ".join(["KETENTUAN"] * 200)
     subject = _extract_subject(text)
     assert len(subject) <= 300
+
+
+def test_identitas_dibaca_dari_amar_saat_teks_dibuka_preambul():
+    """Dokumen matriks tanggapan tidak memuat halaman judul di kolom batang
+    tubuhnya: teksnya langsung dibuka "Menimbang". Nomor pertama yang terbaca
+    di situ milik peraturan yang dirujuk Mengingat — #2016 dan #2017 terbaca
+    sebagai "UU Nomor 21 Tahun 2011" (temuan 16 Nov 2026)."""
+    teks = (
+        "Menimbang\n"
+        "a. bahwa Otoritas Jasa Keuangan berfungsi menyelenggarakan sistem pengaturan;\n"
+        "Mengingat\n"
+        "1. Undang-Undang Nomor 21 Tahun 2011 tentang Otoritas Jasa Keuangan "
+        "(Lembaran Negara Republik Indonesia Tahun 2011 Nomor 111);\n"
+        "Menetapkan Memutuskan:\n"
+        "PERATURAN DEWAN KOMISIONER OTORITAS\n"
+        "JASA KEUANGAN TENTANG KOMITE\n"
+        "PENGEMBANGAN DAN PENGUATAN KEUANGAN\n"
+        "SYARIAH DI OTORITAS JASA KEUANGAN\n"
+        "BAB I\nKETENTUAN UMUM\n"
+        "Pasal 1\n"
+        "Dalam Peraturan Dewan Komisioner ini yang dimaksud dengan OJK adalah lembaga negara.\n"
+    )
+    md = extract_metadata(teks)
+    assert md.doc_type == "PDK"
+    assert md.number is None                      # draf memang belum bernomor
+    assert md.subject and "KOMITE PENGEMBANGAN" in md.subject
+    assert "Undang-Undang" not in (md.subject or "")
+
+
+def test_dokumen_berhalaman_judul_tidak_berubah():
+    """Peraturan dengan halaman judul utuh tetap dibaca dari situ."""
+    teks = (
+        "SALINAN\nPERATURAN OTORITAS JASA KEUANGAN\nNOMOR 12/POJK.03/2021\n"
+        "TENTANG\nKONSOLIDASI BANK UMUM\n"
+        "DENGAN RAHMAT TUHAN YANG MAHA ESA\n"
+        "Menimbang\na. bahwa perlu dilakukan konsolidasi;\n"
+        "Mengingat\n1. Undang-Undang Nomor 21 Tahun 2011 tentang Otoritas Jasa Keuangan;\n"
+        "Menetapkan: PERATURAN OTORITAS JASA KEUANGAN TENTANG KONSOLIDASI BANK UMUM\n"
+    )
+    md = extract_metadata(teks)
+    assert md.doc_type == "POJK"
+    assert md.number == "12/POJK.03/2021"
+    assert md.subject and "KONSOLIDASI BANK UMUM" in md.subject
