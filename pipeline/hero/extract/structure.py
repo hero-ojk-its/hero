@@ -141,21 +141,8 @@ def _split_ayat(body: str) -> list[tuple[str, str]]:
     return [(n, t) for n, t in ayat if t]
 
 
-def _buang_nomor_kembar(number: str, rest: str) -> str:
-    """Buang "Pasal N" kedua yang berurutan: "Pasal 41 Pasal 41 BPR wajib …".
-
-    Dokumen matriks tanggapan mencetak nomor pasal di kolom batang tubuh DAN
-    di kolom penjelasan. Bila kedua kolom terbaca menyambung, nomornya muncul
-    dua kali dan sisa barisnya menjadi "Pasal 41 BPR wajib …" — bukan pembuka
-    ketentuan, sehingga pasalnya tetap tak terbaca (temuan QA 15 Nov).
-    """
-    kembar = re.match(rf"(?:PASAL|ARTICLE)\s+{re.escape(number)}\b\s*(.*)$",
-                      rest, re.IGNORECASE)
-    return kembar.group(1).strip() if kembar else rest
-
-
-def _inline_pasal_heading(stripped: str, expected: int) -> tuple[str, str] | None:
-    """Apakah ``stripped`` judul "Pasal N" yang direkatkan ke badan pasalnya?
+def _inline_pasal_heading(stripped: str, expected: int) -> re.Match[str] | None:
+    """Is ``stripped`` a "Pasal N" heading glued to its body by the extractor?
 
     Only told apart from a citation by context, so three signals must agree:
     the number continues the run of articles (like diktum and section
@@ -171,12 +158,17 @@ def _inline_pasal_heading(stripped: str, expected: int) -> tuple[str, str] | Non
     rest = _buang_nomor_kembar(number, m.group(2).strip())
     if not rest or _RUJUKAN_LANJUTAN.match(rest) or not (rest[0].isupper() or rest[0] == "("):
         return None
+    rest = m.group(2).strip()
+    if not rest or _RUJUKAN_LANJUTAN.match(rest) or not (rest[0].isupper() or rest[0] == "("):
+        return None
+    number = m.group(1)
     digits = int(re.sub(r"\D", "", number) or 0)
     suffix = number[len(str(digits)):].strip()
     # "Pasal 12A" is inserted after Pasal 12, so it does not advance the run.
     if digits != expected and not (suffix and digits == expected - 1):
         return None
     return number, rest
+    return m
 
 
 def parse_structure(pages: list[PageText], *, pasal_sebaris: bool = False) -> DocumentStructure:
@@ -325,6 +317,17 @@ def parse_structure(pages: list[PageText], *, pasal_sebaris: bool = False) -> Do
             if nomor_pasal:
                 saw_pasal = True
                 start_article(nomor_pasal, page.number)
+            inline_body = ""
+            if m is None and pasal_sebaris and not in_attachment:
+                m = _inline_pasal_heading(stripped, pasal_sebaris_count + 1)
+                if m is not None:
+                    inline_body = m.group(2).strip()
+                    # Nomor pokok, bukan jumlah pasal: "Pasal 2A" menyisip di
+                    # antara 2 dan 3, jadi ia tidak memajukan urutan.
+                    pasal_sebaris_count = int(re.sub(r"\D", "", m.group(1)) or 0)
+            if m:
+                saw_pasal = True
+                start_article(m.group(1), page.number)
                 if inline_body:
                     buf.append(inline_body)
                 continue
