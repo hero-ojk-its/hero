@@ -469,3 +469,36 @@ def test_08_inactive_documents_untouched(
     assert doc_inactive.extraction_attempts == settings.extraction_max_attempts
     assert doc_inactive.processing_status == StatusPemrosesan.diterima
 
+
+
+def test_09_requeue_dengan_reset_percobaan_membuka_dokumen_yang_sudah_gagal(
+    client: TestClient, db_session: Session, test_storage: StorageService
+):
+    """9. Dokumen yang gagal karena bug pipeline harus bisa diantre ulang sesudah
+    pipeline-nya diperbaiki: requeue?reset_percobaan=true menolkan hitungannya,
+    sehingga dokumen tidak langsung ditandai gagal lagi (temuan 16 Nov 2026,
+    dokumen matriks #2016 dan #2017)."""
+    doc = _seed_test_doc(
+        db_session,
+        test_storage,
+        title="Dokumen Matriks Gagal",
+        attempts=settings.extraction_max_attempts,
+        status=StatusPemrosesan.gagal,
+    )
+
+    resp = client.post(
+        f"/api/v1/internal/extraction/requeue/{doc.id}?reset_percobaan=true",
+        headers=INTERNAL_HEADERS,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["percobaan"] == 0
+
+    db_session.refresh(doc)
+    assert doc.processing_status == StatusPemrosesan.diterima
+    assert doc.extraction_attempts == 0
+    assert doc.extraction_claimed_at is None
+
+    # dan dokumennya benar-benar bisa diklaim lagi oleh worker
+    klaim = client.post("/api/v1/internal/extraction/claim?limit=10", headers=INTERNAL_HEADERS)
+    assert klaim.status_code == 200
+    assert any(item["document_id"] == doc.id for item in klaim.json())

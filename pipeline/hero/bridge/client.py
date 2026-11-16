@@ -236,8 +236,16 @@ class BackendClient:
                          "halaman, hierarki ayat, dan ganti-bersih diaktifkan")
             self._contract = dict(_CONTRACT_V2, terdeteksi=True, sumber="jawaban backend")
 
-    def requeue(self, document_id: int) -> dict[str, Any]:
-        return self._json("POST", f"/api/v1/internal/extraction/requeue/{document_id}")
+    def requeue(self, document_id: int, reset_percobaan: bool = False) -> dict[str, Any]:
+        """Kembalikan dokumen ke antrean ekstraksi.
+
+        ``reset_percobaan`` menolkan jatah percobaan di backend. Tanpa itu,
+        dokumen yang sudah tiga kali gagal langsung ditandai gagal lagi — jadi
+        perbaikan pipeline tidak pernah sampai ke dokumen yang justru paling
+        membutuhkannya.
+        """
+        sisipan = "?reset_percobaan=true" if reset_percobaan else ""
+        return self._json("POST", f"/api/v1/internal/extraction/requeue/{document_id}{sisipan}")
 
     def close(self) -> None:
         self.http.close()

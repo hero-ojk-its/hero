@@ -1034,10 +1034,21 @@ def patch_extraction_result(
 )
 def requeue_document_extraction(
     document_id: int,
+    reset_percobaan: bool = Query(
+        False,
+        description="Nolkan hitungan percobaan ekstraksi. Dipakai saat dokumen diantre ulang "
+                    "karena PIPELINE-nya diperbaiki, bukan karena gangguan sesaat.",
+    ),
     db: Session = Depends(get_db),
 ):
     """
-    Mengembalikan dokumen ke status 'diterima' dan mereset claimed_at (tidak mereset attempt count).
+    Mengembalikan dokumen ke status 'diterima' dan mereset claimed_at.
+
+    Hitungan percobaan TIDAK direset kecuali ``reset_percobaan=true``. Tanpa itu,
+    dokumen yang sudah kehabisan jatah percobaan langsung ditandai gagal lagi di
+    bawah — benar untuk gangguan sesaat, tetapi membuat dokumen yang gagal karena
+    bug pipeline tidak akan pernah bisa diekstraksi ulang sesudah bug itu
+    diperbaiki (ditemukan 16 Nov 2026 pada dokumen matriks #2016 dan #2017).
     """
     doc = db.query(Document).filter(
         Document.id == document_id,
@@ -1046,14 +1057,18 @@ def requeue_document_extraction(
     if not doc:
         raise HTTPException(status_code=404, detail=f"Dokumen ID {document_id} tidak ditemukan.")
 
+    percobaan_sebelum = doc.extraction_attempts
     doc.processing_status = StatusPemrosesan.diterima
     doc.extraction_claimed_at = None
+    if reset_percobaan:
+        doc.extraction_attempts = 0
 
     record_audit(
         db,
         action=EXTRACTION_REQUEUED,
         target_resource=f"document:{doc.id}",
-        detail={"document_id": doc.id, "attempt": doc.extraction_attempts},
+        detail={"document_id": doc.id, "attempt": percobaan_sebelum,
+                "reset_percobaan": reset_percobaan},
         commit=False,
     )
     db.flush()
@@ -1066,6 +1081,7 @@ def requeue_document_extraction(
     return {
         "status": "requeued",
         "document_id": doc.id,
+        "percobaan": doc.extraction_attempts,
     }
 
 
