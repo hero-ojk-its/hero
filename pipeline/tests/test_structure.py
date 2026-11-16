@@ -1,6 +1,6 @@
 """Pasal / ayat / section parsing."""
 from hero.extract.structure import (
-    parse_structure, roman_to_int, structure_quality,
+    _inline_pasal_heading, parse_structure, roman_to_int, structure_quality,
 )
 from hero.models import PageText
 
@@ -191,3 +191,33 @@ def test_empty_input():
     struct = parse_structure([])
     assert struct.articles == []
     assert not struct.has_structure
+
+
+def test_nomor_pasal_kembar_dari_dua_kolom_tetap_terbaca():
+    """Matriks tanggapan mencetak nomor pasal di kolom batang tubuh DAN
+    penjelasan; bila keduanya terbaca menyambung, nomornya muncul dua kali."""
+    assert _inline_pasal_heading(
+        "Pasal 40 Pasal 40 BPR atau BPR Syariah wajib menyelenggarakan TI.", 40
+    ) == ("40", "BPR atau BPR Syariah wajib menyelenggarakan TI.")
+    pages = [PageText(number=1, source="text-layer", text=(
+        "Pasal 1 Pasal 1 BPR atau BPR Syariah wajib menyelenggarakan teknologi informasi.\n"
+        "Pasal 2 Pasal 2 BPR atau BPR Syariah wajib menyampaikan laporan kepada Otoritas Jasa Keuangan.\n"
+    ))]
+    struct = parse_structure(pages, pasal_sebaris=True)
+    assert [a.number for a in struct.articles] == ["1", "2"]
+    assert struct.articles[0].text.startswith("BPR atau BPR Syariah wajib")
+    assert "Pasal 1" not in struct.articles[0].text
+
+
+def test_judul_bab_yang_tercetak_dua_baris_tidak_terpotong():
+    pages = [PageText(number=1, source="text-layer", text=(
+        "BAB IX\n"
+        "PENGENDALIAN DAN AUDIT INTERN BPR\n"
+        "DAN BPR SYARIAH\n"
+        "Pasal 1\n"
+        "BPR wajib menyelenggarakan audit intern.\n"
+    ))]
+    struct = parse_structure(pages)
+    assert struct.babs[0]["title"] == "Pengendalian Dan Audit Intern Bpr Dan Bpr Syariah"
+    assert struct.articles[0].number == "1"
+    assert "AUDIT INTERN" not in struct.articles[0].text
