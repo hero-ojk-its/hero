@@ -19,6 +19,7 @@ from pathlib import Path
 import pymupdf
 
 from hero.config import OcrSettings, PdfSettings
+from hero.extract.kolom import RencanaKolom, rencana_matriks, teks_matriks
 from hero.extract.ocr import ocr_pixmap_bytes, tesseract_available
 from hero.models import ExtractionResult, PageText
 
@@ -361,8 +362,16 @@ def susun_baris(words: list[tuple]) -> str:
     return "\n".join(out)
 
 
-def page_text(page) -> str:
-    """Teks halaman dalam urutan baca bila urutan berkasnya terbukti acak; selain itu apa adanya."""
+def page_text(page, rencana: "RencanaKolom | None" = None) -> str:
+    """Teks halaman dalam urutan baca bila urutan berkasnya terbukti acak; selain itu apa adanya.
+
+    ``rencana`` berisi kolom tabel dokumen bila berkasnya berbentuk matriks
+    tanggapan; halaman lalu dibaca kolom demi kolom, bukan baris demi baris.
+    """
+    if rencana is not None:
+        teks = teks_matriks(page, rencana)
+        if teks.strip():
+            return teks
     blocks = [b for b in page.get_text("blocks") if b[6] == 0 and b[4].strip()]
     if not urutan_acak(blocks):
         return page.get_text("text")
@@ -414,10 +423,16 @@ def extract_pdf(
             pages: list[PageText] = []
             ocr_todo: list[int] = []
             garbled: set[int] = set()
+            # Satu kali per dokumen: kolomnya sama di seluruh halaman.
+            rencana = None if force_ocr else rencana_matriks(doc)
+            if rencana is not None:
+                result.matriks_kolom = rencana.judul
+                log.info("%s: matriks tanggapan, kolom %s", path.name,
+                         list(zip(rencana.judul, rencana.peran)))
 
             for i in range(doc.page_count):
                 try:
-                    raw = "" if force_ocr else page_text(doc[i])
+                    raw = "" if force_ocr else page_text(doc[i], rencana)
                 except Exception as exc:  # noqa: BLE001 - one bad page ≠ a bad doc
                     log.warning("%s: page %d text layer unreadable (%s); "
                                "falling back to OCR", path.name, i + 1, exc)

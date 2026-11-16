@@ -33,7 +33,7 @@ from typing import Any
 
 from hero.extract.structure import DIKTUM_ORDINAL
 
-VERSION = "v2.5"
+VERSION = "v2.6"
 
 # Lower-case only, matched case-sensitively: Indonesian legislative drafting
 # writes obligations in lower case ("wajib menyampaikan") and defined terms in
@@ -58,7 +58,11 @@ MARKERS: tuple[tuple[str, str, int], ...] = (
     # tengah kalimat terlalu umum dan akan menangkap hampir semua kalimat.
     (rf"\bbertugas\b|\bmempunyai tugas\b|\bbertanggung jawab\b|^(?i:{_KERJA_TUGAS})\b", "Tugas", 3),
     (r"\bpaling lambat\b|\bpaling lama\b|\bdalam jangka waktu\b", "Batas Waktu", 4),
-    (r"\bdicabut dan dinyatakan tidak berlaku\b", "Pencabutan", 5),
+    # Pencabutan diperiksa SEBELUM Masa Berlaku dan tidak lagi menuntut kalimat
+    # bakunya utuh: "Pada saat … ini mulai berlaku, POJK 75/POJK.03/2016 …
+    # dicabut" dulu terbaca sebagai Masa Berlaku karena hanya frasa lengkap
+    # "dicabut dan dinyatakan tidak berlaku" yang dikenali (temuan QA 15 Nov).
+    (r"\bdicabut\b|\bdinyatakan tidak berlaku\b", "Pencabutan", 5),
     (r"\bmulai berlaku pada\b|\bberlaku sejak\b", "Masa Berlaku", 6),
     # Official English translations (OJK and BI publish both).
     (r"\bshall be (imposed|subject to) (an? )?(administrative )?sanction", "Sanksi", 0),
@@ -96,7 +100,37 @@ _TRAILING_HEADING = re.compile(r"\s+(Paragraf \d+|Bagian (Kesatu|Kedua|Ketiga|Ke
 # referring to itself ("Pada saat Peraturan OJK ini mulai berlaku, …").
 _REVOKED_NAME = re.compile(r"((?:Peraturan|Surat Edaran|Keputusan)(?:(?!\bini\b)[^;]){0,120}?Nomor\s+[\w./-]+"
                            r"(?:\s+Tahun\s+\d{4})?\s+tentang\s+[^(;]{5,160}?)(?=\s*\(|;|,? dicabut|$)")
-MAX_POINT_CHARS = 900
+# Batas panjang satu poin. Dinaikkan dari 900: satu ayat berdaftar a–e dengan
+# rincian angka memang sepanjang ini, dan memotongnya di tengah membuat
+# pembaca awam mengira dokumennya yang terputus (temuan QA 15 Nov).
+MAX_POINT_CHARS = 1600
+# Akhir kalimat atau akhir satu butir daftar — tempat yang wajar untuk berhenti.
+_AKHIR_KALIMAT = re.compile(r"[.;:]['\")\]]?(?=\s|$)")
+# Potongan tidak boleh berhenti tepat sesudah penanda butir ("… sesuai dengan: a.").
+_BUTIR_MENGGANTUNG = re.compile(r"(?:^|\s)(?:[a-z]|\d{1,2})\.$")
+# Setidaknya separuh batas harus tersisa; kalau tidak, potong per kata saja.
+_MIN_RASIO_POTONG = 0.5
+
+
+def potong_rapi(teks: str, maks: int = MAX_POINT_CHARS) -> str:
+    """Potong ``teks`` di akhir kalimat terakhir yang masih muat.
+
+    Pemotongan lama memakai ``teks[:maks].rsplit(" ", 1)``, jadi kutipan
+    berhenti di tengah kalimat ("… dinyatakan …"). Di sini titik potongnya
+    adalah tanda baca akhir kalimat — dan bukan penanda butir yang
+    menggantung, yang justru membuat daftar tampak hilang.
+    """
+    if len(teks) <= maks:
+        return teks
+    potong = ""
+    for m in _AKHIR_KALIMAT.finditer(teks[:maks + 1]):
+        kandidat = teks[:m.end()].rstrip()
+        if _BUTIR_MENGGANTUNG.search(kandidat):
+            continue
+        potong = kandidat
+    if len(potong) < _MIN_RASIO_POTONG * maks:
+        potong = teks[:maks].rsplit(" ", 1)[0].rstrip()
+    return potong + " …"
 
 
 @dataclass
@@ -109,6 +143,9 @@ class Point:
     prioritas: int
     subjek: str | None = None
     terpotong: bool = False
+    # Kategori yang hanya muncul di rincian butir, bukan di norma pokoknya —
+    # supaya kewajiban pelaporan di dalam daftar tetap dapat ditelusuri.
+    kategori_lain: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -218,14 +255,55 @@ def _clean(s: str) -> str:
     return _TRAILING_HEADING.sub("", re.sub(r"\s+", " ", s).strip()).strip()
 
 
-def classify_unit(text: str) -> tuple[str, int] | None:
-    # "Membentuk Tim … yang selanjutnya disebut Tim" adalah norma, bukan definisi.
-    if _DEFINITION.search(text[:300]) and not _TUGAS_AWAL.match(text):
-        return None
+# Daftar berhuruf/berangka yang dibuka kalimat pengantar ("… wajib memenuhi
+# ketentuan: a. …"). Pengantarnya lah yang memuat normanya.
+_PEMBUKA_DAFTAR = re.compile(r"(?:^|\s)(?:[a-z]\.|\d{1,2}\.)\s+(?=\S)")
+_MIN_PENGANTAR = 25
+
+
+def kalimat_pengantar(text: str) -> str:
+    """Kalimat pengantar sebuah unit: bagian sebelum daftar rinciannya.
+
+    Penanda kategori dulu dicari di SELURUH teks ayat, sehingga satu kata di
+    rincian huruf a angka 3 menentukan kategori seluruh pasal: Pasal 24 #2018
+    ("Pelaksanaan fungsi kepatuhan wajib memenuhi ketentuan: …") masuk kategori
+    Pelaporan hanya karena salah satu rinciannya menyebut penyampaian laporan
+    (temuan QA 15 Nov). Normanya ada di pengantar; rincian hanya menjabarkan.
+    """
+    m = _PEMBUKA_DAFTAR.search(text)
+    if not m:
+        return text
+    pengantar = text[:m.start()].strip()
+    return pengantar if len(pengantar) >= _MIN_PENGANTAR else text
+
+
+def _cocok(text: str) -> tuple[str, int] | None:
     for rx, cat, pr in _MARKERS:
         if rx.search(text):
             return cat, pr
     return None
+
+
+def kategori_rincian(text: str) -> list[str]:
+    """Kategori lain yang muncul di rincian, setelah kategori utamanya.
+
+    Kewajiban pelaporan yang terkubur di daftar huruf tetap harus dapat
+    ditemukan, tanpa menyandera kategori utama pasal itu.
+    """
+    utama = classify_unit(text)
+    rincian = text[len(kalimat_pengantar(text)):]
+    lain = []
+    for rx, cat, _pr in _MARKERS:
+        if cat not in lain and (not utama or cat != utama[0]) and rx.search(rincian):
+            lain.append(cat)
+    return lain
+
+
+def classify_unit(text: str) -> tuple[str, int] | None:
+    # "Membentuk Tim … yang selanjutnya disebut Tim" adalah norma, bukan definisi.
+    if _DEFINITION.search(text[:300]) and not _TUGAS_AWAL.match(text):
+        return None
+    return _cocok(kalimat_pengantar(text)) or _cocok(text)
 
 
 def subject_of(text: str) -> str | None:
@@ -313,8 +391,8 @@ def extract_points(articles: list[dict[str, Any]]) -> list[Point]:
         ref = NO_PASAL if num == NO_PASAL else unit_ref(num, ayat)
         points.append(Point(id=f"F{len(points) + 1}", kategori=kategori, pasal=ref,
                             halaman=art.get("page"), prioritas=prioritas, subjek=subject_of(teks),
-                            teks=(teks[:MAX_POINT_CHARS].rsplit(" ", 1)[0] + " …") if cut else teks,
-                            terpotong=cut))
+                            teks=potong_rapi(teks) if cut else teks,
+                            kategori_lain=kategori_rincian(teks), terpotong=cut))
 
     for art in articles:
         for ayat, body in units_of(art):
