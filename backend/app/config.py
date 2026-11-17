@@ -107,6 +107,18 @@ class Settings(BaseSettings):
     # Kemiripan Draft Berulang (Langkah 30)
     draft_kemiripan_ambang: float = 80.0
 
+    # Ekspor Catatan Dinas (Langkah 39 / Backlog #76 / Weekly #10)
+    cd_default_yth: str = "Kepala Departemen"
+    cd_default_dari: str = "Analis Eksekutif"
+    cd_default_sifat: str = "Biasa"
+    cd_default_lampiran: str = "-"
+    cd_default_hal_template: str = "Tanggapan atas {judul}"
+    cd_placeholder_tanggal: str = "…"
+    cd_placeholder_nomor_cd: str = "CD-xx/…/xxxx"
+    cd_placeholder_nomor_nd: str = "ND-xx/…/xxxx"
+    cd_placeholder_unit_peminta: str = "…"
+    cd_placeholder_hal_nd: str = "…"
+
     @field_validator("category_path_template")
     @classmethod
     def validate_category_path_template(cls, v: str) -> str:

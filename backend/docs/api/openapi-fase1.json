@@ -3018,7 +3018,7 @@
           "Internal"
         ],
         "summary": "[Internal] Mengembalikan dokumen ke antrean ekstraksi",
-        "description": "Mengembalikan dokumen ke status 'diterima' dan mereset claimed_at (tidak mereset attempt count).",
+        "description": "Mengembalikan dokumen ke status 'diterima' dan mereset claimed_at.\n\nHitungan percobaan TIDAK direset kecuali ``reset_percobaan=true``. Tanpa itu,\ndokumen yang sudah kehabisan jatah percobaan langsung ditandai gagal lagi di\nbawah — benar untuk gangguan sesaat, tetapi membuat dokumen yang gagal karena\nbug pipeline tidak akan pernah bisa diekstraksi ulang sesudah bug itu\ndiperbaiki (ditemukan 16 Nov 2026 pada dokumen matriks #2016 dan #2017).",
         "operationId": "requeue_document_extraction_api_v1_internal_extraction_requeue__document_id__post",
         "parameters": [
           {
@@ -3029,6 +3029,18 @@
               "type": "integer",
               "title": "Document Id"
             }
+          },
+          {
+            "name": "reset_percobaan",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Nolkan hitungan percobaan ekstraksi. Dipakai saat dokumen diantre ulang karena PIPELINE-nya diperbaiki, bukan karena gangguan sesaat.",
+              "default": false,
+              "title": "Reset Percobaan"
+            },
+            "description": "Nolkan hitungan percobaan ekstraksi. Dipakai saat dokumen diantre ulang karena PIPELINE-nya diperbaiki, bukan karena gangguan sesaat."
           },
           {
             "name": "X-Internal-API-Key",

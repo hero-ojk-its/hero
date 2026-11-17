@@ -40,6 +40,7 @@ from app.models.user import User
 from app.routers.auth import ALGORITHM
 from app.routers.ml_gateway import get_ml_client
 from app.services.audit_service import EXPORT_HARMONIZATION
+from app.services.catatan_dinas_export_service import format_tanggal_indonesia
 
 
 @pytest.fixture(autouse=True)
@@ -269,7 +270,7 @@ def test_cd01_docx_ekspor_dengan_isian_form_lengkap(client: TestClient, db_sessi
 
 
 def test_cd02_form_kosong_placeholder_dan_butir4_dilewati(client: TestClient, db_session: Session):
-    """2. Form kosong -> placeholder muncul; butir 4 dilewati dan penomoran menyesuaikan."""
+    """2. Form kosong -> kop baku Weekly #10 (Kepala Departemen, Analis Eksekutif), hal default, tanggal '…' (bukan hari ini); butir 4 dilewati dan penomoran menyesuaikan."""
     draft = create_test_doc(title="Draf Perbankan Digital")
     db_session.add(draft)
     db_session.commit()
@@ -283,6 +284,10 @@ def test_cd02_form_kosong_placeholder_dan_butir4_dilewati(client: TestClient, db
         },
     )
 
+    now_wib = datetime.now(timezone(timedelta(hours=7))).date()
+    tgl_hari_ini = format_tanggal_indonesia(now_wib)
+
+    # A. Ekspor DOCX dengan form kosong
     resp = client.post(
         f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
         json={},
@@ -291,12 +296,16 @@ def test_cd02_form_kosong_placeholder_dan_butir4_dilewati(client: TestClient, db
 
     full_text = extract_docx_text(resp.content)
 
-    # Placeholder default
+    # Kop baku Weekly #10 dan default
     assert "NOMOR CD-xx/…/xxxx" in full_text
-    assert "…" in full_text
+    assert "Kepala Departemen" in full_text
+    assert "Analis Eksekutif" in full_text
     assert "Biasa" in full_text
     assert "-" in full_text
     assert f"Tanggapan atas {draft.title}" in full_text
+    assert "…" in full_text
+    # Tanggal harus berupa placeholder '…' dan BUKAN tanggal hari ini
+    assert tgl_hari_ini not in full_text
 
     # Penomoran menyesuaikan: ada 1, 2, 3, 4, dan TIDAK ada 5
     assert "1. " in full_text
@@ -304,6 +313,20 @@ def test_cd02_form_kosong_placeholder_dan_butir4_dilewati(client: TestClient, db
     assert "3. " in full_text
     assert "4. Apabila Bapak/Ibu sependapat, terlampir konsep nota dinas tanggapan untuk ditindaklanjuti." in full_text
     assert "5. " not in full_text
+
+    # B. Ekspor PDF dengan form kosong
+    resp_pdf = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={"format": "pdf"},
+    )
+    assert resp_pdf.status_code == 200
+    pdf_text = extract_pdf_text(resp_pdf.content)
+
+    assert "Kepala Departemen" in pdf_text
+    assert "Analis Eksekutif" in pdf_text
+    assert f"Tanggapan atas {draft.title}" in pdf_text
+    assert "…" in pdf_text
+    assert tgl_hari_ini not in pdf_text
 
 
 def test_cd03_butir3_memuat_semua_temuan_urut_pasal_termasuk_pasal_baru(client: TestClient, db_session: Session):
@@ -895,5 +918,123 @@ def test_cd15_temuan_disaring_akses_menampilkan_kalimat_penutup(client: TestClie
     assert resp_pdf.status_code == 200
     text_pdf = extract_pdf_text(resp_pdf.content)
     assert "2 temuan tidak ditampilkan karena pembandingnya tidak dapat diakses." in " ".join(text_pdf.split())
+
+
+def test_cd16_isian_form_kop_override_dan_format_tanggal(client: TestClient, db_session: Session):
+    """8. yth, dari, tanggal diisi form -> nilai form dipakai, format tanggal '13 November 2026' di DOCX dan PDF."""
+    draft = create_test_doc(title="Draf Isian Manual")
+    db_session.add(draft)
+    db_session.commit()
+
+    seed_harmonisasi_result(db_session, draft, {"versi": "1.0", "temuan": []})
+
+    req_body = {
+        "yth": "Direktur Pengaturan Perbankan",
+        "dari": "Analis Eksekutif Senior",
+        "tanggal": "2026-11-13",
+        "sifat": "Segera",
+        "lampiran": "1 (satu) Berkas",
+        "hal": "Tanggapan Khusus atas Draf",
+    }
+
+    # A. DOCX
+    resp_docx = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json=dict(req_body, format="docx"),
+    )
+    assert resp_docx.status_code == 200
+    text_docx = extract_docx_text(resp_docx.content)
+    assert "Direktur Pengaturan Perbankan" in text_docx
+    assert "Analis Eksekutif Senior" in text_docx
+    assert "13 November 2026" in text_docx
+    assert "Segera" in text_docx
+    assert "1 (satu) Berkas" in text_docx
+    assert "Tanggapan Khusus atas Draf" in text_docx
+
+    # B. PDF
+    resp_pdf = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json=dict(req_body, format="pdf"),
+    )
+    assert resp_pdf.status_code == 200
+    text_pdf = extract_pdf_text(resp_pdf.content)
+    assert "Direktur Pengaturan Perbankan" in text_pdf
+    assert "Analis Eksekutif Senior" in text_pdf
+    assert "13 November 2026" in text_pdf
+    assert "Segera" in text_pdf
+    assert "1 (satu) Berkas" in text_pdf
+    assert "Tanggapan Khusus atas Draf" in text_pdf
+
+
+def test_cd17_konfigurasi_bawaan_dapat_diubah_tanpa_ubah_kode(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient, db_session: Session
+):
+    """9. Nilai bawaan kop dapat diubah lewat konfigurasi Settings (env/override) tanpa ubah kode."""
+    draft = create_test_doc(title="Draf Tata Kelola BPR")
+    db_session.add(draft)
+    db_session.commit()
+
+    seed_harmonisasi_result(db_session, draft, {"versi": "1.0", "temuan": []})
+
+    # Override konfigurasi Settings
+    monkeypatch.setattr(settings, "cd_default_yth", "Direktur Utama Pengawasan")
+    monkeypatch.setattr(settings, "cd_default_dari", "Pemeriksa Eksekutif Madya")
+    monkeypatch.setattr(settings, "cd_default_sifat", "Rahasia")
+    monkeypatch.setattr(settings, "cd_default_lampiran", "2 (dua) Eksemplar")
+    monkeypatch.setattr(settings, "cd_default_hal_template", "Telaah Regulasi: {judul}")
+    monkeypatch.setattr(settings, "cd_placeholder_tanggal", "[TANGGAL_MANUAL]")
+    monkeypatch.setattr(settings, "cd_placeholder_nomor_cd", "CD-KUSTOM/2026")
+
+    # Form kosong -> harus memuat nilai konfigurasi baru
+    resp_docx = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={"format": "docx"},
+    )
+    assert resp_docx.status_code == 200
+    text_docx = extract_docx_text(resp_docx.content)
+    assert "NOMOR CD-KUSTOM/2026" in text_docx
+    assert "Direktur Utama Pengawasan" in text_docx
+    assert "Pemeriksa Eksekutif Madya" in text_docx
+    assert "Rahasia" in text_docx
+    assert "2 (dua) Eksemplar" in text_docx
+    assert "Telaah Regulasi: Draf Tata Kelola BPR" in text_docx
+    assert "[TANGGAL_MANUAL]" in text_docx
+
+    # PDF juga harus memuat nilai konfigurasi baru
+    resp_pdf = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={"format": "pdf"},
+    )
+    assert resp_pdf.status_code == 200
+    text_pdf = extract_pdf_text(resp_pdf.content)
+    assert "CD-KUSTOM/2026" in text_pdf
+    assert "Direktur Utama Pengawasan" in text_pdf
+    assert "Pemeriksa Eksekutif Madya" in text_pdf
+    assert "Rahasia" in text_pdf
+    assert "2 (dua) Eksemplar" in text_pdf
+    assert "Telaah Regulasi: Draf Tata Kelola BPR" in text_pdf
+    assert "[TANGGAL_MANUAL]" in text_pdf
+
+
+def test_cd18_pola_hal_tidak_dobel_tanggapan_atas(client: TestClient, db_session: Session):
+    """10. Judul draf yang sudah diawali 'Tanggapan atas' tidak diduplikasi saat pola hal default diterapkan."""
+    draft = create_test_doc(title="Tanggapan atas Rancangan POJK Pasar Modal")
+    db_session.add(draft)
+    db_session.commit()
+
+    seed_harmonisasi_result(db_session, draft, {"versi": "1.0", "temuan": []})
+
+    resp = client.post(
+        f"/api/v1/documents/{draft.id}/harmonisasi/ekspor/catatan-dinas",
+        json={"format": "docx"},
+    )
+    assert resp.status_code == 200
+    text = extract_docx_text(resp.content)
+
+    # Memuat judul asli dengan benar
+    assert "Tanggapan atas Rancangan POJK Pasar Modal" in text
+    # TIDAK memuat duplikasi 'Tanggapan atas Tanggapan atas'
+    assert "Tanggapan atas Tanggapan atas Rancangan POJK Pasar Modal" not in text
+
 
 

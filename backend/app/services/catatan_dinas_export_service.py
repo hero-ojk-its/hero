@@ -27,6 +27,7 @@ from reportlab.lib.units import mm
 from reportlab.platypus import HRFlowable, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.analysis_result import AnalysisResult
 from app.models.article import Article
 from app.models.document import Document
@@ -389,6 +390,31 @@ def _get_butir_1_content(
     return template_text, None, None
 
 
+def resolve_default_hal(judul_draf: str, template: Optional[str] = None) -> str:
+    """
+    Menyusun nilai perihal (hal) bawaan Catatan Dinas.
+    Mencegah duplikasi frasa 'Tanggapan atas' jika judul dokumen sudah diawali teks tersebut.
+    """
+    tpl = template or settings.cd_default_hal_template
+    clean_judul = (judul_draf or "").strip()
+    prefix_lower = "tanggapan atas "
+
+    if clean_judul.lower().startswith(prefix_lower):
+        if tpl.strip().lower() == "tanggapan atas {judul}":
+            return clean_judul
+        clean_judul_without_prefix = clean_judul[len(prefix_lower):].strip()
+        if "{judul}" in tpl:
+            return tpl.format(judul=clean_judul_without_prefix)
+        return f"{tpl} {clean_judul_without_prefix}".strip()
+
+    if "{judul}" in tpl:
+        return tpl.format(judul=clean_judul)
+    elif "{judul_draf}" in tpl:
+        return tpl.format(judul_draf=clean_judul)
+    else:
+        return f"{tpl} {clean_judul}".strip()
+
+
 def build_catatan_dinas_data(
     db: Session,
     doc: Document,
@@ -402,19 +428,18 @@ def build_catatan_dinas_data(
     """
     judul_draf = doc.title or f"Dokumen #{doc.id}"
 
-    # 1. Isian identitas dengan default
-    nomor_cd = payload.nomor_cd or "CD-xx/…/xxxx"
-    yth = payload.yth or "…"
-    dari = payload.dari or "…"
-    sifat = payload.sifat or "Biasa"
-    lampiran = payload.lampiran or "-"
-    hal = payload.hal or f"Tanggapan atas {judul_draf}"
+    # 1. Isian identitas dengan default yang dapat dikonfigurasi (Weekly #10 / Backlog #76)
+    nomor_cd = payload.nomor_cd or settings.cd_placeholder_nomor_cd
+    yth = payload.yth or settings.cd_default_yth
+    dari = payload.dari or settings.cd_default_dari
+    sifat = payload.sifat or settings.cd_default_sifat
+    lampiran = payload.lampiran or settings.cd_default_lampiran
+    hal = payload.hal or resolve_default_hal(judul_draf)
 
     if payload.tanggal:
         tanggal_str = format_tanggal_indonesia(payload.tanggal)
     else:
-        now_wib = datetime.now(timezone(timedelta(hours=7))).date()
-        tanggal_str = format_tanggal_indonesia(now_wib)
+        tanggal_str = settings.cd_placeholder_tanggal
 
     identitas_rows = [
         ("Yth.", yth),
@@ -425,10 +450,14 @@ def build_catatan_dinas_data(
         ("Tanggal", tanggal_str),
     ]
 
-    unit_peminta = payload.unit_peminta or "…"
-    nomor_nd = payload.nomor_nd or "ND-xx/…/xxxx"
-    tanggal_nd_str = format_tanggal_indonesia(payload.tanggal_nd) if payload.tanggal_nd else "…"
-    hal_nd = payload.hal_nd or "…"
+    unit_peminta = payload.unit_peminta or settings.cd_placeholder_unit_peminta
+    nomor_nd = payload.nomor_nd or settings.cd_placeholder_nomor_nd
+    tanggal_nd_str = (
+        format_tanggal_indonesia(payload.tanggal_nd)
+        if payload.tanggal_nd
+        else settings.cd_placeholder_tanggal
+    )
+    hal_nd = payload.hal_nd or settings.cd_placeholder_hal_nd
 
     kalimat_pembuka = (
         f"Sehubungan dengan nota dinas {unit_peminta} nomor {nomor_nd} tanggal {tanggal_nd_str} "
