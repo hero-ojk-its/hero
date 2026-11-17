@@ -30,6 +30,7 @@ from app.services.file_validation import (
 )
 from app.services.storage_service import StorageService, get_storage_service
 from app.services.audit_service import record_audit, RETRY_FAILURE, UPDATE_FAILURE
+from app.services.document_service import tandai_ekstraksi_kehabisan_percobaan
 
 logger = logging.getLogger("hero")
 
@@ -547,6 +548,7 @@ class FailureService:
             # Requeue dokumen
             doc.processing_status = StatusPemrosesan.diterima
             doc.extraction_claimed_at = None
+            doc.extraction_attempts = 0
 
             failure.follow_up_status = StatusTindakLanjut.diproses_ulang
             failure.attempt_count += 1

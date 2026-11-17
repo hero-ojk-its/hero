@@ -52,6 +52,11 @@ RE_LAMPIRAN = re.compile(r"^\s*(?:LAMPIRAN|PENJELASAN)\b")
 
 _MAX_HEADING_LEN = 120
 
+# Kata yang menyusul nomor pasal dalam RUJUKAN, bukan dalam judul pasal:
+# "… sebagaimana dimaksud dalam Pasal 5 ayat (2) huruf a".
+_RUJUKAN_LANJUTAN = re.compile(
+    r"^(?:ayat|huruf|angka|sampai|s\.d\.|dan|atau|serta|tersebut|ini)\b", re.IGNORECASE)
+
 
 _ROMAN_VALUES = {"I": 1, "V": 5, "X": 10}
 
@@ -136,8 +141,51 @@ def _split_ayat(body: str) -> list[tuple[str, str]]:
     return [(n, t) for n, t in ayat if t]
 
 
-def parse_structure(pages: list[PageText]) -> DocumentStructure:
-    """Walk the document line by line, tracking the current heading context."""
+def _buang_nomor_kembar(number: str, rest: str) -> str:
+    """Buang "Pasal N" kedua yang berurutan: "Pasal 41 Pasal 41 BPR wajib …".
+
+    Dokumen matriks tanggapan mencetak nomor pasal di kolom batang tubuh DAN
+    di kolom penjelasan. Bila kedua kolom terbaca menyambung, nomornya muncul
+    dua kali dan sisa barisnya menjadi "Pasal 41 BPR wajib …" — bukan pembuka
+    ketentuan, sehingga pasalnya tetap tak terbaca (temuan QA 15 Nov).
+    """
+    kembar = re.match(rf"(?:PASAL|ARTICLE)\s+{re.escape(number)}\b\s*(.*)$",
+                      rest, re.IGNORECASE)
+    return kembar.group(1).strip() if kembar else rest
+
+
+def _inline_pasal_heading(stripped: str, expected: int) -> tuple[str, str] | None:
+    """Apakah ``stripped`` judul "Pasal N" yang direkatkan ke badan pasalnya?
+
+    Only told apart from a citation by context, so three signals must agree:
+    the number continues the run of articles (like diktum and section
+    numbering elsewhere here), the body does not read as the rest of a
+    citation, and it opens the way a provision does — a capital or "(1)".
+
+    Mengembalikan (nomor, badan pasal) atau ``None``.
+    """
+    m = RE_PASAL_INLINE.match(stripped)
+    if m is None:
+        return None
+    number = m.group(1)
+    rest = _buang_nomor_kembar(number, m.group(2).strip())
+    if not rest or _RUJUKAN_LANJUTAN.match(rest) or not (rest[0].isupper() or rest[0] == "("):
+        return None
+    digits = int(re.sub(r"\D", "", number) or 0)
+    suffix = number[len(str(digits)):].strip()
+    # "Pasal 12A" is inserted after Pasal 12, so it does not advance the run.
+    if digits != expected and not (suffix and digits == expected - 1):
+        return None
+    return number, rest
+
+
+def parse_structure(pages: list[PageText], *, pasal_sebaris: bool = False) -> DocumentStructure:
+    """Walk the document line by line, tracking the current heading context.
+
+    ``pasal_sebaris`` accepts "Pasal N" headings that share a line with their
+    body. It is off by default and turned on only by the retry below, when the
+    strict pass found no structure at all.
+    """
     struct = DocumentStructure()
     if not pages:
         return struct
@@ -146,6 +194,7 @@ def parse_structure(pages: list[PageText]) -> DocumentStructure:
     cur_bagian: str | None = None
     cur_paragraf: str | None = None
     pending_bab: str | None = None   # BAB number awaiting its title line
+    judul_bab = ""                   # judul BAB yang terkumpul lintas baris
     # Same wrapped-title problem as BAB, for Bagian/Paragraf (Fase 2 finding
     # T5): "Paragraf 2" prints on its own line, its title on the next. Each
     # holds the heading text seen so far while it waits for that next line.
@@ -154,6 +203,7 @@ def parse_structure(pages: list[PageText]) -> DocumentStructure:
     in_attachment = False
     saw_pasal = False       # dokumen berpasal tidak pernah memakai diktum
     diktum_count = 0
+    pasal_sebaris_count = 0   # pasal yang sudah dibuka oleh lintasan sebaris
     sections_done = False   # body sections finished, lampiran forms follow
 
     current: Article | None = None
@@ -201,17 +251,21 @@ def parse_structure(pages: list[PageText]) -> DocumentStructure:
             stripped = line.strip()
 
             if pending_bab is not None:
-                # The line right after "BAB II" is normally its title.
+                # The line right after "BAB II" is normally its title — dan
+                # judul panjang tercetak dalam beberapa baris kapital
+                # ("PENGENDALIAN DAN AUDIT INTERN BPR" / "DAN BPR SYARIAH"),
+                # yang dulu terpotong di baris pertama saja.
                 if stripped and _is_heading_like(stripped) \
-                        and not RE_PASAL_INLINE.match(stripped):
-                    struct.babs[-1]["title"] = stripped.title()
-                    cur_bab = f"BAB {pending_bab} — {stripped.title()}"
-                pending_bab = None
+                        and not RE_PASAL_INLINE.match(stripped) \
+                        and not RE_BAB.match(stripped) and not RE_BAGIAN.match(stripped) \
+                        and not RE_PARAGRAF.match(stripped) and not RE_DIKTUM.match(stripped):
+                    judul_bab = f"{judul_bab} {stripped}".strip()
+                    struct.babs[-1]["title"] = judul_bab.title()
+                    cur_bab = f"BAB {pending_bab} — {judul_bab.title()}"
+                    continue
+                pending_bab, judul_bab = None, ""
                 if struct.babs and cur_bab is None:
                     cur_bab = f"BAB {struct.babs[-1]['number']}"
-                if stripped and struct.babs and \
-                        struct.babs[-1].get("title") == stripped.title():
-                    continue
 
             if pending_bagian is not None:
                 cur_bagian, taken = _take_pending_title(pending_bagian, stripped)
@@ -235,10 +289,10 @@ def parse_structure(pages: list[PageText]) -> DocumentStructure:
                     "page": page.number,
                 })
                 cur_bab = f"BAB {number}"
+                judul_bab = inline_title
                 if inline_title:
                     cur_bab += f" — {inline_title.title()}"
-                else:
-                    pending_bab = number
+                pending_bab = number
                 cur_bagian = cur_paragraf = None
                 pending_bagian = pending_paragraf = None
                 continue
@@ -259,9 +313,20 @@ def parse_structure(pages: list[PageText]) -> DocumentStructure:
                 continue
 
             m = RE_PASAL.match(stripped)
-            if m:
+            nomor_pasal = m.group(1) if m else None
+            inline_body = ""
+            if m is None and pasal_sebaris and not in_attachment:
+                sebaris = _inline_pasal_heading(stripped, pasal_sebaris_count + 1)
+                if sebaris is not None:
+                    nomor_pasal, inline_body = sebaris
+                    # Nomor pokok, bukan jumlah pasal: "Pasal 2A" menyisip di
+                    # antara 2 dan 3, jadi ia tidak memajukan urutan.
+                    pasal_sebaris_count = int(re.sub(r"\D", "", nomor_pasal) or 0)
+            if nomor_pasal:
                 saw_pasal = True
-                start_article(m.group(1), page.number)
+                start_article(nomor_pasal, page.number)
+                if inline_body:
+                    buf.append(inline_body)
                 continue
 
             # Diktum harus berurutan (KESATU, KEDUA, …) seperti ayat: kata yang sama di
@@ -317,6 +382,13 @@ def parse_structure(pages: list[PageText]) -> DocumentStructure:
 
     close_current()
     struct.has_structure = bool(struct.articles or struct.sections)
+    if not struct.has_structure and not pasal_sebaris:
+        # Tak satu pun "Pasal N" berdiri sendiri: ekstraktor merekatkan setiap
+        # judul ke badan pasalnya. Coba sekali lagi menerima bentuk sebaris —
+        # lebih baik daripada analisa jatuh ke kalimat tanpa rujukan pasal.
+        retry = parse_structure(pages, pasal_sebaris=True)
+        if retry.articles:
+            return retry
     return struct
 
 

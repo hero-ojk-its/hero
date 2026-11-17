@@ -126,6 +126,11 @@ export default function SummaryView({
   // State Ekspansi Key Takeaways (default: maksimal 10 poin pertama)
   const [isExpandedTakeaways, setIsExpandedTakeaways] = useState<boolean>(false);
 
+  // State Ekspansi Section Ringkasan Eksekutif (default: maksimal 5 butir)
+  const [isKewajibanExpanded, setIsKewajibanExpanded] = useState<boolean>(false);
+  const [isSanksiExpanded, setIsSanksiExpanded] = useState<boolean>(false);
+  const [isPencabutanExpanded, setIsPencabutanExpanded] = useState<boolean>(false);
+
   // 1. Memuat Data Deterministik & Berkas Dokumen saat mount / documentId berubah
   useEffect(() => {
     let isMounted = true;
@@ -380,13 +385,16 @@ export default function SummaryView({
 
     // Jika tidak ditemukan dalam articles terstruktur, cari potongan di docText
     if (docText?.text && targetNum) {
-      const regex = new RegExp(`(?:Pasal|PASAL)\\s+${targetNum}\\b([\\s\\S]*?)(?=(?:Pasal|PASAL)\\s+[0-9]+|$)`, 'i');
+      const isTargetDiktum = /^ke(?:satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh|sebelas|dua\s*belas|\d+)$/i.test(targetNum);
+      const regex = isTargetDiktum
+        ? new RegExp(`(?:Diktum\\s+)?${targetNum}\\s*[:—–\\-]?\\s*([\\s\\S]*?)(?=(?:Diktum\\s+)?KE(?:SATU|DUA|TIGA|EMPAT|LIMA|ENAM|TUJUH|DELAPAN|SEMBILAN|SEPULUH|SEBELAS)|$)`, 'i')
+        : new RegExp(`(?:Pasal|PASAL)\\s+${targetNum}\\b([\\s\\S]*?)(?=(?:Pasal|PASAL)\\s+[0-9]+|$)`, 'i');
       const match = docText.text.match(regex);
       if (match && match[0]) {
         setPasalModal({
           refStr: pasalStr,
-          articleNumber: `Pasal ${parsedTarget.pasalNum}`,
-          chapterTitle: 'Hasil Ekstraksi Teks',
+          articleNumber: isTargetDiktum ? `Diktum ${parsedTarget.pasalNum}` : `Pasal ${parsedTarget.pasalNum}`,
+          chapterTitle: isTargetDiktum ? 'Hasil Ekstraksi Diktum' : 'Hasil Ekstraksi Teks',
           contentText: match[0].trim(),
         });
         return;
@@ -394,12 +402,13 @@ export default function SummaryView({
     }
 
     // Fallback jika teks belum terindeks penuh
+    const isTargetDiktum = pasalStr.toLowerCase().includes('diktum') || /^ke/i.test(targetNum || '');
     setPasalModal({
       refStr: pasalStr,
       articleNumber: pasalStr,
-      chapterTitle: 'Rujukan Naskah Regulasi',
+      chapterTitle: isTargetDiktum ? 'Rujukan Diktum Dokumen' : 'Rujukan Naskah Regulasi',
       contentText:
-        'Teks lengkap untuk pasal ini belum dapat dimuat secara terpisah. Anda dapat membuka naskah lengkap melalui tombol di bawah untuk menelusuri isi dokumen.',
+        `Teks lengkap untuk ${isTargetDiktum ? 'diktum' : 'pasal'} ini belum dapat dimuat secara terpisah. Anda dapat membuka naskah lengkap melalui tombol di bawah untuk menelusuri isi dokumen.`,
     });
   }, [docStatus?.articles, docText]);
 
@@ -461,15 +470,91 @@ export default function SummaryView({
   // Daftar poin utama
   const poinUtama: MlAnalisaPoint[] = activeData?.poin_utama || [];
 
-  // Helper membersihkan rujukan pasal teknis dari narasi Ringkasan Eksekutif
+  // Helper membersihkan rujukan pasal/diktum dalam tanda kurung dengan penanganan kurung bersarang (nested)
+  const stripParenthesizedRefs = (text: string): string => {
+    let out = '';
+    let i = 0;
+    while (i < text.length) {
+      if (text[i] === '(' || text[i] === '[') {
+        const openChar = text[i];
+        const closeChar = openChar === '(' ? ')' : ']';
+        let depth = 1;
+        let j = i + 1;
+        while (j < text.length && depth > 0) {
+          if (text[j] === openChar) depth++;
+          else if (text[j] === closeChar) depth--;
+          j++;
+        }
+        if (depth === 0) {
+          const inside = text.slice(i, j);
+          if (/(?:pasal|ps\.|diktum)/i.test(inside)) {
+            i = j;
+            continue;
+          }
+        }
+      }
+      out += text[i];
+      i++;
+    }
+    return out;
+  };
+
+  // Helper membersihkan rujukan pasal teknis dari narasi Ringkasan Eksekutif tanpa merusak isi substantif
   const cleanPasalRefs = (text: string): string => {
     if (!text) return '';
-    return text
-      .replace(/\s*\((?:lihat\s+)?(?:pasal|ps\.)\s+[0-9a-zA-Z\s,–\-\(\)]+\)/gi, '')
-      .replace(/\s*\[(?:lihat\s+)?(?:pasal|ps\.)\s+[0-9a-zA-Z\s,–\-\(\)]+\]/gi, '')
-      .replace(/(?:sebagaimana\s+dimaksud\s+(?:dalam|pada)\s+)?(?:pasal|ps\.)\s+[0-9]+(?:\s+ayat\s+\([0-9]+\))?/gi, 'ketentuan yang berlaku')
-      .replace(/\s{2,}/g, ' ')
-      .trim();
+
+    // 1. Hapus kurung / siku yang berisi rujukan pasal atau diktum
+    let res = stripParenthesizedRefs(text);
+
+    // Pola satu referensi unit hukum (Pasal / Diktum / Ayat)
+    const unitPattern = '(?:(?:pasal|ps\\.)\\s+\\d+[a-zA-Z]?(?:\\s+ayat\\s*\\([0-9]+\\))?(?:\\s+huruf\\s+[a-zA-Z])?|diktum\\s+ke[a-zA-Z0-9]+|ayat\\s*\\([0-9]+\\))';
+
+    // Pemisah antar unit: koma dan, koma atau, dan, atau, sampai dengan, s.d., koma
+    const sep = '(?:,\\s*(?:dan|atau)\\s*|\\s+(?:dan|atau)\\s*|\\s*(?:sampai(?:\\s+dengan)?|s\\.?d\\.?)\\s*|,\\s*)';
+
+    // Rangkaian unit (satu atau lebih)
+    const listUnits = '(?:' + unitPattern + '(?:' + sep + unitPattern + ')*)';
+
+    // 2. Hapus frasa 'sebagaimana dimaksud dalam/pada ...' beserta rentetannya
+    const relClause = new RegExp('(?:,\\s*)?\\b(?:sebagaimana\\s+dimaksud\\s+(?:dalam|pada)|sebagaimana\\s+diatur\\s+(?:dalam|pada)|diatur\\s+dalam)\\s+' + listUnits + '(?:\\s*,)?', 'gi');
+    res = res.replace(relClause, '');
+
+    // 3. Hapus 'dalam/pada <unit>' jika ada
+    const dalamClause = new RegExp('(?:,\\s*)?\\b(?:dalam|pada)\\s+' + listUnits + '(?:\\s*,)?', 'gi');
+    res = res.replace(dalamClause, '');
+
+    // 4. Hapus rujukan unit mandiri (misal 'sesuai Pasal 5 dan Pasal 6', atau sisa pasal)
+    const standaloneUnits = new RegExp('\\b' + listUnits, 'gi');
+    res = res.replace(standaloneUnits, '');
+
+    // 5. Bersihkan spasi sebelum tanda baca terlebih dahulu
+    res = res.replace(/\s+([.,;:!?])/g, '$1');
+
+    // 6. Rapikan kata sambung / preposisi yang menggantung tanpa objek
+    res = res.replace(/\b(?:sesuai\s+dengan\s+ketentuan|sesuai\s+dengan|sesuai|berdasarkan|merujuk\s+pada)\s*([.,;:]|$)/gi, '$1');
+    res = res.replace(/\b(?:dalam|pada)\s*([.,;:]|$)/gi, '$1');
+    res = res.replace(/\b(?:dan|atau)\s*([.,;:]|$)/gi, '$1');
+    res = res.replace(/^\s*(?:dan|atau)\s+/gi, '');
+
+    // 7. Rapikan tanda baca koma beruntun / menggantung
+    res = res.replace(/,\s*,+/g, ',');
+    res = res.replace(/,\s*\./g, '.');
+    res = res.replace(/\s+([.,;:!?])/g, '$1');
+    res = res.replace(/^[,;:\s]+/, '');
+    res = res.replace(/[,;:\s]+$/, (m) => (m.includes('.') ? '.' : ''));
+
+    // Rapikan spasi ganda
+    res = res.replace(/\s{2,}/g, ' ').trim();
+
+    // Pastikan huruf pertama tetap kapital jika valid
+    if (res.length > 0) {
+      res = res.charAt(0).toUpperCase() + res.slice(1);
+      if (!/[.!?]$/.test(res)) {
+        res += '.';
+      }
+    }
+
+    return res;
   };
 
   // Ekstraksi data terstruktur untuk Ringkasan Eksekutif (8 Kelompok Informasi Berurutan)
@@ -492,8 +577,21 @@ export default function SummaryView({
     const hasIdentitas = Boolean(namaJudul || nomorReg);
 
     // 2. Kerangka Regulasi
-    const jumlahBab = activeData?.metrik?.jumlah_bab || (activeData?.kerangka && activeData.kerangka.length > 0 ? activeData.kerangka.length : null) || null;
-    const jumlahPasal = activeData?.metrik?.jumlah_pasal || docStatus?.articles?.length || activeData?.identitas?.jumlah_pasal || null;
+    const isDiktum = Boolean(
+      (activeData?.identitas?.jumlah_diktum && activeData.identitas.jumlah_diktum > 0) ||
+      (docStatus?.articles && docStatus.articles.length > 0 && docStatus.articles.every((a) => /^(?:DIKTUM\s+)?KE[A-Za-z0-9]+/i.test(a.article_number.trim()))) ||
+      (activeData?.kerangka && activeData.kerangka.length > 0 && activeData.kerangka.every((k) => /^(?:DIKTUM\s+)?KE[A-Za-z0-9]+/i.test(k.bab.trim())))
+    );
+
+    const jumlahDiktum = isDiktum
+      ? activeData?.identitas?.jumlah_diktum || docStatus?.articles?.length || activeData?.kerangka?.length || 0
+      : 0;
+    const jumlahBab = isDiktum
+      ? null
+      : activeData?.metrik?.jumlah_bab || (activeData?.kerangka && activeData.kerangka.length > 0 ? activeData.kerangka.length : null) || null;
+    const jumlahPasal = isDiktum
+      ? null
+      : activeData?.metrik?.jumlah_pasal || docStatus?.articles?.length || activeData?.identitas?.jumlah_pasal || null;
     const babList = activeData?.kerangka?.map((k) => `${k.bab}: ${k.judul}`).filter(Boolean) || [];
     let cakupanUmum: string | null = null;
     if (activeData?.ringkasan && activeData.ringkasan.length > 0) {
@@ -501,7 +599,13 @@ export default function SummaryView({
     } else if (activeData?.ringkasan_teks) {
       cakupanUmum = cleanPasalRefs(activeData.ringkasan_teks.split('\n')[0] || '');
     }
-    const hasKerangka = Boolean(jumlahBab || jumlahPasal || babList.length > 0 || cakupanUmum);
+    // Jika dokumen Diktum, pastikan kalimat pembuka tidak salah menyebut '0 pasal dan 7 bab'
+    if (cakupanUmum && isDiktum) {
+      cakupanUmum = cakupanUmum
+        .replace(/(?:terdiri\s+atas\s+)?\d+\s+bab\s+dan\s+\d+\s+pasal/gi, `memuat ${jumlahDiktum} diktum`)
+        .replace(/\d+\s+pasal\s+dan\s+\d+\s+bab/gi, `${jumlahDiktum} diktum`);
+    }
+    const hasKerangka = Boolean(isDiktum ? (jumlahDiktum > 0 || babList.length > 0 || cakupanUmum) : (jumlahBab || jumlahPasal || babList.length > 0 || cakupanUmum));
 
     // 3. Pihak yang Diatur
     const subjekList: Array<{ nama: string; jumlah?: number }> = [];
@@ -547,7 +651,18 @@ export default function SummaryView({
       for (const p of activeData.poin_utama) {
         const kat = (p.kategori || '').toLowerCase();
         const txt = (p.teks || p.poin || '').toLowerCase();
-        if (kat.includes('lapor') || /(?:pelaporan|laporan|melapor|pemberitahuan\s+insiden)/i.test(txt)) {
+
+        // Jangan masukkan fungsi kepatuhan, tata cara pembukuan, atau fungsi internal non-pelaporan
+        const isNonReportingFunction = /(?:fungsi\s+kepatuhan|fungsi\s+pembukuan|tata\s+cara\s+pembukuan|sistem\s+pembukuan|penyelenggaraan\s+pembukuan|tugas\s+internal|struktur\s+organisasi|menyusun\s+laporan\s+internal)/i.test(txt);
+        if (isNonReportingFunction) continue;
+
+        // Prioritaskan kategori terstruktur 'Pelaporan' dari pipeline / backend
+        const isStructuredPelaporan = kat === 'pelaporan' || kat === 'kewajiban pelaporan';
+
+        // Regex fallback presisi untuk kewajiban penyampaian laporan (reporting obligation)
+        const isReportingObligation = /(?:wajib\s+(?:menyampaikan|menyerahkan|mengirimkan|memberikan)\s+laporan|wajib\s+melaporkan|menyampaikan\s+laporan\s+(?:berkala|insiden|keuangan|tahunan|triwulanan|bulanan|semesteran|kepada\s+ojk|kepada\s+otoritas)|kewajiban\s+penyampaian\s+laporan|laporan\s+insiden\s+siber\s+kepada)/i.test(txt);
+
+        if (isStructuredPelaporan || isReportingObligation) {
           const text = cleanPasalRefs(p.teks || p.poin || '');
           if (text && !pelaporanItems.includes(text)) {
             pelaporanItems.push(text);
@@ -557,7 +672,11 @@ export default function SummaryView({
     }
     if (pelaporanItems.length === 0 && activeData?.ringkasan) {
       for (const r of activeData.ringkasan) {
-        if (/(?:laporan|pelaporan|melaporkan|pemberitahuan\s+insiden)/i.test(r.kalimat)) {
+        const txt = (r.kalimat || '').toLowerCase();
+        const isNonReportingFunction = /(?:fungsi\s+kepatuhan|fungsi\s+pembukuan|tata\s+cara\s+pembukuan)/i.test(txt);
+        if (isNonReportingFunction) continue;
+
+        if (/(?:wajib\s+(?:menyampaikan|menyerahkan|mengirimkan)\s+laporan|wajib\s+melaporkan|menyampaikan\s+laporan\s+(?:berkala|insiden|kepada\s+ojk)|kewajiban\s+penyampaian\s+laporan)/i.test(txt)) {
           const text = cleanPasalRefs(r.kalimat);
           if (text && !pelaporanItems.includes(text)) {
             pelaporanItems.push(text);
@@ -618,7 +737,7 @@ export default function SummaryView({
       for (const p of activeData.poin_utama) {
         const kat = (p.kategori || '').toLowerCase();
         const txt = (p.teks || p.poin || '').toLowerCase();
-        if (kat.includes('cabut') || kat.includes('ubah') || /(?:mencabut|dinyatakan\s+tidak\s+berlaku|perubahan\s+atas)/i.test(txt)) {
+        if (kat.includes('cabut') || kat.includes('ubah') || /(?:mencabut|dicabut|dinyatakan\s+tidak\s+berlaku|tidak\s+berlaku\s+lagi|perubahan\s+atas)/i.test(txt)) {
           const text = cleanPasalRefs(p.teks || p.poin || '');
           if (text && !pencabutanItems.includes(text)) {
             pencabutanItems.push(text);
@@ -634,7 +753,12 @@ export default function SummaryView({
       for (const p of activeData.poin_utama) {
         const kat = (p.kategori || '').toLowerCase();
         const txt = (p.teks || p.poin || '').toLowerCase();
-        if (kat.includes('masa') || kat.includes('berlaku') || /(?:mulai\s+berlaku|masa\s+transisi|tanggal\s+pengundangan|diundangkan\s+pada)/i.test(txt)) {
+
+        // Filter ketat: jangan masukkan butir klausul pencabutan regulasi
+        const isRevocation = /(?:dicabut|mencabut|dinyatakan\s+tidak\s+berlaku|tidak\s+berlaku\s+lagi)/i.test(txt) || kat.includes('cabut');
+        if (isRevocation) continue;
+
+        if (kat === 'masa berlaku' || kat.includes('transisi') || /(?:mulai\s+berlaku|masa\s+transisi|berlaku\s+sejak|berlaku\s+pada|tanggal\s+pengundangan|diundangkan\s+pada)/i.test(txt)) {
           const text = cleanPasalRefs(p.teks || p.poin || '');
           if (text && !masaBerlakuItems.includes(text)) {
             masaBerlakuItems.push(text);
@@ -642,14 +766,30 @@ export default function SummaryView({
         }
       }
     }
-    if (masaBerlakuItems.length === 0 && activeData?.identitas?.tanggal_terbit) {
-      masaBerlakuItems.push(`Ditetapkan / diterbitkan pada tanggal ${activeData.identitas.tanggal_terbit}.`);
+    if (masaBerlakuItems.length === 0 && activeData?.ringkasan) {
+      for (const r of activeData.ringkasan) {
+        const txt = (r.kalimat || '').toLowerCase();
+        const isRevocation = /(?:dicabut|mencabut|dinyatakan\s+tidak\s+berlaku)/i.test(txt);
+        if (!isRevocation && /(?:mulai\s+berlaku|masa\s+transisi|berlaku\s+sejak|diundangkan\s+pada)/i.test(txt)) {
+          const text = cleanPasalRefs(r.kalimat);
+          if (text && !masaBerlakuItems.includes(text)) {
+            masaBerlakuItems.push(text);
+          }
+        }
+      }
+    }
+    if (masaBerlakuItems.length === 0) {
+      if (activeData?.identitas?.tanggal_berlaku) {
+        masaBerlakuItems.push(`Mulai berlaku pada tanggal ${activeData.identitas.tanggal_berlaku}.`);
+      } else if (activeData?.identitas?.tanggal_terbit) {
+        masaBerlakuItems.push(`Ditetapkan / diterbitkan pada tanggal ${activeData.identitas.tanggal_terbit}.`);
+      }
     }
     const hasMasaBerlaku = masaBerlakuItems.length > 0;
 
     return {
       identitas: hasIdentitas ? { namaJudul, nomorReg, tahunReg, jenisReg, statusKeberlakuan } : null,
-      kerangka: hasKerangka ? { jumlahBab, jumlahPasal, babList, cakupanUmum } : null,
+      kerangka: hasKerangka ? { isDiktum, jumlahDiktum, jumlahBab, jumlahPasal, babList, cakupanUmum } : null,
       pihakDiatur: hasSubjek ? subjekList : null,
       kewajiban: hasKewajiban ? kewajibanItems : null,
       pelaporan: hasPelaporan ? pelaporanItems : null,
@@ -720,15 +860,23 @@ export default function SummaryView({
         title: 'Kerangka Regulasi',
         extraHeader: (
           <div className="flex items-center gap-2 text-xs font-semibold text-gray-700">
-            {kr.jumlahBab && (
+            {kr.isDiktum ? (
               <span className="bg-gray-200/70 px-2 py-0.5 rounded">
-                {kr.jumlahBab} Bab
+                {kr.jumlahDiktum} Diktum
               </span>
-            )}
-            {kr.jumlahPasal && (
-              <span className="bg-gray-200/70 px-2 py-0.5 rounded">
-                {kr.jumlahPasal} Pasal
-              </span>
+            ) : (
+              <>
+                {kr.jumlahBab && (
+                  <span className="bg-gray-200/70 px-2 py-0.5 rounded">
+                    {kr.jumlahBab} Bab
+                  </span>
+                )}
+                {kr.jumlahPasal && (
+                  <span className="bg-gray-200/70 px-2 py-0.5 rounded">
+                    {kr.jumlahPasal} Pasal
+                  </span>
+                )}
+              </>
             )}
           </div>
         ),
@@ -742,7 +890,7 @@ export default function SummaryView({
             {kr.babList.length > 0 && (
               <div className="pt-1">
                 <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">
-                  Struktur Bab Dokumen:
+                  {kr.isDiktum ? 'Struktur Diktum Dokumen:' : 'Struktur Bab Dokumen:'}
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs text-gray-700">
                   {kr.babList.map((bab, bIdx) => (
@@ -787,18 +935,38 @@ export default function SummaryView({
     // 4. Kewajiban Utama
     if (structuredSummary.kewajiban && structuredSummary.kewajiban.length > 0) {
       const kwj = structuredSummary.kewajiban;
+      const displayedKwj = isKewajibanExpanded ? kwj : kwj.slice(0, 5);
       list.push({
         id: 'kewajiban',
         title: 'Kewajiban Utama',
+        extraHeader: kwj.length > 5 ? (
+          <span className="text-[11px] text-gray-500 font-medium font-sans">
+            {kwj.length} butir
+          </span>
+        ) : undefined,
         content: (
-          <ul className="space-y-2 text-sm text-gray-800 leading-relaxed font-sans">
-            {kwj.map((item, idx) => (
-              <li key={idx} className="flex items-start gap-2.5 bg-white/80 p-3 rounded-lg border border-gray-200/80">
-                <span className="w-1.5 h-1.5 rounded-full bg-gray-500 mt-2 shrink-0" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
+          <div className="space-y-2.5 font-sans">
+            <ul className="space-y-2 text-sm text-gray-800 leading-relaxed">
+              {displayedKwj.map((item, idx) => (
+                <li key={idx} className="flex items-start gap-2.5 bg-white/80 p-3 rounded-lg border border-gray-200/80">
+                  <span className="w-1.5 h-1.5 rounded-full bg-gray-500 mt-2 shrink-0" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+            {kwj.length > 5 && (
+              <div className="pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => setIsKewajibanExpanded((prev) => !prev)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-700 hover:text-gray-900 bg-gray-100 hover:bg-gray-200/80 border border-gray-200 shadow-2xs transition-colors cursor-pointer"
+                >
+                  <span>{isKewajibanExpanded ? 'Tampilkan lebih sedikit' : `Lihat semua (${kwj.length})`}</span>
+                  <ChevronDown size={14} className={`text-gray-500 transition-transform duration-200 ${isKewajibanExpanded ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+            )}
+          </div>
         ),
       });
     }
@@ -825,18 +993,38 @@ export default function SummaryView({
     // 6. Sanksi
     if (structuredSummary.sanksi && structuredSummary.sanksi.length > 0) {
       const snk = structuredSummary.sanksi;
+      const displayedSnk = isSanksiExpanded ? snk : snk.slice(0, 5);
       list.push({
         id: 'sanksi',
         title: 'Sanksi',
+        extraHeader: snk.length > 5 ? (
+          <span className="text-[11px] text-gray-500 font-medium font-sans">
+            {snk.length} butir
+          </span>
+        ) : undefined,
         content: (
-          <ul className="space-y-2 text-sm text-gray-800 leading-relaxed font-sans">
-            {snk.map((item, idx) => (
-              <li key={idx} className="flex items-start gap-2.5 bg-white/80 p-3 rounded-lg border border-gray-200/80">
-                <span className="w-1.5 h-1.5 rounded-full bg-gray-500 mt-2 shrink-0" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
+          <div className="space-y-2.5 font-sans">
+            <ul className="space-y-2 text-sm text-gray-800 leading-relaxed">
+              {displayedSnk.map((item, idx) => (
+                <li key={idx} className="flex items-start gap-2.5 bg-white/80 p-3 rounded-lg border border-gray-200/80">
+                  <span className="w-1.5 h-1.5 rounded-full bg-gray-500 mt-2 shrink-0" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+            {snk.length > 5 && (
+              <div className="pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => setIsSanksiExpanded((prev) => !prev)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-700 hover:text-gray-900 bg-gray-100 hover:bg-gray-200/80 border border-gray-200 shadow-2xs transition-colors cursor-pointer"
+                >
+                  <span>{isSanksiExpanded ? 'Tampilkan lebih sedikit' : `Lihat semua (${snk.length})`}</span>
+                  <ChevronDown size={14} className={`text-gray-500 transition-transform duration-200 ${isSanksiExpanded ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+            )}
+          </div>
         ),
       });
     }
@@ -844,18 +1032,38 @@ export default function SummaryView({
     // 7. Pencabutan atau Perubahan Regulasi
     if (structuredSummary.pencabutan && structuredSummary.pencabutan.length > 0) {
       const pcb = structuredSummary.pencabutan;
+      const displayedPcb = isPencabutanExpanded ? pcb : pcb.slice(0, 5);
       list.push({
         id: 'pencabutan',
         title: 'Pencabutan atau Perubahan Regulasi',
+        extraHeader: pcb.length > 5 ? (
+          <span className="text-[11px] text-gray-500 font-medium font-sans">
+            {pcb.length} butir
+          </span>
+        ) : undefined,
         content: (
-          <ul className="space-y-2 text-sm text-gray-800 leading-relaxed font-sans">
-            {pcb.map((item, idx) => (
-              <li key={idx} className="flex items-start gap-2.5 bg-white/80 p-3 rounded-lg border border-gray-200/80">
-                <span className="w-1.5 h-1.5 rounded-full bg-gray-500 mt-2 shrink-0" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
+          <div className="space-y-2.5 font-sans">
+            <ul className="space-y-2 text-sm text-gray-800 leading-relaxed">
+              {displayedPcb.map((item, idx) => (
+                <li key={idx} className="flex items-start gap-2.5 bg-white/80 p-3 rounded-lg border border-gray-200/80">
+                  <span className="w-1.5 h-1.5 rounded-full bg-gray-500 mt-2 shrink-0" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+            {pcb.length > 5 && (
+              <div className="pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => setIsPencabutanExpanded((prev) => !prev)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-700 hover:text-gray-900 bg-gray-100 hover:bg-gray-200/80 border border-gray-200 shadow-2xs transition-colors cursor-pointer"
+                >
+                  <span>{isPencabutanExpanded ? 'Tampilkan lebih sedikit' : `Lihat semua (${pcb.length})`}</span>
+                  <ChevronDown size={14} className={`text-gray-500 transition-transform duration-200 ${isPencabutanExpanded ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+            )}
+          </div>
         ),
       });
     }
@@ -880,7 +1088,7 @@ export default function SummaryView({
     }
 
     return list;
-  }, [structuredSummary]);
+  }, [structuredSummary, isKewajibanExpanded, isSanksiExpanded, isPencabutanExpanded]);
 
   // Perhitungan Kategori Key Takeaways
   const categoryCounts = useMemo(() => {
@@ -951,6 +1159,15 @@ export default function SummaryView({
     ...(activeData?.ringkasan || []).flatMap((k) => k.rujukan || []),
     ...poinUtama.map((p) => p.pasal).filter((x): x is string => Boolean(x)),
   ];
+
+  const isDocDiktum = useMemo(() => {
+    return Boolean(
+      (data?.identitas?.jumlah_diktum && data.identitas.jumlah_diktum > 0) ||
+      (docStatus?.articles && docStatus.articles.length > 0 && docStatus.articles.every((a) => /^(?:DIKTUM\s+)?KE[A-Za-z0-9]+/i.test(a.article_number.trim()))) ||
+      (data?.kerangka && data.kerangka.length > 0 && data.kerangka.every((k) => /^(?:DIKTUM\s+)?KE[A-Za-z0-9]+/i.test(k.bab.trim())))
+    );
+  }, [data?.identitas, docStatus?.articles, data?.kerangka]);
+
   const dokumenTanpaPasal = semuaRujukan.length > 0 && semuaRujukan.every(isNoPasalRef);
 
   const nomorTahunRegulasi = useMemo(() => {
@@ -1063,7 +1280,9 @@ export default function SummaryView({
             <div className="min-w-0">
               <h2 className="text-xs sm:text-sm font-bold text-gray-900 truncate">Naskah Regulasi</h2>
               <p className="text-[11px] text-gray-500 truncate">
-                {docStatus?.articles?.length ? `${docStatus.articles.length} Pasal Terindeks` : 'Naskah draf regulasi'}
+                {docStatus?.articles?.length
+                  ? `${docStatus.articles.length} ${isDocDiktum ? 'Diktum' : 'Pasal'} Terindeks`
+                  : 'Naskah draf regulasi'}
               </p>
             </div>
 
@@ -1327,7 +1546,7 @@ export default function SummaryView({
           )}
 
           {/* Catatan: dokumen tanpa pasal yang dapat dikenali */}
-          {!loading && !error && dokumenTanpaPasal && (
+          {!loading && !error && dokumenTanpaPasal && !isDocDiktum && (
             <div className="m-4 mb-0 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2">
               <AlertCircle size={15} className="text-amber-700 shrink-0 mt-0.5" />
               <div>
@@ -1486,7 +1705,7 @@ export default function SummaryView({
                                   <BookOpen size={13} className="text-red-600 group-hover:text-red-800" />
                                   <span>{point.pasal}</span>
                                   <span className="text-[11px] text-red-600 font-medium underline ml-0.5">
-                                    Lihat Pasal
+                                    {point.pasal.toLowerCase().includes('diktum') || /^ke/i.test(point.pasal) ? 'Lihat Diktum' : 'Lihat Pasal'}
                                   </span>
                                 </button>
                               )}
@@ -1576,7 +1795,7 @@ export default function SummaryView({
                 {pasalModal.contentText}
               </div>
               <p className="text-[11px] text-gray-500 italic font-sans">
-                * Isi pasal diekstraksi dari naskah regulasi resmi draf ini sebagai dasar pendukung Key Takeaway.
+                * Isi {pasalModal.articleNumber.toLowerCase().includes('diktum') || /^ke/i.test(pasalModal.articleNumber) ? 'diktum' : 'pasal'} diekstraksi dari naskah regulasi resmi draf ini sebagai dasar pendukung Key Takeaway.
               </p>
             </div>
 
@@ -1586,7 +1805,7 @@ export default function SummaryView({
                 type="button"
                 onClick={handleViewInNaskahFromModal}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold text-red-800 hover:text-red-900 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors cursor-pointer"
-                title="Buka dan sorot pasal ini di panel naskah regulasi"
+                title={`Buka dan sorot ${pasalModal.articleNumber.toLowerCase().includes('diktum') || /^ke/i.test(pasalModal.articleNumber) ? 'diktum' : 'pasal'} ini di panel naskah regulasi`}
               >
                 <FileText size={14} />
                 <span>Buka di Naskah Lengkap</span>

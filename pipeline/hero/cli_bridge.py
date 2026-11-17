@@ -210,6 +210,10 @@ def ulang_ekstraksi(
                                        help="Dengan --sebelum: hanya dokumen yang tanggal berlakunya masih kosong."),
     jenis: Optional[list[str]] = typer.Option(None, "--jenis", help="Dengan --sebelum: jenis peraturan (KEPDK, SEOJK, …)."),
     maks: int = typer.Option(100, "--maks", min=1, help="Dengan --sebelum: batas dokumen per jalan (per batch)."),
+    tanpa_reset: bool = typer.Option(
+        False, "--tanpa-reset",
+        help="Jangan nolkan jatah percobaan ekstraksi di backend (bawaan: dinolkan, "
+             "karena antre-ulang dipakai sesudah pipeline diperbaiki)."),
     yakin: bool = typer.Option(False, "--yakin", help="Jalankan; tanpa ini hanya menampilkan rencana."),
     config: Path = CONFIG_OPT,
 ) -> None:
@@ -244,7 +248,7 @@ def ulang_ekstraksi(
         with BackendClient(bridge) as c:
             for i in ids:
                 try:
-                    c.requeue(i)
+                    c.requeue(i, reset_percobaan=not tanpa_reset)
                 except BackendError as exc:
                     console.print(f"[yellow]•[/] dokumen {i}: {exc}")
                     continue

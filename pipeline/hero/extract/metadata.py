@@ -140,6 +140,15 @@ def _head(text: str, chars: int = 4000) -> str:
 _PREAMBLE = re.compile(r"\b(?:DENGAN\s+RAHMAT|Menimbang|MENIMBANG|Mengingat|MENGINGAT)\b")
 
 
+# Sebuah peraturan selalu menyebut ulang nama lengkapnya sendiri di amar
+# "MEMUTUSKAN: Menetapkan : PERATURAN … TENTANG …". Itulah sumber identitas
+# cadangan ketika halaman judulnya tidak ada di aliran teks.
+# Keduanya kerap berurutan ("Menetapkan Memutuskan:"), jadi seluruh rentetannya
+# dilewati supaya amar benar-benar dimulai di nama peraturannya.
+_MENETAPKAN = re.compile(r"(?:\b(?:Menetapkan|MENETAPKAN|MEMUTUSKAN|Memutuskan)\b\s*:?\s*)+")
+_AKHIR_AMAR = re.compile(r"\n\s*(?:BAB\s+[IVXLCDM]+|BAGIAN\s|PASAL\s|Pasal\s|KE(?:SATU|DUA|TIGA)\b)")
+
+
 def _identity_block(text: str, cap: int = 2500) -> str:
     window = text[:cap]
     # The preamble starts citing other regulations; when the text layer lost
@@ -147,7 +156,40 @@ def _identity_block(text: str, cap: int = 2500) -> str:
     # Tahun 2023" in Menimbang was once read as POJK 14/2023's own number).
     ends = [m.start() for m in (RE_TENTANG.search(window), _PREAMBLE.search(window))
             if m and m.start() > 20]
-    return window[: min(ends)] if ends else window
+    blok = window[: min(ends)] if ends else window
+    # Dokumen matriks tanggapan tidak punya halaman judul di kolom batang
+    # tubuhnya: teksnya langsung dibuka "Menimbang a. bahwa …". Blok identitas
+    # lalu berisi preambul, dan nomor pertama yang terbaca di situ adalah milik
+    # peraturan LAIN yang dirujuk Mengingat — #2016/#2017 terbaca sebagai
+    # "UU Nomor 21 Tahun 2011" (temuan 16 Nov 2026). Amar Menetapkan menyebut
+    # nama peraturan ini sendiri, jadi di sanalah identitasnya dibaca.
+    if _PREAMBLE.search(blok):
+        m = _MENETAPKAN.search(text)
+        if m:
+            # Berhenti di unit pertama batang tubuh: di luar itu nomor yang
+            # terbaca milik peraturan yang dirujuk pasalnya, bukan milik
+            # dokumen ini.
+            amar = _AKHIR_AMAR.split(text[m.end(): m.end() + 700])[0]
+            if _amar_menamai_diri(amar):
+                return amar
+    return blok
+
+
+def _amar_menamai_diri(amar: str) -> bool:
+    """Apakah ``amar`` benar-benar menyebut nama peraturan ini sendiri?
+
+    Pada PDF hasil pindai, "Menetapkan" kadang langsung diikuti butir Mengingat
+    karena kolom labelnya terbaca terpisah. Dua tanda membedakannya: amar yang
+    sah dibuka oleh jenis peraturan, dan di antara pembukanya dengan "TENTANG"
+    tidak ada "Nomor" — nomor di situ berarti yang disebut adalah peraturan
+    lain yang dirujuk, bukan dokumen ini.
+    """
+    tentang = RE_TENTANG.search(amar)
+    if not tentang or not re.match(
+            r"\s*(?:RANCANGAN\s+)?(?:PERATURAN|KEPUTUSAN|SURAT\s+EDARAN|INSTRUKSI)\b",
+            amar, re.IGNORECASE):
+        return False
+    return not re.search(r"\bNomor\b", amar[: tentang.start()], re.IGNORECASE)
 
 
 def _norm_space(s: str) -> str:
@@ -431,7 +473,10 @@ def extract_metadata(
     if md.number:
         score += 0.3
 
-    md.subject = _extract_subject(text)
+    # Blok identitas lebih dipercaya daripada teks penuh: pada dokumen yang
+    # teksnya dibuka langsung oleh preambul, "TENTANG" pertama di seluruh teks
+    # adalah milik peraturan yang dirujuk Mengingat.
+    md.subject = _extract_subject(identity) or _extract_subject(text)
     if md.subject:
         score += 0.2
 

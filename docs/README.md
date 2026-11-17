@@ -39,6 +39,9 @@
 | **22** | **[MoM Weekly Update #7](22-mom-weekly-update-07.md)** | PM | Final | Link rekaman |
 | **23** | **[Panduan Pengguna Sistem HERO (User Guide & FAQ)](PANDUAN-PENGGUNA.md)** | Product/QA | Final v2.0 | Panduan UAT (TC-59) & Dokumentasi Teknis (TC-60) |
 | **24** | **[MoM Weekly Update #8](24-mom-weekly-update-08.md)** | PM | Final | — |
+| **25** | **[MoM Weekly Update #9](25-mom-weekly-update-09.md)** | PM | Final | — |
+| **26** | **[Rangkuman Detail Weekly #9](26-rangkuman-weekly-update-09.md)** | PM | Final | — |
+| **27** | **[MoM Weekly Update #10](27-mom-weekly-update-10.md)** | PM | Final | — |
 
 ### Template Operasional
 

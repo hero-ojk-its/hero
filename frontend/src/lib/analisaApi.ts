@@ -118,6 +118,8 @@ export interface MlAnalisaIdentity {
   status?: string;
   penerbit?: string;
   jumlah_pasal?: number;
+  jumlah_diktum?: number;
+  tanggal_berlaku?: string | null;
 }
 
 /** Satu kalimat narasi AI (pipeline AiResult.ringkasan): menunjuk id fakta dan pasal asalnya */
@@ -751,6 +753,18 @@ export function parsePasalRef(str: string): ParsedPasalRef {
     return { pasalNum: null, ayatNum: null, canonicalId: null, raw: '' };
   }
   const trimmed = str.trim();
+
+  // Pola 0: Diktum (misal "Diktum KESATU", "KESATU", "Diktum KEDUA", "KEDUA", dsb.)
+  const diktumMatch = trimmed.match(/^(?:Diktum\s+)?(KE(?:SATU|DUA|TIGA|EMPAT|LIMA|ENAM|TUJUH|DELAPAN|SEMBILAN|SEPULUH|SEBELAS|DUA\s*BELAS|\d+))\b/i);
+  if (diktumMatch) {
+    const norm = diktumMatch[1].toUpperCase().replace(/\s+/g, '');
+    return {
+      pasalNum: norm,
+      ayatNum: null,
+      canonicalId: `diktum-${norm.toLowerCase()}`,
+      raw: trimmed
+    };
+  }
 
   // Pola 1: "Pasal 5", "Pasal 5A", "Pasal 5-A", "Pasal 5 A" (di mana A adalah huruf tunggal, bukan awal kata seperti 'ayat')
   // diikuti opsional "ayat (2)" atau "ayat 2"

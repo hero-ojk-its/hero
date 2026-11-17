@@ -1,6 +1,6 @@
 """Pasal / ayat / section parsing."""
 from hero.extract.structure import (
-    parse_structure, roman_to_int, structure_quality,
+    _inline_pasal_heading, parse_structure, roman_to_int, structure_quality,
 )
 from hero.models import PageText
 
@@ -132,6 +132,53 @@ Bagian yang menjadi tanggung jawabnya, paling lambat 10 hari kerja.
     assert "Bagian yang menjadi tanggung jawabnya" in struct.articles[0].text
 
 
+def test_pasal_sebaris_diselamatkan_saat_tak_ada_judul_berdiri_sendiri():
+    """Sebagian PDF merekatkan judul "Pasal N" ke badan pasalnya. Tanpa
+    lintasan sebaris, dokumen seperti ini kehilangan seluruh strukturnya dan
+    analisa jatuh ke "Teks dokumen (pasal tidak terbaca)"."""
+    text = """BAB I KETENTUAN UMUM
+
+Pasal 1 Dalam Peraturan ini yang dimaksud dengan Pelapor adalah Pihak.
+
+Pasal 2 (1) Pelapor wajib menyampaikan laporan paling lambat 30 hari kerja.
+
+Pasal 2A Pelapor juga wajib mengumumkan laporan tersebut.
+
+Pasal 3 Peraturan ini mulai berlaku pada tanggal diundangkan.
+
+Ditetapkan di Jakarta
+"""
+    struct = parse_structure(pages(text))
+    assert struct.has_structure
+    assert [a.number for a in struct.articles] == ["1", "2", "2A", "3"]
+    assert struct.articles[0].text == "Dalam Peraturan ini yang dimaksud dengan Pelapor adalah Pihak."
+    assert struct.articles[1].ayat[0][1].startswith("Pelapor wajib menyampaikan")
+
+
+def test_rujukan_pasal_di_awal_baris_bukan_judul_pasal():
+    """Lintasan sebaris tidak boleh mengarang struktur dari kalimat yang
+    kebetulan dimulai dengan rujukan "Pasal N"."""
+    text = """Ketentuan peralihan berlaku sejak diundangkan.
+
+Pasal 5 ayat (2) huruf a dicabut dan dinyatakan tidak berlaku.
+
+Pasal 7 dan Pasal 8 diubah sebagaimana mestinya.
+
+Ditetapkan di Jakarta
+"""
+    struct = parse_structure(pages(text))
+    assert not struct.has_structure
+    assert struct.articles == []
+
+
+def test_lintasan_sebaris_tidak_mengubah_dokumen_yang_sudah_terbaca():
+    """Dokumen dengan judul pasal berdiri sendiri harus identik hasilnya,
+    karena lintasan sebaris hanya dicoba bila lintasan ketat gagal total."""
+    ketat = parse_structure(pages(BODY))
+    assert [a.number for a in ketat.articles] == ["1", "2", "3"]
+    assert ketat.articles[1].bab == "BAB II — Kewajiban"
+
+
 def test_roman_to_int():
     assert roman_to_int("I") == 1
     assert roman_to_int("IV") == 4
@@ -144,3 +191,33 @@ def test_empty_input():
     struct = parse_structure([])
     assert struct.articles == []
     assert not struct.has_structure
+
+
+def test_nomor_pasal_kembar_dari_dua_kolom_tetap_terbaca():
+    """Matriks tanggapan mencetak nomor pasal di kolom batang tubuh DAN
+    penjelasan; bila keduanya terbaca menyambung, nomornya muncul dua kali."""
+    assert _inline_pasal_heading(
+        "Pasal 40 Pasal 40 BPR atau BPR Syariah wajib menyelenggarakan TI.", 40
+    ) == ("40", "BPR atau BPR Syariah wajib menyelenggarakan TI.")
+    pages = [PageText(number=1, source="text-layer", text=(
+        "Pasal 1 Pasal 1 BPR atau BPR Syariah wajib menyelenggarakan teknologi informasi.\n"
+        "Pasal 2 Pasal 2 BPR atau BPR Syariah wajib menyampaikan laporan kepada Otoritas Jasa Keuangan.\n"
+    ))]
+    struct = parse_structure(pages, pasal_sebaris=True)
+    assert [a.number for a in struct.articles] == ["1", "2"]
+    assert struct.articles[0].text.startswith("BPR atau BPR Syariah wajib")
+    assert "Pasal 1" not in struct.articles[0].text
+
+
+def test_judul_bab_yang_tercetak_dua_baris_tidak_terpotong():
+    pages = [PageText(number=1, source="text-layer", text=(
+        "BAB IX\n"
+        "PENGENDALIAN DAN AUDIT INTERN BPR\n"
+        "DAN BPR SYARIAH\n"
+        "Pasal 1\n"
+        "BPR wajib menyelenggarakan audit intern.\n"
+    ))]
+    struct = parse_structure(pages)
+    assert struct.babs[0]["title"] == "Pengendalian Dan Audit Intern Bpr Dan Bpr Syariah"
+    assert struct.articles[0].number == "1"
+    assert "AUDIT INTERN" not in struct.articles[0].text

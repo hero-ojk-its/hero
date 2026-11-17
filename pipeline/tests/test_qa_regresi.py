@@ -191,3 +191,58 @@ def test_mode_ketat_melaporkan_kewajiban_yang_hilang_sebagai_skor():
     sumber = "[Kewajiban] Bank wajib menyampaikan laporan."
     assert periksa_modalitas("Bank menyampaikan laporan.", sumber) == []            # bukan gerbang
     assert periksa_modalitas("Bank menyampaikan laporan.", sumber, ketat=True) == ["menghilangkan 'wajib'"]
+
+
+# -- QA 15 Nov 2026: kategori penanda & potongan kutipan ----------------------
+def test_kategori_diambil_dari_kalimat_pengantar_bukan_dari_rinciannya():
+    """Pasal 24 #2018 masuk "Pelaporan" hanya karena satu rinciannya menyebut
+    penyampaian laporan; normanya ada di kalimat pengantar."""
+    from hero.analysis.structured import classify_unit, kategori_rincian
+
+    teks = ("Pelaksanaan fungsi kepatuhan wajib memenuhi ketentuan: "
+            "a. fungsi kepatuhan bersifat independen dari fungsi lainnya; "
+            "b. menyampaikan laporan secara berkala kepada dewan komisaris.")
+    assert classify_unit(teks)[0] == "Kewajiban"
+    assert "Pelaporan" in kategori_rincian(teks)
+
+
+def test_kewajiban_pelaporan_di_pengantar_tetap_masuk_pelaporan():
+    from hero.analysis.structured import classify_unit
+
+    teks = ("BPR wajib menyampaikan laporan penyelenggaraan teknologi informasi "
+            "kepada Otoritas Jasa Keuangan paling lambat setiap akhir bulan.")
+    assert classify_unit(teks)[0] == "Pelaporan"
+
+
+def test_kalimat_pencabutan_tidak_terbaca_sebagai_masa_berlaku():
+    from hero.analysis.structured import classify_unit
+
+    teks = ("Pada saat Peraturan Otoritas Jasa Keuangan ini mulai berlaku, "
+            "Peraturan Otoritas Jasa Keuangan Nomor 75/POJK.03/2016 tentang Standar "
+            "Penyelenggaraan Teknologi Informasi, dicabut.")
+    assert classify_unit(teks)[0] == "Pencabutan"
+
+
+def test_masa_berlaku_tetap_dikenali_tanpa_pencabutan():
+    from hero.analysis.structured import classify_unit
+
+    assert classify_unit("Peraturan ini mulai berlaku pada tanggal diundangkan.")[0] == "Masa Berlaku"
+
+
+def test_poin_panjang_dipotong_di_akhir_kalimat():
+    from hero.analysis.structured import potong_rapi
+
+    teks = ("Bank wajib menyusun kebijakan tertulis. " * 20) + "Kalimat terakhir yang tidak muat."
+    hasil = potong_rapi(teks, maks=200)
+    assert hasil.endswith(". …")
+    assert "kebijakan tertulis. …" in hasil
+
+
+def test_potongan_tidak_berhenti_pada_penanda_butir_menggantung():
+    from hero.analysis.structured import potong_rapi
+
+    teks = ("Bank menyusun laporan sesuai dengan ketentuan yang berlaku dan wajib "
+            "memenuhi persyaratan berikut: a. laporan keuangan tahunan yang telah "
+            "diaudit oleh akuntan publik terdaftar; b. laporan lain yang diminta.")
+    hasil = potong_rapi(teks, maks=130)
+    assert not hasil.rstrip(" …").endswith("a.")
