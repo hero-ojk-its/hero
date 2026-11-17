@@ -41,6 +41,7 @@
 | **24** | **[MoM Weekly Update #8](24-mom-weekly-update-08.md)** | PM | Final | — |
 | **25** | **[MoM Weekly Update #9](25-mom-weekly-update-09.md)** | PM | Final | — |
 | **26** | **[Rangkuman Detail Weekly #9](26-rangkuman-weekly-update-09.md)** | PM | Final | — |
+| **27** | **[MoM Weekly Update #10](27-mom-weekly-update-10.md)** | PM | Final | — |
 
 ### Template Operasional
 
