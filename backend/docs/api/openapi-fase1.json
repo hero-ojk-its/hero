@@ -5719,8 +5719,8 @@
         "tags": [
           "Harmonisasi"
         ],
-        "summary": "Ekspor laporan harmonisasi regulasi (DOCX, CSV, JSON) (US-50 #73)",
-        "description": "[US-50, FR-HRM-13] Mengekspor laporan hasil harmonisasi draft regulasi ke berkas DOCX, CSV, atau JSON\nlangsung dari hasil yang tersimpan di basis data (tanpa memanggil layanan ML).",
+        "summary": "Ekspor laporan harmonisasi regulasi (DOCX, CSV, JSON, XLSX) (US-50 #73)",
+        "description": "[US-50, FR-HRM-13] Mengekspor laporan hasil harmonisasi draft regulasi ke berkas DOCX, CSV, JSON, atau XLSX\nlangsung dari hasil yang tersimpan di basis data (tanpa memanggil layanan ML).",
         "operationId": "export_document_harmonization_api_v1_documents__document_id__harmonisasi_ekspor_get",
         "security": [
           {
@@ -5743,11 +5743,11 @@
             "required": false,
             "schema": {
               "type": "string",
-              "description": "Format berkas ekspor: docx | csv | json",
+              "description": "Format berkas ekspor: docx | csv | json | xlsx",
               "default": "docx",
               "title": "Format"
             },
-            "description": "Format berkas ekspor: docx | csv | json"
+            "description": "Format berkas ekspor: docx | csv | json | xlsx"
           },
           {
             "name": "run_id",
@@ -5770,13 +5770,14 @@
         ],
         "responses": {
           "200": {
-            "description": "Berkas ekspor laporan harmonisasi dalam format DOCX, CSV, atau JSON.",
+            "description": "Berkas ekspor laporan harmonisasi dalam format DOCX, CSV, JSON, atau XLSX.",
             "content": {
               "application/json": {
                 "schema": {}
               },
               "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {},
-              "text/csv": {}
+              "text/csv": {},
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}
             }
           },
           "403": {

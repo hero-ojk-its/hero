@@ -1993,7 +1993,20 @@ Frontend cukup memanggil satu asal (`API_BASE_URL` backend) tanpa perlu menghubu
   - `kecuali_dokumen` (opsional): ID dokumen draft untuk dikecualikan dari pembanding
   - `hanya_publik` (opsional): boolean (dipaksa `true` saat mode proteksi non-publik aktif)
 
-### 11.8 Ekspor Catatan Dinas Harmonisasi (US-52 #76 / Weekly #10)
+### 11.8 Ekspor Laporan Harmonisasi (US-50 #73)
+- **Method & Path:** `GET /api/v1/documents/{document_id}/harmonisasi/ekspor`
+- **Izin:** `ANALISA_EKSPOR` (Analis)
+- **Parameter Query:**
+  - `format` (opsional): `docx` (default) | `csv` | `json` | `xlsx`
+  - `run_id` (opsional): ID riwayat eksekusi harmonisasi tertentu
+- **Perilaku:** Mengambil hasil harmonisasi tersimpan (cache atau run) tanpa memanggil ML, menyaring rujukan nonaktif/non-publik, menggabungkan tanggapan analis, dan menghasilkan dokumen laporan sesuai format.
+- **Headers Respons:**
+  - `Content-Type`: `application/vnd.openxmlformats-officedocument.wordprocessingml.document` (DOCX), `text/csv` (CSV), `application/json` (JSON), atau `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` (XLSX)
+  - `Content-Disposition`: `attachment; filename="harmonisasi_<slug>_<id>.<ext>"; filename*="UTF-8''..."`
+- **Kode Galat:** 404 `harmonisasi_belum_ada` bila belum pernah diharmonisasi, 422 `bukan_draft` bila bukan `draft_kajian`.
+- **Audit:** Mencatat jejak audit `EXPORT_HARMONIZATION`.
+
+### 11.9 Ekspor Catatan Dinas Harmonisasi (US-52 #76 / Weekly #10)
 - **Method & Path:** `POST /api/v1/documents/{document_id}/harmonisasi/ekspor/catatan-dinas`
 - **Izin:** `ANALISA_EKSPOR` (Analis)
 - **Content-Type:** `application/json`

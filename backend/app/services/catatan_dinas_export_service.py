@@ -35,8 +35,12 @@ from app.models.enums import JenisAnalisa, ModeAnalisa
 from app.schemas.catatan_dinas import CatatanDinasExportIn
 from app.services.harmonisasi_export_service import (
     FOOTER_URD,
+    JENIS_LABEL_MAP,
     _format_keyakinan,
+    _format_nama_pembanding,
     muat_data_harmonisasi_tersimpan,
+    parse_pasal_sort_key,
+    potong_teks_di_batas_kata,
 )
 
 logger = logging.getLogger("hero")
@@ -56,42 +60,10 @@ BULAN_INDONESIA = {
     12: "Desember",
 }
 
-JENIS_LABEL_MAP = {
-    "pasal_baru": "Baru",
-    "baru": "Baru",
-    "sama": "Sama",
-    "menggantikan": "Menggantikan",
-    "melengkapi": "Melengkapi",
-    "konflik": "Konflik",
-}
-
 
 def format_tanggal_indonesia(d: date) -> str:
     """Format tanggal ke bahasa Indonesia, misal: 13 November 2026."""
     return f"{d.day} {BULAN_INDONESIA.get(d.month, str(d.month))} {d.year}"
-
-
-def potong_teks_di_batas_kata(teks: Optional[str], batas: int = 300) -> str:
-    """Memotong teks maksimal `batas` karakter pada batas kata dengan akhiran '…'."""
-    if not teks:
-        return ""
-    teks = teks.strip()
-    if len(teks) <= batas:
-        return teks
-    potongan = teks[:batas]
-    last_space = potongan.rfind(" ")
-    if last_space > 0:
-        potongan = potongan[:last_space]
-    return potongan.rstrip(".,;:- ") + "…"
-
-
-def parse_pasal_sort_key(pasal_str: Optional[str]) -> Tuple[int, str]:
-    """Sort key alami untuk penomoran pasal: Pasal 1, Pasal 2, ..., Pasal 10."""
-    if not pasal_str:
-        return (999999, "")
-    m = re.search(r"\b(?:pasal\s*)?(\d+)", str(pasal_str), re.IGNORECASE)
-    num = int(m.group(1)) if m else 999999
-    return (num, str(pasal_str).lower())
 
 
 def get_letter_label(idx: int) -> str:
@@ -204,55 +176,6 @@ def _normalkan_narasi_ai(val: Any) -> Optional[str]:
         if sentences:
             joined = " ".join(sentences).strip()
             return joined if joined else None
-    return None
-
-
-def _format_nama_pembanding(
-    pembanding_obj: Optional[Dict[str, Any]],
-    pasal_fallback: Optional[str] = None,
-    allowed_ids: Optional[Set[int]] = None,
-) -> Optional[str]:
-    """
-    Menyusun nama peraturan pembanding:
-    - akses dibatasi: 'peraturan pembanding (akses dibatasi)'
-    - ada judul dan nomor: '<judul> (Nomor <nomor>), <pasal>'
-    - hanya judul: '<judul>, <pasal>'
-    - hanya nomor: 'peraturan Nomor <nomor>, <pasal>'
-    - tidak ada keduanya: 'peraturan pembanding' (+ ', <pasal>' bila ada)
-    Jangan menampilkan pembanding.key (pengenal internal). Judul dipotong maks 200 karakter.
-    """
-    if pembanding_obj and isinstance(pembanding_obj, dict):
-        p_doc_id = pembanding_obj.get("document_id")
-        if allowed_ids is not None and isinstance(p_doc_id, int) and p_doc_id not in allowed_ids:
-            return "peraturan pembanding (akses dibatasi)"
-        if pembanding_obj.get("restricted") or pembanding_obj.get("akses_dibatasi"):
-            return "peraturan pembanding (akses dibatasi)"
-
-        judul_raw = pembanding_obj.get("judul")
-        judul = potong_teks_di_batas_kata(str(judul_raw).strip(), 200) if judul_raw and str(judul_raw).strip() else None
-
-        nomor_raw = pembanding_obj.get("nomor")
-        nomor = str(nomor_raw).strip() if nomor_raw and str(nomor_raw).strip() else None
-
-        pasal_raw = pembanding_obj.get("pasal") or pasal_fallback
-        pasal = str(pasal_raw).strip() if pasal_raw and str(pasal_raw).strip() else None
-
-        if judul and nomor:
-            base = f"{judul} (Nomor {nomor})"
-        elif judul:
-            base = judul
-        elif nomor:
-            base = f"peraturan Nomor {nomor}"
-        else:
-            base = "peraturan pembanding"
-
-        if pasal:
-            return f"{base}, {pasal}"
-        return base
-
-    if pasal_fallback and str(pasal_fallback).strip():
-        return f"peraturan pembanding, {str(pasal_fallback).strip()}"
-
     return None
 
 

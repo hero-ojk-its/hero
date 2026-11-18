@@ -422,15 +422,16 @@ def rekap_tanggapan(
 
 @router.get(
     "/api/v1/documents/{document_id}/harmonisasi/ekspor",
-    summary="Ekspor laporan harmonisasi regulasi (DOCX, CSV, JSON) (US-50 #73)",
+    summary="Ekspor laporan harmonisasi regulasi (DOCX, CSV, JSON, XLSX) (US-50 #73)",
     responses={
         200: {
             "content": {
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {},
                 "text/csv": {},
                 "application/json": {},
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {},
             },
-            "description": "Berkas ekspor laporan harmonisasi dalam format DOCX, CSV, atau JSON.",
+            "description": "Berkas ekspor laporan harmonisasi dalam format DOCX, CSV, JSON, atau XLSX.",
         },
         403: {"description": "Akses ditolak (dokumen non-publik memerlukan otentikasi)"},
         404: {"description": "Dokumen tidak ditemukan atau belum pernah diharmonisasi"},
@@ -440,13 +441,13 @@ def rekap_tanggapan(
 def export_document_harmonization(
     document_id: int,
     request: Request,
-    format: str = Query("docx", description="Format berkas ekspor: docx | csv | json"),
+    format: str = Query("docx", description="Format berkas ekspor: docx | csv | json | xlsx"),
     run_id: Optional[int] = Query(None, description="ID eksekusi tertentu dari riwayat harmonisasi"),
     db: Session = Depends(get_db),
     current_user=Depends(perlu_izin(Izin.ANALISA_EKSPOR)),
 ):
     """
-    [US-50, FR-HRM-13] Mengekspor laporan hasil harmonisasi draft regulasi ke berkas DOCX, CSV, atau JSON
+    [US-50, FR-HRM-13] Mengekspor laporan hasil harmonisasi draft regulasi ke berkas DOCX, CSV, JSON, atau XLSX
     langsung dari hasil yang tersimpan di basis data (tanpa memanggil layanan ML).
     """
     doc = check_document_access(db, document_id, user=current_user)
@@ -457,10 +458,10 @@ def export_document_harmonization(
         )
 
     fmt_clean = format.lower().strip()
-    if fmt_clean not in ("docx", "csv", "json"):
+    if fmt_clean not in ("docx", "csv", "json", "xlsx"):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Format '{format}' tidak didukung. Pilihan format: docx, csv, json.",
+            detail=f"Format '{format}' tidak didukung. Pilihan format: docx, csv, json, xlsx.",
         )
 
     allowed_ids = allowed_document_ids(db, user=current_user)
