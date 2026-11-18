@@ -34,7 +34,7 @@ from app.services.audit_service import (
     record_audit,
 )
 from app.services.catatan_dinas_export_service import export_catatan_dinas
-from app.services.harmonisasi_export_service import export_harmonisasi
+from app.services.harmonisasi_export_service import export_harmonisasi, netralkan_sel_csv
 from app.services.tanggapan_service import (
     kunci_temuan,
     tandai_kunci_temuan,
@@ -396,7 +396,7 @@ def rekap_tanggapan(
         writer = csv.writer(output)
         writer.writerow(["jenis", "valid", "tidak_relevan", "total"])
         for j_key, counts in sorted(per_jenis.items()):
-            writer.writerow([j_key, counts["valid"], counts["tidak_relevan"], counts["total"]])
+            writer.writerow([netralkan_sel_csv(j_key), counts["valid"], counts["tidak_relevan"], counts["total"]])
         writer.writerow(["TOTAL", total_rekap["valid"], total_rekap["tidak_relevan"], total_rekap["total"]])
 
         csv_bytes = b"\xef\xbb\xbf" + output.getvalue().encode("utf-8")

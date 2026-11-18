@@ -20,7 +20,7 @@ from pathlib import Path
 import random
 import re
 import sys
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 import urllib.parse
 
 # Pastikan root proyek backend masuk ke sys.path
@@ -116,9 +116,14 @@ def jalankan_buat_lembar_sampling(
 
     dokumen_diproses = 0
     dokumen_dilewati = 0
+    temuan_dilewati_pembanding_nonaktif = 0
     sampel_ditulis = 0
 
     clean_base_url = (base_url or "").strip().rstrip("/") if base_url else None
+
+    # Kumpulkan dokumen valid dan seluruh pembanding.document_id untuk query status aktif batch
+    kandidat_dokumen: List[Tuple[Document, List[Dict[str, Any]]]] = []
+    pembanding_ids_to_check: set = set()
 
     for doc_id in doc_ids_unique:
         doc = db.query(Document).filter(Document.id == doc_id).first()
@@ -151,7 +156,34 @@ def jalankan_buat_lembar_sampling(
             dokumen_dilewati += 1
             continue
 
-        # Filter temuan: hanya yang memiliki pembanding (bukan pasal_baru)
+        for t in raw_temuan:
+            if isinstance(t, dict):
+                p_info = t.get("pembanding")
+                if isinstance(p_info, dict):
+                    pid = p_info.get("document_id")
+                    if pid is not None:
+                        try:
+                            pembanding_ids_to_check.add(int(pid))
+                        except (ValueError, TypeError):
+                            pass
+
+        kandidat_dokumen.append((doc, raw_temuan))
+
+    # Satu kueri untuk memeriksa semua ID dokumen pembanding yang aktif di DB
+    active_pembanding_ids: set = set()
+    if pembanding_ids_to_check:
+        active_rows = (
+            db.query(Document.id)
+            .filter(
+                Document.id.in_(pembanding_ids_to_check),
+                Document.is_active == True,
+            )
+            .all()
+        )
+        active_pembanding_ids = {r[0] for r in active_rows}
+
+    for doc, raw_temuan in kandidat_dokumen:
+        # Filter temuan: hanya yang memiliki pembanding (bukan pasal_baru) dan pembandingnya aktif bila ber-document_id
         eligible_temuan: List[Dict[str, Any]] = []
         for t in raw_temuan:
             if not isinstance(t, dict):
@@ -162,6 +194,19 @@ def jalankan_buat_lembar_sampling(
             p_info = t.get("pembanding")
             if not p_info or not isinstance(p_info, dict):
                 continue
+
+            # Periksa pembanding nonaktif / dokumen tidak ditemukan
+            pid = p_info.get("document_id")
+            if pid is not None:
+                try:
+                    pid_int = int(pid)
+                    if pid_int not in active_pembanding_ids:
+                        temuan_dilewati_pembanding_nonaktif += 1
+                        continue
+                except (ValueError, TypeError):
+                    temuan_dilewati_pembanding_nonaktif += 1
+                    continue
+
             eligible_temuan.append(t)
 
         if not eligible_temuan:
@@ -314,6 +359,7 @@ def jalankan_buat_lembar_sampling(
     return {
         "dokumen_diproses": dokumen_diproses,
         "dokumen_dilewati": dokumen_dilewati,
+        "temuan_dilewati_pembanding_nonaktif": temuan_dilewati_pembanding_nonaktif,
         "sampel_ditulis": sampel_ditulis,
         "path_keluaran": str(out_path.resolve()),
     }
@@ -358,7 +404,7 @@ def main():
 
     args = parser.parse_args()
 
-    engine = create_engine(settings.database_url)
+    engine = create_engine(str(settings.database_url))
     SessionLocal = sessionmaker(bind=engine)
     db = SessionLocal()
 
@@ -376,6 +422,7 @@ def main():
         print("=== Ringkasan Pembuatan Lembar Sampling ===")
         print(f"Dokumen diproses : {hasil['dokumen_diproses']}")
         print(f"Dokumen dilewati : {hasil['dokumen_dilewati']}")
+        print(f"Temuan dilewati (pembanding nonaktif): {hasil['temuan_dilewati_pembanding_nonaktif']}")
         print(f"Sampel ditulis   : {hasil['sampel_ditulis']}")
         print(f"Path keluaran    : {hasil['path_keluaran']}")
     finally:

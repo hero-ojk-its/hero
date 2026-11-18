@@ -116,14 +116,42 @@ def _format_nama_pembanding(
     return None
 
 
+MAX_EXCEL_CELL_LEN = 32000
+SUFFIX_DIPOTONG = " … [dipotong]"
+DANGEROUS_CSV_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
 def clean_cell_text(val: Any) -> str:
-    """Membersihkan karakter kontrol dan memastikan teks aman disimpan di sel Excel."""
+    """Membersihkan karakter kontrol, membatasi panjang sel Excel, dan memastikan teks aman disimpan di sel Excel."""
     if val is None:
         return ""
     text = str(val)
     text = ILLEGAL_CHARACTERS_RE.sub("", text)
     text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
+    if len(text) > MAX_EXCEL_CELL_LEN:
+        text = text[:MAX_EXCEL_CELL_LEN] + SUFFIX_DIPOTONG
     return text
+
+
+def netralkan_sel_csv(val: Any) -> Any:
+    """
+    Menetralkan sel CSV dari formula injection (CSV injection).
+    Jika nilai bertipe teks (str) dan diawali salah satu karakter berbahaya
+    ('=', '+', '-', '@', '\t', '\r'), tambahkan tanda kutip tunggal (') di depannya.
+    None, string kosong, angka murni (int, float), dan teks biasa tidak diubah.
+    """
+    if val is None:
+        return None
+    if isinstance(val, (int, float)) and not isinstance(val, bool):
+        return val
+    if not isinstance(val, str):
+        val = str(val)
+    if not val:
+        return val
+
+    if val[0] in DANGEROUS_CSV_PREFIXES:
+        return f"'{val}"
+    return val
 
 
 def set_safe_text_cell(cell, val: Any) -> None:
@@ -370,16 +398,16 @@ def export_harmonisasi_to_csv(data: Dict[str, Any]) -> bytes:
 
         writer.writerow([
             i,
-            t.get("jenis") or "",
-            t.get("pasal_draft") or "",
-            p_str,
-            pasal_p or "",
-            uraian or "",
-            keyakinan_str,
-            pen,
-            cat,
-            oleh,
-            t.get("kunci_temuan") or "",
+            netralkan_sel_csv(t.get("jenis") or ""),
+            netralkan_sel_csv(t.get("pasal_draft") or ""),
+            netralkan_sel_csv(p_str),
+            netralkan_sel_csv(pasal_p or ""),
+            netralkan_sel_csv(uraian or ""),
+            netralkan_sel_csv(keyakinan_str),
+            netralkan_sel_csv(pen),
+            netralkan_sel_csv(cat),
+            netralkan_sel_csv(oleh),
+            netralkan_sel_csv(t.get("kunci_temuan") or ""),
         ])
 
     csv_text = output.getvalue()
