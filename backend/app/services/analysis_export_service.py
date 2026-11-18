@@ -23,6 +23,7 @@ from app.models.document import Document
 from app.models.enums import JenisAnalisa, ModeAnalisa
 from app.models.user import User
 from app.services.analysis_result_service import get_document_fingerprint
+from app.services.harmonisasi_export_service import netralkan_sel_csv
 
 logger = logging.getLogger("hero")
 
@@ -299,7 +300,15 @@ def export_to_csv(result: Dict[str, Any]) -> bytes:
     writer.writerow(["bagian", "urutan", "kategori", "pasal_rujukan", "halaman", "teks", "parafrase"])
 
     # Baris pertama setelah header: label
-    writer.writerow(["label", 1, "", "", "", LABEL_REKOMENDASI, ""])
+    writer.writerow([
+        netralkan_sel_csv("label"),
+        1,
+        "",
+        "",
+        "",
+        netralkan_sel_csv(LABEL_REKOMENDASI),
+        "",
+    ])
 
     identitas = result.get("identitas") if isinstance(result.get("identitas"), dict) else {}
     kerangka = result.get("kerangka") if isinstance(result.get("kerangka"), list) else []
@@ -312,11 +321,27 @@ def export_to_csv(result: Dict[str, Any]) -> bytes:
     idx_id = 1
     for k in ["jenis", "nomor", "tahun", "tentang", "status", "tanggal_terbit", "penerbit", "jumlah_pasal"]:
         val = identitas.get(k)
-        writer.writerow(["identitas", idx_id, k, "", "", str(val) if val is not None else "", ""])
+        writer.writerow([
+            netralkan_sel_csv("identitas"),
+            idx_id,
+            netralkan_sel_csv(k),
+            "",
+            "",
+            netralkan_sel_csv(str(val) if val is not None else ""),
+            "",
+        ])
         idx_id += 1
 
     if kerangka:
-        writer.writerow(["identitas", idx_id, "jumlah_bab", "", "", str(len(kerangka)), ""])
+        writer.writerow([
+            netralkan_sel_csv("identitas"),
+            idx_id,
+            netralkan_sel_csv("jumlah_bab"),
+            "",
+            "",
+            netralkan_sel_csv(str(len(kerangka))),
+            "",
+        ])
 
     # Bagian Ringkasan: satu baris per kalimat
     if isinstance(ringkasan, list) and ringkasan:
@@ -330,11 +355,35 @@ def export_to_csv(result: Dict[str, Any]) -> bytes:
                     pasal_rujukan = str(rujukan)
                 else:
                     pasal_rujukan = ""
-                writer.writerow(["ringkasan", idx, "", pasal_rujukan, "", kalimat, ""])
+                writer.writerow([
+                    "ringkasan",
+                    idx,
+                    "",
+                    netralkan_sel_csv(pasal_rujukan),
+                    "",
+                    netralkan_sel_csv(kalimat),
+                    "",
+                ])
             elif isinstance(item, str):
-                writer.writerow(["ringkasan", idx, "", "", "", item, ""])
+                writer.writerow([
+                    "ringkasan",
+                    idx,
+                    "",
+                    "",
+                    "",
+                    netralkan_sel_csv(item),
+                    "",
+                ])
     elif result.get("ringkasan_teks"):
-        writer.writerow(["ringkasan", 1, "", "", "", str(result.get("ringkasan_teks")), ""])
+        writer.writerow([
+            "ringkasan",
+            1,
+            "",
+            "",
+            "",
+            netralkan_sel_csv(str(result.get("ringkasan_teks"))),
+            "",
+        ])
 
     # Bagian Poin Utama: satu baris per poin
     if isinstance(poin_utama, list) and poin_utama:
@@ -342,7 +391,15 @@ def export_to_csv(result: Dict[str, Any]) -> bytes:
             if isinstance(item, dict):
                 kategori = item.get("kategori", "")
                 pasal = item.get("pasal", "")
-                halaman = item.get("halaman", "")
+                halaman = item.get("halaman")
+                if halaman is None:
+                    halaman_val = ""
+                elif isinstance(halaman, (int, float)) and not isinstance(halaman, bool):
+                    halaman_val = str(halaman)
+                elif isinstance(halaman, str):
+                    halaman_val = netralkan_sel_csv(halaman)
+                else:
+                    halaman_val = netralkan_sel_csv(str(halaman))
                 teks = item.get("teks", "")
                 if item.get("terpotong"):
                     teks = f"{teks} (dipotong)"
@@ -350,24 +407,32 @@ def export_to_csv(result: Dict[str, Any]) -> bytes:
                 writer.writerow([
                     "poin_utama",
                     idx,
-                    kategori,
-                    format_pasal_ref(pasal),
-                    str(halaman) if halaman is not None else "",
-                    teks,
-                    str(parafrase) if parafrase is not None else "",
+                    netralkan_sel_csv(kategori),
+                    netralkan_sel_csv(format_pasal_ref(pasal)),
+                    halaman_val,
+                    netralkan_sel_csv(teks),
+                    netralkan_sel_csv(str(parafrase) if parafrase is not None else ""),
                 ])
             elif isinstance(item, str):
-                writer.writerow(["poin_utama", idx, "", "", "", item, ""])
+                writer.writerow([
+                    "poin_utama",
+                    idx,
+                    "",
+                    "",
+                    "",
+                    netralkan_sel_csv(item),
+                    "",
+                ])
 
     # Bagian Dasar Hukum: satu baris per butir
     if isinstance(dasar_hukum, list) and dasar_hukum:
         for idx, item in enumerate(dasar_hukum, start=1):
-            writer.writerow(["dasar_hukum", idx, "", "", "", str(item), ""])
+            writer.writerow(["dasar_hukum", idx, "", "", "", netralkan_sel_csv(str(item)), ""])
 
     # Bagian Sanksi: satu baris per butir
     if isinstance(sanksi, list) and sanksi:
         for idx, item in enumerate(sanksi, start=1):
-            writer.writerow(["sanksi", idx, "", "", "", str(item), ""])
+            writer.writerow(["sanksi", idx, "", "", "", netralkan_sel_csv(str(item)), ""])
 
     # UTF-8 dengan BOM (agar terbaca langsung benar di Excel)
     csv_str = output.getvalue()
