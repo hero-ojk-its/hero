@@ -4,10 +4,21 @@ Layanan ekstraksi metadata otomatis dari naskah PDF regulasi (Judul, Nomor, Jeni
 Mendukung regulasi OJK (POJK, SEOJK, PDK, SEDK) dan peraturan perundang-undangan Indonesia (UU, PP, Perpres, PBI, dll).
 """
 import io
+import logging
 import re
 from datetime import date
 from typing import Any, Dict, Optional, Tuple
+from fastapi import HTTPException, UploadFile, status
 from pypdf import PdfReader
+
+from app.config import settings
+from app.services.file_validation import (
+    FileRejectCode,
+    FileValidationError,
+    validate_pdf,
+)
+
+logger = logging.getLogger("hero")
 
 # Kamus nama bulan Indonesia ke angka
 MONTHS_ID = {
@@ -452,4 +463,66 @@ def extract_metadata_from_text(
         "page_count": 1,
         "raw_preview": text[:500] if text else None,
     }
+
+
+def process_extract_metadata_upload(file: UploadFile) -> Dict[str, Any]:
+    """
+    Validasi berkas PDF unggahan dan ekstrak metadata otomatis secara aman:
+    - Memeriksa ekstensi .pdf (status 400 jika bukan .pdf)
+    - Membatasi ukuran berkas sesuai settings.max_upload_bytes secara bertahap / chunked (status 413 jika melebihi batas)
+    - Validasi struktur & magic bytes PDF menggunakan validate_pdf (status 422 jika isi bukan PDF valid/rusak)
+    - Menutup file handle di blok finally
+    - Mencegah kebocoran exception internal ke klien (status 422 dengan pesan umum)
+    """
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File harus berupa berkas PDF (.pdf)",
+        )
+
+    chunk_size = 64 * 1024
+    content_chunks = []
+    total_bytes = 0
+    max_bytes = settings.max_upload_bytes
+
+    try:
+        try:
+            while True:
+                chunk = file.file.read(chunk_size)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > max_bytes:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Ukuran berkas melebihi batas maksimal {settings.max_upload_mb} MB.",
+                    )
+                content_chunks.append(chunk)
+            content = b"".join(content_chunks)
+
+            validate_pdf(file.filename, content, max_bytes)
+            return extract_metadata_from_pdf_content(content, file.filename)
+        except HTTPException:
+            raise
+        except FileValidationError as val_err:
+            if val_err.code == FileRejectCode.ukuran_melebihi_batas:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Ukuran berkas melebihi batas maksimal {settings.max_upload_mb} MB.",
+                )
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=val_err.message,
+            )
+        except Exception as exc:
+            logger.warning("Gagal mengekstrak metadata dari PDF (%s)", type(exc).__name__)
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Metadata tidak dapat dibaca dari berkas ini",
+            )
+    finally:
+        try:
+            file.file.close()
+        except Exception:
+            pass
 
