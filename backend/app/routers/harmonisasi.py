@@ -8,7 +8,7 @@ import io
 import logging
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,7 @@ from app.routers.ml_gateway import (
     saring_rujukan_lengkap,
     sesuaikan_ringkasan_harmonisasi,
 )
+from app.schemas.catatan_dinas import CatatanDinasExportIn
 from app.schemas.tanggapan import (
     TanggapanTemuanIn,
     TanggapanTemuanResponse,
@@ -32,7 +33,8 @@ from app.services.audit_service import (
     TANGGAPAN_TEMUAN,
     record_audit,
 )
-from app.services.harmonisasi_export_service import export_harmonisasi
+from app.services.catatan_dinas_export_service import export_catatan_dinas
+from app.services.harmonisasi_export_service import export_harmonisasi, netralkan_sel_csv
 from app.services.tanggapan_service import (
     kunci_temuan,
     tandai_kunci_temuan,
@@ -394,7 +396,7 @@ def rekap_tanggapan(
         writer = csv.writer(output)
         writer.writerow(["jenis", "valid", "tidak_relevan", "total"])
         for j_key, counts in sorted(per_jenis.items()):
-            writer.writerow([j_key, counts["valid"], counts["tidak_relevan"], counts["total"]])
+            writer.writerow([netralkan_sel_csv(j_key), counts["valid"], counts["tidak_relevan"], counts["total"]])
         writer.writerow(["TOTAL", total_rekap["valid"], total_rekap["tidak_relevan"], total_rekap["total"]])
 
         csv_bytes = b"\xef\xbb\xbf" + output.getvalue().encode("utf-8")
@@ -420,15 +422,16 @@ def rekap_tanggapan(
 
 @router.get(
     "/api/v1/documents/{document_id}/harmonisasi/ekspor",
-    summary="Ekspor laporan harmonisasi regulasi (DOCX, CSV, JSON) (US-50 #73)",
+    summary="Ekspor laporan harmonisasi regulasi (DOCX, CSV, JSON, XLSX) (US-50 #73)",
     responses={
         200: {
             "content": {
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {},
                 "text/csv": {},
                 "application/json": {},
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {},
             },
-            "description": "Berkas ekspor laporan harmonisasi dalam format DOCX, CSV, atau JSON.",
+            "description": "Berkas ekspor laporan harmonisasi dalam format DOCX, CSV, JSON, atau XLSX.",
         },
         403: {"description": "Akses ditolak (dokumen non-publik memerlukan otentikasi)"},
         404: {"description": "Dokumen tidak ditemukan atau belum pernah diharmonisasi"},
@@ -438,13 +441,13 @@ def rekap_tanggapan(
 def export_document_harmonization(
     document_id: int,
     request: Request,
-    format: str = Query("docx", description="Format berkas ekspor: docx | csv | json"),
+    format: str = Query("docx", description="Format berkas ekspor: docx | csv | json | xlsx"),
     run_id: Optional[int] = Query(None, description="ID eksekusi tertentu dari riwayat harmonisasi"),
     db: Session = Depends(get_db),
     current_user=Depends(perlu_izin(Izin.ANALISA_EKSPOR)),
 ):
     """
-    [US-50, FR-HRM-13] Mengekspor laporan hasil harmonisasi draft regulasi ke berkas DOCX, CSV, atau JSON
+    [US-50, FR-HRM-13] Mengekspor laporan hasil harmonisasi draft regulasi ke berkas DOCX, CSV, JSON, atau XLSX
     langsung dari hasil yang tersimpan di basis data (tanpa memanggil layanan ML).
     """
     doc = check_document_access(db, document_id, user=current_user)
@@ -455,10 +458,10 @@ def export_document_harmonization(
         )
 
     fmt_clean = format.lower().strip()
-    if fmt_clean not in ("docx", "csv", "json"):
+    if fmt_clean not in ("docx", "csv", "json", "xlsx"):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Format '{format}' tidak didukung. Pilihan format: docx, csv, json.",
+            detail=f"Format '{format}' tidak didukung. Pilihan format: docx, csv, json, xlsx.",
         )
 
     allowed_ids = allowed_document_ids(db, user=current_user)
@@ -485,6 +488,86 @@ def export_document_harmonization(
             "format": fmt_clean,
             "run_id": run_id,
             "jumlah_temuan": temuan_count,
+        },
+        ip_address=client_ip,
+        commit=True,
+    )
+
+    return Response(
+        content=content_bytes,
+        media_type=media_type,
+        headers=headers,
+    )
+
+
+@router.post(
+    "/api/v1/documents/{document_id}/harmonisasi/ekspor/catatan-dinas",
+    summary="Ekspor laporan harmonisasi format Catatan Dinas (DOCX, PDF)",
+    responses={
+        200: {
+            "content": {
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {},
+                "application/pdf": {},
+            },
+            "description": "Berkas ekspor Catatan Dinas dalam format DOCX atau PDF.",
+        },
+        403: {"description": "Akses ditolak (dokumen non-publik memerlukan otentikasi atau peran tidak berizin)"},
+        404: {"description": "Dokumen tidak ditemukan atau belum pernah diharmonisasi"},
+        422: {"description": "Bukan dokumen draft kajian atau parameter tidak valid"},
+    },
+)
+def export_document_harmonization_catatan_dinas(
+    document_id: int,
+    request: Request,
+    payload: Optional[CatatanDinasExportIn] = Body(default_factory=CatatanDinasExportIn),
+    db: Session = Depends(get_db),
+    current_user=Depends(perlu_izin(Izin.ANALISA_EKSPOR)),
+):
+    """
+    Mengekspor laporan hasil harmonisasi draft regulasi ke format Catatan Dinas (DOCX atau PDF).
+    Mengikuti tata naskah dinas resmi DPEA / OJK.
+    """
+    if payload is None:
+        payload = CatatanDinasExportIn()
+
+    doc = check_document_access(db, document_id, user=current_user)
+    if doc.document_role != PeranDokumen.draft_kajian:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "bukan_draft", "message": "Hanya dokumen draft kajian yang dapat diekspor catatan dinas harmonisasinya."},
+        )
+
+    fmt_clean = (payload.format or "docx").lower().strip()
+    if fmt_clean not in ("docx", "pdf"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Format '{payload.format}' tidak didukung. Pilihan format: docx, pdf.",
+        )
+
+    allowed_ids = allowed_document_ids(db, user=current_user)
+    content_bytes, media_type, headers, temuan_count, ai_status = export_catatan_dinas(
+        db=db,
+        doc=doc,
+        payload=payload,
+        current_user=current_user,
+        allowed_ids=allowed_ids,
+        saring_rujukan_lengkap_fn=saring_rujukan_lengkap,
+        sesuaikan_ringkasan_harmonisasi_fn=sesuaikan_ringkasan_harmonisasi,
+    )
+
+    actor_user_id = getattr(current_user, "id", None) if current_user else None
+    client_ip = request.client.host if request.client else None
+    record_audit(
+        db,
+        action=EXPORT_HARMONIZATION,
+        user_id=actor_user_id,
+        target_resource=f"document:{doc.id}",
+        detail={
+            "document_id": doc.id,
+            "format": f"catatan_dinas_{fmt_clean}",
+            "run_id": payload.run_id,
+            "jumlah_temuan": temuan_count,
+            "pakai_ai": bool(payload.pakai_ai),
         },
         ip_address=client_ip,
         commit=True,

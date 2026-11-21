@@ -1247,10 +1247,40 @@ Frontend cukup memanggil satu asal (`API_BASE_URL` backend) tanpa perlu menghubu
 - **Method & Path:** `GET /api/v1/documents/{{document_id}}/harmonisasi/ekspor`
 - **Izin:** `ANALISA_EKSPOR` (Analis)
 - **Parameter Query:**
-  - `format` (opsional): `docx` (default) | `csv` | `json`
+  - `format` (opsional): `docx` (default) | `csv` | `json` | `xlsx`
   - `run_id` (opsional): ID riwayat eksekusi harmonisasi tertentu
 - **Perilaku:** Mengambil hasil harmonisasi tersimpan (cache atau run) tanpa memanggil ML, menyaring rujukan nonaktif/non-publik, menggabungkan tanggapan analis, dan menghasilkan dokumen laporan sesuai format.
 - **Kode Galat:** 404 `harmonisasi_belum_ada` bila belum pernah diharmonisasi, 422 `bukan_draft` bila bukan `draft_kajian`.
+- **Audit:** Mencatat jejak audit `EXPORT_HARMONIZATION`.
+
+### 11.12 Ekspor Catatan Dinas Harmonisasi (US-52 #76 / Weekly #10)
+- **Method & Path:** `POST /api/v1/documents/{{document_id}}/harmonisasi/ekspor/catatan-dinas`
+- **Izin:** `ANALISA_EKSPOR` (Analis)
+- **Content-Type:** `application/json`
+- **Body JSON (CatatanDinasExportIn):**
+  - `format` (opsional): `"docx"` (default) | `"pdf"`
+  - `run_id` (opsional): ID riwayat eksekusi harmonisasi tertentu
+  - `pakai_ai` (opsional, boolean): Gunakan narasi AI untuk Butir 1 (default `false`)
+  - `nomor_cd` (opsional, string, maks 60): Nomor Catatan Dinas (bawaan: `settings.cd_placeholder_nomor_cd` = `"CD-xx/…/xxxx"`)
+  - `yth` (opsional, string, maks 200): Kepada / Yth. (bawaan baku: `settings.cd_default_yth` = `"Kepala Departemen"`)
+  - `dari` (opsional, string, maks 200): Dari (bawaan baku: `settings.cd_default_dari` = `"Analis Eksekutif"`)
+  - `sifat` (opsional, string, maks 60): Sifat surat (bawaan: `settings.cd_default_sifat` = `"Biasa"`)
+  - `lampiran` (opsional, string, maks 120): Lampiran (bawaan: `settings.cd_default_lampiran` = `"-"`)
+  - `hal` (opsional, string, maks 300): Perihal (bawaan: `"Tanggapan atas <judul draf>"`, tidak menduplikasi jika judul sudah diawali kata tersebut)
+  - `tanggal` (opsional, date YYYY-MM-DD): Tanggal Catatan Dinas (bawaan: `settings.cd_placeholder_tanggal` = `"…"` karena diisi manual pengguna; bila diisi, diformat misal `13 November 2026`)
+  - `unit_peminta` (opsional, string, maks 200): Unit kerja peminta nota dinas (bawaan: `"…"`)
+  - `nomor_nd` (opsional, string, maks 60): Nomor Nota Dinas permintaan (bawaan: `"ND-xx/…/xxxx"`)
+  - `tanggal_nd` (opsional, date YYYY-MM-DD): Tanggal Nota Dinas permintaan (bawaan: `"…"`)
+  - `hal_nd` (opsional, string, maks 300): Perihal Nota Dinas permintaan (bawaan: `"…"`)
+  - `catatan_tambahan` (opsional, string, maks 4000): Catatan tambahan pada Butir 4 (bila kosong, butir 4 dilewati)
+  - `penandatangan_jabatan` (opsional, string, maks 200): Jabatan penandatangan (bawaan: `"…"`)
+  - `penandatangan_nama` (opsional, string, maks 200): Nama penandatangan (bawaan: `"…"`)
+  - `penandatangan_nip` (opsional, string, maks 30): NIP penandatangan (bawaan: `"…"`)
+- **Headers Respons:**
+  - `Content-Type`: `application/vnd.openxmlformats-officedocument.wordprocessingml.document` (DOCX) atau `application/pdf` (PDF)
+  - `Content-Disposition`: `attachment; filename="catatan_dinas_<slug>_<id>.<ext>"; filename*="UTF-8''..."`
+  - `X-Catatan-Dinas-AI`: `"dipakai"` | `"tidak_tersedia"` (bila `pakai_ai=true`)
+- **Kode Galat:** 404 `harmonisasi_belum_ada` bila belum pernah diharmonisasi, 422 `bukan_draft` bila bukan `draft_kajian`, 422 bila batas panjang parameter terlampaui.
 - **Audit:** Mencatat jejak audit `EXPORT_HARMONIZATION`.
 
 ---

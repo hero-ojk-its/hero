@@ -16,6 +16,9 @@ import urllib.parse
 import docx
 from docx.shared import Pt, RGBColor
 from fastapi import HTTPException, status
+import openpyxl
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from sqlalchemy.orm import Session
 
 from app.models.analysis_result import AnalysisResult
@@ -30,6 +33,138 @@ from app.services.tanggapan_service import (
 logger = logging.getLogger("hero")
 
 FOOTER_URD = "Keputusan final tetap kewenangan Pengawas / unit terkait."
+
+JENIS_LABEL_MAP = {
+    # Pemetaan jenis temuan internal/engine ke label tampilan UI (Baru, Sama, Menggantikan, Melengkapi, Konflik).
+    # Catatan: Kosakata akhir (UI atau istilah DPEA) menunggu konfirmasi tim.
+    "pasal_baru": "Baru",
+    "baru": "Baru",
+    "duplikasi": "Sama",
+    "sama": "Sama",
+    "menggantikan": "Menggantikan",
+    "memperjelas": "Melengkapi",
+    "melengkapi": "Melengkapi",
+    "konflik": "Konflik",
+}
+
+
+def potong_teks_di_batas_kata(teks: Optional[str], batas: int = 300) -> str:
+    """Memotong teks maksimal `batas` karakter pada batas kata dengan akhiran '…'."""
+    if not teks:
+        return ""
+    teks = teks.strip()
+    if len(teks) <= batas:
+        return teks
+    potongan = teks[:batas]
+    last_space = potongan.rfind(" ")
+    if last_space > 0:
+        potongan = potongan[:last_space]
+    return potongan.rstrip(".,;:- ") + "…"
+
+
+def parse_pasal_sort_key(pasal_str: Optional[str]) -> Tuple[int, str]:
+    """Sort key alami untuk penomoran pasal: Pasal 1, Pasal 2, ..., Pasal 10."""
+    if not pasal_str:
+        return (999999, "")
+    m = re.search(r"\b(?:pasal\s*)?(\d+)", str(pasal_str), re.IGNORECASE)
+    num = int(m.group(1)) if m else 999999
+    return (num, str(pasal_str).lower())
+
+
+def _format_nama_pembanding(
+    pembanding_obj: Optional[Dict[str, Any]],
+    pasal_fallback: Optional[str] = None,
+    allowed_ids: Optional[Set[int]] = None,
+) -> Optional[str]:
+    """
+    Menyusun nama peraturan pembanding:
+    - akses dibatasi: 'peraturan pembanding (akses dibatasi)'
+    - ada judul dan nomor: '<judul> (Nomor <nomor>), <pasal>'
+    - hanya judul: '<judul>, <pasal>'
+    - hanya nomor: 'peraturan Nomor <nomor>, <pasal>'
+    - tidak ada keduanya: 'peraturan pembanding' (+ ', <pasal>' bila ada)
+    Jangan menampilkan pembanding.key (pengenal internal). Judul dipotong maks 200 karakter.
+    """
+    if pembanding_obj and isinstance(pembanding_obj, dict):
+        p_doc_id = pembanding_obj.get("document_id")
+        if allowed_ids is not None and isinstance(p_doc_id, int) and p_doc_id not in allowed_ids:
+            return "peraturan pembanding (akses dibatasi)"
+        if pembanding_obj.get("restricted") or pembanding_obj.get("akses_dibatasi"):
+            return "peraturan pembanding (akses dibatasi)"
+
+        judul_raw = pembanding_obj.get("judul")
+        judul = potong_teks_di_batas_kata(str(judul_raw).strip(), 200) if judul_raw and str(judul_raw).strip() else None
+
+        nomor_raw = pembanding_obj.get("nomor")
+        nomor = str(nomor_raw).strip() if nomor_raw and str(nomor_raw).strip() else None
+
+        pasal_raw = pembanding_obj.get("pasal") or pasal_fallback
+        pasal = str(pasal_raw).strip() if pasal_raw and str(pasal_raw).strip() else None
+
+        if judul and nomor:
+            base = f"{judul} (Nomor {nomor})"
+        elif judul:
+            base = judul
+        elif nomor:
+            base = f"peraturan Nomor {nomor}"
+        else:
+            base = "peraturan pembanding"
+
+        if pasal:
+            return f"{base}, {pasal}"
+        return base
+
+    if pasal_fallback and str(pasal_fallback).strip():
+        return f"peraturan pembanding, {str(pasal_fallback).strip()}"
+
+    return None
+
+
+MAX_EXCEL_CELL_LEN = 32000
+SUFFIX_DIPOTONG = " … [dipotong]"
+DANGEROUS_CSV_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def clean_cell_text(val: Any) -> str:
+    """Membersihkan karakter kontrol, membatasi panjang sel Excel, dan memastikan teks aman disimpan di sel Excel."""
+    if val is None:
+        return ""
+    text = str(val)
+    text = ILLEGAL_CHARACTERS_RE.sub("", text)
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
+    if len(text) > MAX_EXCEL_CELL_LEN:
+        text = text[:MAX_EXCEL_CELL_LEN] + SUFFIX_DIPOTONG
+    return text
+
+
+def netralkan_sel_csv(val: Any) -> Any:
+    """
+    Menetralkan sel CSV dari formula injection (CSV injection).
+    Jika nilai bertipe teks (str) dan diawali salah satu karakter berbahaya
+    ('=', '+', '-', '@', '\t', '\r'), tambahkan tanda kutip tunggal (') di depannya.
+    None, string kosong, angka murni (int, float), dan teks biasa tidak diubah.
+    """
+    if val is None:
+        return None
+    if isinstance(val, (int, float)) and not isinstance(val, bool):
+        return val
+    if not isinstance(val, str):
+        val = str(val)
+    if not val:
+        return val
+
+    if val[0] in DANGEROUS_CSV_PREFIXES:
+        return f"'{val}"
+    return val
+
+
+def set_safe_text_cell(cell, val: Any) -> None:
+    """
+    Menulis sel Excel sebagai teks biasa (data_type='s') agar tidak pernah
+    dievaluasi sebagai rumus meskipun diawali =, +, -, atau @.
+    """
+    cell.value = clean_cell_text(val)
+    cell.data_type = "s"
 
 
 def generate_harmonisasi_export_filename(
@@ -139,7 +274,9 @@ def export_harmonisasi_to_docx(
     if isinstance(per_jenis, dict) and per_jenis:
         p_ringkasan.add_run("Rincian per Jenis Temuan:\n").bold = True
         for j_key, j_val in per_jenis.items():
-            p_ringkasan.add_run(f"  • {str(j_key).replace('_', ' ').capitalize()}: {j_val}\n")
+            raw_k = str(j_key).strip().lower()
+            lbl = JENIS_LABEL_MAP.get(raw_k, str(j_key).replace('_', ' ').capitalize())
+            p_ringkasan.add_run(f"  • {lbl}: {j_val}\n")
 
     tanggapan_rekap = ringkasan.get("tanggapan")
     if isinstance(tanggapan_rekap, dict):
@@ -177,7 +314,9 @@ def export_harmonisasi_to_docx(
             continue
         row_cells = tbl.add_row().cells
         row_cells[0].text = str(i)
-        row_cells[1].text = str(t.get("jenis") or "-")
+        raw_j = str(t.get("jenis") or "").strip().lower()
+        lbl_jenis = JENIS_LABEL_MAP.get(raw_j, str(t.get("jenis") or "-"))
+        row_cells[1].text = lbl_jenis
         row_cells[2].text = str(t.get("pasal_draft") or "-")
 
         p_info = t.get("pembanding")
@@ -267,35 +406,248 @@ def export_harmonisasi_to_csv(data: Dict[str, Any]) -> bytes:
 
         writer.writerow([
             i,
-            t.get("jenis") or "",
-            t.get("pasal_draft") or "",
-            p_str,
-            pasal_p or "",
-            uraian or "",
-            keyakinan_str,
-            pen,
-            cat,
-            oleh,
-            t.get("kunci_temuan") or "",
+            netralkan_sel_csv(t.get("jenis") or ""),
+            netralkan_sel_csv(t.get("pasal_draft") or ""),
+            netralkan_sel_csv(p_str),
+            netralkan_sel_csv(pasal_p or ""),
+            netralkan_sel_csv(uraian or ""),
+            netralkan_sel_csv(keyakinan_str),
+            netralkan_sel_csv(pen),
+            netralkan_sel_csv(cat),
+            netralkan_sel_csv(oleh),
+            netralkan_sel_csv(t.get("kunci_temuan") or ""),
         ])
 
     csv_text = output.getvalue()
     return b"\xef\xbb\xbf" + csv_text.encode("utf-8")
 
 
-def export_harmonisasi(
+def export_harmonisasi_to_xlsx(
+    doc_model: Document,
+    data: Dict[str, Any],
+    mode: str,
+    dibuat_at: Optional[datetime],
+    diekspor_at: datetime,
+    allowed_ids: Optional[Set[int]] = None,
+) -> bytes:
+    """
+    Membangun berkas Excel (.xlsx) laporan harmonisasi dengan dua sheet:
+    1. Ringkasan: parameter draf, ringkasan per label, rekap tanggapan analis, disclaimer URD.
+    2. Temuan: SEMUA temuan urut pasal draf, kolom lengkap, aman dari formula injection.
+    """
+    wb = openpyxl.Workbook()
+
+    # Sheet 1: Ringkasan
+    ws_ringkasan = wb.active
+    ws_ringkasan.title = "Ringkasan"
+
+    # Sheet 2: Temuan
+    ws_temuan = wb.create_sheet(title="Temuan")
+
+    temuan_raw = data.get("temuan") if isinstance(data.get("temuan"), list) else []
+    temuan_list = [t for t in temuan_raw if isinstance(t, dict)]
+
+    # Hitung jumlah per label tampilan
+    counts_label = {
+        "Baru": 0,
+        "Sama": 0,
+        "Menggantikan": 0,
+        "Melengkapi": 0,
+        "Konflik": 0,
+    }
+    for t in temuan_list:
+        raw_j = str(t.get("jenis") or "").strip().lower()
+        lbl = JENIS_LABEL_MAP.get(raw_j, raw_j.capitalize())
+        if lbl in counts_label:
+            counts_label[lbl] += 1
+
+    # Hitung jumlah per penilaian analis
+    counts_penilaian = {
+        "Valid": 0,
+        "Tidak Relevan": 0,
+        "Belum dinilai": 0,
+    }
+    for t in temuan_list:
+        tg = t.get("tanggapan")
+        if isinstance(tg, dict) and tg.get("penilaian"):
+            pen = str(tg.get("penilaian")).strip().lower()
+            if pen == "valid":
+                counts_penilaian["Valid"] += 1
+            elif pen == "tidak_relevan":
+                counts_penilaian["Tidak Relevan"] += 1
+            else:
+                counts_penilaian["Belum dinilai"] += 1
+        else:
+            counts_penilaian["Belum dinilai"] += 1
+
+    waktu_harmonisasi_str = dibuat_at.strftime("%Y-%m-%d %H:%M:%S UTC") if dibuat_at else "-"
+    waktu_ekspor_str = diekspor_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    # --- Isi Sheet Ringkasan ---
+    ws_ringkasan.cell(row=1, column=1, value="Parameter").font = Font(name="Calibri", size=11, bold=True)
+    ws_ringkasan.cell(row=1, column=2, value="Nilai").font = Font(name="Calibri", size=11, bold=True)
+    ws_ringkasan.cell(row=1, column=1).fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
+    ws_ringkasan.cell(row=1, column=2).fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
+    ws_ringkasan.freeze_panes = "A2"
+
+    ringkasan_rows = [
+        ("Judul Draf", doc_model.title or f"Dokumen #{doc_model.id}"),
+        ("Jenis Regulasi", doc_model.regulation_type or "-"),
+        ("Nomor Regulasi", doc_model.regulation_number or "-"),
+        ("Tahun Regulasi", str(doc_model.regulation_year) if doc_model.regulation_year else "-"),
+        ("Mode Analisa", mode),
+        ("Waktu Harmonisasi", waktu_harmonisasi_str),
+        ("Waktu Ekspor", waktu_ekspor_str),
+        ("Total Temuan", len(temuan_list)),
+        ("Temuan - Baru", counts_label["Baru"]),
+        ("Temuan - Sama", counts_label["Sama"]),
+        ("Temuan - Menggantikan", counts_label["Menggantikan"]),
+        ("Temuan - Melengkapi", counts_label["Melengkapi"]),
+        ("Temuan - Konflik", counts_label["Konflik"]),
+        ("Penilaian - Valid", counts_penilaian["Valid"]),
+        ("Penilaian - Tidak Relevan", counts_penilaian["Tidak Relevan"]),
+        ("Penilaian - Belum dinilai", counts_penilaian["Belum dinilai"]),
+        ("Catatan", "Draft / Rekomendasi - keluaran sistem bukan keputusan"),
+    ]
+
+    for r_idx, (param, val) in enumerate(ringkasan_rows, start=2):
+        c_a = ws_ringkasan.cell(row=r_idx, column=1)
+        set_safe_text_cell(c_a, param)
+        c_a.alignment = Alignment(vertical="top")
+
+        c_b = ws_ringkasan.cell(row=r_idx, column=2)
+        if isinstance(val, int) and not isinstance(val, bool):
+            c_b.value = val
+            c_b.data_type = "n"
+            c_b.alignment = Alignment(horizontal="right", vertical="top")
+        else:
+            set_safe_text_cell(c_b, val)
+            c_b.alignment = Alignment(vertical="top", wrap_text=True)
+
+    ws_ringkasan.column_dimensions["A"].width = 28
+    ws_ringkasan.column_dimensions["B"].width = 65
+
+    # --- Isi Sheet Temuan ---
+    headers_temuan = [
+        "No",
+        "Pasal draf",
+        "Kutipan draf",
+        "Jenis",
+        "Peraturan pembanding",
+        "Kutipan pembanding",
+        "Keyakinan",
+        "Alasan",
+        "Penilaian analis",
+        "Catatan analis",
+    ]
+
+    for c_idx, h in enumerate(headers_temuan, start=1):
+        cell_h = ws_temuan.cell(row=1, column=c_idx, value=h)
+        cell_h.font = Font(name="Calibri", size=11, bold=True)
+        cell_h.fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
+        cell_h.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    ws_temuan.freeze_panes = "A2"
+
+    sorted_temuan = sorted(
+        temuan_list,
+        key=lambda x: parse_pasal_sort_key(x.get("pasal_draft") or x.get("pasal")),
+    )
+
+    for i, t in enumerate(sorted_temuan, start=1):
+        r_num = i + 1
+        pasal_d = t.get("pasal_draft") or t.get("pasal") or "-"
+        kutipan_d = (
+            t.get("kutipan_draft")
+            or t.get("teks_draft")
+            or t.get("draft_teks")
+            or t.get("kutipan")
+            or t.get("isi_pasal")
+            or "-"
+        )
+
+        raw_j = str(t.get("jenis") or "").strip().lower()
+        lbl_jenis = JENIS_LABEL_MAP.get(raw_j, str(t.get("jenis") or "-"))
+
+        p_info = t.get("pembanding")
+        if raw_j == "pasal_baru" or not p_info:
+            p_nama = "-"
+            p_kutipan = "-"
+        else:
+            p_dict = p_info if isinstance(p_info, dict) else {}
+            p_nama = _format_nama_pembanding(
+                p_dict,
+                pasal_fallback=t.get("pasal_pembanding"),
+                allowed_ids=allowed_ids,
+            ) or "-"
+            p_kutipan = p_dict.get("kutipan") or t.get("kutipan_pembanding") or "-"
+
+        keyakinan_str = _format_keyakinan(t.get("tingkat"), t.get("keyakinan"))
+        alasan_str = t.get("alasan") or t.get("deskripsi") or t.get("judul") or "-"
+
+        tg = t.get("tanggapan")
+        if isinstance(tg, dict):
+            pen_str = str(tg.get("penilaian") or "-").replace("_", " ").capitalize()
+            cat_str = str(tg.get("catatan") or "-")
+        else:
+            pen_str = "Belum dinilai"
+            cat_str = "-"
+
+        # Kolom 1: No (integer)
+        c_no = ws_temuan.cell(row=r_num, column=1, value=i)
+        c_no.alignment = Alignment(horizontal="center", vertical="top")
+
+        # Kolom 2..10 (safe text)
+        row_values = [
+            pasal_d,
+            kutipan_d,
+            lbl_jenis,
+            p_nama,
+            p_kutipan,
+            keyakinan_str,
+            alasan_str,
+            pen_str,
+            cat_str,
+        ]
+        for col_offset, val in enumerate(row_values, start=2):
+            c_val = ws_temuan.cell(row=r_num, column=col_offset)
+            set_safe_text_cell(c_val, val)
+            c_val.alignment = Alignment(vertical="top", wrap_text=True)
+
+    col_widths_temuan = {
+        "A": 6,
+        "B": 16,
+        "C": 45,
+        "D": 16,
+        "E": 38,
+        "F": 45,
+        "G": 18,
+        "H": 35,
+        "I": 18,
+        "J": 25,
+    }
+    for col_letter, width in col_widths_temuan.items():
+        ws_temuan.column_dimensions[col_letter].width = width
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def muat_data_harmonisasi_tersimpan(
     db: Session,
     doc: Document,
-    format_type: str,
     run_id: Optional[int] = None,
-    current_user: Optional[Any] = None,
     allowed_ids: Optional[Set[int]] = None,
     saring_rujukan_lengkap_fn: Optional[Any] = None,
     sesuaikan_ringkasan_harmonisasi_fn: Optional[Any] = None,
-) -> Tuple[bytes, str, Dict[str, str], int]:
+) -> Tuple[Dict[str, Any], str, Optional[datetime], Optional[int]]:
     """
-    Mengambil hasil harmonisasi tersimpan (cache atau run), menyaring rujukan rahasia/nonaktif,
-    menggabungkan tanggapan analis, dan menghasilkan bytes berkas ekspor sesuai format (DOCX/CSV/JSON).
+    Mengambil data harmonisasi tersimpan (dari run_id atau cache AnalysisResult),
+    menandai kunci temuan, menyaring rujukan dokumen nonaktif / non-publik,
+    dan menggabungkan tanggapan analis.
+    Mengembalikan (filtered_data, actual_mode, dibuat_at, resolved_run_id).
     """
     raw_data: Optional[Dict[str, Any]] = None
     dibuat_at: Optional[datetime] = None
@@ -425,6 +777,32 @@ def export_harmonisasi(
     # 4. Gabungkan tanggapan analis
     filtered_data = gabungkan_tanggapan_ke_harmonisasi(db, doc.id, filtered_data)
 
+    return filtered_data, actual_mode, dibuat_at, resolved_run_id
+
+
+def export_harmonisasi(
+    db: Session,
+    doc: Document,
+    format_type: str,
+    run_id: Optional[int] = None,
+    current_user: Optional[Any] = None,
+    allowed_ids: Optional[Set[int]] = None,
+    saring_rujukan_lengkap_fn: Optional[Any] = None,
+    sesuaikan_ringkasan_harmonisasi_fn: Optional[Any] = None,
+) -> Tuple[bytes, str, Dict[str, str], int]:
+    """
+    Mengambil hasil harmonisasi tersimpan (cache atau run), menyaring rujukan rahasia/nonaktif,
+    menggabungkan tanggapan analis, dan menghasilkan bytes berkas ekspor sesuai format (DOCX/CSV/JSON).
+    """
+    filtered_data, actual_mode, dibuat_at, resolved_run_id = muat_data_harmonisasi_tersimpan(
+        db=db,
+        doc=doc,
+        run_id=run_id,
+        allowed_ids=allowed_ids,
+        saring_rujukan_lengkap_fn=saring_rujukan_lengkap_fn,
+        sesuaikan_ringkasan_harmonisasi_fn=sesuaikan_ringkasan_harmonisasi_fn,
+    )
+
     temuan_count = len(filtered_data.get("temuan", [])) if isinstance(filtered_data.get("temuan"), list) else 0
     now_utc = datetime.now(timezone.utc)
 
@@ -479,10 +857,24 @@ def export_harmonisasi(
             "Content-Disposition": content_disp,
             "Content-Type": media_type,
         }
+    elif fmt == "xlsx":
+        content_bytes = export_harmonisasi_to_xlsx(
+            doc_model=doc,
+            data=filtered_data,
+            mode=actual_mode,
+            dibuat_at=dibuat_at,
+            diekspor_at=now_utc,
+            allowed_ids=allowed_ids,
+        )
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        headers = {
+            "Content-Disposition": content_disp,
+            "Content-Type": media_type,
+        }
     else:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Format '{format_type}' tidak didukung. Format yang tersedia: docx, csv, json.",
+            detail=f"Format '{format_type}' tidak didukung. Format yang tersedia: docx, csv, json, xlsx.",
         )
 
     return content_bytes, media_type, headers, temuan_count

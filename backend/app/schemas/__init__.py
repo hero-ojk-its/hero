@@ -29,6 +29,9 @@ from app.schemas.category import (
 from app.schemas.document import (
     DocumentMetadataPatchResponse,
 )
+from app.schemas.catatan_dinas import (
+    CatatanDinasExportIn,
+)
 
 __all__ = [
     "ScrapingSourceCreate",
@@ -51,4 +54,5 @@ __all__ = [
     "CategoryDetailResponse",
     "CategoryUpdateResponse",
     "DocumentMetadataPatchResponse",
+    "CatatanDinasExportIn",
 ]
