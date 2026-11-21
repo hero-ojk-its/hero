@@ -35,7 +35,10 @@ from app.schemas.article import (
 )
 from app.schemas.document import DocumentMetadataPatchResponse
 from app.schemas.ingest import ExtractedMetadataResponse
-from app.services.metadata_extraction_service import extract_metadata_from_pdf_content
+from app.services.metadata_extraction_service import (
+    extract_metadata_from_pdf_content,
+    process_extract_metadata_upload,
+)
 from app.core.permissions import (
     perlu_izin,
     perlu_salah_satu_izin,
@@ -181,25 +184,14 @@ class AnalysisRunDetailResponse(AnalysisRunItemResponse):
 )
 def extract_metadata(
     file: UploadFile = File(..., description="File PDF untuk diekstrak metadatanya"),
+    current_user=Depends(perlu_izin(Izin.DOKUMEN_UNGGAH)),
 ):
     """
     Mengekstrak informasi metadata (Judul, Nomor, Jenis, Bidang/Sektor, Tanggal Terbit)
     secara otomatis dari halaman awal PDF tanpa menyimpannya ke database.
     """
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File harus berupa berkas PDF (.pdf)",
-        )
-    try:
-        content = file.file.read()
-        res = extract_metadata_from_pdf_content(content, file.filename)
-        return ExtractedMetadataResponse(**res)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"Gagal membaca naskah PDF: {str(exc)}",
-        )
+    res = process_extract_metadata_upload(file)
+    return ExtractedMetadataResponse(**res)
 
 
 @router.get("/", summary="Daftar & pencarian dokumen regulasi")
