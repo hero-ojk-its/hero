@@ -35,10 +35,14 @@ logger = logging.getLogger("hero")
 FOOTER_URD = "Keputusan final tetap kewenangan Pengawas / unit terkait."
 
 JENIS_LABEL_MAP = {
+    # Pemetaan jenis temuan internal/engine ke label tampilan UI (Baru, Sama, Menggantikan, Melengkapi, Konflik).
+    # Catatan: Kosakata akhir (UI atau istilah DPEA) menunggu konfirmasi tim.
     "pasal_baru": "Baru",
     "baru": "Baru",
+    "duplikasi": "Sama",
     "sama": "Sama",
     "menggantikan": "Menggantikan",
+    "memperjelas": "Melengkapi",
     "melengkapi": "Melengkapi",
     "konflik": "Konflik",
 }
@@ -270,7 +274,9 @@ def export_harmonisasi_to_docx(
     if isinstance(per_jenis, dict) and per_jenis:
         p_ringkasan.add_run("Rincian per Jenis Temuan:\n").bold = True
         for j_key, j_val in per_jenis.items():
-            p_ringkasan.add_run(f"  • {str(j_key).replace('_', ' ').capitalize()}: {j_val}\n")
+            raw_k = str(j_key).strip().lower()
+            lbl = JENIS_LABEL_MAP.get(raw_k, str(j_key).replace('_', ' ').capitalize())
+            p_ringkasan.add_run(f"  • {lbl}: {j_val}\n")
 
     tanggapan_rekap = ringkasan.get("tanggapan")
     if isinstance(tanggapan_rekap, dict):
@@ -308,7 +314,9 @@ def export_harmonisasi_to_docx(
             continue
         row_cells = tbl.add_row().cells
         row_cells[0].text = str(i)
-        row_cells[1].text = str(t.get("jenis") or "-")
+        raw_j = str(t.get("jenis") or "").strip().lower()
+        lbl_jenis = JENIS_LABEL_MAP.get(raw_j, str(t.get("jenis") or "-"))
+        row_cells[1].text = lbl_jenis
         row_cells[2].text = str(t.get("pasal_draft") or "-")
 
         p_info = t.get("pembanding")
