@@ -203,8 +203,7 @@ def test_extract_metadata_internal_error_no_leak(
     assert res.json()["detail"] == "Metadata tidak dapat dibaca dari berkas ini"
 
 
-@pytest.mark.parametrize("endpoint", ENDPOINTS)
-def test_extract_metadata_file_cleanup(client: TestClient, endpoint: str):
+def test_extract_metadata_file_cleanup():
     """6. Berkas sementara / handle file ditutup setelah request selesai."""
     pdf_bytes = make_pdf("PERATURAN OTORITAS JASA KEUANGAN NOMOR 1/POJK.01/2026")
     raw_io = io.BytesIO(pdf_bytes)

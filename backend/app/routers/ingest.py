@@ -44,7 +44,6 @@ from app.schemas.ingest import (
     ExtractedMetadataResponse,
 )
 from app.services.metadata_extraction_service import (
-    extract_metadata_from_pdf_content,
     process_extract_metadata_upload,
 )
 from app.services.ingest_service import (
@@ -125,6 +124,12 @@ def _format_failure_response(f: IngestFailure) -> FailureResponse:
     "/extract-metadata",
     response_model=ExtractedMetadataResponse,
     summary="Ekstraksi metadata otomatis dari file PDF sebelum proses upload/simpan",
+    responses={
+        401: {"description": "Autentikasi diperlukan"},
+        403: {"description": "Izin tidak memadai"},
+        413: {"description": "Ukuran berkas melebihi batas maksimal"},
+        422: {"description": "Format atau isi berkas PDF tidak valid"},
+    },
 )
 def extract_metadata(
     file: UploadFile = File(..., description="File PDF untuk diekstrak metadatanya"),

@@ -36,7 +36,6 @@ from app.schemas.article import (
 from app.schemas.document import DocumentMetadataPatchResponse
 from app.schemas.ingest import ExtractedMetadataResponse
 from app.services.metadata_extraction_service import (
-    extract_metadata_from_pdf_content,
     process_extract_metadata_upload,
 )
 from app.core.permissions import (
@@ -181,6 +180,12 @@ class AnalysisRunDetailResponse(AnalysisRunItemResponse):
     "/extract-metadata",
     response_model=ExtractedMetadataResponse,
     summary="Ekstraksi metadata otomatis dari file PDF",
+    responses={
+        401: {"description": "Autentikasi diperlukan"},
+        403: {"description": "Izin tidak memadai"},
+        413: {"description": "Ukuran berkas melebihi batas maksimal"},
+        422: {"description": "Format atau isi berkas PDF tidak valid"},
+    },
 )
 def extract_metadata(
     file: UploadFile = File(..., description="File PDF untuk diekstrak metadatanya"),

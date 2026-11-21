@@ -515,7 +515,7 @@ def process_extract_metadata_upload(file: UploadFile) -> Dict[str, Any]:
                 detail=val_err.message,
             )
         except Exception as exc:
-            logger.warning("Gagal mengekstrak metadata dari PDF: %s", exc)
+            logger.warning("Gagal mengekstrak metadata dari PDF (%s)", type(exc).__name__)
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Metadata tidak dapat dibaca dari berkas ini",
