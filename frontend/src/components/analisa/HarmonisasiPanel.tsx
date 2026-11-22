@@ -565,7 +565,7 @@ export default function HarmonisasiPanel({
             </button>
 
             {exportOpen && isDraft && (
-              <div className="absolute left-0 mt-1 w-52 bg-white border border-gray-200 rounded-lg shadow-xl z-30 py-1 text-xs animate-in fade-in zoom-in-95 duration-150">
+              <div className="absolute left-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-xl z-30 py-1 text-xs animate-in fade-in zoom-in-95 duration-150">
                 <div className="px-3 py-1.5 border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
                   Pilih Format Laporan
                 </div>
@@ -581,6 +581,19 @@ export default function HarmonisasiPanel({
                     <span className="text-[10px] text-gray-500">Tabel resmi &amp; penilaian analis</span>
                   </div>
                   {exportingFormat === 'docx' && <Loader2 size={12} className="animate-spin ml-auto text-blue-600" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleExport('xlsx')}
+                  disabled={exportingFormat !== null}
+                  className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-center gap-2 text-gray-700 transition cursor-pointer disabled:opacity-50"
+                >
+                  <FileSpreadsheet size={14} className="text-emerald-600 shrink-0" />
+                  <div className="min-w-0">
+                    <span className="font-semibold block text-xs">Spreadsheet Excel (.xlsx)</span>
+                    <span className="text-[10px] text-gray-500">Tabel analisis &amp; matriks evaluasi</span>
+                  </div>
+                  {exportingFormat === 'xlsx' && <Loader2 size={12} className="animate-spin ml-auto text-emerald-600" />}
                 </button>
                 <button
                   type="button"
