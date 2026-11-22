@@ -9,7 +9,7 @@
  *   (disaring_backend, cache, penyaringan temuan yang pembandingnya tidak boleh diakses).
  */
 
-import { apiJson, ApiError, buildQueryString, apiFetchBlob } from './api';
+import { apiJson, ApiError, buildQueryString, apiFetchBlob, API_BASE_URL, parseContentDispositionFilename } from './api';
 import { ANALISA_TIMEOUT_MS, ML_API_BASE_URL } from './analisaApi';
 import type { MlAnalisaCache } from './analisaApi';
 import type { components, operations } from './openapi';
@@ -328,6 +328,120 @@ export async function exportHarmonisasi(
   const fallbackFilename = `harmonisasi_dokumen_${documentId}.${format}`;
   const filename = blob.filename || fallbackFilename;
   return { blob, filename };
+}
+
+// ============================================================================
+// Ekspor Catatan Dinas Harmonisasi (Weekly #10 / Backlog #76)
+// ============================================================================
+
+export interface CatatanDinasExportPayload {
+  format?: 'docx' | 'pdf';
+  run_id?: number | null;
+  pakai_ai?: boolean;
+  nomor_cd?: string | null;
+  yth?: string | null;
+  dari?: string | null;
+  sifat?: string | null;
+  lampiran?: string | null;
+  hal?: string | null;
+  tanggal?: string | null; // format YYYY-MM-DD
+  unit_peminta?: string | null;
+  nomor_nd?: string | null;
+  tanggal_nd?: string | null; // format YYYY-MM-DD
+  hal_nd?: string | null;
+  catatan_tambahan?: string | null;
+  penandatangan_jabatan?: string | null;
+  penandatangan_nama?: string | null;
+  penandatangan_nip?: string | null;
+}
+
+export interface CatatanDinasExportResult {
+  blob: Blob;
+  filename: string;
+  aiStatus: 'dipakai' | 'tidak_tersedia' | null;
+}
+
+/**
+ * Mengambil token autentikasi jika tersedia di browser storage.
+ */
+function getAuthTokenFromStorage(): string | null {
+  if (typeof window === 'undefined') return null;
+  return (
+    localStorage.getItem('hero_token') ||
+    localStorage.getItem('token') ||
+    localStorage.getItem('auth_token') ||
+    sessionStorage.getItem('hero_token') ||
+    sessionStorage.getItem('token')
+  );
+}
+
+/**
+ * Mengekspor naskah resmi Catatan Dinas hasil harmonisasi draf regulasi (DOCX atau PDF).
+ * Mengirimkan isian kop, rujukan nota dinas, penandatangan, serta preferensi narasi AI.
+ * Membaca header respons X-Catatan-Dinas-AI untuk mengetahui status penggunaan AI pada Butir 1.
+ */
+export async function exportCatatanDinas(
+  documentId: number,
+  payload: CatatanDinasExportPayload = {},
+  options?: { signal?: AbortSignal }
+): Promise<CatatanDinasExportResult> {
+  const url = `${API_BASE_URL}/api/v1/documents/${documentId}/harmonisasi/ekspor/catatan-dinas`;
+  const token = getAuthTokenFromStorage();
+  const headers = new Headers({
+    'Content-Type': 'application/json',
+    Accept: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document, application/pdf, */*',
+  });
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+      signal: options?.signal,
+    });
+  } catch (err: unknown) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw err;
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    const friendlyMessage =
+      message.toLowerCase().includes('failed to fetch') || message.toLowerCase().includes('fetch failed')
+        ? 'Gagal terhubung ke peladen backend. Pastikan server backend sedang aktif di ' + (API_BASE_URL || 'http://localhost:8000') + '.'
+        : message || 'Gagal terhubung ke peladen API backend.';
+    throw new ApiError(0, friendlyMessage);
+  }
+
+  if (!response.ok) {
+    let errorDetail: unknown = null;
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      try {
+        const bodyData = await response.json();
+        errorDetail =
+          bodyData && typeof bodyData === 'object' && 'detail' in (bodyData as Record<string, unknown>)
+            ? (bodyData as Record<string, unknown>).detail
+            : bodyData;
+      } catch {
+        errorDetail = null;
+      }
+    }
+    if (!errorDetail) {
+      errorDetail = response.statusText || `Galat HTTP ${response.status}`;
+    }
+    throw new ApiError(response.status, errorDetail, { headers: response.headers });
+  }
+
+  const aiStatus = (response.headers.get('x-catatan-dinas-ai') as 'dipakai' | 'tidak_tersedia' | null) || null;
+  const contentDisp = response.headers.get('content-disposition');
+  const fallbackExt = payload.format === 'pdf' ? 'pdf' : 'docx';
+  const filename = parseContentDispositionFilename(contentDisp) || `catatan_dinas_dokumen_${documentId}.${fallbackExt}`;
+  const blob = await response.blob();
+
+  return { blob, filename, aiStatus };
 }
 
 // ============================================================================

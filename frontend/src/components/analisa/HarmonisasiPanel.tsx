@@ -18,6 +18,7 @@ import {
   FileSpreadsheet,
   FileCode2,
   Layers,
+  ScrollText,
 } from 'lucide-react';
 import { apiFetchBlob, ApiError } from '../../lib/api';
 import {
@@ -39,6 +40,7 @@ import type {
   PenilaianTemuan,
   HarmonisasiExportFormat,
 } from '../../lib/harmonisasiApi';
+import CatatanDinasModal from './CatatanDinasModal';
 import { ErrorState } from '../ErrorState';
 import { EmptyState } from '../EmptyState';
 
@@ -168,6 +170,10 @@ export default function HarmonisasiPanel({
   const [exportError, setExportError] = useState<string | null>(null);
   const exportDropdownRef = useRef<HTMLDivElement | null>(null);
 
+  // State Modal & Notifikasi Ekspor Catatan Dinas
+  const [isCdModalOpen, setIsCdModalOpen] = useState<boolean>(false);
+  const [cdToast, setCdToast] = useState<{ tipe: 'sukses' | 'info'; pesan: string } | null>(null);
+
   // State Penandaan Temuan (#71)
   const [savingKunci, setSavingKunci] = useState<Record<string, boolean>>({});
   const [aksiError, setAksiError] = useState<Record<string, string | null>>({});
@@ -177,6 +183,7 @@ export default function HarmonisasiPanel({
   const isDraft = documentRole === 'draft_kajian';
   const data = state?.data ?? null;
   const loading = state?.status === 'loading';
+  const isHarmonisasiReady = Boolean(isDraft && data && (state?.status === 'sukses' || Array.isArray(data?.temuan)));
 
   const temuan = useMemo<HarmonisasiTemuan[]>(
     () => (Array.isArray(data?.temuan) ? data.temuan.filter((t) => t && typeof t === 'object' && teksAda(t.pasal_draft)) : []),
@@ -285,6 +292,15 @@ export default function HarmonisasiPanel({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Auto-dismiss notifikasi toast Catatan Dinas
+  useEffect(() => {
+    if (!cdToast) return;
+    const timer = setTimeout(() => {
+      setCdToast(null);
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [cdToast]);
 
   // Sinkronisasi tanggapan dari database saat dokumen dimuat tanpa memicu ML
   useEffect(() => {
@@ -541,9 +557,9 @@ export default function HarmonisasiPanel({
             <button
               type="button"
               onClick={() => setExportOpen(!exportOpen)}
-              disabled={loading || exportingFormat !== null || !data || !isDraft}
+              disabled={loading || exportingFormat !== null || !isHarmonisasiReady}
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-semibold transition cursor-pointer ${
-                !isDraft
+                !isHarmonisasiReady
                   ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed opacity-60'
                   : exportOpen
                   ? 'border-red-300 bg-red-50 text-red-700'
@@ -552,7 +568,9 @@ export default function HarmonisasiPanel({
               title={
                 !isDraft
                   ? 'Ekspor laporan hanya tersedia untuk dokumen draft kajian'
-                  : 'Ekspor laporan hasil analisa pembandingan (DOCX, CSV, JSON)'
+                  : !data
+                  ? 'Jalankan harmonisasi terlebih dahulu untuk mengekspor'
+                  : 'Ekspor laporan hasil analisa pembandingan (Catatan Dinas, DOCX, XLSX, CSV, JSON)'
               }
             >
               {exportingFormat !== null ? (
@@ -565,10 +583,40 @@ export default function HarmonisasiPanel({
             </button>
 
             {exportOpen && isDraft && (
-              <div className="absolute left-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-xl z-30 py-1 text-xs animate-in fade-in zoom-in-95 duration-150">
+              <div className="absolute left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-xl z-30 py-1 text-xs animate-in fade-in zoom-in-95 duration-150">
                 <div className="px-3 py-1.5 border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
                   Pilih Format Laporan
                 </div>
+
+                {/* Opsi 1: Catatan Dinas Resmi OJK */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExportOpen(false);
+                    setIsCdModalOpen(true);
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-red-50/60 flex items-center gap-2.5 text-gray-800 transition cursor-pointer group"
+                >
+                  <div className="p-1 rounded bg-red-100 text-red-700 group-hover:bg-red-200 shrink-0">
+                    <ScrollText size={15} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold block text-xs text-gray-900 group-hover:text-red-900">
+                        Catatan Dinas (.docx / .pdf)
+                      </span>
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-red-100 text-red-700 border border-red-200">
+                        Resmi
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-gray-500 block truncate">
+                      Format resmi OJK, tanggapan ND &amp; temuan
+                    </span>
+                  </div>
+                </button>
+
+                <div className="border-t border-gray-100 my-1" />
+
                 <button
                   type="button"
                   onClick={() => void handleExport('docx')}
@@ -660,6 +708,31 @@ export default function HarmonisasiPanel({
             onClick={() => setExportError(null)}
             className="text-red-500 hover:text-red-800 text-xs font-bold p-0.5 cursor-pointer"
             title="Tutup pesan"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Feedback Toast Catatan Dinas */}
+      {cdToast && (
+        <div
+          role="status"
+          className={`p-3 rounded-lg border text-xs flex items-center justify-between gap-2 shadow-2xs transition-all duration-200 ${
+            cdToast.tipe === 'sukses'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+              : 'bg-blue-50 border-blue-200 text-blue-900'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={15} className={cdToast.tipe === 'sukses' ? 'text-emerald-600 shrink-0' : 'text-blue-600 shrink-0'} />
+            <span className="font-medium">{cdToast.pesan}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCdToast(null)}
+            className="text-gray-400 hover:text-gray-600 p-0.5 rounded cursor-pointer"
+            title="Tutup pemberitahuan"
           >
             ✕
           </button>
@@ -1384,6 +1457,29 @@ export default function HarmonisasiPanel({
             </div>
           )}
         </>
+      )}
+
+      {/* Modal Form Ekspor Catatan Dinas */}
+      {documentId && (
+        <CatatanDinasModal
+          isOpen={isCdModalOpen}
+          onClose={() => setIsCdModalOpen(false)}
+          documentId={documentId}
+          documentTitle={data?.draft?.judul ?? null}
+          belumDinilaiCount={rekapTanggapan.belumDinilai}
+          onSuccess={(result, format, pakaiAi) => {
+            let pesan = `Catatan Dinas (${format.toUpperCase()}) berhasil diunduh.`;
+            if (result.aiStatus === 'dipakai') {
+              pesan = `Catatan Dinas (${format.toUpperCase()}) berhasil diunduh dengan narasi AI.`;
+            } else if (result.aiStatus === 'tidak_tersedia' && pakaiAi) {
+              pesan = `Catatan Dinas (${format.toUpperCase()}) berhasil diunduh. Narasi AI belum tersedia di sistem.`;
+            }
+            setCdToast({
+              tipe: 'sukses',
+              pesan,
+            });
+          }}
+        />
       )}
     </div>
   );
