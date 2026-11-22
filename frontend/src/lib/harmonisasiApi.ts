@@ -301,7 +301,7 @@ export async function deleteTanggapanTemuan(
 // Ekspor Laporan Harmonisasi (US-50 #73)
 // ============================================================================
 
-export type HarmonisasiExportFormat = 'docx' | 'csv' | 'json';
+export type HarmonisasiExportFormat = 'docx' | 'xlsx' | 'csv' | 'json';
 
 export interface ExportHarmonisasiResult {
   blob: Blob;
@@ -309,7 +309,7 @@ export interface ExportHarmonisasiResult {
 }
 
 /**
- * Mengekspor berkas laporan hasil harmonisasi draft regulasi ke format DOCX, CSV, atau JSON (US-50 #73).
+ * Mengekspor berkas laporan hasil harmonisasi draft regulasi ke format DOCX, XLSX, CSV, atau JSON (US-50 #73).
  * Menggunakan helper apiFetchBlob untuk menerima respons file biner/stream dan memparsing nama berkas asli.
  */
 export async function exportHarmonisasi(
