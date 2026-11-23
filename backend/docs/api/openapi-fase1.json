@@ -609,17 +609,24 @@
               }
             }
           },
+          "401": {
+            "description": "Autentikasi diperlukan"
+          },
+          "403": {
+            "description": "Izin tidak memadai"
+          },
+          "413": {
+            "description": "Ukuran berkas melebihi batas maksimal"
+          },
           "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
+            "description": "Format atau isi berkas PDF tidak valid"
           }
-        }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
       }
     },
     "/api/v1/ingest/upload-pdf": {
@@ -1347,17 +1354,24 @@
               }
             }
           },
+          "401": {
+            "description": "Autentikasi diperlukan"
+          },
+          "403": {
+            "description": "Izin tidak memadai"
+          },
+          "413": {
+            "description": "Ukuran berkas melebihi batas maksimal"
+          },
           "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
+            "description": "Format atau isi berkas PDF tidak valid"
           }
-        }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
       }
     },
     "/api/v1/documents/": {
