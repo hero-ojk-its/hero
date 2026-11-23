@@ -227,7 +227,7 @@ def test_cd01_docx_ekspor_dengan_isian_form_lengkap(client: TestClient, db_sessi
     # 1. Judul & Konsep
     assert "CATATAN DINAS" in full_text
     assert "NOMOR CD-10/DPEA/XI/2026" in full_text
-    assert "KONSEP — dihasilkan sistem HERO sebagai Draft / Rekomendasi; belum ditandatangani." in full_text
+    assert "KONSEP — dihasilkan sistem HERO sebagai Draft / Rekomendasi; belum ditandatangani." not in full_text
 
     # 2. Blok Identitas
     assert "Direktur Pengaturan Perbankan" in full_text
@@ -433,7 +433,7 @@ def test_cd04_pdf_valid_dan_memuat_catatan_dinas(client: TestClient, db_session:
     pdf_text = extract_pdf_text(content)
     assert "CATATAN DINAS" in pdf_text
     assert "CD-PDF/01/2026" in pdf_text
-    assert "KONSEP — dihasilkan sistem HERO sebagai Draft / Rekomendasi; belum ditandatangani." in pdf_text
+    assert "KONSEP — dihasilkan sistem HERO sebagai Draft / Rekomendasi; belum ditandatangani." not in pdf_text
     assert "Apabila Bapak/Ibu sependapat, terlampir konsep nota dinas tanggapan untuk ditindaklanjuti." in pdf_text
 
 

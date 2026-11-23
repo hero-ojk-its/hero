@@ -90,6 +90,125 @@ def int_to_roman_lower(n: int) -> str:
     return roman_num or "i"
 
 
+# ---------------------------------------------------------------------------
+# Konstanta dan Fungsi Penulisan Judul Gaya OJK
+# ---------------------------------------------------------------------------
+KATA_SAMBUNG_OJK = {
+    "dan", "atau", "serta", "oleh", "atas", "bagi", "dari", "di", "ke", "pada", "dalam",
+    "untuk", "yang", "tentang", "dengan", "terhadap", "sebagai", "antara", "melalui",
+    "kepada", "tanpa", "secara",
+}
+
+SINGKATAN_OJK = [
+    "OJK", "POJK", "SEOJK", "UU", "PP", "BPR", "BPRS", "BUS", "UUS", "BUK", "TI", "IT",
+    "LJK", "LPS", "BI", "BUMN", "BUMD", "PT", "NKRI", "RI", "APU", "PPT", "PPPSPM",
+    "KYC", "SDM", "ATM", "KPR", "UMKM", "LKM", "IKNB", "PVML", "PPDP",
+    "AI", "QRIS", "BPJS", "ESG", "OSS", "CSR", "TKDN", "NPWP", "NIK", "KTP",
+    "DPR", "DPD", "APBN", "APBD", "LKS", "BPD",
+]
+SINGKATAN_OJK_MAP = {s.upper(): s for s in SINGKATAN_OJK}
+
+ROMAN_NUMERALS = {
+    "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X",
+    "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX",
+    "XXI", "XXII", "XXIII", "XXIV", "XXV", "XXVI", "XXVII", "XXVIII", "XXIX", "XXX",
+    "XL", "L",
+}
+
+
+def _format_word_ojk(word: str, is_first: bool, is_all_upper_mode: bool = False) -> str:
+    """Format satu kata sesuai kaidah penulisan judul OJK."""
+    # Token yang mengandung angka atau "/" dibiarkan apa adanya (mis. "75/POJK.03/2016")
+    if any(c.isdigit() for c in word) or "/" in word:
+        return word
+
+    m = re.match(r"^([^\w]*)(.*?)([^\w]*)$", word)
+    if not m:
+        return word
+    prefix, core, suffix = m.groups()
+    if not core:
+        return word
+
+    # Token dengan titik di tengah (mis. POJK.03) dibiarkan apa adanya
+    if "." in core:
+        return word
+
+    # Bila teks TIDAK huruf kapital semua (mode pola 'Tiap Kata Kapital'),
+    # token yang seluruh hurufnya kapital dan panjangnya >= 2 (mis. 'AI', 'QRIS', 'BPJS') DIBIARKAN apa adanya.
+    core_lower = core.lower()
+    if not is_all_upper_mode and core.isupper() and len(core) >= 2 and core_lower not in KATA_SAMBUNG_OJK:
+        return word
+
+    core_upper = core.upper()
+
+    if core_upper in SINGKATAN_OJK_MAP:
+        res_core = SINGKATAN_OJK_MAP[core_upper]
+    elif core_upper in ROMAN_NUMERALS:
+        res_core = core_upper
+    elif core_lower in KATA_SAMBUNG_OJK:
+        res_core = core_lower.capitalize() if is_first else core_lower
+    else:
+        if "-" in core:
+            subparts = core.split("-")
+            res_subparts = []
+            for sp in subparts:
+                sp_u = sp.upper()
+                if sp_u in SINGKATAN_OJK_MAP:
+                    res_subparts.append(SINGKATAN_OJK_MAP[sp_u])
+                elif sp_u in ROMAN_NUMERALS:
+                    res_subparts.append(sp_u)
+                else:
+                    res_subparts.append(sp.capitalize())
+            res_core = "-".join(res_subparts)
+        else:
+            res_core = core.capitalize()
+
+    return f"{prefix}{res_core}{suffix}"
+
+
+def rapikan_judul_ojk(teks: Optional[str]) -> Optional[str]:
+    """
+    Merapikan teks judul dengan gaya penulisan OJK:
+    - Huruf pertama tiap kata diawali kapital, kata sambung/depan huruf kecil (kecuali kata pertama),
+      singkatan tetap huruf kapital.
+    - Diterapkan HANYA bila teks huruf kapital semua, ATAU semua kata diawali kapital (pola 'Tata Kelola Ti Bpr Dan').
+    - Teks dengan huruf campuran yang wajar dibiarkan apa adanya.
+    - Aman untuk string kosong dan None.
+    """
+    if teks is None or not isinstance(teks, str):
+        return teks
+    stripped = teks.strip()
+    if not stripped:
+        return teks
+
+    # Terapkan HANYA bila teks huruf kapital semua, ATAU semua kata diawali kapital
+    is_all_upper = teks.isupper()
+    tokens = stripped.split()
+    all_capitalized = True
+    for t in tokens:
+        first_alpha = next((c for c in t if c.isalpha()), None)
+        if first_alpha and not first_alpha.isupper():
+            all_capitalized = False
+            break
+
+    if not (is_all_upper or all_capitalized):
+        return teks
+
+    parts = teks.split(" ")
+    res = []
+    is_first = True
+    for p in parts:
+        if not p:
+            res.append(p)
+            continue
+        formatted = _format_word_ojk(p, is_first, is_all_upper)
+        res.append(formatted)
+        if any(c.isalpha() for c in p):
+            is_first = False
+
+    return " ".join(res)
+
+
 @dataclass
 class TemuanItem:
     label_jenis: str
@@ -191,6 +310,7 @@ def _get_butir_1_content(
     """
     jenis = doc.regulation_type or "Regulasi"
     judul = doc.title or f"Dokumen #{doc.id}"
+    judul_rapikan = rapikan_judul_ojk(judul) or judul
 
     # 1. Cari data analisa tersimpan (kind=analisa) untuk identitas & kerangka
     analisa_cached = (
@@ -221,13 +341,13 @@ def _get_butir_1_content(
             jumlah_bab = len(kerangka)
             # bab ke-2 s.d. ke-5 (index 1 to 4)
             bab_titles = [
-                str(b.get("judul")).strip()
+                rapikan_judul_ojk(str(b.get("judul")).strip())
                 for b in kerangka[1:5]
                 if isinstance(b, dict) and b.get("judul") and str(b.get("judul")).strip()
             ]
             if not bab_titles:
                 bab_titles = [
-                    str(b.get("judul")).strip()
+                    rapikan_judul_ojk(str(b.get("judul")).strip())
                     for b in kerangka[:4]
                     if isinstance(b, dict) and b.get("judul") and str(b.get("judul")).strip()
                 ]
@@ -256,25 +376,26 @@ def _get_butir_1_content(
 
         if ordered_chapters:
             jumlah_bab = len(ordered_chapters)
+            raw_bab_slice = ordered_chapters[1:5] if len(ordered_chapters) > 1 else ordered_chapters[:4]
             if not bab_titles:
-                bab_titles = ordered_chapters[1:5] if len(ordered_chapters) > 1 else ordered_chapters[:4]
+                bab_titles = [rapikan_judul_ojk(ch) for ch in raw_bab_slice]
 
     # Susun template bawaan
     if jumlah_bab and jumlah_pasal:
         if bab_titles:
             bab_str = ", ".join(bab_titles)
             template_text = (
-                f"{jenis} tentang {judul} terdiri atas {jumlah_bab} bab dan {jumlah_pasal} pasal, "
+                f"{jenis} tentang {judul_rapikan} terdiri atas {jumlah_bab} bab dan {jumlah_pasal} pasal, "
                 f"yang antara lain mengatur {bab_str}."
             )
         else:
             template_text = (
-                f"{jenis} tentang {judul} terdiri atas {jumlah_bab} bab dan {jumlah_pasal} pasal."
+                f"{jenis} tentang {judul_rapikan} terdiri atas {jumlah_bab} bab dan {jumlah_pasal} pasal."
             )
     elif jumlah_pasal:
-        template_text = f"{jenis} tentang {judul} terdiri atas {jumlah_pasal} pasal."
+        template_text = f"{jenis} tentang {judul_rapikan} terdiri atas {jumlah_pasal} pasal."
     else:
-        template_text = f"{jenis} tentang {judul} mengatur pokok-pokok ketentuan regulasi terkait."
+        template_text = f"{jenis} tentang {judul_rapikan} mengatur pokok-pokok ketentuan regulasi terkait."
 
     # 2. Bila pakai_ai=True: cari narasi AI yang tersimpan dan segar
     if pakai_ai:
@@ -319,7 +440,7 @@ def resolve_default_hal(judul_draf: str, template: Optional[str] = None) -> str:
     Mencegah duplikasi frasa 'Tanggapan atas' jika judul dokumen sudah diawali teks tersebut.
     """
     tpl = template or settings.cd_default_hal_template
-    clean_judul = (judul_draf or "").strip()
+    clean_judul = rapikan_judul_ojk((judul_draf or "").strip()) or ""
     prefix_lower = "tanggapan atas "
 
     if clean_judul.lower().startswith(prefix_lower):
@@ -395,9 +516,10 @@ def build_catatan_dinas_data(
     )
 
     # 3. Butir 2 (Riwayat permintaan)
+    judul_draf_rapikan = rapikan_judul_ojk(judul_draf) or judul_draf
     butir_2_text = (
         f"{unit_peminta} melalui nota dinas nomor {nomor_nd} tanggal {tanggal_nd_str} "
-        f"meminta tanggapan atas {judul_draf}."
+        f"meminta tanggapan atas {judul_draf_rapikan}."
     )
 
     # 4. Butir 3 (Tanggapan: SEMUA temuan, dikelompokkan per pasal draf)
@@ -641,21 +763,10 @@ def render_catatan_dinas_docx(data: CatatanDinasData) -> bytes:
 
     p_nomor = doc.add_paragraph()
     p_nomor.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_nomor.paragraph_format.space_after = Pt(4)
+    p_nomor.paragraph_format.space_after = Pt(8)
     run_nomor = p_nomor.add_run(f"NOMOR {data.nomor_cd}")
     run_nomor.bold = True
     run_nomor.font.size = Pt(11)
-
-    # Satu baris di bawah judul: label KONSEP
-    p_konsep = doc.add_paragraph()
-    p_konsep.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_konsep.paragraph_format.space_after = Pt(8)
-    run_konsep = p_konsep.add_run(
-        "KONSEP — dihasilkan sistem HERO sebagai Draft / Rekomendasi; belum ditandatangani."
-    )
-    run_konsep.italic = True
-    run_konsep.font.size = Pt(8.5)
-    run_konsep.font.color.rgb = RGBColor(100, 100, 100)
 
     # Garis pemisah horizontal (border bawah tipis via XML)
     p_hr = doc.add_paragraph()
@@ -844,17 +955,7 @@ def render_catatan_dinas_pdf(data: CatatanDinasData) -> bytes:
         fontSize=11,
         leading=15,
         alignment=TA_CENTER,
-        spaceAfter=4,
-    )
-    style_konsep = ParagraphStyle(
-        "CDKonsep",
-        parent=styles["Normal"],
-        fontName="Times-Italic",
-        fontSize=8.5,
-        leading=11,
-        alignment=TA_CENTER,
-        textColor=colors.HexColor("#555555"),
-        spaceAfter=6,
+        spaceAfter=8,
     )
     style_body = ParagraphStyle(
         "CDBody",
@@ -924,15 +1025,9 @@ def render_catatan_dinas_pdf(data: CatatanDinasData) -> bytes:
 
     story: List[Any] = []
 
-    # 1. Judul Tengah & Nomor & Konsep
+    # 1. Judul Tengah & Nomor
     story.append(Paragraph("CATATAN DINAS", style_title))
     story.append(Paragraph(f"NOMOR {html.escape(data.nomor_cd)}", style_nomor))
-    story.append(
-        Paragraph(
-            "KONSEP — dihasilkan sistem HERO sebagai Draft / Rekomendasi; belum ditandatangani.",
-            style_konsep,
-        )
-    )
     story.append(HRFlowable(width="100%", thickness=1, color=colors.black, spaceAfter=8))
 
     # 2. Blok Identitas (Tabel 3 kolom)
