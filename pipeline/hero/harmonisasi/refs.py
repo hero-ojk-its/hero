@@ -28,6 +28,8 @@ _REF = re.compile(
     re.IGNORECASE)
 _PENERBIT = re.compile(r"^\s*(?:Peraturan|Surat\s+Edaran|Keputusan)\s+((?:[A-Z][\w.]*\s+(?:dan\s+)?){1,5}?)Nomor\s+"
                        r"([\w./-]+)\s+Tahun\s+(\d{4})", re.IGNORECASE)
+_JENIS = re.compile(r"\b(?:Peraturan|Undang-Undang|Surat\s+Edaran|Keputusan|POJK|SEOJK|PADK|UU)\b",
+                    re.IGNORECASE)
 _SELF = re.compile(r"\b(?:ini|tersebut)\b", re.IGNORECASE)
 
 # One amendment instruction: "3. Ketentuan Pasal 5 diubah sehingga berbunyi …",
@@ -43,7 +45,20 @@ _WHOLE_DELETE = re.compile(r"^(?:Ketentuan\s+)?Pasal\s+(\d+[A-Z]?)\s+dihapus", r
 _CLOSING = re.compile(r"\bDitetapkan\s+di\b", re.IGNORECASE)
 _VERB = re.compile(r"\b(?:diubah|dihapus|disisipkan|ditambahkan)", re.IGNORECASE)
 _AMENDS_TITLE = re.compile(r"\bPERUBAHAN\s+(?:\w+\s+)?ATAS\b", re.IGNORECASE)
+# Kata kunci relasi (Weekly #10, keputusan 3): dicari LEBIH DULU, sebelum kemiripan.
+#   "… dicabut dan dinyatakan tidak berlaku", "… dinyatakan tidak berlaku", "… dicabut."
+# Frasa kuat boleh melintasi butir daftar ("a. POJK X …; dan b. POJK Y …, dicabut dan …");
+# frasa lemah harus di klausa yang sama. "dicabut." polos sengaja TIDAK dipakai: kalimat sanksi
+# ("… izin usaha dicabut.") setelah rujukan akan terbaca sebagai pencabutan peraturan.
 _REVOKES = re.compile(r"dicabut\s+dan\s+dinyatakan\s+tidak\s+berlaku", re.IGNORECASE)
+_REVOKES_LEMAH = re.compile(r"^[^;]{0,200}?(?<!\.)\s(?:dinyatakan\s+tidak\s+berlaku)", re.IGNORECASE)
+#   "Beberapa ketentuan dalam Peraturan … Nomor … (Lembaran Negara …) diubah sebagai berikut"
+_AMENDS_AFTER = re.compile(r"^[^.;]{0,360}?\bdiubah\s+(?:sebagai\s+berikut|sehingga)", re.IGNORECASE)
+#   "Ketentuan Pasal 10, Pasal 11, dan Pasal 12 ayat (2) [dalam] Peraturan …" tepat sebelum
+#   rujukan yang dicabut → pencabutan SEBAGIAN (hanya pasal itu yang tidak berlaku).
+_PARTIAL = re.compile(r"(?:Ketentuan\s+)?((?:Pasal\s+\d+[A-Z]?(?:\s+ayat\s+\(\d+\))?"
+                      r"(?:\s*,\s*|\s+dan\s+|\s+sampai\s+dengan\s+)?)+)\s*(?:dalam|pada)?\s*$",
+                      re.IGNORECASE)
 
 
 @dataclass
@@ -90,11 +105,19 @@ class Reference:
     key: str
     teks: str
     pasal_draft: list[str]
-    relasi: str                     # dirujuk | diubah | dicabut
+    relasi: str                     # dirujuk | diubah | dicabut | dicabut_sebagian
     status: str | None = None       # from the graph: berlaku | dicabut | diubah | …
     judul: str | None = None
     doc_id: str | None = None       # set when the cited regulation is in the KB
     pengganti: list[dict[str, Any]] = field(default_factory=list)
+    # Bukti kata kunci yang menetapkan relasi (dikutip apa adanya dari draft) — supaya
+    # "kenapa dibandingkan dengan peraturan ini?" selalu bisa dijawab dengan teks.
+    kata_kunci: str | None = None
+    pasal_dicabut: list[str] = field(default_factory=list)   # hanya untuk dicabut_sebagian
+
+
+RELASI_EKSPLISIT = ("diubah", "dicabut", "dicabut_sebagian")
+_RANK = {"dirujuk": 0, "dicabut_sebagian": 1, "diubah": 2, "dicabut": 3}
 
 
 def _where(snippet: str, articles: list[dict[str, Any]]) -> list[str]:
@@ -131,14 +154,34 @@ def explicit_references(conn: sqlite3.Connection, full_text: str, title: str | N
         ref = canonical_ref(raw) or _ref_penerbit(raw)
         if ref is None or ref.key == own_key:
             continue
-        ctx = text[max(0, m.start() - 160): m.end() + 80]
-        relasi = "dirujuk"
-        if _REVOKES.search(text[m.end(): m.end() + 260]) and "dicabut" not in ctx[:150]:
-            relasi = "dicabut"
-        if ref.key not in refs:
-            refs[ref.key] = Reference(ref.key, raw.strip(), _where(raw, articles), relasi)
-        elif relasi == "dicabut":
-            refs[ref.key].relasi = "dicabut"
+        # _REF mulai dari "Peraturan" PERTAMA, jadi "Peraturan OJK ini mulai berlaku, Ketentuan
+        # Pasal 5 Peraturan … Nomor 14" tertelan utuh; awalan sebelum jenis terakhir = konteks.
+        awal = [x.start() for x in _JENIS.finditer(re.split(r"\bNomor\b", raw, maxsplit=1)[0])]
+        before = text[max(0, m.start() - 200): m.start()] + raw[:awal[-1] if awal else 0]
+        after = text[m.end(): m.end() + 360]
+        # Klausa tempat rujukan berada: "dicabut" di klausa yang sama SEBELUM rujukan
+        # ("pengganti POJK X yang telah dicabut …") bukan pernyataan pencabutan oleh draft.
+        klausa = re.split(r"[;:]|\.\s", before)[-1]
+        relasi, bukti, pasal_dicabut = "dirujuk", None, []
+        rev = _REVOKES.search(after[:260]) or _REVOKES_LEMAH.search(re.split(r"\.\s+(?=[A-Z])", after)[0])
+        if rev and "dicabut" not in klausa.lower():
+            part = _PARTIAL.search(before)
+            if part:
+                relasi = "dicabut_sebagian"
+                pasal_dicabut = sorted({p.upper() for p in _PASAL_NO.findall(part.group(1))},
+                                       key=lambda x: (len(x), x))
+                bukti = f"{part.group(0).strip()} {raw.strip()} … {rev.group(0).strip(' .;')}"
+            else:
+                relasi, bukti = "dicabut", f"{raw.strip()} … {rev.group(0).strip(' .;')}"
+        elif _AMENDS_AFTER.search(after):
+            relasi = "diubah"
+            bukti = f"{raw.strip()} … {_AMENDS_AFTER.search(after).group(0)[-40:].strip()}"
+        r = refs.get(ref.key)
+        if r is None:
+            refs[ref.key] = Reference(ref.key, raw.strip(), _where(raw, articles), relasi,
+                                      kata_kunci=bukti, pasal_dicabut=pasal_dicabut)
+        elif _RANK[relasi] > _RANK[r.relasi]:
+            r.relasi, r.kata_kunci, r.pasal_dicabut = relasi, bukti, pasal_dicabut
     # The title names the parent of an amendment.
     if _AMENDS_TITLE.search(head):
         tail = re.split(_AMENDS_TITLE, head, maxsplit=1)[-1]
@@ -146,6 +189,7 @@ def explicit_references(conn: sqlite3.Connection, full_text: str, title: str | N
         if ref and ref.key != own_key:
             r = refs.setdefault(ref.key, Reference(ref.key, tail[:160], [], "diubah"))
             r.relasi = "diubah"
+            r.kata_kunci = f"judul: {_AMENDS_TITLE.search(head).group(0)} {tail[:120].strip()}"
     has_graph = conn.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='graph_node'").fetchone()
     for r in refs.values():
@@ -157,4 +201,5 @@ def explicit_references(conn: sqlite3.Connection, full_text: str, title: str | N
             if r.status == "dicabut":
                 r.pengganti = [{"key": n["key"], "judul": n.get("judul"), "status": n.get("status")}
                                for n in lineage(conn, r.key).get("berlaku_terkini", [])]
-    return sorted(refs.values(), key=lambda r: (r.relasi != "diubah", r.relasi != "dicabut", r.key))
+    urut = {"diubah": 0, "dicabut": 1, "dicabut_sebagian": 2, "dirujuk": 3}
+    return sorted(refs.values(), key=lambda r: (urut[r.relasi], r.key))
