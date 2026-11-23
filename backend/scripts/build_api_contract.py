@@ -11,6 +11,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Dict
 from unittest.mock import patch
@@ -115,16 +116,46 @@ def reset_test_db():
         db.close()
 
 
+def _neutralize_path(val: str) -> str:
+    """Mengganti path absolut direktori proyek atau temp dengan representasi netral."""
+    candidates = [
+        (BASE_DIR, "<backend>"),
+        (BASE_DIR.parent, "<project>"),
+    ]
+    try:
+        for t in [tempfile.gettempdir(), "/tmp", "/var/tmp"]:
+            if t:
+                candidates.append((Path(t), "<tmp>"))
+    except Exception:
+        pass
+
+    val_lower = val.lower()
+    for dir_path, tag in candidates:
+        if len(Path(dir_path).parts) <= 1:
+            continue  # jangan pernah menetralkan root ("/" atau "C:\"), bisa merusak URL seperti /api/v1/...
+        dir_win = str(dir_path)
+        dir_posix = dir_path.as_posix()
+        for prefix in (dir_win, dir_posix):
+            prefix_clean = prefix.rstrip("/\\")
+            prefix_lower = prefix_clean.lower()
+            if val_lower == prefix_lower:
+                return tag
+            if val_lower.startswith(prefix_lower + "\\") or val_lower.startswith(prefix_lower + "/"):
+                remainder = val[len(prefix_clean):].replace("\\", "/")
+                return f"{tag}{remainder}"
+    return val
+
+
 def normalize_val(val: Any) -> Any:
-    """Normalisasi tanggal dinamis dan suffix berkas agar idempoten pada setiap eksekusi."""
+    """Normalisasi tanggal dinamis, suffix berkas, dan path lokal agar idempoten pada setiap eksekusi."""
     if isinstance(val, str):
         # Match ISO timestamp pattern
         if re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", val):
             return "2026-10-01T10:00:00Z"
         # Normalisasi suffix duplikasi berkas pada path
         if val.endswith(".pdf") and re.search(r"-\d+\.pdf$", val):
-            return re.sub(r"-\d+\.pdf$", ".pdf", val)
-        return val
+            val = re.sub(r"-\d+\.pdf$", ".pdf", val)
+        return _neutralize_path(val)
     elif isinstance(val, dict):
         normalized_dict = {}
         for k, v in val.items():
@@ -665,8 +696,9 @@ def build_markdown_contract(blocks: Dict[str, str], output_dir: Path | None = No
     contract_path = target_dir / "KONTRAK-API-FASE1.md"
     max_upload_mb = settings.max_upload_bytes // (1024 * 1024)
 
-    if contract_path.exists():
-        existing_content = contract_path.read_text(encoding="utf-8")
+    template_path = contract_path if contract_path.exists() else (BASE_DIR / "docs" / "api" / "KONTRAK-API-FASE1.md")
+    if template_path.exists():
+        existing_content = template_path.read_text(encoding="utf-8")
         updated_content = existing_content
         for key, value in blocks.items():
             pattern = re.compile(
@@ -677,6 +709,7 @@ def build_markdown_contract(blocks: Dict[str, str], output_dir: Path | None = No
                 lambda m, v=value: f"{m.group(1)}\n{v}\n{m.group(2)}",
                 updated_content,
             )
+        contract_path.parent.mkdir(parents=True, exist_ok=True)
         contract_path.write_text(updated_content, encoding="utf-8")
         print(f"Kontrak API berhasil diperbarui (blok AUTO) ke: {contract_path}")
         return
