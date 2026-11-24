@@ -250,12 +250,23 @@ def create_app(settings: Settings | None = None, bridge: BridgeSettings | None =
         vs = st.vectors
         peta = len(st.state.doc_map())
         siap = docs > 0 and peta > 0
+        from hero.harmonisasi import semantik as _sem
+        from hero.harmonisasi.engine import _lengkapi_semantik
+
+        hcfg = st.hcfg()
+        conn = st.catalog()
+        try:
+            _lengkapi_semantik(conn, hcfg)
+        finally:
+            conn.close()
         return {
             "status": "siap" if siap else "belum-siap",
             "korpus": {"dokumen": docs, "pasal": pasal, "pasal_berhalaman": halaman,
                        "dokumen_terpeta_ke_backend": peta},
             "vektor": {m: vs.ready(m) for m in ("lexical", "lsa", "semantic", "hybrid")},
             "mode_ai": settings.analysis.ai_enabled,
+            # Kemiripan makna harmonisasi (#67): tanpa model, harmonisasi tetap jalan leksikal.
+            "harmonisasi_semantik": _sem.status_ringan(hcfg),
             "langkah_berikutnya": [] if siap else [
                 "jalankan 'hero bridge sinkron' untuk mencerminkan korpus backend",
                 "lalu 'hero vector build' bila pencarian makna dipakai"],

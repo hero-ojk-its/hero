@@ -59,6 +59,20 @@ _AMENDS_AFTER = re.compile(r"^[^.;]{0,360}?\bdiubah\s+(?:sebagai\s+berikut|sehin
 _PARTIAL = re.compile(r"(?:Ketentuan\s+)?((?:Pasal\s+\d+[A-Z]?(?:\s+ayat\s+\(\d+\))?"
                       r"(?:\s*,\s*|\s+dan\s+|\s+sampai\s+dengan\s+)?)+)\s*(?:dalam|pada)?\s*$",
                       re.IGNORECASE)
+# Bagian selain pasal yang dicabut: butir, angka, huruf, Bab, Bagian, Lampiran — lazim di SEOJK
+# ("angka 3 huruf b Lampiran Surat Edaran …", "butir III.2 SEOJK …", "Lampiran I POJK …").
+_UNIT_BAGIAN = (r"(?:Pasal\s+\d+[A-Z]?(?:\s+ayat\s+\(\d+\))?(?:\s+huruf\s+[a-z])?"
+                r"|angka\s+[\dIVXL]+(?:\.\d+)*|huruf\s+[a-z]|butir\s+[\w.]+|Bab\s+[IVXLC]+A?"
+                r"|Bagian\s+\w+|Lampiran(?:\s+[IVXLC]+)?)")
+_PARTIAL_BAGIAN = re.compile(
+    rf"(?:Ketentuan\s+)?((?:{_UNIT_BAGIAN}(?:\s*,\s*|\s+dan\s+|\s+sampai\s+dengan\s+|\s+)?)+)"
+    r"\s*(?:dalam|pada|dari)?\s*$", re.IGNORECASE)
+#   "Ketentuan mengenai pelaporan sebagaimana diatur dalam POJK …" — sebagian menurut pokok bahasan.
+_PARTIAL_POKOK = re.compile(r"\bKetentuan\s+mengenai\s+([^;:]{5,160}?)\s+(?:sebagaimana\s+"
+                            r"(?:diatur|dimaksud)\s+)?(?:dalam|pada)\s*$", re.IGNORECASE)
+#   "… dicabut dan dinyatakan tidak berlaku, kecuali Pasal 5 dan Pasal 6" / "…, kecuali ketentuan
+#   mengenai …" — yang dikecualikan TETAP berlaku, jadi pencabutannya sebagian.
+_KECUALI = re.compile(r"\bkecuali\s+(.{3,220}?)(?=\s*[;:]|\.\s+[A-Z]|\.?\s*$)", re.IGNORECASE)
 
 
 @dataclass
@@ -114,6 +128,13 @@ class Reference:
     # "kenapa dibandingkan dengan peraturan ini?" selalu bisa dijawab dengan teks.
     kata_kunci: str | None = None
     pasal_dicabut: list[str] = field(default_factory=list)   # hanya untuk dicabut_sebagian
+    # Dari mana relasi dibaca (asumsi status mitra): judul ("PERUBAHAN … ATAS …") → mengubah;
+    # pasal penutup ("… dicabut dan dinyatakan tidak berlaku") → mencabut / mencabut sebagian;
+    # batang tubuh ("Beberapa ketentuan dalam … diubah") → mengubah; selain itu → rujukan.
+    dasar: str = "rujukan"
+    bagian_dicabut: list[str] = field(default_factory=list)  # butir/angka/Lampiran/pokok bahasan
+    pengecualian: list[str] = field(default_factory=list)    # pasal yang TETAP berlaku ("kecuali")
+    pengecualian_teks: str | None = None
 
 
 RELASI_EKSPLISIT = ("diubah", "dicabut", "dicabut_sebagian")
@@ -138,12 +159,32 @@ def _ref_penerbit(raw: str) -> RegRef | None:
     return RegRef(f"{singkatan}|{m.group(2)}|{m.group(3)}", singkatan, m.group(2), int(m.group(3)))
 
 
-def explicit_references(conn: sqlite3.Connection, full_text: str, title: str | None,
-                        articles: list[dict[str, Any]], own_key: str | None = None,
-                        ) -> list[Reference]:
-    """Every regulation the draft cites, with its status and replacement."""
-    from hero.graph.query import get_node, lineage
+def _nomor_pasal(teks: str) -> list[str]:
+    return sorted({p.upper() for p in _PASAL_NO.findall(teks)}, key=lambda x: (len(x), x))
 
+
+def _bagian_bukan_pasal(teks: str) -> list[str]:
+    """Unit non-pasal yang disebut ("angka 3 huruf b", "Lampiran I", "butir III.2")."""
+    t = re.sub(r"\bPasal\s+\d+[A-Z]?(?:\s+ayat\s+\(\d+\))?(?:\s+huruf\s+[a-z])?", " ", teks, flags=re.I)
+    t = re.sub(r"^\s*Ketentuan\s+", "", t, flags=re.I)
+    parts = [x.strip(" ,") for x in re.split(r"\s*,\s*|\s+dan\s+", t) if x.strip(" ,")]
+    return [p for p in parts if re.match(r"(?:angka|huruf|butir|Bab|Bagian|Lampiran)\b", p, re.I)]
+
+
+def relasi_teks(full_text: str, title: str | None, own_key: str | None = None,
+                articles: list[dict[str, Any]] | None = None) -> list[Reference]:
+    """Relasi dokumen-ke-dokumen yang dinyatakan SENDIRI oleh teks peraturan (tanpa basis data).
+
+    Asumsi status yang disepakati:
+
+    * judul "PERUBAHAN … ATAS …"                            → ``diubah`` (dasar: judul)
+    * "… dicabut dan dinyatakan tidak berlaku" di penutup    → ``dicabut`` (dasar: pasal penutup)
+    * klausa itu menyebut Pasal X, butir, angka, Lampiran,
+      "ketentuan mengenai …", atau memakai "kecuali …"       → ``dicabut_sebagian``
+    * penyebutan lain                                        → ``dirujuk`` (hanya rujukan)
+
+    Dipakai harmonisasi (draft vs KB) dan graf KB (status turunan setiap peraturan).
+    """
     text = " ".join((full_text or "").split())
     head = " ".join((title or "").split())
     refs: dict[str, Reference] = {}
@@ -151,48 +192,81 @@ def explicit_references(conn: sqlite3.Connection, full_text: str, title: str | N
         raw = m.group(1)
         if _SELF.search(raw.split("Nomor")[0][-25:]):
             continue  # "Peraturan OJK ini" is the draft itself
-        ref = canonical_ref(raw) or _ref_penerbit(raw)
-        if ref is None or ref.key == own_key:
-            continue
         # _REF mulai dari "Peraturan" PERTAMA, jadi "Peraturan OJK ini mulai berlaku, Ketentuan
         # Pasal 5 Peraturan … Nomor 14" tertelan utuh; awalan sebelum jenis terakhir = konteks.
         awal = [x.start() for x in _JENIS.finditer(re.split(r"\bNomor\b", raw, maxsplit=1)[0])]
-        before = text[max(0, m.start() - 200): m.start()] + raw[:awal[-1] if awal else 0]
+        potong = awal[-1] if awal else 0
+        # Identitas dibaca dari jenis TERAKHIR bila di depannya ada kalimat tentang draft sendiri
+        # ("Peraturan OJK ini mulai berlaku, Surat Edaran Bank Indonesia Nomor 9/30/DPNP" bukan POJK).
+        # Tanpa "ini", awalan itu bagian nama ("Peraturan Pemerintah Pengganti Undang-Undang").
+        rujukan = raw[potong:] if potong and _SELF.search(raw[:potong]) else raw
+        ref = canonical_ref(rujukan) or _ref_penerbit(rujukan)
+        if ref is None or ref.key == own_key:
+            continue
+        before = text[max(0, m.start() - 200): m.start()] + raw[:potong]
+        raw = rujukan
         after = text[m.end(): m.end() + 360]
         # Klausa tempat rujukan berada: "dicabut" di klausa yang sama SEBELUM rujukan
         # ("pengganti POJK X yang telah dicabut …") bukan pernyataan pencabutan oleh draft.
         klausa = re.split(r"[;:]|\.\s", before)[-1]
-        relasi, bukti, pasal_dicabut = "dirujuk", None, []
+        r_new = Reference(ref.key, raw.strip(), _where(raw, articles or []), "dirujuk")
         rev = _REVOKES.search(after[:260]) or _REVOKES_LEMAH.search(re.split(r"\.\s+(?=[A-Z])", after)[0])
         if rev and "dicabut" not in klausa.lower():
+            r_new.dasar = "pasal penutup"
+            frasa = rev.group(0).strip(" .;")
+            kalimat_cabut = re.split(r"\.\s+(?=[A-Z])", after[rev.start():])[0]
+            antara = after[:rev.start()]
+            kec = _KECUALI.search(antara) or _KECUALI.search(kalimat_cabut)
             part = _PARTIAL.search(before)
-            if part:
-                relasi = "dicabut_sebagian"
-                pasal_dicabut = sorted({p.upper() for p in _PASAL_NO.findall(part.group(1))},
-                                       key=lambda x: (len(x), x))
-                bukti = f"{part.group(0).strip()} {raw.strip()} … {rev.group(0).strip(' .;')}"
+            bagian = _PARTIAL_BAGIAN.search(before)
+            pokok = _PARTIAL_POKOK.search(before)
+            if part or bagian or pokok or kec:
+                r_new.relasi = "dicabut_sebagian"
+                sebutan = (bagian or part)
+                if sebutan:
+                    r_new.pasal_dicabut = _nomor_pasal(sebutan.group(1))
+                    r_new.bagian_dicabut = _bagian_bukan_pasal(sebutan.group(1))
+                if pokok:
+                    r_new.bagian_dicabut.append(f"ketentuan mengenai {pokok.group(1).strip()}")
+                if kec:
+                    r_new.pengecualian = _nomor_pasal(kec.group(1))
+                    r_new.pengecualian_teks = kec.group(1).strip(" ,")
+                awalan = (sebutan or pokok).group(0).strip() + " " if (sebutan or pokok) else ""
+                r_new.kata_kunci = (f"{awalan}{raw.strip()} … {frasa}"
+                                    + (f", kecuali {r_new.pengecualian_teks}" if kec else ""))
             else:
-                relasi, bukti = "dicabut", f"{raw.strip()} … {rev.group(0).strip(' .;')}"
+                r_new.relasi, r_new.kata_kunci = "dicabut", f"{raw.strip()} … {frasa}"
         elif _AMENDS_AFTER.search(after):
-            relasi = "diubah"
-            bukti = f"{raw.strip()} … {_AMENDS_AFTER.search(after).group(0)[-40:].strip()}"
+            r_new.relasi, r_new.dasar = "diubah", "batang tubuh"
+            r_new.kata_kunci = f"{raw.strip()} … {_AMENDS_AFTER.search(after).group(0)[-40:].strip()}"
         r = refs.get(ref.key)
         if r is None:
-            refs[ref.key] = Reference(ref.key, raw.strip(), _where(raw, articles), relasi,
-                                      kata_kunci=bukti, pasal_dicabut=pasal_dicabut)
-        elif _RANK[relasi] > _RANK[r.relasi]:
-            r.relasi, r.kata_kunci, r.pasal_dicabut = relasi, bukti, pasal_dicabut
+            refs[ref.key] = r_new
+        elif _RANK[r_new.relasi] > _RANK[r.relasi]:
+            r_new.pasal_draft = r.pasal_draft or r_new.pasal_draft
+            refs[ref.key] = r_new
     # The title names the parent of an amendment.
     if _AMENDS_TITLE.search(head):
         tail = re.split(_AMENDS_TITLE, head, maxsplit=1)[-1]
         ref = canonical_ref(tail)
         if ref and ref.key != own_key:
             r = refs.setdefault(ref.key, Reference(ref.key, tail[:160], [], "diubah"))
-            r.relasi = "diubah"
+            r.relasi, r.dasar = "diubah", "judul"
             r.kata_kunci = f"judul: {_AMENDS_TITLE.search(head).group(0)} {tail[:120].strip()}"
+    urut = {"diubah": 0, "dicabut": 1, "dicabut_sebagian": 2, "dirujuk": 3}
+    return sorted(refs.values(), key=lambda r: (urut[r.relasi], r.key))
+
+
+def explicit_references(conn: sqlite3.Connection, full_text: str, title: str | None,
+                        articles: list[dict[str, Any]], own_key: str | None = None,
+                        ) -> list[Reference]:
+    """Every regulation the draft cites, with its status and replacement (FR-HRM-03/04)."""
+    from hero.graph.query import get_node, lineage
+
+    refs = relasi_teks(full_text, title, own_key, articles)
     has_graph = conn.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='graph_node'").fetchone()
-    for r in refs.values():
+    for r in refs:
         if not has_graph:
             break  # graph not built yet: references are listed without status
         node = get_node(conn, r.key)
@@ -201,5 +275,4 @@ def explicit_references(conn: sqlite3.Connection, full_text: str, title: str | N
             if r.status == "dicabut":
                 r.pengganti = [{"key": n["key"], "judul": n.get("judul"), "status": n.get("status")}
                                for n in lineage(conn, r.key).get("berlaku_terkini", [])]
-    urut = {"diubah": 0, "dicabut": 1, "dicabut_sebagian": 2, "dirujuk": 3}
-    return sorted(refs.values(), key=lambda r: (urut[r.relasi], r.key))
+    return refs

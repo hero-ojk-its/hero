@@ -1,0 +1,102 @@
+# Uji kesesuaian makna antar pasal (#67, FR-HRM-05) — SET SINTETIS, bukan label mitra.
+#
+# Pasal `asli` diambil apa adanya dari Knowledge Base (peraturan berlaku). Tiga varian ditulis oleh
+# analis data tim (24 Nov 2026) SEBELUM metode apa pun diukur padanya, supaya ambang tidak disetel
+# mengikuti set ini:
+#   parafrase    makna & pihak sama, redaksi berbeda, angka sama          → Tumpang Tindih (duplikasi)
+#   melengkapi   objek & pihak sama, mengatur aspek lain, tidak mengulang  → Selaras/Melengkapi (memperjelas)
+#   kontradiktif objek sama, angka/batas waktu/modalitas berbeda           → Kontradiktif (konflik)
+# Ukuran yang relevan bagi DPEA tetap validasi sampling pada draft sungguhan (FR-HRM-12); set ini
+# hanya menguji apakah mesin MEMBEDAKAN ketiganya ketika redaksinya tidak sama.
+
+butir:
+  - id: modal-syariah-pembiayaan
+    perihal: Pengembangan dan Penguatan Perusahaan Pembiayaan
+    asli: Perusahaan Syariah wajib memiliki rasio Modal Inti terhadap Modal Disetor atau modal kerja bagi UUS paling rendah 50% (lima puluh persen).
+    parafrase: Rasio Modal Inti terhadap Modal Disetor, atau terhadap modal kerja dalam hal UUS, yang dimiliki Perusahaan Syariah harus sekurang-kurangnya 50% (lima puluh persen).
+    melengkapi: Perusahaan Syariah wajib menyampaikan laporan pemenuhan rasio Modal Inti terhadap Modal Disetor kepada Otoritas Jasa Keuangan setiap triwulan melalui sistem pelaporan.
+    kontradiktif: Perusahaan Syariah wajib memiliki rasio Modal Inti terhadap Modal Disetor atau modal kerja bagi UUS paling rendah 40% (empat puluh persen).
+  - id: apu-ppt-profil-nasabah
+    perihal: Penerapan Program Anti Pencucian Uang dan Pencegahan Pendanaan Terorisme
+    asli: PJK wajib memahami profil, maksud dan tujuan hubungan usaha, dan transaksi yang dilakukan Nasabah dan Pemilik Manfaat (Beneficial Owner) melalui identifikasi dan verifikasi.
+    parafrase: Melalui proses identifikasi dan verifikasi, PJK harus mengenali profil Nasabah dan Pemilik Manfaat (Beneficial Owner), termasuk maksud dan tujuan hubungan usaha serta transaksi yang mereka lakukan.
+    melengkapi: Hasil identifikasi dan verifikasi Nasabah dan Pemilik Manfaat wajib didokumentasikan oleh PJK dan disimpan paling singkat 5 (lima) tahun sejak berakhirnya hubungan usaha.
+    kontradiktif: PJK dapat memahami profil, maksud dan tujuan hubungan usaha, dan transaksi yang dilakukan Nasabah dan Pemilik Manfaat (Beneficial Owner) melalui identifikasi dan verifikasi.
+  - id: situs-web-manajer-investasi
+    perihal: Penerapan Tata Kelola Manajer Investasi
+    asli: (1) Manajer Investasi wajib memiliki Situs Web. (2) Situs Web sebagaimana dimaksud pada ayat (1) harus mencerminkan identitas Manajer Investasi dan memperhatikan ketentuan peraturan perundangundangan. (3) Situs Web sebagaimana dimaksud ayat (1) memuat informasi yang aktual dan terkini.
+    parafrase: (1) Setiap Manajer Investasi harus mempunyai Situs Web. (2) Situs Web tersebut wajib menampilkan identitas Manajer Investasi dengan tetap memperhatikan peraturan perundang-undangan. (3) Informasi pada Situs Web tersebut harus aktual dan selalu diperbarui.
+    melengkapi: (1) Situs Web Manajer Investasi wajib menyediakan fitur pengaduan nasabah secara daring. (2) Manajer Investasi wajib menjaga keamanan Situs Web dari akses yang tidak sah.
+    kontradiktif: (1) Manajer Investasi dapat memiliki Situs Web. (2) Situs Web sebagaimana dimaksud pada ayat (1) harus mencerminkan identitas Manajer Investasi dan memperhatikan ketentuan peraturan perundangundangan. (3) Situs Web sebagaimana dimaksud ayat (1) memuat informasi yang aktual dan terkini.
+  - id: atmr-risiko-operasional
+    perihal: Kewajiban Penyediaan Modal Minimum Bank Umum Berdasarkan Prinsip Syariah
+    asli: (1) Dalam perhitungan ATMR untuk Risiko Operasional, Bank menggunakan a. Pendekatan Indikator Dasar; b. Pendekatan Standar; dan/atau c. Pendekatan yang lebih kompleks. (2) Bank yang mengggunakan pendekatan sebagaimana dimaksud pada ayat (1) huruf b dan huruf c wajib memperoleh persetujuan terlebih dahulu dari Otoritas Jasa Keuangan.
+    parafrase: (1) Bank menghitung ATMR Risiko Operasional dengan Pendekatan Indikator Dasar, Pendekatan Standar, dan/atau pendekatan yang lebih kompleks. (2) Penggunaan Pendekatan Standar atau pendekatan yang lebih kompleks harus didahului persetujuan Otoritas Jasa Keuangan.
+    melengkapi: (1) Bank yang menggunakan Pendekatan Standar dalam perhitungan ATMR untuk Risiko Operasional wajib memiliki data kerugian operasional historis. (2) Data sebagaimana dimaksud pada ayat (1) wajib dikinikan setiap tahun.
+    kontradiktif: (1) Dalam perhitungan ATMR untuk Risiko Operasional, Bank menggunakan a. Pendekatan Indikator Dasar; b. Pendekatan Standar; dan/atau c. Pendekatan yang lebih kompleks. (2) Bank yang mengggunakan pendekatan sebagaimana dimaksud pada ayat (1) huruf b dan huruf c tidak wajib memperoleh persetujuan dan dapat langsung menggunakannya.
+  - id: lapor-kegiatan-ppe-ebus
+    perihal: Perantara Pedagang Efek untuk Efek Bersifat Utang dan Sukuk
+    asli: Perusahaan Efek yang melakukan kegiatan usaha sebagai perantara pedagang Efek yang baru pertama kali melakukan kegiatan PPE-EBUS wajib melaporkan kepada Otoritas Jasa Keuangan paling lambat 7 (tujuh) hari kerja sejak dimulainya kegiatan sebagai PPE-EBUS.
+    parafrase: Dalam waktu paling lambat 7 (tujuh) hari kerja sejak pertama kali menjalankan kegiatan PPE-EBUS, Perusahaan Efek perantara pedagang Efek harus menyampaikan laporan kepada Otoritas Jasa Keuangan.
+    melengkapi: Laporan dimulainya kegiatan PPE-EBUS oleh Perusahaan Efek memuat paling sedikit nama penanggung jawab kegiatan, sistem perdagangan yang digunakan, dan tanggal dimulainya kegiatan.
+    kontradiktif: Perusahaan Efek yang melakukan kegiatan usaha sebagai perantara pedagang Efek yang baru pertama kali melakukan kegiatan PPE-EBUS wajib melaporkan kepada Otoritas Jasa Keuangan paling lambat 3 (tiga) hari kerja sejak dimulainya kegiatan sebagai PPE-EBUS.
+  - id: modal-ppa
+    perihal: Penyelenggara Pasar Alternatif
+    asli: (1) PPA wajib memiliki modal disetor paling sedikit sebesar Rp100.000.000.000,00 (seratus miliar rupiah). (2) Otoritas Jasa Keuangan dapat mewajibkan pemegang saham PPA untuk meningkatkan permodalan PPA dengan mempertimbangkan kebutuhan operasional atau kondisi kegiatan PPA.
+    parafrase: (1) Modal disetor PPA harus berjumlah sekurang-kurangnya Rp100.000.000.000,00 (seratus miliar rupiah). (2) Dengan memperhatikan kebutuhan operasional atau kondisi kegiatannya, Otoritas Jasa Keuangan dapat meminta pemegang saham PPA menambah permodalan.
+    melengkapi: (1) Modal disetor PPA wajib disetor penuh dalam bentuk uang tunai pada saat pendirian. (2) Sumber dana modal disetor PPA dilarang berasal dari pinjaman.
+    kontradiktif: (1) PPA wajib memiliki modal disetor paling sedikit sebesar Rp50.000.000.000,00 (lima puluh miliar rupiah). (2) Otoritas Jasa Keuangan dapat mewajibkan pemegang saham PPA untuk meningkatkan permodalan PPA dengan mempertimbangkan kebutuhan operasional atau kondisi kegiatan PPA.
+  - id: perjanjian-urun-dana
+    perihal: Penawaran Efek melalui Layanan Urun Dana Berbasis Teknologi Informasi
+    asli: Dalam menyelenggarakan Layanan Urun Dana, Penyelenggara wajib melakukan perjanjian paling sedikit a. perjanjian penyelenggaraan Layanan Urun Dana dengan Penerbit; b. selaku kuasa Pemodal, perjanjian penerbitan Efek bersifat utang atau Sukuk dengan Penerbit; dan c. perjanjian penyelenggaraan Layanan Urun Dana dengan Pemodal.
+    parafrase: Penyelenggara Layanan Urun Dana harus membuat sekurang-kurangnya perjanjian penyelenggaraan dengan Penerbit, perjanjian penerbitan Efek bersifat utang atau Sukuk dengan Penerbit dalam kedudukan sebagai kuasa Pemodal, serta perjanjian penyelenggaraan dengan Pemodal.
+    melengkapi: Perjanjian penyelenggaraan Layanan Urun Dana antara Penyelenggara dan Pemodal wajib dibuat secara elektronik dan memuat hak serta kewajiban para pihak, termasuk mekanisme penyelesaian sengketa.
+    kontradiktif: Dalam menyelenggarakan Layanan Urun Dana, Penyelenggara dapat melakukan perjanjian a. perjanjian penyelenggaraan Layanan Urun Dana dengan Penerbit; b. selaku kuasa Pemodal, perjanjian penerbitan Efek bersifat utang atau Sukuk dengan Penerbit; dan c. perjanjian penyelenggaraan Layanan Urun Dana dengan Pemodal.
+  - id: rencana-bisnis-bpr
+    perihal: Rencana Bisnis Bank Perkreditan Rakyat dan Bank Pembiayaan Rakyat Syariah
+    asli: (1) Direksi wajib melaksanakan Rencana Bisnis secara efektif. (2) Direksi wajib mengomunikasikan Rencana Bisnis kepada a. pemegang saham BPR atau BPRS; dan b. seluruh jenjang organisasi pada BPR atau BPRS.
+    parafrase: (1) Rencana Bisnis harus dijalankan Direksi secara efektif. (2) Direksi harus menyampaikan Rencana Bisnis kepada pemegang saham dan kepada seluruh jenjang organisasi BPR atau BPRS.
+    melengkapi: (1) Dewan Komisaris wajib melakukan pengawasan atas pelaksanaan Rencana Bisnis BPR atau BPRS. (2) Hasil pengawasan sebagaimana dimaksud pada ayat (1) disampaikan kepada Otoritas Jasa Keuangan setiap semester.
+    kontradiktif: (1) Direksi wajib melaksanakan Rencana Bisnis secara efektif. (2) Direksi dapat mengomunikasikan Rencana Bisnis kepada a. pemegang saham BPR atau BPRS; dan b. seluruh jenjang organisasi pada BPR atau BPRS.
+  - id: faktor-risiko-prospektus
+    perihal: Bentuk dan Isi Prospektus dan Prospektus Ringkas dalam rangka Penawaran Umum
+    asli: (1) Faktor risiko usaha dan risiko umum sebagaimana dimaksud dalam Pasal 22 huruf b dan huruf c harus disusun berdasarkan bobot risiko. (2) Pengungkapan faktor risiko sebagaimana dimaksud pada ayat (1) harus diuraikan secara rinci disertai dampak masing-masing risiko terhadap kinerja Emiten.
+    parafrase: (1) Risiko usaha dan risiko umum dalam prospektus wajib diurutkan menurut bobotnya. (2) Setiap faktor risiko wajib dijelaskan secara rinci bersama dampaknya terhadap kinerja Emiten.
+    melengkapi: (1) Prospektus wajib memuat risiko terkait investasi pada Efek yang ditawarkan. (2) Risiko terkait investasi disajikan dalam bagian tersendiri setelah faktor risiko usaha dan risiko umum.
+    kontradiktif: (1) Faktor risiko usaha dan risiko umum sebagaimana dimaksud dalam Pasal 22 huruf b dan huruf c dapat disusun berdasarkan bobot risiko. (2) Pengungkapan faktor risiko sebagaimana dimaksud pada ayat (1) dapat diuraikan secara ringkas.
+  - id: keputusan-investasi-direksi-asuransi
+    perihal: Tata Kelola Perusahaan yang Baik bagi Perusahaan Perasuransian
+    asli: Direksi Perusahaan wajib mengambil keputusan investasi secara profesional dan mengoptimalkan nilai Perusahaan bagi Pemangku Kepentingan khususnya pemegang polis, tertanggung, peserta, dan/atau pihak yang berhak memperoleh manfaat.
+    parafrase: Dalam memutuskan investasi, Direksi Perusahaan harus bertindak profesional demi nilai Perusahaan yang optimal bagi Pemangku Kepentingan, terutama pemegang polis, tertanggung, peserta, dan pihak yang berhak atas manfaat.
+    melengkapi: Direksi Perusahaan wajib menyusun kebijakan investasi tertulis yang memuat strategi alokasi aset, batasan risiko, dan mekanisme evaluasi kinerja investasi.
+    kontradiktif: Direksi Perusahaan dapat mengambil keputusan investasi dengan mempertimbangkan kepentingan pemegang saham pengendali.
+  - id: denominasi-rdkik
+    perihal: Reksa Dana Berbentuk Kontrak Investasi Kolektif
+    asli: Reksa Dana berbentuk Kontrak Investasi Kolektif wajib menggunakan denominasi Rupiah kecuali mayoritas Portofolio Efek dari Reksa Dana berbentuk Kontrak Investasi Kolektif berdenominasi mata uang asing.
+    parafrase: Denominasi Reksa Dana berbentuk Kontrak Investasi Kolektif harus Rupiah, kecuali sebagian besar Portofolio Efeknya berdenominasi mata uang asing.
+    melengkapi: Reksa Dana berbentuk Kontrak Investasi Kolektif yang berdenominasi mata uang asing wajib mengungkapkan risiko nilai tukar dalam prospektus.
+    kontradiktif: Reksa Dana berbentuk Kontrak Investasi Kolektif dapat menggunakan denominasi mata uang asing tanpa memperhatikan denominasi Portofolio Efek.
+  - id: pengendalian-internal-akd
+    perihal: Penyelenggaraan Perdagangan Aset Keuangan Digital termasuk Aset Kripto
+    asli: (1) Penyelenggara Perdagangan Aset Keuangan Digital wajib melaksanakan pengendalian internal dalam menjalankan kegiatan usahanya. (2) Dalam melaksanakan pengendalian internal sebagaimana dimaksud pada ayat (1), Penyelenggara Perdagangan Aset Keuangan Digital wajib membentuk fungsi a. kepatuhan dan audit internal; dan b. manajemen risiko.
+    parafrase: (1) Kegiatan usaha Penyelenggara Perdagangan Aset Keuangan Digital harus dijalankan dengan pengendalian internal. (2) Untuk itu Penyelenggara Perdagangan Aset Keuangan Digital harus memiliki fungsi kepatuhan dan audit internal serta fungsi manajemen risiko.
+    melengkapi: (1) Fungsi manajemen risiko Penyelenggara Perdagangan Aset Keuangan Digital wajib melakukan pemantauan harian atas risiko likuiditas dan risiko siber. (2) Hasil pemantauan dilaporkan kepada Direksi setiap bulan.
+    kontradiktif: (1) Penyelenggara Perdagangan Aset Keuangan Digital dapat melaksanakan pengendalian internal dalam menjalankan kegiatan usahanya. (2) Dalam melaksanakan pengendalian internal sebagaimana dimaksud pada ayat (1), Penyelenggara Perdagangan Aset Keuangan Digital dapat membentuk fungsi a. kepatuhan dan audit internal; dan b. manajemen risiko.
+  - id: pusat-data-bank
+    perihal: Penerapan Manajemen Risiko dalam Penggunaan Teknologi Informasi oleh Bank Umum
+    asli: (1) Pusat Data dan Pusat Pemulihan Bencana wajib menjamin kelangsungan usaha Bank. (2) Pengelolaan Pusat Data dan Pusat Pemulihan Bencana sebagaimana dimaksud pada ayat (1), diatur lebih lanjut dalam Surat Edaran Otoritas Jasa Keuangan.
+    parafrase: (1) Kelangsungan usaha Bank harus dijamin oleh Pusat Data dan Pusat Pemulihan Bencana. (2) Ketentuan lebih lanjut mengenai pengelolaan Pusat Data dan Pusat Pemulihan Bencana ditetapkan dengan Surat Edaran Otoritas Jasa Keuangan.
+    melengkapi: (1) Bank wajib melakukan uji coba rencana pemulihan bencana atas Pusat Pemulihan Bencana paling sedikit 1 (satu) kali dalam 1 (satu) tahun. (2) Hasil uji coba dilaporkan kepada Otoritas Jasa Keuangan.
+    kontradiktif: (1) Pusat Data dan Pusat Pemulihan Bencana dapat menjamin kelangsungan usaha Bank. (2) Pengelolaan Pusat Data dan Pusat Pemulihan Bencana sebagaimana dimaksud pada ayat (1), diatur lebih lanjut dalam Surat Edaran Otoritas Jasa Keuangan.
+  - id: jaminan-lpe
+    perihal: Lembaga Pendanaan Efek
+    asli: Dalam hal LPE akan menggunakan Jaminan Pendanaan yang diterima dari penerima Pendanaan Transaksi Efek untuk Pendanaan Transaksi Efek, LPE wajib memiliki perjanjian dengan penerima Pendanaan Transaksi Efek yang memungkinkan LPE menggunakan Efek dan/atau dana yang dijaminkan penerima Pendanaan Transaksi Efek dimaksud.
+    parafrase: LPE yang hendak memakai Jaminan Pendanaan dari penerima Pendanaan Transaksi Efek untuk pendanaan lain harus terlebih dahulu memiliki perjanjian dengan penerima tersebut yang mengizinkan LPE menggunakan Efek dan/atau dana yang dijaminkan.
+    melengkapi: LPE wajib menatausahakan Jaminan Pendanaan dari setiap penerima Pendanaan Transaksi Efek dalam rekening terpisah dan melakukan penilaian harian atas nilai jaminan tersebut.
+    kontradiktif: Dalam hal LPE akan menggunakan Jaminan Pendanaan yang diterima dari penerima Pendanaan Transaksi Efek untuk Pendanaan Transaksi Efek, LPE dapat menggunakannya tanpa perjanjian dengan penerima Pendanaan Transaksi Efek.
+  - id: ekuitas-pergadaian
+    perihal: Pergadaian
+    asli: (1) Perusahaan wajib memenuhi Ekuitas paling sedikit a. Rp1.000.000.000,00 (satu miliar rupiah) untuk lingkup wilayah usaha kabupaten/kota; b. Rp4.000.000.000,00 (empat miliar rupiah) untuk lingkup wilayah usaha provinsi; dan c. Rp50.000.000.000,00 (lima puluh miliar rupiah) untuk lingkup usaha nasional. (2) Perusahaan wajib memiliki rasio Ekuitas terhadap Modal Disetor paling rendah 50% (lima puluh persen).
+    parafrase: (1) Ekuitas minimum Perusahaan adalah Rp1.000.000.000,00 (satu miliar rupiah) untuk wilayah kabupaten/kota, Rp4.000.000.000,00 (empat miliar rupiah) untuk wilayah provinsi, dan Rp50.000.000.000,00 (lima puluh miliar rupiah) untuk wilayah nasional. (2) Rasio Ekuitas terhadap Modal Disetor Perusahaan harus sekurang-kurangnya 50% (lima puluh persen).
+    melengkapi: (1) Perusahaan wajib melaporkan posisi Ekuitas kepada Otoritas Jasa Keuangan setiap bulan. (2) Perusahaan yang Ekuitasnya kurang dari ketentuan wajib menyampaikan rencana tindak penyehatan.
+    kontradiktif: (1) Perusahaan wajib memenuhi Ekuitas paling sedikit a. Rp2.000.000.000,00 (dua miliar rupiah) untuk lingkup wilayah usaha kabupaten/kota; b. Rp4.000.000.000,00 (empat miliar rupiah) untuk lingkup wilayah usaha provinsi; dan c. Rp50.000.000.000,00 (lima puluh miliar rupiah) untuk lingkup usaha nasional. (2) Perusahaan wajib memiliki rasio Ekuitas terhadap Modal Disetor paling rendah 40% (empat puluh persen).

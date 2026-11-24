@@ -119,3 +119,52 @@ def test_dewan_komisioner_abbreviations(text, key):
     """Regression: only the long phrases were recognised, so JDIH Landasan
     entries written as "PADK Nomor 1 Tahun 2026" were dropped as unresolved."""
     assert canonical_ref(text).key == key
+
+
+# --- Status diturunkan dari relasi dokumen-ke-dokumen (asumsi status mitra) -------------------
+
+def _dok(conn, doc_id, number, year, judul, teks, reg_status="berlaku"):
+    conn.execute("INSERT INTO documents (doc_id, sha256, source_type, doc_type, number, year, title, "
+                 "status, reg_status) VALUES (?,?,'web','POJK',?,?,?,'ingested',?)",
+                 (doc_id, doc_id * 4, number, year, judul, reg_status))
+    conn.execute("INSERT INTO document_text (doc_id, full_text) VALUES (?, ?)", (doc_id, teks))
+
+
+def test_status_diturunkan_dari_judul_dan_pasal_penutup(tmp_path):
+    conn = _catalog(tmp_path)
+    _dok(conn, "x", "7 Tahun 2025", 2025, "POJK Nomor 7 Tahun 2025 tentang Perubahan atas Peraturan "
+         "Otoritas Jasa Keuangan Nomor 4 Tahun 2024 tentang x", "Pasal I ...")
+    _dok(conn, "y", "8 Tahun 2025", 2025, "POJK tentang Pelaporan Baru",
+         "Pada saat Peraturan OJK ini mulai berlaku, Peraturan Otoritas Jasa Keuangan Nomor 5 Tahun "
+         "2024 tentang x dicabut dan dinyatakan tidak berlaku, kecuali Pasal 2.")
+    # Rancangan tidak mencabut apa pun (ADR-03): belum berlaku.
+    _dok(conn, "z", "9 Tahun 2026", 2026, "Rancangan POJK",
+         "Peraturan Otoritas Jasa Keuangan Nomor 3 Tahun 2023 dicabut dan dinyatakan tidak berlaku.",
+         reg_status="rancangan")
+    conn.commit()
+    rep = build_graph(conn)
+    assert gq.get_node(conn, "POJK|4|2024")["status"] == "diubah"
+    assert gq.get_node(conn, "POJK|5|2024")["status"] == "dicabut_sebagian"   # karena "kecuali"
+    assert gq.get_node(conn, "POJK|3|2023")["status"] == "berlaku"            # rancangan diabaikan
+    row = conn.execute("SELECT status_register, status_asal, status_bukti FROM graph_node "
+                       "WHERE key = 'POJK|4|2024'").fetchone()
+    assert row["status_register"] == "berlaku" and row["status_asal"] == "turunan"
+    assert "[judul]" in row["status_bukti"]
+    assert rep.edges_from_text == 2
+
+
+def test_riwayat_jdih_menurunkan_status_dan_pencabutan_yang_disusul_perubahan_dibaca_sebagian(tmp_path):
+    conn = _catalog(tmp_path)
+    build_graph(conn)
+    assert gq.get_node(conn, "POJK|1|2015")["status"] == "dicabut"            # register sudah dicabut
+    assert gq.get_node(conn, "POJK|2|2019")["status"] == "dicabut_sebagian"   # JDIH: Pasal Terkait Pasal 4
+    # "Dicabut" penuh tahun 2019, tetapi masih diubah tahun 2024 → pencabutan itu sebagian.
+    conn.execute("INSERT INTO inventory (record_key, source, title, number, doc_type, year, status, "
+                 "fields_json, detail_url, listed_at) VALUES ('f', 'jdih-ojk', 'POJK 6', '6 Tahun 2024', "
+                 "'POJK', 2024, 'berlaku', ?, 'f', 'x')",
+                 (json.dumps({"Riwayat Peraturan": "Mengubah : 1. POJK Nomor 1 Tahun 2015"}),))
+    conn.execute("UPDATE inventory SET status='berlaku' WHERE record_key='a'")
+    conn.commit()
+    build_graph(conn)
+    node = conn.execute("SELECT status, status_bukti FROM graph_node WHERE key='POJK|1|2015'").fetchone()
+    assert node["status"] == "dicabut_sebagian" and "dibaca sebagian" in node["status_bukti"]

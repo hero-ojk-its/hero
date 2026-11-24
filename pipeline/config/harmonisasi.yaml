@@ -20,6 +20,19 @@ ambang:
   # Porsi isi pasal lama yang masih termuat di pasal draft agar dibaca
   # MEMPERJELAS (draft memerinci, bukan mengganti).
   cakupan_memperjelas: 0.80
+  # --- Bila kemiripan MAKNA aktif (bagian `semantik` di bawah) -------------------------------
+  # Kemiripan objek = 0,5 × TF-IDF + 0,5 × MiniLM. Youden J pada 45 pasangan perubahan↔induk
+  # (24 Nov 2026): 0,62 (AUC 0,931; recall terarah 91,8% → 92,9%, seluruh KB 85,0% → 86,1%).
+  objek_sama_hibrida: 0.62
+  # TUMPANG TINDIH beda redaksi: kemiripan makna ≥ ini, panjang sebanding, tanpa pertentangan.
+  # Set parafrase (tests/fixtures/uji_makna.yaml): dataran 0,85–0,90 sama baiknya (14/15) → titik tengah.
+  makna_tumpang_tindih: 0.88
+  # Tumpang tindih berdasar REDAKSI (tanpa model): kesamaan kata ≥ ini.
+  redaksi_tumpang_tindih: 0.80
+  # "Topik sama, aspek lain" ketika redaksinya jauh: pada draft nyata sinyal 0,65–0,86 hampir
+  # selalu klausul templat atau "teman palsu" (0 dari 6 sampel tepat) → sengaja ketat.
+  topik_sama: 0.90
+  panjang_sebanding: 0.67
 
 kandidat:
   # Jumlah peraturan pembanding yang ditampilkan (FR-HRM-02).
@@ -59,3 +72,22 @@ tampil:
   # Mode seluruh_kb lebih ketat karena KB memuat pasal kembar di peraturan saudara.
   terarah:   {tampil: 0.50, kutip: 0.45}
   seluruh_kb: {tampil: 0.80, kutip: 0.55}
+
+# Tingkat kecocokan bila kemiripan makna aktif (skor gabungan lebih tinggi dari TF-IDF murni) —
+# dari simulasi presisi yang sama (`hero harmonisasi evaluasi`, 45 pasangan, 24 Nov 2026).
+tampil_hibrida:
+  terarah:    {tampil: 0.70, kutip: 0.60}
+  seluruh_kb: {tampil: 0.85, kutip: 0.70}
+
+semantik:
+  # Kemiripan makna antar pasal (#67, FR-HRM-05) — model lokal (ONNX), tidak ada teks keluar server.
+  #   auto  aktif bila model sudah ada di <folder katalog>/models; kalau tidak, leksikal saja
+  #   mati  leksikal (TF-IDF) murni — mode Deterministik
+  # Siapkan sekali di server:  hero harmonisasi siapkan-semantik --unduh
+  # Pemilihan model & ambang: docs/HARMONISASI_SEMANTIK.md
+  metode: auto
+  model: minilm          # paraphrase-multilingual-MiniLM-L12-v2, 0,22 GB, <1 GB RAM
+  bobot: 0.5             # porsi makna dalam kemiripan objek
+  # Pasal korpus yang belum ter-cache dan boleh dihitung dalam satu permintaan; lebih dari ini →
+  # permintaan itu leksikal saja (jalankan siapkan-semantik).
+  maks_tanpa_cache: 2000

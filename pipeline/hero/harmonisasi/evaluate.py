@@ -120,6 +120,7 @@ class PairResult:
     # (jenis_label_kebenaran, padanan_ke_induk_benar, terdekat_di_induk, kemiripan) per pasal
     butir: list[tuple[str, bool, bool, float]] = field(default_factory=list)
     mode: str = ""                         # terarah | seluruh_kb (hasil kata kunci relasi)
+    hibrida: bool = False                  # kemiripan = gabungan leksikal + makna
     induk_dari_kata_kunci: bool = False    # induk ditemukan lewat kata kunci, bukan kemiripan
     waktu_detik: float = 0.0
     # (kemiripan, relevan) per pasal berlabel: relevan = padanan benar, ATAU pasal terdekat
@@ -150,8 +151,18 @@ def evaluate_pair(conn: sqlite3.Connection, amend_id: str, base_id: str, cfg: di
     arts = {str(a["number"]).upper(): clean_article(a.get("text") or "") for a in draft.articles}
     want = [n for n in sorted(plan.diubah | plan.disisipkan) if n in arts and len(arts[n]) >= 40]
     if want:
+        from hero.harmonisasi import semantik as _sem
+        from hero.harmonisasi.engine import _lengkapi_semantik
+
         D, C = _vectorise([arts[n] for n in want], [c.teks for c in corpus])
         S = (D @ C[base_rows].T).toarray()
+        # Kalibrasi memakai skor yang SAMA dengan mesin: gabungan leksikal + makna bila aktif.
+        _lengkapi_semantik(conn, cfg)
+        M = _sem.matriks([arts[n] for n in want], [corpus[i].teks for i in base_rows], cfg)
+        if M is not None:
+            w = float(cfg["semantik"].get("bobot", 0.5))
+            S = (1 - w) * S + w * M
+            res.hibrida = True
         for r, n in enumerate(want):
             if n in plan.diubah:
                 same = [k for k, i in enumerate(base_rows) if corpus[i].pasal.upper() == n]
@@ -300,6 +311,7 @@ def run(conn: sqlite3.Connection, settings, cfg_path="config/harmonisasi.yaml",
         "waktu_maks_detik": round(max(waktu), 2) if waktu else None,
         "presisi_rentang": presisi_rentang(butir, relevan=[x for r in results for x in r.relevan]),
         "ambang_dipakai": cfg["ambang"],
+        "metode_kemiripan": "leksikal + makna" if any(r.hibrida for r in results) else "leksikal",
         "pasangan": len(results), "dilewati": skipped,
         "kandidat_induk_peringkat_1": sum(r.peringkat_induk == 1 for r in results),
         "kandidat_induk_5_besar": sum(r.peringkat_induk is not None for r in results),
@@ -351,7 +363,7 @@ def write_markdown(res: dict[str, Any], path: Path) -> None:
         "",
         "## Kalibrasi ambang `objek_sama` (TD-07)",
         "",
-        "Kemiripan TF-IDF pasal baru ↔ pasal induk bernomor sama (positif) dibandingkan "
+        f"Kemiripan ({res.get('metode_kemiripan', 'leksikal')}) pasal baru ↔ pasal induk bernomor sama (positif) dibandingkan "
         "kemiripan tertinggi pasal sisipan ↔ pasal mana pun di induk (negatif).",
         "",
         "| | Nilai |",
@@ -360,7 +372,8 @@ def write_markdown(res: dict[str, Any], path: Path) -> None:
         f"| Median negatif / P90 negatif | {d['negatif_median']} / {d['negatif_p90']} |",
         f"| AUC | {k.get('auc')} |",
         f"| Ambang yang disarankan (Youden J) | **{k.get('ambang')}** (TPR {k.get('tpr')}, FPR {k.get('fpr')}) |",
-        f"| Ambang yang dipakai saat ini | {res['ambang_dipakai']['objek_sama']} |",
+        f"| Metode kemiripan | {res.get('metode_kemiripan', 'leksikal')} |",
+        f"| Ambang yang dipakai saat ini | {res['ambang_dipakai']['objek_sama_hibrida' if res.get('metode_kemiripan', '').startswith('leksikal + makna') else 'objek_sama']} |",
         "",
         "Pengaruh ambang (pasal unik): *recall* = pasal diubah yang dipasangkan ke pasal induk "
         "yang benar dan tidak dilabel `pasal_baru`; *sisipan tertaut* = pasal sisipan yang "
