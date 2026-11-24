@@ -11,7 +11,10 @@
 ambang:
   # Kemiripan TF-IDF minimum agar dua pasal dianggap mengatur OBJEK YANG SAMA.
   # Di bawah ini → pasal_baru.
-  objek_sama: 0.40
+  # 0.40 → 0.45 (23 Nov 2026): 45 pasangan perubahan↔induk, Youden J 0.46 (AUC 0.925); di bawah
+  # 0.45 presisi padanan < 50% (= "tidak layak dikutip", Weekly #10). Recall 91.5% → 90.0%,
+  # pasal sisipan yang keliru ditautkan ke induk 15.6% → 11.7%. Rincian: docs/HARMONISASI_AMBANG.md
+  objek_sama: 0.45
   # Rasio kesamaan redaksi (difflib) minimum untuk DUPLIKASI (hampir identik).
   duplikasi: 0.95
   # Porsi isi pasal lama yang masih termuat di pasal draft agar dibaca
@@ -40,3 +43,19 @@ korpus:
 keyakinan:
   tinggi: 0.75
   sedang: 0.50
+
+relasi:
+  # Weekly #10 keputusan 3: cari kata kunci relasi DULU (Perubahan atas, mengubah, dicabut,
+  # dinyatakan tidak berlaku). Ada → bandingkan hanya dengan peraturan yang disebut; tidak ada
+  # → peraturan baru, pasal per pasal ke seluruh KB. false = selalu seluruh KB.
+  terarah: true
+
+tampil:
+  # Tingkat kecocokan tiap padanan (Weekly #10 keputusan 5, ISU-06 #28), dari presisi empiris
+  # per rentang kemiripan (`hero harmonisasi evaluasi`, 45 pasangan):
+  #   ≥ tampil  → presisi ≥ 75%  : layak ditampilkan
+  #   ≥ kutip   → presisi 50–75% : "pertimbangkan"
+  #   < kutip   → presisi < 50%  : tidak dikutip (pasal serupa lain tidak dimunculkan)
+  # Mode seluruh_kb lebih ketat karena KB memuat pasal kembar di peraturan saudara.
+  terarah:   {tampil: 0.50, kutip: 0.45}
+  seluruh_kb: {tampil: 0.80, kutip: 0.55}

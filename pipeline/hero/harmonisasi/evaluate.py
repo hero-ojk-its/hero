@@ -28,9 +28,10 @@ from typing import Any
 import numpy as np
 
 from hero.harmonisasi.engine import (
-    _vectorise, clean_article, draft_from_catalog, harmonise, load_config, load_corpus,
+    _vectorise, clean_article, draft_from_catalog, harmonise, load_config, pilih_korpus,
+    wording_ratio,
 )
-from hero.harmonisasi.refs import amendment_plan
+from hero.harmonisasi.refs import amendment_plan, explicit_references
 
 _AMENDS = re.compile(
     r"Perubahan\s+(?:\w+\s+)?Atas\s+(?:Peraturan\s+Otoritas\s+Jasa\s+Keuangan|POJK)\s+Nomor\s+"
@@ -118,6 +119,13 @@ class PairResult:
     catatan: list[str] = field(default_factory=list)
     # (jenis_label_kebenaran, padanan_ke_induk_benar, terdekat_di_induk, kemiripan) per pasal
     butir: list[tuple[str, bool, bool, float]] = field(default_factory=list)
+    mode: str = ""                         # terarah | seluruh_kb (hasil kata kunci relasi)
+    induk_dari_kata_kunci: bool = False    # induk ditemukan lewat kata kunci, bukan kemiripan
+    waktu_detik: float = 0.0
+    # (kemiripan, relevan) per pasal berlabel: relevan = padanan benar, ATAU pasal terdekat
+    # berredaksi ≥ 80% sama dengan pasal draft / pasal induk bernomor sama (pasal kembar di
+    # peraturan saudara, mis. versi BPR vs BPRS — "pasal serupa" yang memang layak dikutip).
+    relevan: list[tuple[float, bool]] = field(default_factory=list)
 
 
 def evaluate_pair(conn: sqlite3.Connection, amend_id: str, base_id: str, cfg: dict[str, Any],
@@ -128,9 +136,13 @@ def evaluate_pair(conn: sqlite3.Connection, amend_id: str, base_id: str, cfg: di
     ranks = [k["doc_id"] for k in rep.kandidat]
     res = PairResult(draft.key or amend_id, base_id, len(plan.diubah), len(plan.disisipkan),
                      ranks.index(base_id) + 1 if base_id in ranks else None, 0, 0)
+    res.mode, res.waktu_detik = rep.relasi.get("mode", ""), rep.waktu_detik
 
-    # Raw similarities through the engine's own corpus and vectoriser.
-    corpus = load_corpus(conn, cfg, draft.doc_id, draft.key)
+    # Raw similarities through the engine's own corpus and vectoriser — the SAME corpus the
+    # engine compared against (terarah: only the regulation named by the keywords).
+    refs = explicit_references(conn, draft.full_text, draft.judul, draft.articles, draft.key)
+    corpus, _info = pilih_korpus(conn, cfg, draft, refs)
+    res.induk_dari_kata_kunci = any(c.doc_id == base_id for c in corpus) and _info["mode"] == "terarah"
     base_rows = [i for i, c in enumerate(corpus) if c.doc_id == base_id]
     if not base_rows:
         res.catatan.append("induk tidak masuk korpus (status/akses)")
@@ -150,6 +162,8 @@ def evaluate_pair(conn: sqlite3.Connection, amend_id: str, base_id: str, cfg: di
             else:
                 res.sim_negatif.append(float(S[r].max()))
 
+    base_txt = {str(a["number"]).upper(): clean_article(a["text"] or "") for a in conn.execute(
+        "SELECT number, text FROM articles WHERE doc_id = ?", (base_id,))}
     counted: set[str] = set()
     for f in rep.temuan:
         n = f.pasal_draft.replace("Pasal ", "").upper()
@@ -162,6 +176,14 @@ def evaluate_pair(conn: sqlite3.Connection, amend_id: str, base_id: str, cfg: di
         if n in plan.diubah or n in plan.disisipkan:
             res.butir.append(("diubah" if n in plan.diubah else "disisipkan", aligned,
                               near.get("doc_id") == base_id, float(near.get("kemiripan") or 0)))
+            ok = n in plan.diubah and aligned
+            if not ok and near.get("doc_id"):
+                row = conn.execute("SELECT text FROM articles WHERE doc_id = ? AND number = ? LIMIT 1",
+                                   (near["doc_id"], str(near.get("pasal")))).fetchone()
+                t = clean_article(row[0] or "") if row else ""
+                ok = bool(t) and (wording_ratio(t, arts.get(n, "")) >= 0.8 or (
+                    n in plan.diubah and n in base_txt and wording_ratio(t, base_txt[n]) >= 0.8))
+            res.relevan.append((float(near.get("kemiripan") or 0), ok))
         if n in plan.diubah and aligned:
             res.padanan_benar += 1
             if f.jenis != "pasal_baru":
@@ -198,10 +220,65 @@ def sweep(items: list[tuple[str, bool, bool, float]],
     return out
 
 
+def presisi_rentang(items: list[tuple[str, bool, bool, float]], lebar: float = 0.10,
+                    min_n: int = 8, relevan: list[tuple[float, bool]] | None = None,
+                    ) -> dict[str, Any]:
+    """Simulasi ambang tampil/kutip (Weekly #10 keputusan 5, ISU-06 #28).
+
+    Kemiripan TF-IDF bukan persen. Yang bisa dijelaskan ke DPEA adalah: *di rentang kemiripan
+    ini, berapa persen pasal terdekat yang ditemukan memang pasal yang benar?* Kebenaran =
+    pasal diubah yang dipasangkan ke pasal induk bernomor sama; pasal sisipan (tak punya
+    padanan) dan pasal diubah yang salah pasang dihitung salah. Ini batas BAWAH presisi —
+    padanan sisipan di peraturan lain bisa saja relevan tetapi tetap dihitung salah.
+
+    ``tampil`` = kemiripan terendah yang di atasnya presisi lokal selalu ≥ 75%;
+    ``kutip``  = kemiripan terendah yang di atasnya presisi lokal selalu ≥ 50%.
+    Dengan ``relevan``, presisi dihitung atas "pasal serupa yang layak dikutip" (lihat
+    :class:`PairResult`) — ukuran yang diminta mitra; versi ketat tetap ikut sebagai batas bawah.
+    """
+    if relevan is not None:
+        hasil = presisi_rentang(items, lebar, min_n)
+        rel = presisi_rentang([("diubah", ok, False, s_) for s_, ok in relevan], lebar, min_n)
+        for a, b in zip(hasil["rentang"], rel["rentang"]):
+            a["presisi_relevan"] = b["presisi_lokal"]
+            a["presisi_relevan_kumulatif"] = b["presisi_kumulatif"]
+        hasil["ketat"] = {"tampil_75": hasil["ambang_tampil_75"], "kutip_50": hasil["ambang_kutip_50"]}
+        hasil["ambang_tampil_75"], hasil["ambang_kutip_50"] = rel["ambang_tampil_75"], rel["ambang_kutip_50"]
+        hasil["relevan"] = rel["benar"]
+        return hasil
+    pts = [(s, k == "diubah" and ok) for k, ok, _, s in items]
+    grid = np.round(np.arange(0.15, 0.951, 0.05), 2)
+    rows = []
+    for t in grid:
+        win = [b for s, b in pts if t - lebar / 2 <= s < t + lebar / 2]
+        atas = [b for s, b in pts if s >= t]
+        rows.append({"kemiripan": float(t), "n": len(win),
+                     "presisi_lokal": round(float(np.mean(win)), 3) if len(win) >= min_n else None,
+                     "n_atas": len(atas),
+                     "presisi_kumulatif": round(float(np.mean(atas)), 3) if atas else None,
+                     "cakupan_benar": round(sum(atas) / max(1, sum(b for _, b in pts)), 3)})
+
+    def batas(p: float) -> float | None:
+        best = None
+        for r in reversed(rows):          # dari kemiripan tinggi turun
+            v = r["presisi_lokal"]
+            if v is None:
+                continue
+            if v < p:
+                break
+            best = r["kemiripan"]
+        return best
+
+    return {"rentang": rows, "ambang_tampil_75": batas(0.75), "ambang_kutip_50": batas(0.50),
+            "n": len(pts), "benar": sum(b for _, b in pts)}
+
+
 def run(conn: sqlite3.Connection, settings, cfg_path="config/harmonisasi.yaml",
-        limit: int = 12) -> dict[str, Any]:
+        limit: int = 12, terarah: bool | None = None) -> dict[str, Any]:
     conn.row_factory = sqlite3.Row
     cfg = load_config(cfg_path)
+    if terarah is not None:
+        cfg.setdefault("relasi", {})["terarah"] = terarah
     results: list[PairResult] = []
     skipped = []
     for p in find_pairs(conn, limit=limit):
@@ -213,8 +290,15 @@ def run(conn: sqlite3.Connection, settings, cfg_path="config/harmonisasi.yaml",
     pos = [s for r in results for s in r.sim_positif]
     neg = [s for r in results for s in r.sim_negatif]
     total_changed = sum(len(r.sim_positif) for r in results)
+    butir = [b for r in results for b in r.butir]
+    waktu = [r.waktu_detik for r in results]
     out = {
         "dibuat": datetime.now().isoformat(timespec="seconds"),
+        "mode": "terarah" if cfg.get("relasi", {}).get("terarah", True) else "seluruh_kb",
+        "induk_dari_kata_kunci": sum(r.induk_dari_kata_kunci for r in results),
+        "waktu_median_detik": round(statistics.median(waktu), 2) if waktu else None,
+        "waktu_maks_detik": round(max(waktu), 2) if waktu else None,
+        "presisi_rentang": presisi_rentang(butir, relevan=[x for r in results for x in r.relevan]),
         "ambang_dipakai": cfg["ambang"],
         "pasangan": len(results), "dilewati": skipped,
         "kandidat_induk_peringkat_1": sum(r.peringkat_induk == 1 for r in results),
@@ -232,7 +316,7 @@ def run(conn: sqlite3.Connection, settings, cfg_path="config/harmonisasi.yaml",
             "negatif_p90": round(float(np.percentile(neg, 90)), 3) if neg else None,
         },
         "kalibrasi_objek_sama": youden(pos, neg),
-        "sweep": sweep([b for r in results for b in r.butir]),
+        "sweep": sweep(butir),
         "per_pasangan": [r.__dict__ for r in results],
     }
     return out
@@ -252,7 +336,10 @@ def write_markdown(res: dict[str, Any], path: Path) -> None:
         "",
         "| Ukuran | Nilai |",
         "|---|---:|",
+        f"| Mode pembanding | `{res.get('mode', 'seluruh_kb')}` |",
         f"| Pasangan dievaluasi | {res['pasangan']} |",
+        f"| Induk ditemukan lewat kata kunci relasi | {res.get('induk_dari_kata_kunci', 0)} / {res['pasangan']} |",
+        f"| Waktu per draft (median / maks) | {res.get('waktu_median_detik')} / {res.get('waktu_maks_detik')} detik |",
         f"| Induk menjadi kandidat #1 | {res['kandidat_induk_peringkat_1']} / {res['pasangan']} |",
         f"| Induk masuk 5 kandidat teratas | {res['kandidat_induk_5_besar']} / {res['pasangan']} |",
         f"| Pasal diubah (berpadanan di induk) | {res['pasal_diubah']} |",
@@ -283,6 +370,26 @@ def write_markdown(res: dict[str, Any], path: Path) -> None:
         "|---:|---:|---:|",
         *[f"| {x['ambang']:.2f} | {(x['recall'] or 0):.1%} | {(x['sisipan_tertaut_induk'] or 0):.1%} |"
           for x in res["sweep"]],
+        "",
+        "## Simulasi ambang tampil / kutip (ISU-06, Weekly #10)",
+        "",
+        "Pada jendela ±0,05 di sekitar tiap kemiripan: *presisi ketat* = porsi pasal terdekat yang "
+        "tepat pasal induk bernomor sama (batas bawah); *presisi relevan* = ketat + pasal terdekat "
+        "yang redaksinya ≥ 80% sama dengan pasal draft atau pasal induknya (pasal kembar di "
+        "peraturan saudara) — \"pasal serupa\" yang memang layak dikutip.",
+        "",
+        f"Ambang tampil (presisi relevan ≥ 75%): **{res['presisi_rentang']['ambang_tampil_75']}** · "
+        f"ambang kutip (≥ 50%): **{res['presisi_rentang']['ambang_kutip_50']}** · versi ketat: "
+        f"{res['presisi_rentang'].get('ketat')} · {res['presisi_rentang']['benar']} tepat, "
+        f"{res['presisi_rentang'].get('relevan')} relevan dari {res['presisi_rentang']['n']} pasal.",
+        "",
+        "| Kemiripan | n jendela | Presisi ketat | Presisi relevan | n ≥ kemiripan | Presisi kumulatif | Pasal benar tercakup |",
+        "|---:|---:|---:|---:|---:|---:|---:|",
+        *[f"| {x['kemiripan']:.2f} | {x['n']} | "
+          f"{'—' if x['presisi_lokal'] is None else format(x['presisi_lokal'], '.0%')} | "
+          f"{'—' if x.get('presisi_relevan') is None else format(x['presisi_relevan'], '.0%')} | {x['n_atas']} | "
+          f"{'—' if x['presisi_kumulatif'] is None else format(x['presisi_kumulatif'], '.0%')} | "
+          f"{x['cakupan_benar']:.0%} |" for x in res["presisi_rentang"]["rentang"]],
         "",
         "## Per pasangan",
         "",

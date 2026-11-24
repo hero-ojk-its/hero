@@ -36,9 +36,11 @@ from typing import Any
 import numpy as np
 import yaml
 
-from hero.harmonisasi.refs import AmendmentPlan, Reference, amendment_plan, explicit_references
+from hero.harmonisasi.refs import (
+    RELASI_EKSPLISIT, AmendmentPlan, Reference, amendment_plan, explicit_references,
+)
 
-VERSION = "harmonisasi-v0.1"
+VERSION = "harmonisasi-v0.2"
 LABELS = ("konflik", "menggantikan", "memperjelas", "duplikasi", "pasal_baru")
 LABEL_TEXT = {
     "konflik": "Konflik", "menggantikan": "Menggantikan", "memperjelas": "Memperjelas",
@@ -56,12 +58,19 @@ LABEL_TONE = {"konflik": "danger", "menggantikan": "warning", "memperjelas": "in
 # ---------------------------------------------------------------------------
 
 DEFAULTS: dict[str, Any] = {
-    "ambang": {"objek_sama": 0.40, "duplikasi": 0.95, "cakupan_memperjelas": 0.80},
+    "ambang": {"objek_sama": 0.45, "duplikasi": 0.95, "cakupan_memperjelas": 0.80},
     "kandidat": {"maks": 5, "min_kemiripan": 0.20, "toleransi_pembanding": 0.05},
     "klausul_baku": {"kemiripan": 0.60, "min_dokumen": 3},
     "register": {"maks": 5, "min_kemiripan": 0.30},
     "korpus": {"kecualikan_status": ["rancangan"], "sertakan_dicabut": False},
     "keyakinan": {"tinggi": 0.75, "sedang": 0.50},
+    # Weekly #10 (keputusan 3): draft yang menyatakan mengubah/mencabut peraturan di KB
+    # dibandingkan HANYA dengan peraturan itu; tanpa kata kunci relasi → seluruh KB.
+    "relasi": {"terarah": True},
+    # Ambang tampil/kutip "pasal serupa" (Weekly #10 keputusan 5, ISU-06) per mode pembanding,
+    # dari simulasi presisi `hero harmonisasi evaluasi` — lihat docs/HARMONISASI_AMBANG.md.
+    "tampil": {"terarah": {"tampil": 0.50, "kutip": 0.45},
+               "seluruh_kb": {"tampil": 0.80, "kutip": 0.55}},
 }
 
 
@@ -226,12 +235,17 @@ class CorpusArticle:
 
 
 def load_corpus(conn: sqlite3.Connection, cfg: dict[str, Any], exclude_doc: str | None,
-                exclude_key: str | None) -> list[CorpusArticle]:
+                exclude_key: str | None, only_keys: set[str] | None = None) -> list[CorpusArticle]:
+    """Pasal pembanding. ``only_keys`` = mode terarah: hanya peraturan yang dinyatakan
+    diubah/dicabut draft, apa pun statusnya di KB (yang dicabut tetap dibandingkan — draft
+    yang mencabut justru harus disandingkan dengan yang dicabutnya)."""
     from hero.graph.identity import ref_for_record
 
     skip = set(cfg["korpus"].get("kecualikan_status") or [])
     if not cfg["korpus"].get("sertakan_dicabut"):
         skip.add("dicabut")
+    if only_keys is not None:
+        skip = {"rancangan"}
     out: list[CorpusArticle] = []
     docs = conn.execute(
         "SELECT doc_id, doc_type, number, year, title, subject, reg_status FROM documents "
@@ -243,6 +257,8 @@ def load_corpus(conn: sqlite3.Connection, cfg: dict[str, Any], exclude_doc: str 
         key = ref.key if ref else None
         if exclude_key and key == exclude_key:
             continue  # another copy of the draft itself
+        if only_keys is not None and key not in only_keys:
+            continue
         judul = d["subject"] or d["title"] or ""
         for a in conn.execute("SELECT number, page, text FROM articles WHERE doc_id = ? ORDER BY id",
                               (d["doc_id"],)):
@@ -271,6 +287,8 @@ class Finding:
     perbedaan: list[str] = field(default_factory=list)
     alternatif: list[dict[str, Any]] = field(default_factory=list)
     klausul_baku: bool = False
+    # tampil (presisi ≥ 75%) | pertimbangkan (50–75%) | tidak_dikutip (< 50%) — lihat cfg "tampil"
+    kecocokan: str | None = None
     # Closest corpus article even when the label is pasal_baru — kept for
     # audit and threshold calibration, never shown as a "pembanding".
     terdekat: dict[str, Any] | None = None
@@ -289,6 +307,8 @@ class Report:
     ringkasan: dict[str, Any]
     rekomendasi: list[str]
     kandidat_register: list[dict[str, Any]] = field(default_factory=list)
+    relasi: dict[str, Any] = field(default_factory=dict)          # mode pembanding + bukti kata kunci
+    dampak_status: list[dict[str, Any]] = field(default_factory=list)
     catatan: str = ("Draft / Rekomendasi — keluaran sistem bukan keputusan. Keputusan final "
                     "tetap kewenangan Pengawas / unit terkait DPEA.")
     waktu_detik: float = 0.0
@@ -363,6 +383,110 @@ def classify(d_text: str, match: CorpusArticle, sim: float, explicit_keys: set[s
             f"{cov:.0%}) tanpa pertentangan angka/kewajiban yang terdeteksi", diffs)
 
 
+def _urut_pasal(nomor: set[str] | list[str]) -> list[str]:
+    def k(x: str):
+        m = re.match(r"(\d+)(.*)", x)
+        return (int(m.group(1)), m.group(2)) if m else (10**6, x)
+    return sorted(nomor, key=k)
+
+
+def pilih_korpus(conn: sqlite3.Connection, cfg: dict[str, Any], draft: DraftDoc,
+                 refs: list[Reference]) -> tuple[list[CorpusArticle], dict[str, Any]]:
+    """Kata kunci dulu, kemiripan kemudian (Weekly #10, keputusan 3).
+
+    * Draft menyatakan mengubah / mencabut (sebagian) peraturan yang ADA di KB →
+      ``terarah``: pasal draft hanya dibandingkan dengan pasal peraturan itu.
+    * Tidak ada kata kunci relasi, atau peraturan sasarannya belum di KB →
+      ``seluruh_kb``: diperlakukan sebagai peraturan baru, pasal per pasal ke seluruh KB.
+    """
+    sasaran = [r for r in refs if r.relasi in RELASI_EKSPLISIT]
+    info: dict[str, Any] = {
+        "mode": "seluruh_kb",
+        "kata_kunci": [{"key": r.key, "relasi": r.relasi, "bukti": r.kata_kunci} for r in sasaran],
+        "sasaran": [], "belum_di_kb": [],
+    }
+    if sasaran and cfg.get("relasi", {}).get("terarah", True):
+        keys = {r.key for r in sasaran}
+        corpus = load_corpus(conn, cfg, draft.doc_id, draft.key, only_keys=keys)
+        ada = {c.key for c in corpus}
+        info["sasaran"] = sorted(ada)
+        info["belum_di_kb"] = sorted(keys - ada)
+        if corpus:
+            info["mode"] = "terarah"
+            info["alasan"] = ("draft menyatakan " + "; ".join(
+                f"{_RELASI_TEKS[r.relasi]} {r.key.replace('|', ' ')}" for r in sasaran
+                if r.key in ada) + " — pasal draft dibandingkan langsung dengan peraturan itu, "
+                "bukan dengan seluruh Knowledge Base")
+            return corpus, info
+        info["alasan"] = ("draft menyatakan mengubah/mencabut peraturan yang belum ada di Knowledge "
+                          "Base — sementara dibandingkan dengan seluruh KB; unduh peraturan itu dulu")
+    else:
+        info["alasan"] = ("tidak ditemukan kata kunci relasi (Perubahan atas, mengubah, dicabut, "
+                          "dinyatakan tidak berlaku) — diperlakukan sebagai peraturan baru dan "
+                          "dibandingkan pasal per pasal dengan seluruh Knowledge Base")
+    return load_corpus(conn, cfg, draft.doc_id, draft.key), info
+
+
+_RELASI_TEKS = {"diubah": "mengubah", "dicabut": "mencabut",
+                "dicabut_sebagian": "mencabut sebagian", "dirujuk": "merujuk"}
+
+
+def dampak_status(conn: sqlite3.Connection, refs: list[Reference], plan: AmendmentPlan,
+                  corpus: list[CorpusArticle]) -> list[dict[str, Any]]:
+    """Akibat draft terhadap status peraturan yang dirujuknya (Weekly #10, keputusan 4).
+
+    * perubahan → hanya pasal yang disebut diubah/dihapus yang tidak berlaku lagi;
+      pasal lain tetap berlaku, pasal sisipan menambah.
+    * pencabutan → seluruh pasal peraturan itu tidak berlaku.
+    * pencabutan sebagian → hanya pasal yang disebut.
+    """
+    doc_of = {c.key: c.doc_id for c in corpus if c.key}
+    induk_ubah = next((r.key for r in refs if r.relasi == "diubah"), None)
+    out = []
+    for r in refs:
+        if r.relasi not in RELASI_EKSPLISIT:
+            continue
+        did = doc_of.get(r.key) or r.doc_id
+        pasal_kb: list[str] = []
+        if did:
+            pasal_kb = _urut_pasal({str(x[0]).upper() for x in conn.execute(
+                "SELECT DISTINCT number FROM articles WHERE doc_id = ?", (did,))})
+        d: dict[str, Any] = {"key": r.key, "doc_id": did, "judul": r.judul, "relasi": r.relasi,
+                             "bukti": r.kata_kunci, "pasal_di_kb": len(pasal_kb)}
+        if r.relasi == "dicabut":
+            d.update(status_setelah="dicabut", pasal_tidak_berlaku=pasal_kb or ["seluruh pasal"],
+                     pasal_tetap_berlaku=[],
+                     penjelasan="pencabutan: seluruh peraturan tidak berlaku sejak draft berlaku")
+        else:
+            if r.relasi == "diubah" and r.key == induk_ubah:
+                gugur, sisip = plan.diubah | plan.dihapus, plan.disisipkan
+                d.update(pasal_diubah=_urut_pasal(plan.diubah), pasal_dihapus=_urut_pasal(plan.dihapus),
+                         pasal_disisipkan=_urut_pasal(sisip))
+            elif r.relasi == "dicabut_sebagian":
+                gugur, sisip = set(r.pasal_dicabut), set()
+            else:
+                gugur, sisip = set(), set()      # draft kedua yang ikut diubah: rinciannya tak terbaca
+            d.update(status_setelah="dicabut sebagian" if r.relasi == "dicabut_sebagian" else "diubah",
+                     pasal_tidak_berlaku=_urut_pasal(gugur),
+                     pasal_tetap_berlaku=[x for x in pasal_kb if x not in gugur],
+                     tidak_ditemukan_di_kb=_urut_pasal(gugur - set(pasal_kb)) if pasal_kb else [],
+                     penjelasan=(f"{_RELASI_TEKS[r.relasi]}: {len(gugur)} pasal lama tidak berlaku"
+                                 + (f" dari {len(pasal_kb)} pasal di KB" if pasal_kb else "")
+                                 + (f", {len(sisip)} pasal disisipkan" if sisip else "")
+                                 + "; pasal lain tetap berlaku"
+                                 if gugur or sisip else
+                                 f"{_RELASI_TEKS[r.relasi]}: pasal yang diubah tidak terbaca dari "
+                                 "instruksi perubahan — periksa manual"))
+        out.append(d)
+    return out
+
+
+def tingkat_kecocokan(sim: float, mode: str, cfg: dict[str, Any]) -> str:
+    """Seberapa layak padanan dikutip, dari presisi empiris di rentang kemiripannya."""
+    t = cfg.get("tampil", DEFAULTS["tampil"]).get(mode) or DEFAULTS["tampil"]["seluruh_kb"]
+    return "tampil" if sim >= t["tampil"] else "pertimbangkan" if sim >= t["kutip"] else "tidak_dikutip"
+
+
 def harmonise(conn: sqlite3.Connection, draft: DraftDoc, cfg: dict[str, Any] | None = None,
               ) -> Report:
     t0 = time.perf_counter()
@@ -371,11 +495,14 @@ def harmonise(conn: sqlite3.Connection, draft: DraftDoc, cfg: dict[str, Any] | N
 
     refs: list[Reference] = explicit_references(conn, draft.full_text, draft.judul,
                                                 draft.articles, own_key=draft.key)
-    explicit_keys = {r.key for r in refs if r.relasi in ("diubah", "dicabut")}
+    explicit_keys = {r.key for r in refs if r.relasi in RELASI_EKSPLISIT}
     plan: AmendmentPlan = amendment_plan(draft.full_text) if any(
         r.relasi == "diubah" for r in refs) else AmendmentPlan()
 
-    corpus = load_corpus(conn, cfg, draft.doc_id, draft.key)
+    corpus, relasi = pilih_korpus(conn, cfg, draft, refs)
+    dampak = dampak_status(conn, refs, plan, corpus)
+    gugur = {(d["key"], p) for d in dampak for p in d["pasal_tidak_berlaku"]}
+    dicabut_penuh = {d["key"] for d in dampak if d["status_setelah"] == "dicabut"}
     d_arts = [(str(a["number"]), a.get("page"), clean_article(a.get("text") or ""))
               for a in draft.articles]
     # A repeated number is the Penjelasan or a quoted article; the body comes first.
@@ -386,9 +513,11 @@ def harmonise(conn: sqlite3.Connection, draft: DraftDoc, cfg: dict[str, Any] | N
         return Report(VERSION, {"judul": draft.judul, "key": draft.key, "pasal": len(d_arts)},
                       [], [asdict(r) for r in refs], [],
                       {"pasal_draft": len(d_arts), "pasal_korpus": len(corpus),
-                       "per_jenis": {}, "galat": "draft atau korpus tanpa pasal terbaca"},
+                       "per_jenis": {}, "galat": "draft atau korpus tanpa pasal terbaca",
+                       "mode_pembanding": relasi["mode"]},
                       ["Draft tidak memiliki struktur pasal yang terbaca; harmonisasi per pasal "
                        "tidak dapat dijalankan. Periksa hasil ekstraksi atau OCR."],
+                      relasi=relasi, dampak_status=dampak,
                       waktu_detik=time.perf_counter() - t0)
 
     D, C = _vectorise([a[2] for a in d_arts], [c.teks for c in corpus])
@@ -429,6 +558,7 @@ def harmonise(conn: sqlite3.Connection, draft: DraftDoc, cfg: dict[str, Any] | N
             score += 1.0
             alasan.append({"diubah": "draft menyatakan mengubah peraturan ini",
                            "dicabut": "draft mencabut peraturan ini",
+                           "dicabut_sebagian": "draft mencabut sebagian pasal peraturan ini",
                            "dirujuk": "dirujuk eksplisit oleh draft"}[r.relasi])
         alasan.append(f"kemiripan dokumen {float(doc_cos[k]):.2f}; "
                       f"{len(mirip)} dari {len(voters)} pasal draft punya padanan")
@@ -467,15 +597,23 @@ def harmonise(conn: sqlite3.Connection, draft: DraftDoc, cfg: dict[str, Any] | N
                     "nomor": best.nomor_dok, "status": best.status, "pasal": best.pasal,
                     "halaman": best.halaman, "kutipan": _excerpt(best.teks),
                     "pdf": f"/api/kb/documents/{best.doc_id}/pdf"
-                           + (f"#page={best.halaman}" if best.halaman else "")}
+                           + (f"#page={best.halaman}" if best.halaman else ""),
+                    # Status pasal pembanding SETELAH draft berlaku (keputusan 4 Weekly #10).
+                    "status_setelah_draft": (
+                        "tidak_berlaku" if best.key in dicabut_penuh
+                        or (best.key, best.pasal.upper()) in gugur else "tetap_berlaku")}
+        # "Pasal serupa" lain hanya bila layak dikutip — di bawah ambang kutip presisinya < 50%.
+        kutip = (cfg.get("tampil", DEFAULTS["tampil"]).get(relasi["mode"]) or {}).get("kutip", min_c)
         alt = [{"doc_id": corpus[int(x)].doc_id, "judul": corpus[int(x)].judul,
-                "pasal": corpus[int(x)].pasal, "kemiripan": round(float(sims[i, x]), 3)}
-               for x in order[:4] if int(x) != j and sims[i, x] >= min_c][:3]
+                "pasal": corpus[int(x)].pasal, "kemiripan": round(float(sims[i, x]), 3),
+                "kecocokan": tingkat_kecocokan(float(sims[i, x]), relasi["mode"], cfg)}
+               for x in order[:4] if int(x) != j and sims[i, x] >= max(min_c, kutip)][:3]
         top = [{"doc_id": corpus[int(x)].doc_id, "pasal": corpus[int(x)].pasal,
                 "kemiripan": round(float(sims[i, x]), 4)} for x in order[:10]]
         findings.append(Finding(f"Pasal {pasal}", page, _excerpt(text), jenis, round(conf, 3),
                                 _tier(conf, cfg), alasan, pemb, round(sim, 3), diffs, alt,
                                 klausul_baku=boiler[i],
+                                kecocokan=tingkat_kecocokan(sim, relasi["mode"], cfg),
                                 terdekat={"doc_id": best.doc_id, "pasal": best.pasal,
                                           "kemiripan": round(sim, 4), "top": top}))
 
@@ -489,12 +627,14 @@ def harmonise(conn: sqlite3.Connection, draft: DraftDoc, cfg: dict[str, Any] | N
         "rujukan": len(refs), "rujukan_dicabut": len(rujukan_dicabut),
         "rencana_perubahan": {"diubah": sorted(plan.diubah), "disisipkan": sorted(plan.disisipkan),
                               "dihapus": sorted(plan.dihapus)} if not plan.kosong else None,
+        "mode_pembanding": relasi["mode"],
     }
     register = register_candidates(conn, draft, cfg)
     return Report(VERSION, {"judul": draft.judul, "key": draft.key, "doc_id": draft.doc_id,
                             "sumber": draft.sumber, "pasal": len(d_arts)},
                   kandidat, [asdict(r) for r in refs], findings, summary,
-                  recommendations(findings, refs, register), register,
+                  recommendations(findings, refs, register, dampak), register,
+                  relasi=relasi, dampak_status=dampak,
                   waktu_detik=round(time.perf_counter() - t0, 3))
 
 
@@ -552,15 +692,26 @@ def register_candidates(conn: sqlite3.Connection, draft: DraftDoc,
 
 
 def recommendations(findings: list[Finding], refs: list[Reference],
-                    register: list[dict[str, Any]] | None = None) -> list[str]:
+                    register: list[dict[str, Any]] | None = None,
+                    dampak: list[dict[str, Any]] | None = None) -> list[str]:
     """Initial recommendations (FR-HRM-10) — templated, each pointing at its evidence."""
     out: list[str] = []
+    for d in dampak or []:
+        nama = d["key"].replace("|", " ")
+        if d["status_setelah"] == "dicabut":
+            out.append(f"Draft mencabut {nama}: seluruh pasalnya tidak berlaku setelah draft "
+                       f"berlaku — perbarui status di Knowledge Base dan rujukan yang masih menunjuknya.")
+        elif d["pasal_tidak_berlaku"]:
+            daftar = ", ".join(d["pasal_tidak_berlaku"][:12])
+            out.append(f"Draft {_RELASI_TEKS[d['relasi']]} {nama}: Pasal {daftar} versi lama tidak "
+                       f"berlaku; {len(d['pasal_tetap_berlaku'])} pasal lain tetap berlaku.")
     for c in (register or [])[:3]:
         out.append(f"Register memuat \"{c['judul'][:110]}\" (kemiripan perihal "
                    f"{c['kemiripan_perihal']:.2f}) yang belum ada di Knowledge Base — unduh dulu "
                    f"agar ikut dibandingkan (hero harvest, record {c['record_key'][-60:]}).")
     for r in refs:
-        if r.relasi in ("diubah", "dicabut") and not r.doc_id:
+        di_kb = r.doc_id or any(d["key"] == r.key and d["doc_id"] for d in dampak or [])
+        if r.relasi in RELASI_EKSPLISIT and not di_kb:
             out.append(f"Draft {'mengubah' if r.relasi == 'diubah' else 'mencabut'} "
                        f"{r.key.replace('|', ' ')}, tetapi peraturan itu belum ada di Knowledge Base — "
                        f"unduh dulu agar pasal yang diubah dapat dibandingkan dengan aslinya.")

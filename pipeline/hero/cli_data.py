@@ -213,6 +213,9 @@ def harmonisasi_evaluasi(
     pasangan: int = typer.Option(12, "--pasangan", "-n"),
     out: Path = typer.Option("docs/HARMONISASI_EVALUASI.md", "--out", "-o"),
     aturan: Path = typer.Option("config/harmonisasi.yaml", "--aturan"),
+    seluruh_kb: bool = typer.Option(False, "--seluruh-kb",
+                                    help="Abaikan kata kunci relasi; bandingkan ke seluruh KB "
+                                         "(skenario peraturan baru, untuk kalibrasi ambang)"),
     config: Path = CONFIG_OPT,
 ) -> None:
     """Recall & kalibrasi ambang dari pasangan perubahan ↔ induk (TD-07, FR-HRM-12)."""
@@ -222,10 +225,12 @@ def harmonisasi_evaluasi(
 
     settings = load_settings(config)
     with sqlite3.connect(settings.catalog_db, timeout=60) as conn:
-        res = run(conn, settings, aturan, limit=pasangan)
+        res = run(conn, settings, aturan, limit=pasangan, terarah=False if seluruh_kb else None)
     write_markdown(res, out)
     k = res["kalibrasi_objek_sama"]
-    console.print(f"{res['pasangan']} pasangan · recall {res['recall_deteksi']} · "
+    pr = res["presisi_rentang"]
+    console.print(f"[{res['mode']}] {res['pasangan']} pasangan · recall {res['recall_deteksi']} · "
+                  f"tampil≥{pr['ambang_tampil_75']} kutip≥{pr['ambang_kutip_50']} · "
                   f"induk #1 {res['kandidat_induk_peringkat_1']} · ambang disarankan "
                   f"{k.get('ambang')} (AUC {k.get('auc')}) → {out}")
 

@@ -1,66 +1,255 @@
 {
- "dibuat": "2026-10-02T20:10:13",
+ "dibuat": "2026-11-23T12:44:35",
+ "mode": "terarah",
+ "induk_dari_kata_kunci": 45,
+ "waktu_median_detik": 0.04,
+ "waktu_maks_detik": 0.55,
+ "presisi_rentang": {
+  "rentang": [
+   {
+    "kemiripan": 0.15,
+    "n": 86,
+    "presisi_lokal": 0.047,
+    "n_atas": 583,
+    "presisi_kumulatif": 0.763,
+    "cakupan_benar": 0.998,
+    "presisi_relevan": 0.047,
+    "presisi_relevan_kumulatif": 0.768
+   },
+   {
+    "kemiripan": 0.2,
+    "n": 76,
+    "presisi_lokal": 0.092,
+    "n_atas": 537,
+    "presisi_kumulatif": 0.823,
+    "cakupan_benar": 0.991,
+    "presisi_relevan": 0.092,
+    "presisi_relevan_kumulatif": 0.829
+   },
+   {
+    "kemiripan": 0.25,
+    "n": 52,
+    "presisi_lokal": 0.25,
+    "n_atas": 507,
+    "presisi_kumulatif": 0.864,
+    "cakupan_benar": 0.982,
+    "presisi_relevan": 0.25,
+    "presisi_relevan_kumulatif": 0.87
+   },
+   {
+    "kemiripan": 0.3,
+    "n": 38,
+    "presisi_lokal": 0.316,
+    "n_atas": 485,
+    "presisi_kumulatif": 0.885,
+    "cakupan_benar": 0.962,
+    "presisi_relevan": 0.316,
+    "presisi_relevan_kumulatif": 0.891
+   },
+   {
+    "kemiripan": 0.35,
+    "n": 31,
+    "presisi_lokal": 0.258,
+    "n_atas": 469,
+    "presisi_kumulatif": 0.908,
+    "cakupan_benar": 0.955,
+    "presisi_relevan": 0.258,
+    "presisi_relevan_kumulatif": 0.915
+   },
+   {
+    "kemiripan": 0.4,
+    "n": 31,
+    "presisi_lokal": 0.387,
+    "n_atas": 454,
+    "presisi_kumulatif": 0.927,
+    "cakupan_benar": 0.944,
+    "presisi_relevan": 0.387,
+    "presisi_relevan_kumulatif": 0.934
+   },
+   {
+    "kemiripan": 0.45,
+    "n": 28,
+    "presisi_lokal": 0.571,
+    "n_atas": 438,
+    "presisi_kumulatif": 0.945,
+    "cakupan_benar": 0.928,
+    "presisi_relevan": 0.571,
+    "presisi_relevan_kumulatif": 0.952
+   },
+   {
+    "kemiripan": 0.5,
+    "n": 29,
+    "presisi_lokal": 0.793,
+    "n_atas": 426,
+    "presisi_kumulatif": 0.951,
+    "cakupan_benar": 0.908,
+    "presisi_relevan": 0.793,
+    "presisi_relevan_kumulatif": 0.958
+   },
+   {
+    "kemiripan": 0.55,
+    "n": 40,
+    "presisi_lokal": 0.85,
+    "n_atas": 409,
+    "presisi_kumulatif": 0.956,
+    "cakupan_benar": 0.877,
+    "presisi_relevan": 0.85,
+    "presisi_relevan_kumulatif": 0.963
+   },
+   {
+    "kemiripan": 0.6,
+    "n": 42,
+    "presisi_lokal": 0.833,
+    "n_atas": 386,
+    "presisi_kumulatif": 0.961,
+    "cakupan_benar": 0.832,
+    "presisi_relevan": 0.833,
+    "presisi_relevan_kumulatif": 0.969
+   },
+   {
+    "kemiripan": 0.65,
+    "n": 50,
+    "presisi_lokal": 0.84,
+    "n_atas": 367,
+    "presisi_kumulatif": 0.97,
+    "cakupan_benar": 0.798,
+    "presisi_relevan": 0.84,
+    "presisi_relevan_kumulatif": 0.978
+   },
+   {
+    "kemiripan": 0.7,
+    "n": 67,
+    "presisi_lokal": 0.91,
+    "n_atas": 336,
+    "presisi_kumulatif": 0.979,
+    "cakupan_benar": 0.738,
+    "presisi_relevan": 0.91,
+    "presisi_relevan_kumulatif": 0.988
+   },
+   {
+    "kemiripan": 0.75,
+    "n": 78,
+    "presisi_lokal": 0.949,
+    "n_atas": 300,
+    "presisi_kumulatif": 0.983,
+    "cakupan_benar": 0.661,
+    "presisi_relevan": 0.949,
+    "presisi_relevan_kumulatif": 0.993
+   },
+   {
+    "kemiripan": 0.8,
+    "n": 99,
+    "presisi_lokal": 0.96,
+    "n_atas": 258,
+    "presisi_kumulatif": 0.988,
+    "cakupan_benar": 0.572,
+    "presisi_relevan": 0.98,
+    "presisi_relevan_kumulatif": 1.0
+   },
+   {
+    "kemiripan": 0.85,
+    "n": 105,
+    "presisi_lokal": 0.981,
+    "n_atas": 201,
+    "presisi_kumulatif": 0.995,
+    "cakupan_benar": 0.448,
+    "presisi_relevan": 1.0,
+    "presisi_relevan_kumulatif": 1.0
+   },
+   {
+    "kemiripan": 0.9,
+    "n": 144,
+    "presisi_lokal": 0.993,
+    "n_atas": 153,
+    "presisi_kumulatif": 0.993,
+    "cakupan_benar": 0.341,
+    "presisi_relevan": 1.0,
+    "presisi_relevan_kumulatif": 1.0
+   },
+   {
+    "kemiripan": 0.95,
+    "n": 146,
+    "presisi_lokal": 0.993,
+    "n_atas": 57,
+    "presisi_kumulatif": 1.0,
+    "cakupan_benar": 0.128,
+    "presisi_relevan": 1.0,
+    "presisi_relevan_kumulatif": 1.0
+   }
+  ],
+  "ambang_tampil_75": 0.5,
+  "ambang_kutip_50": 0.45,
+  "n": 639,
+  "benar": 446,
+  "ketat": {
+   "tampil_75": 0.5,
+   "kutip_50": 0.45
+  },
+  "relevan": 449
+ },
  "ambang_dipakai": {
-  "objek_sama": 0.4,
+  "objek_sama": 0.45,
   "duplikasi": 0.95,
   "cakupan_memperjelas": 0.8
  },
- "pasangan": 14,
- "dilewati": [],
- "kandidat_induk_peringkat_1": 14,
- "kandidat_induk_5_besar": 14,
- "pasal_diubah": 213,
- "padanan_benar": 197,
- "recall_deteksi": 0.901,
- "pasal_disisipkan": 88,
- "sisipan_tidak_dipasangkan_ke_induk": 74,
+ "pasangan": 45,
+ "dilewati": [
+  "POJK|27|2022 → POJK|11|2016: belum di KB"
+ ],
+ "kandidat_induk_peringkat_1": 45,
+ "kandidat_induk_5_besar": 45,
+ "pasal_diubah": 451,
+ "padanan_benar": 446,
+ "recall_deteksi": 0.918,
+ "pasal_disisipkan": 179,
+ "sisipan_tidak_dipasangkan_ke_induk": 158,
  "distribusi": {
-  "positif_median": 0.811,
-  "positif_p10": 0.411,
-  "negatif_median": 0.289,
-  "negatif_p90": 0.575
+  "positif_median": 0.82,
+  "positif_p10": 0.421,
+  "negatif_median": 0.183,
+  "negatif_p90": 0.486
  },
  "kalibrasi_objek_sama": {
-  "ambang": 0.45,
-  "auc": 0.895,
-  "tpr": 0.883,
-  "fpr": 0.125
+  "ambang": 0.46,
+  "auc": 0.925,
+  "tpr": 0.887,
+  "fpr": 0.106
  },
  "sweep": [
   {
    "ambang": 0.25,
-   "recall": 0.921,
-   "sisipan_tertaut_induk": 0.557
+   "recall": 0.952,
+   "sisipan_tertaut_induk": 0.346
   },
   {
    "ambang": 0.3,
-   "recall": 0.916,
-   "sisipan_tertaut_induk": 0.42
+   "recall": 0.933,
+   "sisipan_tertaut_induk": 0.279
   },
   {
    "ambang": 0.35,
-   "recall": 0.907,
-   "sisipan_tertaut_induk": 0.273
+   "recall": 0.926,
+   "sisipan_tertaut_induk": 0.207
   },
   {
    "ambang": 0.4,
-   "recall": 0.897,
-   "sisipan_tertaut_induk": 0.159
+   "recall": 0.915,
+   "sisipan_tertaut_induk": 0.156
   },
   {
    "ambang": 0.45,
-   "recall": 0.883,
-   "sisipan_tertaut_induk": 0.125
+   "recall": 0.9,
+   "sisipan_tertaut_induk": 0.117
   },
   {
    "ambang": 0.5,
-   "recall": 0.869,
-   "sisipan_tertaut_induk": 0.114
+   "recall": 0.88,
+   "sisipan_tertaut_induk": 0.101
   },
   {
    "ambang": 0.55,
-   "recall": 0.855,
-   "sisipan_tertaut_induk": 0.114
+   "recall": 0.85,
+   "sisipan_tertaut_induk": 0.084
   }
  ],
  "per_pasangan": [
@@ -71,26 +260,25 @@
    "disisipkan": 3,
    "peringkat_induk": 1,
    "padanan_benar": 6,
-   "terdeteksi": 6,
+   "terdeteksi": 5,
    "label": {
-    "menggantikan": 3,
-    "memperjelas": 4,
-    "pasal_baru": 1,
-    "duplikasi": 1
+    "menggantikan": 2,
+    "memperjelas": 3,
+    "pasal_baru": 4
    },
    "sisipan_baru": 3,
    "sim_positif": [
-    0.6799725134922665,
-    0.875774253952731,
-    0.6764880428822085,
-    0.7843573528025339,
-    0.8922075823356607,
-    0.4916833894514969
+    0.7061749560627082,
+    0.8477425324982617,
+    0.7163467865424463,
+    0.8163053146260312,
+    0.9012678523162889,
+    0.4205494034458334
    ],
    "sim_negatif": [
-    0.3943356549412184,
-    0.33060597143300136,
-    0.05268805549699228
+    0.30382484089442224,
+    0.17370573303643216,
+    0.15007387252983712
    ],
    "catatan": [],
    "butir": [
@@ -98,55 +286,96 @@
      "diubah",
      true,
      true,
-     0.68
+     0.7062
     ],
     [
      "diubah",
      true,
      true,
-     0.6765
+     0.7163
     ],
     [
      "diubah",
      true,
      true,
-     0.4917
+     0.4205
     ],
     [
      "disisipkan",
      false,
      true,
-     0.3943
+     0.3038
     ],
     [
      "diubah",
      true,
      true,
-     0.8758
+     0.8477
     ],
     [
      "diubah",
      true,
      true,
-     0.7844
+     0.8163
     ],
     [
      "diubah",
      true,
      true,
-     0.8922
+     0.9013
     ],
     [
      "disisipkan",
      false,
-     false,
-     0.7752
+     true,
+     0.1737
     ],
     [
      "disisipkan",
      false,
-     false,
-     1.0
+     true,
+     0.1501
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.551,
+   "relevan": [
+    [
+     0.7062,
+     true
+    ],
+    [
+     0.7163,
+     true
+    ],
+    [
+     0.4205,
+     true
+    ],
+    [
+     0.3038,
+     false
+    ],
+    [
+     0.8477,
+     true
+    ],
+    [
+     0.8163,
+     true
+    ],
+    [
+     0.9013,
+     true
+    ],
+    [
+     0.1737,
+     false
+    ],
+    [
+     0.1501,
+     false
     ]
    ]
   },
@@ -159,34 +388,33 @@
    "padanan_benar": 9,
    "terdeteksi": 9,
    "label": {
-    "menggantikan": 7,
+    "menggantikan": 6,
     "memperjelas": 5,
-    "pasal_baru": 6,
-    "duplikasi": 1
+    "pasal_baru": 8
    },
    "sisipan_baru": 8,
    "sim_positif": [
-    0.789369471387967,
-    0.571212588776561,
-    0.7548352121551378,
-    0.7467711638872979,
-    0.9393162309967223,
-    0.8111330519445072,
-    0.7704786883483743,
-    0.9402258493872886,
-    0.6345443482721089
+    0.7702917640516025,
+    0.594771072158832,
+    0.7098467917170916,
+    0.714265524766258,
+    0.93827565333542,
+    0.8087564439154014,
+    0.7762599860684835,
+    0.9428064280400008,
+    0.5988982862776874
    ],
    "sim_negatif": [
-    0.6524542308789295,
-    0.47578061757088896,
-    0.09691864850490019,
-    0.12406002295315174,
-    0.28341095910727687,
-    0.16649109601623638,
-    0.2607248105554348,
-    0.14579153799248254,
-    0.3951077550831125,
-    0.12449342561415606
+    0.6675261584634054,
+    0.4802712713619585,
+    0.06344432412849332,
+    0.09120264810265823,
+    0.1881101643075243,
+    0.15778157748471214,
+    0.21034693223416298,
+    0.13308871626010654,
+    0.3352362779244854,
+    0.1557671092696326
    ],
    "catatan": [],
    "butir": [
@@ -194,115 +422,196 @@
      "diubah",
      true,
      true,
-     0.7894
+     0.7703
     ],
     [
      "diubah",
      true,
      true,
-     0.8111
+     0.8088
     ],
     [
      "diubah",
      true,
      true,
-     0.7705
+     0.7763
     ],
     [
      "diubah",
      true,
      true,
-     0.6345
+     0.5989
     ],
     [
      "disisipkan",
      false,
-     false,
-     0.296
+     true,
+     0.1578
     ],
     [
      "disisipkan",
      false,
-     false,
-     0.3439
+     true,
+     0.2103
     ],
     [
      "diubah",
      true,
      true,
-     0.7548
+     0.7098
     ],
     [
      "disisipkan",
      false,
-     false,
-     0.2881
+     true,
+     0.1331
     ],
     [
      "diubah",
      true,
      true,
-     0.7468
+     0.7143
     ],
     [
      "disisipkan",
      false,
      true,
-     0.3951
+     0.3352
     ],
     [
      "diubah",
      true,
      true,
-     0.9393
+     0.9383
     ],
     [
      "disisipkan",
      false,
-     false,
-     0.1405
+     true,
+     0.1558
     ],
     [
      "diubah",
      true,
      true,
-     0.9402
+     0.9428
     ],
     [
      "diubah",
      true,
      true,
-     0.5712
+     0.5948
     ],
     [
      "disisipkan",
      false,
      true,
-     0.6525
+     0.6675
     ],
     [
      "disisipkan",
      false,
      true,
-     0.4758
+     0.4803
     ],
     [
      "disisipkan",
      false,
-     false,
-     0.8368
+     true,
+     0.0634
     ],
     [
      "disisipkan",
      false,
-     false,
-     1.0
+     true,
+     0.0912
     ],
     [
      "disisipkan",
      false,
-     false,
-     0.3865
+     true,
+     0.1881
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.07,
+   "relevan": [
+    [
+     0.7703,
+     true
+    ],
+    [
+     0.8088,
+     true
+    ],
+    [
+     0.7763,
+     true
+    ],
+    [
+     0.5989,
+     true
+    ],
+    [
+     0.1578,
+     false
+    ],
+    [
+     0.2103,
+     false
+    ],
+    [
+     0.7098,
+     true
+    ],
+    [
+     0.1331,
+     false
+    ],
+    [
+     0.7143,
+     true
+    ],
+    [
+     0.3352,
+     false
+    ],
+    [
+     0.9383,
+     true
+    ],
+    [
+     0.1558,
+     false
+    ],
+    [
+     0.9428,
+     true
+    ],
+    [
+     0.5948,
+     true
+    ],
+    [
+     0.6675,
+     false
+    ],
+    [
+     0.4803,
+     false
+    ],
+    [
+     0.0634,
+     false
+    ],
+    [
+     0.0912,
+     false
+    ],
+    [
+     0.1881,
+     false
     ]
    ]
   },
@@ -312,8 +621,8 @@
    "diubah": 49,
    "disisipkan": 10,
    "peringkat_induk": 1,
-   "padanan_benar": 39,
-   "terdeteksi": 39,
+   "padanan_benar": 40,
+   "terdeteksi": 40,
    "label": {
     "menggantikan": 23,
     "pasal_baru": 11,
@@ -321,60 +630,60 @@
    },
    "sisipan_baru": 10,
    "sim_positif": [
-    0.9641354983352352,
-    0.6820029261344425,
-    0.8367898121267097,
-    0.6487454399855144,
-    0.8569237304895224,
-    0.9179588367388125,
-    0.9543538970645132,
-    0.5418899327976169,
-    0.8677157388778278,
-    0.9553368920275677,
-    0.8816227493547639,
-    0.9209845669115971,
-    0.6989792880284181,
-    0.7527581798392557,
-    0.5532021331572872,
-    0.5803615586421075,
-    0.764974683819834,
-    0.8297818630700319,
-    0.7998260838090315,
-    0.7836077707369624,
-    0.66823903743671,
-    0.9571648606187078,
-    0.7313870377100495,
-    0.7926877457815082,
-    0.933910331932196,
-    0.9122162276739333,
-    0.9530940946480381,
-    0.7910992196710469,
-    0.9403366519184801,
-    0.939241761422777,
-    0.9208131856708525,
-    0.843775785007465,
-    0.9501811054621954,
-    0.7686524212881688,
-    0.6782543738447783,
-    0.9054120332030002,
-    0.8110725777421514,
-    0.8062201918943501,
-    0.5636928485448648,
-    0.7936933999411454,
-    0.7133811745565473,
-    0.928233008278788
+    0.9637041827770925,
+    0.7319614475010482,
+    0.8493773952161796,
+    0.639746654282747,
+    0.8783919408670504,
+    0.9276920766311201,
+    0.9476643893497925,
+    0.5463144490326702,
+    0.8616259883467904,
+    0.9620028371985441,
+    0.888608236941371,
+    0.9291702858982358,
+    0.7323632706792436,
+    0.7377057797184028,
+    0.6225871698249924,
+    0.6015877431294188,
+    0.7873445555857939,
+    0.8557000258048004,
+    0.8359177418134232,
+    0.754905020278552,
+    0.6473624085144033,
+    0.9611284633109197,
+    0.729079852763828,
+    0.7520110696211424,
+    0.931534962794623,
+    0.9023862555970709,
+    0.9436396468007131,
+    0.7831080362732334,
+    0.9427881729320121,
+    0.9326483437370262,
+    0.9117365764444594,
+    0.8370368708917422,
+    0.9604846152982383,
+    0.7998365000148185,
+    0.6898830770060638,
+    0.9009947317319795,
+    0.7787334084724379,
+    0.8038698783530618,
+    0.557422883600464,
+    0.7879595357883485,
+    0.6714330692159014,
+    0.9319892174125304
    ],
    "sim_negatif": [
-    0.16805245030436836,
-    0.16166974481606503,
-    0.3036186306421609,
-    0.37259877534282354,
-    0.27031904508849786,
-    0.2540219534646941,
-    0.28661117757709004,
-    0.18865567440902767,
-    0.3573759960134764,
-    0.3419710362826115
+    0.16002167825483513,
+    0.12047885054936097,
+    0.3279536036821999,
+    0.3497279609802219,
+    0.18270314764336626,
+    0.2907339221939455,
+    0.16384673358692123,
+    0.2312682506978188,
+    0.32759956113625505,
+    0.2113630575302785
    ],
    "catatan": [
     "Pasal 26A tidak terbaca di induk"
@@ -384,67 +693,193 @@
      "diubah",
      true,
      true,
-     0.9641
+     0.9637
     ],
     [
      "disisipkan",
      false,
      true,
-     0.2866
+     0.1638
     ],
     [
      "diubah",
      true,
      true,
-     0.7911
+     0.7831
     ],
     [
      "diubah",
      true,
      true,
-     0.7134
+     0.6714
     ],
     [
      "diubah",
      true,
      true,
-     0.682
+     0.732
     ],
     [
      "diubah",
      true,
      true,
-     0.5419
+     0.5463
     ],
     [
      "diubah",
      true,
      true,
-     0.699
-    ],
-    [
-     "diubah",
-     false,
-     true,
-     0.6633
+     0.7324
     ],
     [
      "diubah",
      false,
      true,
-     0.6591
+     0.6405
     ],
     [
      "diubah",
      false,
      true,
-     0.7797
+     0.6127
     ],
     [
      "diubah",
      true,
      true,
-     0.8298
+     0.7873
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8557
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8359
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7549
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1205
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6474
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.328
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9611
+    ],
+    [
+     "diubah",
+     false,
+     true,
+     0.1793
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7291
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.752
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.3497
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9315
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1827
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9024
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9436
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2907
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9428
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9326
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9117
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.837
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2313
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9605
     ],
     [
      "diubah",
@@ -456,247 +891,338 @@
      "diubah",
      true,
      true,
-     0.7836
+     0.6899
     ],
     [
      "disisipkan",
      false,
      true,
-     0.1617
+     0.3276
     ],
     [
      "diubah",
      true,
      true,
-     0.6682
+     0.901
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7787
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8039
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5574
     ],
     [
      "disisipkan",
      false,
      true,
-     0.3036
+     0.2114
     ],
     [
      "diubah",
      true,
      true,
-     0.9572
-    ],
-    [
-     "diubah",
-     false,
-     true,
-     0.2253
+     0.788
     ],
     [
      "diubah",
      true,
      true,
-     0.7314
+     0.932
     ],
     [
      "diubah",
      true,
      true,
-     0.7927
+     0.8494
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6397
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8784
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9277
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9477
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8616
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.962
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8886
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9292
     ],
     [
      "disisipkan",
      false,
      true,
-     0.3726
+     0.16
     ],
     [
      "diubah",
      true,
      true,
-     0.9339
+     0.7377
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.112,
+   "relevan": [
+    [
+     0.9637,
+     true
     ],
     [
-     "disisipkan",
-     false,
-     true,
-     0.2703
+     0.1638,
+     false
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.9122
+     0.7831,
+     true
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.9531
+     0.6714,
+     true
     ],
     [
-     "disisipkan",
-     false,
-     true,
-     0.254
+     0.732,
+     true
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.9403
+     0.5463,
+     true
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.9392
+     0.7324,
+     true
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.9208
+     0.6405,
+     false
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.8438
+     0.6127,
+     false
     ],
     [
-     "disisipkan",
-     false,
-     true,
-     0.1887
+     0.7873,
+     true
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.9502
+     0.8557,
+     true
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.7687
+     0.8359,
+     true
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.6783
+     0.7549,
+     true
     ],
     [
-     "disisipkan",
-     false,
-     true,
-     0.3574
+     0.1205,
+     false
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.9054
+     0.6474,
+     true
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.8111
+     0.328,
+     false
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.8062
+     0.9611,
+     true
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.5637
+     0.1793,
+     false
     ],
     [
-     "disisipkan",
-     false,
-     true,
-     0.342
+     0.7291,
+     true
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.7937
+     0.752,
+     true
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.9282
+     0.3497,
+     false
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.8368
+     0.9315,
+     true
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.6487
+     0.1827,
+     false
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.8569
+     0.9024,
+     true
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.918
+     0.9436,
+     true
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.9544
+     0.2907,
+     false
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.8677
+     0.9428,
+     true
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.9553
+     0.9326,
+     true
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.8816
+     0.9117,
+     true
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.921
+     0.837,
+     true
     ],
     [
-     "disisipkan",
-     false,
-     true,
-     0.1681
+     0.2313,
+     false
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.7528
+     0.9605,
+     true
+    ],
+    [
+     0.7998,
+     true
+    ],
+    [
+     0.6899,
+     true
+    ],
+    [
+     0.3276,
+     false
+    ],
+    [
+     0.901,
+     true
+    ],
+    [
+     0.7787,
+     true
+    ],
+    [
+     0.8039,
+     true
+    ],
+    [
+     0.5574,
+     true
+    ],
+    [
+     0.2114,
+     false
+    ],
+    [
+     0.788,
+     true
+    ],
+    [
+     0.932,
+     true
+    ],
+    [
+     0.8494,
+     true
+    ],
+    [
+     0.6397,
+     true
+    ],
+    [
+     0.8784,
+     true
+    ],
+    [
+     0.9277,
+     true
+    ],
+    [
+     0.9477,
+     true
+    ],
+    [
+     0.8616,
+     true
+    ],
+    [
+     0.962,
+     true
+    ],
+    [
+     0.8886,
+     true
+    ],
+    [
+     0.9292,
+     true
+    ],
+    [
+     0.16,
+     false
+    ],
+    [
+     0.7377,
+     true
     ]
    ]
   },
@@ -713,7 +1239,7 @@
    },
    "sisipan_baru": 0,
    "sim_positif": [
-    0.8400132126997852
+    0.7602689689430897
    ],
    "sim_negatif": [],
    "catatan": [],
@@ -722,7 +1248,16 @@
      "diubah",
      true,
      true,
-     0.84
+     0.7603
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.038,
+   "relevan": [
+    [
+     0.7603,
+     true
     ]
    ]
   },
@@ -732,52 +1267,52 @@
    "diubah": 29,
    "disisipkan": 12,
    "peringkat_induk": 1,
-   "padanan_benar": 21,
-   "terdeteksi": 21,
+   "padanan_benar": 23,
+   "terdeteksi": 22,
    "label": {
-    "menggantikan": 18,
-    "memperjelas": 7,
-    "pasal_baru": 10
+    "pasal_baru": 12,
+    "menggantikan": 17,
+    "memperjelas": 6
    },
-   "sisipan_baru": 10,
+   "sisipan_baru": 11,
    "sim_positif": [
-    0.9448433759598798,
-    0.9645929992846264,
-    0.9485620744027913,
-    0.45473174267128386,
-    0.6817442371677562,
-    0.933464120307219,
-    0.9480384543931188,
-    0.8998003324692795,
-    0.9148219597734123,
-    0.8362926361248929,
-    0.9304883957467238,
-    0.9536371187815994,
-    0.9782442103926609,
-    0.972691010576866,
-    0.9645279162910734,
-    0.4467768832687488,
-    0.9610499880599069,
-    0.7881657101662622,
-    0.424880891602766,
-    0.9229870728553949,
-    0.6326581681955344,
-    0.8453449002764061,
-    0.9432789534982499
+    0.943558646708555,
+    0.9678529454997435,
+    0.9516682091126784,
+    0.47154843935498925,
+    0.6637307955053193,
+    0.9358529253229936,
+    0.9495203668577905,
+    0.9198277771775677,
+    0.9112146341793936,
+    0.8556102791348135,
+    0.9357433181987346,
+    0.9576077906685198,
+    0.9804784753210438,
+    0.9791695168006487,
+    0.9685953972291496,
+    0.45783668500223723,
+    0.9655214229364433,
+    0.7674638807078604,
+    0.41747894605487373,
+    0.920189943986066,
+    0.6354358402676041,
+    0.8479455712366158,
+    0.9476743444567793
    ],
    "sim_negatif": [
-    0.3476348786015445,
-    0.23050451313085807,
-    0.38460093976868714,
-    0.329224851461927,
-    0.11254793406014002,
-    0.9413621206145955,
-    0.2993179010157847,
-    0.4367420785866839,
-    0.34689688833825205,
-    0.2932648057244152,
-    0.19783446034234484,
-    0.3790738107691641
+    0.3356003150066261,
+    0.24454804927262788,
+    0.41003705787924505,
+    0.3179753645390978,
+    0.12522255762423817,
+    0.9450058300029962,
+    0.4075870853231429,
+    0.35844757702082836,
+    0.3508202895538314,
+    0.29545923505734406,
+    0.19995831501567438,
+    0.384807134322011
    ],
    "catatan": [],
    "butir": [
@@ -785,211 +1320,356 @@
      "disisipkan",
      false,
      true,
-     0.4367
+     0.3584
     ],
     [
      "diubah",
      true,
      true,
-     0.961
+     0.9655
     ],
     [
      "diubah",
      true,
      true,
-     0.7882
+     0.7675
     ],
     [
      "disisipkan",
      false,
      true,
-     0.3469
+     0.3508
     ],
     [
      "disisipkan",
      false,
      true,
-     0.2933
+     0.2955
     ],
     [
      "diubah",
      true,
      true,
-     0.4249
-    ],
-    [
-     "disisipkan",
-     false,
-     false,
-     0.3442
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.923
-    ],
-    [
-     "diubah",
-     false,
-     false,
-     0.7903
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.8453
+     0.4175
     ],
     [
      "disisipkan",
      false,
      true,
-     0.3791
+     0.2
     ],
     [
      "diubah",
      true,
      true,
-     0.9433
-    ],
-    [
-     "diubah",
-     false,
-     false,
-     0.9524
+     0.9202
     ],
     [
      "diubah",
      true,
      true,
-     0.9646
+     0.6354
     ],
     [
      "diubah",
      true,
      true,
-     0.9486
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.4547
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.6817
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.9335
+     0.8479
     ],
     [
      "disisipkan",
      false,
      true,
-     0.3476
+     0.3848
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9477
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9436
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9679
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9517
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.4715
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6637
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9359
     ],
     [
      "disisipkan",
      false,
      true,
-     0.2305
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.948
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.8998
+     0.3356
     ],
     [
      "disisipkan",
      false,
      true,
-     0.3846
+     0.2445
     ],
     [
      "diubah",
      true,
      true,
-     0.9148
+     0.9495
     ],
     [
      "diubah",
      true,
      true,
-     0.8363
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.9305
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.9536
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.9782
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.9727
+     0.9198
     ],
     [
      "disisipkan",
      false,
      true,
-     0.3292
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.1125
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.9414
+     0.41
     ],
     [
      "diubah",
      true,
      true,
-     0.9645
+     0.9112
     ],
     [
      "diubah",
      true,
      true,
-     0.4468
+     0.8556
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9357
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9576
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9805
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9792
     ],
     [
      "disisipkan",
      false,
+     true,
+     0.318
+    ],
+    [
+     "disisipkan",
      false,
-     0.3493
+     true,
+     0.1252
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.945
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9686
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.4578
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.4076
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.084,
+   "relevan": [
+    [
+     0.3584,
+     false
+    ],
+    [
+     0.9655,
+     true
+    ],
+    [
+     0.7675,
+     true
+    ],
+    [
+     0.3508,
+     false
+    ],
+    [
+     0.2955,
+     false
+    ],
+    [
+     0.4175,
+     true
+    ],
+    [
+     0.2,
+     false
+    ],
+    [
+     0.9202,
+     true
+    ],
+    [
+     0.6354,
+     true
+    ],
+    [
+     0.8479,
+     true
+    ],
+    [
+     0.3848,
+     false
+    ],
+    [
+     0.9477,
+     true
+    ],
+    [
+     0.9436,
+     true
+    ],
+    [
+     0.9679,
+     true
+    ],
+    [
+     0.9517,
+     true
+    ],
+    [
+     0.4715,
+     true
+    ],
+    [
+     0.6637,
+     true
+    ],
+    [
+     0.9359,
+     true
+    ],
+    [
+     0.3356,
+     false
+    ],
+    [
+     0.2445,
+     false
+    ],
+    [
+     0.9495,
+     true
+    ],
+    [
+     0.9198,
+     true
+    ],
+    [
+     0.41,
+     false
+    ],
+    [
+     0.9112,
+     true
+    ],
+    [
+     0.8556,
+     true
+    ],
+    [
+     0.9357,
+     true
+    ],
+    [
+     0.9576,
+     true
+    ],
+    [
+     0.9805,
+     true
+    ],
+    [
+     0.9792,
+     true
+    ],
+    [
+     0.318,
+     false
+    ],
+    [
+     0.1252,
+     false
+    ],
+    [
+     0.945,
+     true
+    ],
+    [
+     0.9686,
+     true
+    ],
+    [
+     0.4578,
+     true
+    ],
+    [
+     0.4076,
+     false
     ]
    ]
   },
@@ -999,56 +1679,57 @@
    "diubah": 38,
    "disisipkan": 4,
    "peringkat_induk": 1,
-   "padanan_benar": 35,
-   "terdeteksi": 35,
+   "padanan_benar": 36,
+   "terdeteksi": 36,
    "label": {
-    "menggantikan": 20,
-    "memperjelas": 20
+    "menggantikan": 18,
+    "memperjelas": 20,
+    "pasal_baru": 2
    },
    "sisipan_baru": 2,
    "sim_positif": [
-    0.7106445944611312,
-    0.03834368844455792,
-    0.9708501139701083,
-    0.9577978083274125,
-    0.9511369006282092,
-    0.9243533911454692,
-    0.09857594313013246,
-    0.810214757414449,
-    0.9526284021507273,
-    0.9416061917953794,
-    0.08643836843021932,
-    0.03494788451967965,
-    0.8374240026113203,
-    0.6814846595357644,
-    0.02088684833371971,
-    0.7367212040614792,
-    0.8800019008178291,
-    0.9424843545062873,
-    0.7862938521202223,
-    0.5604810804154012,
-    0.7604985845937908,
-    0.7772992672138634,
-    0.024980034208228395,
-    0.8922698653678562,
-    0.7619572800553728,
-    0.024029767740426106,
-    0.8429160430399655,
-    0.010337967752551143,
-    0.021150931329171202,
-    0.036800405383113174,
-    0.5844145858212765,
-    0.06086351353603384,
-    0.05738091185771756,
-    0.033157804650225886,
-    0.9536182417183661,
-    0.9530124781803299
+    0.7495242882746972,
+    0.0414641944301985,
+    0.9772176026020658,
+    0.964594131734294,
+    0.9527880904032195,
+    0.9274110375211118,
+    0.11669394767141021,
+    0.8042404155883437,
+    0.9578667171202846,
+    0.9438429406559258,
+    0.057815474435080415,
+    0.031515046630925005,
+    0.8381985493888522,
+    0.6638019259617485,
+    0.013860657632286461,
+    0.718037803885469,
+    0.8855448331242479,
+    0.9400393682564324,
+    0.7691657828148069,
+    0.5604179733824081,
+    0.7643195263243105,
+    0.7847080692568252,
+    0.017851103620534832,
+    0.8973034103224153,
+    0.7459525649806311,
+    0.025108689625540956,
+    0.8345098286784285,
+    0.012628039856316437,
+    0.02224607932592874,
+    0.028223875068625004,
+    0.5841304736835177,
+    0.0703592400818385,
+    0.059311477867289124,
+    0.03351762885401503,
+    0.9527188142436811,
+    0.9532965003316517
    ],
    "sim_negatif": [
-    0.6422537938603499,
-    0.7084644192526894,
-    0.22839654746825347,
-    0.21170854980697468
+    0.6183104724911924,
+    0.6850323273878882,
+    0.2002661834590313,
+    0.20863438996581596
    ],
    "catatan": [],
    "butir": [
@@ -1060,183 +1741,985 @@
     ],
     [
      "diubah",
-     false,
-     false,
-     0.7898
+     true,
+     true,
+     0.7636
     ],
     [
      "diubah",
      true,
      true,
-     0.5817
+     0.5782
     ],
     [
      "diubah",
      true,
      true,
-     0.776
+     0.7816
     ],
     [
      "diubah",
      true,
      true,
-     0.8016
+     0.811
     ],
     [
      "diubah",
      true,
      true,
-     0.8859
+     0.8869
     ],
     [
      "diubah",
      true,
      true,
-     0.9579
+     0.965
     ],
     [
      "diubah",
      true,
      true,
-     0.908
+     0.9011
     ],
     [
      "diubah",
      true,
      true,
-     0.9693
+     0.9697
     ],
     [
      "diubah",
      true,
      true,
-     0.8088
+     0.8025
     ],
     [
      "diubah",
      true,
      true,
-     0.9527
+     0.9582
     ],
     [
      "diubah",
      true,
      true,
-     0.9416
+     0.9439
     ],
     [
      "disisipkan",
      false,
      true,
-     0.708
+     0.6847
     ],
     [
      "diubah",
      true,
      true,
-     0.9142
+     0.9148
     ],
     [
      "diubah",
      true,
      true,
-     0.7335
+     0.7119
     ],
     [
      "diubah",
      true,
      true,
-     0.8798
+     0.8848
     ],
     [
      "diubah",
      true,
      true,
-     0.9424
+     0.9398
     ],
     [
      "diubah",
      true,
      true,
-     0.954
+     0.953
     ],
     [
      "diubah",
      true,
      true,
-     0.971
+     0.9774
     ],
     [
      "diubah",
      true,
      true,
-     0.8573
+     0.8529
     ],
     [
      "diubah",
      true,
      true,
-     0.9512
+     0.9532
     ],
     [
      "diubah",
      true,
      true,
-     0.9243
+     0.9274
     ],
     [
      "disisipkan",
      false,
      true,
-     0.6421
+     0.6188
     ],
     [
      "diubah",
      true,
      true,
-     0.8346
+     0.833
     ],
     [
      "diubah",
      true,
      true,
-     0.6786
+     0.6589
     ],
     [
      "diubah",
      true,
      true,
-     0.8742
+     0.8783
     ],
     [
      "diubah",
      true,
      true,
-     0.8251
+     0.8303
     ],
     [
      "diubah",
      true,
      true,
-     0.9809
+     0.9844
     ],
     [
      "diubah",
      true,
      true,
-     0.939
+     0.9407
     ],
     [
      "diubah",
      true,
      true,
-     0.7587
+     0.7399
     ],
     [
      "diubah",
      true,
      true,
-     0.9494
+     0.9484
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7719
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5556
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7667
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7872
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8965
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8348
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9638
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2013
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2059
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.145,
+   "relevan": [
+    [
+     0.9528,
+     true
+    ],
+    [
+     0.7636,
+     true
+    ],
+    [
+     0.5782,
+     true
+    ],
+    [
+     0.7816,
+     true
+    ],
+    [
+     0.811,
+     true
+    ],
+    [
+     0.8869,
+     true
+    ],
+    [
+     0.965,
+     true
+    ],
+    [
+     0.9011,
+     true
+    ],
+    [
+     0.9697,
+     true
+    ],
+    [
+     0.8025,
+     true
+    ],
+    [
+     0.9582,
+     true
+    ],
+    [
+     0.9439,
+     true
+    ],
+    [
+     0.6847,
+     false
+    ],
+    [
+     0.9148,
+     true
+    ],
+    [
+     0.7119,
+     true
+    ],
+    [
+     0.8848,
+     true
+    ],
+    [
+     0.9398,
+     true
+    ],
+    [
+     0.953,
+     true
+    ],
+    [
+     0.9774,
+     true
+    ],
+    [
+     0.8529,
+     true
+    ],
+    [
+     0.9532,
+     true
+    ],
+    [
+     0.9274,
+     true
+    ],
+    [
+     0.6188,
+     false
+    ],
+    [
+     0.833,
+     true
+    ],
+    [
+     0.6589,
+     true
+    ],
+    [
+     0.8783,
+     true
+    ],
+    [
+     0.8303,
+     true
+    ],
+    [
+     0.9844,
+     true
+    ],
+    [
+     0.9407,
+     true
+    ],
+    [
+     0.7399,
+     true
+    ],
+    [
+     0.9484,
+     true
+    ],
+    [
+     0.7719,
+     true
+    ],
+    [
+     0.5556,
+     true
+    ],
+    [
+     0.7667,
+     true
+    ],
+    [
+     0.7872,
+     true
+    ],
+    [
+     0.8965,
+     true
+    ],
+    [
+     0.8348,
+     true
+    ],
+    [
+     0.9638,
+     true
+    ],
+    [
+     0.2013,
+     false
+    ],
+    [
+     0.2059,
+     false
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|11|2024",
+   "induk": "70ec2bf179ca4a92b8a27cba00210503",
+   "diubah": 9,
+   "disisipkan": 1,
+   "peringkat_induk": 1,
+   "padanan_benar": 9,
+   "terdeteksi": 8,
+   "label": {
+    "memperjelas": 5,
+    "pasal_baru": 2,
+    "menggantikan": 3
+   },
+   "sisipan_baru": 1,
+   "sim_positif": [
+    0.541021576369836,
+    0.8244431447033723,
+    0.6716971360695244,
+    0.7474769705862843,
+    0.838555989413037,
+    0.35359900282460255,
+    0.5096347903128511,
+    0.8197275664684489,
+    0.782563798468989
+   ],
+   "sim_negatif": [
+    0.12306839751941423
+   ],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.541
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.3536
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1231
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5096
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7826
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8244
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6717
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7475
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8386
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8197
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.04,
+   "relevan": [
+    [
+     0.541,
+     true
+    ],
+    [
+     0.3536,
+     true
+    ],
+    [
+     0.1231,
+     false
+    ],
+    [
+     0.5096,
+     true
+    ],
+    [
+     0.7826,
+     true
+    ],
+    [
+     0.8244,
+     true
+    ],
+    [
+     0.6717,
+     true
+    ],
+    [
+     0.7475,
+     true
+    ],
+    [
+     0.8386,
+     true
+    ],
+    [
+     0.8197,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|19|2024",
+   "induk": "5437ab3bbdd047fa98b94bf6fc672d00",
+   "diubah": 9,
+   "disisipkan": 1,
+   "peringkat_induk": 1,
+   "padanan_benar": 9,
+   "terdeteksi": 7,
+   "label": {
+    "memperjelas": 6,
+    "pasal_baru": 3,
+    "menggantikan": 1
+   },
+   "sisipan_baru": 1,
+   "sim_positif": [
+    0.772287879209969,
+    0.8953391618883765,
+    0.904866768631116,
+    0.7171568965519062,
+    0.5279316965497559,
+    0.6152655702220424,
+    0.29903480194889476,
+    0.35164873250447565,
+    0.7155530671883417
+   ],
+   "sim_negatif": [
+    0.43036677661327266
+   ],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.7723
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8953
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9049
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7172
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5279
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6153
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.299
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.4304
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.3516
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7156
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.043,
+   "relevan": [
+    [
+     0.7723,
+     true
+    ],
+    [
+     0.8953,
+     true
+    ],
+    [
+     0.9049,
+     true
+    ],
+    [
+     0.7172,
+     true
+    ],
+    [
+     0.5279,
+     true
+    ],
+    [
+     0.6153,
+     true
+    ],
+    [
+     0.299,
+     true
+    ],
+    [
+     0.4304,
+     false
+    ],
+    [
+     0.3516,
+     true
+    ],
+    [
+     0.7156,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|20|2024",
+   "induk": "2ef29c91ad714a969d41e65ee70fca4f",
+   "diubah": 4,
+   "disisipkan": 1,
+   "peringkat_induk": 1,
+   "padanan_benar": 3,
+   "terdeteksi": 2,
+   "label": {
+    "menggantikan": 2,
+    "pasal_baru": 2
+   },
+   "sisipan_baru": 1,
+   "sim_positif": [
+    0.8927038019205457,
+    0.4147039817719982,
+    0.7215572099947393
+   ],
+   "sim_negatif": [
+    0.3659276258137903
+   ],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.8927
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7216
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.3659
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.4147
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.03,
+   "relevan": [
+    [
+     0.8927,
+     true
+    ],
+    [
+     0.7216,
+     true
+    ],
+    [
+     0.3659,
+     false
+    ],
+    [
+     0.4147,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|36|2024",
+   "induk": "8a1246bc33d643a1aeff3ab9c2cad86b",
+   "diubah": 20,
+   "disisipkan": 17,
+   "peringkat_induk": 1,
+   "padanan_benar": 20,
+   "terdeteksi": 18,
+   "label": {
+    "memperjelas": 12,
+    "pasal_baru": 18,
+    "menggantikan": 7
+   },
+   "sisipan_baru": 16,
+   "sim_positif": [
+    0.8046162996187147,
+    0.688259898514619,
+    0.690490251511134,
+    0.6523488577928037,
+    0.8211265629949323,
+    0.9531119190057641,
+    0.9109094066581158,
+    0.9106639105739007,
+    0.7983077889054763,
+    0.9413996184302876,
+    0.9107183616287174,
+    0.6690645481311476,
+    0.9518235197002843,
+    0.5402969731168773,
+    0.3543181819510717,
+    0.787712088502621,
+    0.19527957862303294,
+    0.595886349245483,
+    0.5804948744603001,
+    0.929840062829687
+   ],
+   "sim_negatif": [
+    0.12714221413077442,
+    0.260945426824864,
+    0.2186043920076736,
+    0.7735125737755354,
+    0.13450691172105744,
+    0.2123511760738403,
+    0.14287095403660652,
+    0.17997174816189462,
+    0.12902105511544634,
+    0.10568705829493373,
+    0.27359271204408303,
+    0.3136470354883377,
+    0.2540796438781371,
+    0.2114874444292789,
+    0.272576517617299,
+    0.08989322951945387,
+    0.08914502474303439
+   ],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.8046
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2609
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2186
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7983
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6691
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.3543
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2115
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9298
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6883
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6905
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6523
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8211
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9531
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1271
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9109
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9107
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9414
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.7735
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9107
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1345
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2124
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1429
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.18
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.129
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1057
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2736
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9518
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5403
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.3136
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2541
     ],
     [
      "diubah",
@@ -1248,79 +2731,250 @@
      "diubah",
      true,
      true,
-     0.5587
+     0.1953
     ],
     [
      "diubah",
      true,
      true,
-     0.7628
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.7799
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.8921
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.843
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.9527
+     0.5959
     ],
     [
      "disisipkan",
      false,
-     false,
-     0.4385
+     true,
+     0.2726
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5805
     ],
     [
      "disisipkan",
      false,
+     true,
+     0.0899
+    ],
+    [
+     "disisipkan",
      false,
-     0.4475
+     true,
+     0.0891
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.069,
+   "relevan": [
+    [
+     0.8046,
+     true
+    ],
+    [
+     0.2609,
+     false
+    ],
+    [
+     0.2186,
+     false
+    ],
+    [
+     0.7983,
+     true
+    ],
+    [
+     0.6691,
+     true
+    ],
+    [
+     0.3543,
+     true
+    ],
+    [
+     0.2115,
+     false
+    ],
+    [
+     0.9298,
+     true
+    ],
+    [
+     0.6883,
+     true
+    ],
+    [
+     0.6905,
+     true
+    ],
+    [
+     0.6523,
+     true
+    ],
+    [
+     0.8211,
+     true
+    ],
+    [
+     0.9531,
+     true
+    ],
+    [
+     0.1271,
+     false
+    ],
+    [
+     0.9109,
+     true
+    ],
+    [
+     0.9107,
+     true
+    ],
+    [
+     0.9414,
+     true
+    ],
+    [
+     0.7735,
+     false
+    ],
+    [
+     0.9107,
+     true
+    ],
+    [
+     0.1345,
+     false
+    ],
+    [
+     0.2124,
+     false
+    ],
+    [
+     0.1429,
+     false
+    ],
+    [
+     0.18,
+     false
+    ],
+    [
+     0.129,
+     false
+    ],
+    [
+     0.1057,
+     false
+    ],
+    [
+     0.2736,
+     false
+    ],
+    [
+     0.9518,
+     true
+    ],
+    [
+     0.5403,
+     true
+    ],
+    [
+     0.3136,
+     false
+    ],
+    [
+     0.2541,
+     false
+    ],
+    [
+     0.7877,
+     true
+    ],
+    [
+     0.1953,
+     true
+    ],
+    [
+     0.5959,
+     true
+    ],
+    [
+     0.2726,
+     false
+    ],
+    [
+     0.5805,
+     true
+    ],
+    [
+     0.0899,
+     false
+    ],
+    [
+     0.0891,
+     false
     ]
    ]
   },
   {
-   "perubahan": "POJK|11|2024",
-   "induk": "70ec2bf179ca4a92b8a27cba00210503",
-   "diubah": 9,
-   "disisipkan": 1,
+   "perubahan": "POJK|38|2024",
+   "induk": "583793dbd9ac4e24a95b586923e88fc7",
+   "diubah": 26,
+   "disisipkan": 14,
    "peringkat_induk": 1,
-   "padanan_benar": 9,
-   "terdeteksi": 9,
+   "padanan_benar": 25,
+   "terdeteksi": 24,
    "label": {
-    "memperjelas": 5,
-    "menggantikan": 4,
-    "pasal_baru": 1
+    "memperjelas": 15,
+    "menggantikan": 14,
+    "pasal_baru": 9,
+    "duplikasi": 1
    },
-   "sisipan_baru": 1,
+   "sisipan_baru": 8,
    "sim_positif": [
-    0.5502632568850409,
-    0.8173210975564646,
-    0.6953071687060663,
-    0.7797302896914424,
-    0.8753278527653808,
-    0.45851230427686834,
-    0.5361653107423167,
-    0.8104466288683492,
-    0.7813499949357127
+    0.8258021873655476,
+    0.9475928156934282,
+    0.5306374297784628,
+    0.820527423073076,
+    0.87828895575648,
+    0.9566604483243925,
+    0.9230559100457587,
+    0.6817584350214525,
+    0.9477002242667151,
+    0.8509119055547053,
+    0.8894641633012882,
+    0.7037156079555178,
+    0.8690426531600292,
+    0.9999999999999998,
+    0.3754935795822426,
+    0.9508867171052495,
+    0.940455118842956,
+    0.8309279819831406,
+    0.874105157071776,
+    0.817924018553199,
+    0.9320248953402006,
+    0.9511067654616839,
+    0.8901719041096102,
+    0.5787081663392627,
+    0.6656107644131423
    ],
    "sim_negatif": [
-    0.17714775909231423
+    0.5237118685552467,
+    0.3282005524141085,
+    0.45954671671330655,
+    0.39438898031670866,
+    0.12755665782868367,
+    0.7696295995835137,
+    0.8000803805700315,
+    0.6755093540266519,
+    0.7455167372618426,
+    0.06457818098637864,
+    0.15368406936818932,
+    0.1436890988147993,
+    0.12452865025050737,
+    0.09425229264444268
    ],
    "catatan": [],
    "butir": [
@@ -1328,117 +2982,199 @@
      "diubah",
      true,
      true,
-     0.5503
+     0.8258
     ],
     [
      "diubah",
      true,
      true,
-     0.4585
+     0.8895
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8902
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6656
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9476
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5306
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8205
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8783
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9567
     ],
     [
      "disisipkan",
      false,
+     true,
+     0.5237
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9231
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6818
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9477
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8509
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7037
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.869
+    ],
+    [
+     "disisipkan",
      false,
-     0.221
+     true,
+     0.3282
     ],
     [
      "diubah",
      true,
      true,
-     0.5362
+     1.0
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.4595
     ],
     [
      "diubah",
      true,
      true,
-     0.7813
+     0.3755
     ],
     [
      "diubah",
      true,
      true,
-     0.8173
+     0.9509
     ],
     [
      "diubah",
      true,
      true,
-     0.6953
+     0.9405
     ],
     [
      "diubah",
      true,
      true,
-     0.7797
+     0.8309
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.3944
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1276
     ],
     [
      "diubah",
      true,
      true,
-     0.8753
+     0.8741
     ],
     [
      "diubah",
      true,
      true,
-     0.8104
-    ]
-   ]
-  },
-  {
-   "perubahan": "POJK|19|2024",
-   "induk": "5437ab3bbdd047fa98b94bf6fc672d00",
-   "diubah": 9,
-   "disisipkan": 1,
-   "peringkat_induk": 1,
-   "padanan_benar": 7,
-   "terdeteksi": 7,
-   "label": {
-    "memperjelas": 7,
-    "pasal_baru": 1,
-    "menggantikan": 2
-   },
-   "sisipan_baru": 1,
-   "sim_positif": [
-    0.7961989409921029,
-    0.8981638671324665,
-    0.9177849227565759,
-    0.7194097151936841,
-    0.5787007839014772,
-    0.6240574696197452,
-    0.32079715106749723,
-    0.3735526498853524,
-    0.7217101145416324
-   ],
-   "sim_negatif": [
-    0.43389049549624276
-   ],
-   "catatan": [],
-   "butir": [
-    [
-     "diubah",
-     true,
-     true,
-     0.7962
+     0.8179
     ],
     [
      "diubah",
      true,
      true,
-     0.8982
+     0.932
     ],
     [
      "diubah",
      true,
      true,
-     0.9178
+     0.9511
     ],
     [
-     "diubah",
+     "disisipkan",
+     false,
      true,
+     0.7696
+    ],
+    [
+     "disisipkan",
+     false,
      true,
-     0.7194
+     0.8001
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.6755
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.7455
     ],
     [
      "diubah",
@@ -1447,58 +3183,3241 @@
      0.5787
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.6241
-    ],
-    [
-     "diubah",
+     "disisipkan",
      false,
-     false,
-     0.3831
+     true,
+     0.0646
     ],
     [
      "disisipkan",
      false,
-     false,
-     0.5392
+     true,
+     0.1537
     ],
     [
-     "diubah",
+     "disisipkan",
      false,
-     false,
-     0.9152
+     true,
+     0.1437
     ],
     [
-     "diubah",
+     "disisipkan",
+     false,
      true,
+     0.1245
+    ],
+    [
+     "disisipkan",
+     false,
      true,
-     0.7217
+     0.0943
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.056,
+   "relevan": [
+    [
+     0.8258,
+     true
+    ],
+    [
+     0.8895,
+     true
+    ],
+    [
+     0.8902,
+     true
+    ],
+    [
+     0.6656,
+     true
+    ],
+    [
+     0.9476,
+     true
+    ],
+    [
+     0.5306,
+     true
+    ],
+    [
+     0.8205,
+     true
+    ],
+    [
+     0.8783,
+     true
+    ],
+    [
+     0.9567,
+     true
+    ],
+    [
+     0.5237,
+     false
+    ],
+    [
+     0.9231,
+     true
+    ],
+    [
+     0.6818,
+     true
+    ],
+    [
+     0.9477,
+     true
+    ],
+    [
+     0.8509,
+     true
+    ],
+    [
+     0.7037,
+     true
+    ],
+    [
+     0.869,
+     true
+    ],
+    [
+     0.3282,
+     false
+    ],
+    [
+     1.0,
+     true
+    ],
+    [
+     0.4595,
+     false
+    ],
+    [
+     0.3755,
+     true
+    ],
+    [
+     0.9509,
+     true
+    ],
+    [
+     0.9405,
+     true
+    ],
+    [
+     0.8309,
+     true
+    ],
+    [
+     0.3944,
+     false
+    ],
+    [
+     0.1276,
+     false
+    ],
+    [
+     0.8741,
+     true
+    ],
+    [
+     0.8179,
+     true
+    ],
+    [
+     0.932,
+     true
+    ],
+    [
+     0.9511,
+     true
+    ],
+    [
+     0.7696,
+     false
+    ],
+    [
+     0.8001,
+     true
+    ],
+    [
+     0.6755,
+     false
+    ],
+    [
+     0.7455,
+     false
+    ],
+    [
+     0.5787,
+     true
+    ],
+    [
+     0.0646,
+     false
+    ],
+    [
+     0.1537,
+     false
+    ],
+    [
+     0.1437,
+     false
+    ],
+    [
+     0.1245,
+     false
+    ],
+    [
+     0.0943,
+     false
     ]
    ]
   },
   {
-   "perubahan": "POJK|20|2024",
-   "induk": "2ef29c91ad714a969d41e65ee70fca4f",
-   "diubah": 4,
+   "perubahan": "POJK|1|2023",
+   "induk": "8d0dbca8a6e74c02b27a9a4237bd0ac6",
+   "diubah": 10,
+   "disisipkan": 2,
+   "peringkat_induk": 1,
+   "padanan_benar": 10,
+   "terdeteksi": 8,
+   "label": {
+    "memperjelas": 2,
+    "menggantikan": 6,
+    "pasal_baru": 4
+   },
+   "sisipan_baru": 2,
+   "sim_positif": [
+    0.8474516277704949,
+    0.64730648229393,
+    0.24040114528392217,
+    0.4323148972853155,
+    0.8210217941917304,
+    0.9299541649930617,
+    0.7426848578762685,
+    0.8371823230457133,
+    0.5980429060137442,
+    0.5651508137605388
+   ],
+   "sim_negatif": [
+    0.11172298090659996,
+    0.11220384236136527
+   ],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.8475
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.598
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1117
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5652
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1122
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6473
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.2404
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.4323
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.821
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.93
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7427
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8372
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.036,
+   "relevan": [
+    [
+     0.8475,
+     true
+    ],
+    [
+     0.598,
+     true
+    ],
+    [
+     0.1117,
+     false
+    ],
+    [
+     0.5652,
+     true
+    ],
+    [
+     0.1122,
+     false
+    ],
+    [
+     0.6473,
+     true
+    ],
+    [
+     0.2404,
+     true
+    ],
+    [
+     0.4323,
+     true
+    ],
+    [
+     0.821,
+     true
+    ],
+    [
+     0.93,
+     true
+    ],
+    [
+     0.7427,
+     true
+    ],
+    [
+     0.8372,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|2|2023",
+   "induk": "eef27c8ce5304d129f68f87bf1fd1bd6",
+   "diubah": 11,
+   "disisipkan": 2,
+   "peringkat_induk": 1,
+   "padanan_benar": 10,
+   "terdeteksi": 9,
+   "label": {
+    "memperjelas": 2,
+    "pasal_baru": 3,
+    "menggantikan": 5,
+    "duplikasi": 2
+   },
+   "sisipan_baru": 2,
+   "sim_positif": [
+    0.9399605264899028,
+    0.3379495390869602,
+    0.561124091163741,
+    0.9251600512425654,
+    0.970827098242815,
+    0.928565632687693,
+    0.9619194746533368,
+    0.5991311981853512,
+    0.9999999999999997,
+    1.0000000000000002
+   ],
+   "sim_negatif": [
+    0.25905663567929593,
+    0.3675557527393254
+   ],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.94
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.3379
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2591
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.3676
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5611
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9252
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9708
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9286
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9619
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5991
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     1.0
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     1.0
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.042,
+   "relevan": [
+    [
+     0.94,
+     true
+    ],
+    [
+     0.3379,
+     true
+    ],
+    [
+     0.2591,
+     false
+    ],
+    [
+     0.3676,
+     false
+    ],
+    [
+     0.5611,
+     true
+    ],
+    [
+     0.9252,
+     true
+    ],
+    [
+     0.9708,
+     true
+    ],
+    [
+     0.9286,
+     true
+    ],
+    [
+     0.9619,
+     true
+    ],
+    [
+     0.5991,
+     true
+    ],
+    [
+     1.0,
+     true
+    ],
+    [
+     1.0,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|4|2023",
+   "induk": "8d82ad759fe0456c957e042c63f75a2d",
+   "diubah": 10,
+   "disisipkan": 11,
+   "peringkat_induk": 1,
+   "padanan_benar": 10,
+   "terdeteksi": 8,
+   "label": {
+    "pasal_baru": 14,
+    "memperjelas": 6,
+    "menggantikan": 2
+   },
+   "sisipan_baru": 11,
+   "sim_positif": [
+    0.5147810835443424,
+    0.6384834449945873,
+    0.25042738649310753,
+    0.2647116942217791,
+    0.9213983959479043,
+    0.9165242818707523,
+    0.6895788529016824,
+    0.8828347396862274,
+    0.9428035110183954,
+    0.5994785743234695
+   ],
+   "sim_negatif": [
+    0.30155541179064155,
+    0.24287280164175112,
+    0.20881398173842955,
+    0.23843154037441552,
+    0.09209323932299988,
+    0.18179105659633538,
+    0.1371246476017366,
+    0.16835280774709124,
+    0.12425533459998458,
+    0.1436819687376661,
+    0.2622955183631172
+   ],
+   "catatan": [],
+   "butir": [
+    [
+     "disisipkan",
+     false,
+     true,
+     0.3019
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5149
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2432
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6388
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.2506
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.2649
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9215
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9166
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6898
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8829
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9428
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2092
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2385
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.0921
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1816
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.137
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.168
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1243
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.144
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2617
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5997
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.05,
+   "relevan": [
+    [
+     0.3019,
+     false
+    ],
+    [
+     0.5149,
+     true
+    ],
+    [
+     0.2432,
+     false
+    ],
+    [
+     0.6388,
+     true
+    ],
+    [
+     0.2506,
+     true
+    ],
+    [
+     0.2649,
+     true
+    ],
+    [
+     0.9215,
+     true
+    ],
+    [
+     0.9166,
+     true
+    ],
+    [
+     0.6898,
+     true
+    ],
+    [
+     0.8829,
+     true
+    ],
+    [
+     0.9428,
+     true
+    ],
+    [
+     0.2092,
+     false
+    ],
+    [
+     0.2385,
+     false
+    ],
+    [
+     0.0921,
+     false
+    ],
+    [
+     0.1816,
+     false
+    ],
+    [
+     0.137,
+     false
+    ],
+    [
+     0.168,
+     false
+    ],
+    [
+     0.1243,
+     false
+    ],
+    [
+     0.144,
+     false
+    ],
+    [
+     0.2617,
+     false
+    ],
+    [
+     0.5997,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|5|2023",
+   "induk": "81374d4661494b42bfa3fdec5776ec48",
+   "diubah": 23,
+   "disisipkan": 8,
+   "peringkat_induk": 1,
+   "padanan_benar": 22,
+   "terdeteksi": 18,
+   "label": {
+    "memperjelas": 8,
+    "menggantikan": 10,
+    "pasal_baru": 13
+   },
+   "sisipan_baru": 8,
+   "sim_positif": [
+    0.8122477009343242,
+    0.9026243728433646,
+    0.26693089414626514,
+    0.16408821148111466,
+    0.9610580868290529,
+    0.6375988902909736,
+    0.8293855237807313,
+    0.2711994674908175,
+    0.8201147424045478,
+    0.5989132437194357,
+    0.37422191996396553,
+    0.913566197980496,
+    0.9068577674670837,
+    0.904156640286253,
+    0.858253015129674,
+    0.7359332228230477,
+    0.7713838954103243,
+    0.922319491140502,
+    0.6962336987398251,
+    0.8071626146865707,
+    0.7646575015783057,
+    0.530074603031061
+   ],
+   "sim_negatif": [
+    0.12649040125610303,
+    0.17468913067318304,
+    0.20008815677653816,
+    0.09812935156330607,
+    0.18642714495107005,
+    0.08719653003689215,
+    0.0964543322031551,
+    0.13797772258617325
+   ],
+   "catatan": [
+    "Pasal 5B tidak terbaca di induk"
+   ],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.8122
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6376
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9042
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9223
+    ],
+    [
+     "diubah",
+     false,
+     true,
+     0.2412
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7647
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5301
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9026
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.2669
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.1641
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1265
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1747
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2001
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9611
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.0981
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8294
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.2712
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8201
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5989
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.3742
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1864
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9136
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9069
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8583
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.0872
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7359
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7714
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6962
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.0965
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8072
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.138
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.064,
+   "relevan": [
+    [
+     0.8122,
+     true
+    ],
+    [
+     0.6376,
+     true
+    ],
+    [
+     0.9042,
+     true
+    ],
+    [
+     0.9223,
+     true
+    ],
+    [
+     0.2412,
+     false
+    ],
+    [
+     0.7647,
+     true
+    ],
+    [
+     0.5301,
+     true
+    ],
+    [
+     0.9026,
+     true
+    ],
+    [
+     0.2669,
+     true
+    ],
+    [
+     0.1641,
+     true
+    ],
+    [
+     0.1265,
+     false
+    ],
+    [
+     0.1747,
+     false
+    ],
+    [
+     0.2001,
+     false
+    ],
+    [
+     0.9611,
+     true
+    ],
+    [
+     0.0981,
+     false
+    ],
+    [
+     0.8294,
+     true
+    ],
+    [
+     0.2712,
+     true
+    ],
+    [
+     0.8201,
+     true
+    ],
+    [
+     0.5989,
+     true
+    ],
+    [
+     0.3742,
+     true
+    ],
+    [
+     0.1864,
+     false
+    ],
+    [
+     0.9136,
+     true
+    ],
+    [
+     0.9069,
+     true
+    ],
+    [
+     0.8583,
+     true
+    ],
+    [
+     0.0872,
+     false
+    ],
+    [
+     0.7359,
+     true
+    ],
+    [
+     0.7714,
+     true
+    ],
+    [
+     0.6962,
+     true
+    ],
+    [
+     0.0965,
+     false
+    ],
+    [
+     0.8072,
+     true
+    ],
+    [
+     0.138,
+     false
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|6|2023",
+   "induk": "5d93f1162cd843d5b8eb641175df87ba",
+   "diubah": 23,
+   "disisipkan": 8,
+   "peringkat_induk": 1,
+   "padanan_benar": 22,
+   "terdeteksi": 20,
+   "label": {
+    "memperjelas": 9,
+    "menggantikan": 10,
+    "pasal_baru": 11,
+    "duplikasi": 1
+   },
+   "sisipan_baru": 8,
+   "sim_positif": [
+    0.8420423765806541,
+    0.9466232323530868,
+    0.8912293248053633,
+    0.7630556418711877,
+    0.5737631622207503,
+    0.8979199206956328,
+    0.5338786592968484,
+    0.28732205173653974,
+    0.14237510097734765,
+    1.0000000000000002,
+    0.9645024013132839,
+    0.793962409228073,
+    0.9288411456143486,
+    0.5931653614343324,
+    0.8663967593441876,
+    0.9473783841253539,
+    0.8369466973447188,
+    0.7801053184708369,
+    0.7794471194271669,
+    0.7384195562100595,
+    0.8009896919978753,
+    0.6537721237265888
+   ],
+   "sim_negatif": [
+    0.12870652166535881,
+    0.19714938754175337,
+    0.20648274102089215,
+    0.09569491186507581,
+    0.17511166681113557,
+    0.135460866164717,
+    0.09468001612081402,
+    0.1317131195741749
+   ],
+   "catatan": [
+    "Pasal 14B tidak terbaca di induk"
+   ],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.842
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5339
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6538
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9466
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8912
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7631
+    ],
+    [
+     "diubah",
+     false,
+     true,
+     0.2319
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5738
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8979
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.2873
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.1424
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1287
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1971
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2065
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     1.0
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9645
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.0957
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.794
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9288
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1751
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5932
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8664
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9474
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8369
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1355
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7801
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7794
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7384
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.0947
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.801
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1317
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.073,
+   "relevan": [
+    [
+     0.842,
+     true
+    ],
+    [
+     0.5339,
+     true
+    ],
+    [
+     0.6538,
+     true
+    ],
+    [
+     0.9466,
+     true
+    ],
+    [
+     0.8912,
+     true
+    ],
+    [
+     0.7631,
+     true
+    ],
+    [
+     0.2319,
+     false
+    ],
+    [
+     0.5738,
+     true
+    ],
+    [
+     0.8979,
+     true
+    ],
+    [
+     0.2873,
+     true
+    ],
+    [
+     0.1424,
+     true
+    ],
+    [
+     0.1287,
+     false
+    ],
+    [
+     0.1971,
+     false
+    ],
+    [
+     0.2065,
+     false
+    ],
+    [
+     1.0,
+     true
+    ],
+    [
+     0.9645,
+     true
+    ],
+    [
+     0.0957,
+     false
+    ],
+    [
+     0.794,
+     true
+    ],
+    [
+     0.9288,
+     true
+    ],
+    [
+     0.1751,
+     false
+    ],
+    [
+     0.5932,
+     true
+    ],
+    [
+     0.8664,
+     true
+    ],
+    [
+     0.9474,
+     true
+    ],
+    [
+     0.8369,
+     true
+    ],
+    [
+     0.1355,
+     false
+    ],
+    [
+     0.7801,
+     true
+    ],
+    [
+     0.7794,
+     true
+    ],
+    [
+     0.7384,
+     true
+    ],
+    [
+     0.0947,
+     false
+    ],
+    [
+     0.801,
+     true
+    ],
+    [
+     0.1317,
+     false
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|12|2022",
+   "induk": "8b8e537a144a4302a65ef014abf12518",
+   "diubah": 17,
+   "disisipkan": 3,
+   "peringkat_induk": 1,
+   "padanan_benar": 17,
+   "terdeteksi": 15,
+   "label": {
+    "menggantikan": 11,
+    "memperjelas": 4,
+    "pasal_baru": 5
+   },
+   "sisipan_baru": 3,
+   "sim_positif": [
+    0.6209580561743355,
+    0.9243919464949726,
+    0.6603036077689363,
+    0.9347932744694053,
+    0.5068539123396144,
+    0.9224307050655873,
+    0.8452204465518293,
+    0.759761383467838,
+    0.8222777351005743,
+    0.24769030497084465,
+    0.9389769084475853,
+    0.8917284097317534,
+    0.25424934436509417,
+    0.9632068910449079,
+    0.9227291224142213,
+    0.7135261233189931,
+    0.6813102481113568
+   ],
+   "sim_negatif": [
+    0.16576654517310363,
+    0.15454770946545487,
+    0.16805306657119026
+   ],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.621
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7598
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9632
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7135
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6813
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1681
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9244
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6603
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9348
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5069
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9224
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1658
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8452
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1545
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8223
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.2477
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.939
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8917
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.2542
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9227
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.04,
+   "relevan": [
+    [
+     0.621,
+     true
+    ],
+    [
+     0.7598,
+     true
+    ],
+    [
+     0.9632,
+     true
+    ],
+    [
+     0.7135,
+     true
+    ],
+    [
+     0.6813,
+     true
+    ],
+    [
+     0.1681,
+     false
+    ],
+    [
+     0.9244,
+     true
+    ],
+    [
+     0.6603,
+     true
+    ],
+    [
+     0.9348,
+     true
+    ],
+    [
+     0.5069,
+     true
+    ],
+    [
+     0.9224,
+     true
+    ],
+    [
+     0.1658,
+     false
+    ],
+    [
+     0.8452,
+     true
+    ],
+    [
+     0.1545,
+     false
+    ],
+    [
+     0.8223,
+     true
+    ],
+    [
+     0.2477,
+     true
+    ],
+    [
+     0.939,
+     true
+    ],
+    [
+     0.8917,
+     true
+    ],
+    [
+     0.2542,
+     true
+    ],
+    [
+     0.9227,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|28|2022",
+   "induk": "fb8c5b4ea1674e0298fe151fb4cd1592",
+   "diubah": 17,
+   "disisipkan": 13,
+   "peringkat_induk": 1,
+   "padanan_benar": 17,
+   "terdeteksi": 16,
+   "label": {
+    "memperjelas": 13,
+    "menggantikan": 4,
+    "pasal_baru": 13
+   },
+   "sisipan_baru": 12,
+   "sim_positif": [
+    0.9370653948211835,
+    0.9568552337089031,
+    0.9400926469737626,
+    0.9602218927798556,
+    0.9369659808214538,
+    0.9529513057712209,
+    0.9205564515906637,
+    0.8792511803194334,
+    0.8876150399746308,
+    0.4852021221342888,
+    0.7434374207128593,
+    0.8760204134608274,
+    0.5746926208717348,
+    0.8384331526347744,
+    0.8400793803107359,
+    0.4913888208193143,
+    0.2915493979215509
+   ],
+   "sim_negatif": [
+    0.3880063698030778,
+    0.4572461783154731,
+    0.17402916873948326,
+    0.11581025684895814,
+    0.1543274869913309,
+    0.12660162300376956,
+    0.15340943423774756,
+    0.12699649577205918,
+    0.07874592736097784,
+    0.16213633785916676,
+    0.2329389784797385,
+    0.14638617302605703,
+    0.14207456296815488
+   ],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.9371
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.4572
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9569
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9401
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9602
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.937
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.388
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.953
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9206
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8793
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.174
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1158
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1543
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1266
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1534
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.127
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.0787
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1621
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8876
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2329
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1464
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1421
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.4852
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7434
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.876
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5747
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8384
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8401
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.4914
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.2915
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.049,
+   "relevan": [
+    [
+     0.9371,
+     true
+    ],
+    [
+     0.4572,
+     false
+    ],
+    [
+     0.9569,
+     true
+    ],
+    [
+     0.9401,
+     true
+    ],
+    [
+     0.9602,
+     true
+    ],
+    [
+     0.937,
+     true
+    ],
+    [
+     0.388,
+     false
+    ],
+    [
+     0.953,
+     true
+    ],
+    [
+     0.9206,
+     true
+    ],
+    [
+     0.8793,
+     true
+    ],
+    [
+     0.174,
+     false
+    ],
+    [
+     0.1158,
+     false
+    ],
+    [
+     0.1543,
+     false
+    ],
+    [
+     0.1266,
+     false
+    ],
+    [
+     0.1534,
+     false
+    ],
+    [
+     0.127,
+     false
+    ],
+    [
+     0.0787,
+     false
+    ],
+    [
+     0.1621,
+     false
+    ],
+    [
+     0.8876,
+     true
+    ],
+    [
+     0.2329,
+     false
+    ],
+    [
+     0.1464,
+     false
+    ],
+    [
+     0.1421,
+     false
+    ],
+    [
+     0.4852,
+     true
+    ],
+    [
+     0.7434,
+     true
+    ],
+    [
+     0.876,
+     true
+    ],
+    [
+     0.5747,
+     true
+    ],
+    [
+     0.8384,
+     true
+    ],
+    [
+     0.8401,
+     true
+    ],
+    [
+     0.4914,
+     true
+    ],
+    [
+     0.2915,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|4|2022",
+   "induk": "1496ed3ce2f64d45aca5e0fbee212796",
+   "diubah": 1,
+   "disisipkan": 1,
+   "peringkat_induk": 1,
+   "padanan_benar": 1,
+   "terdeteksi": 1,
+   "label": {
+    "memperjelas": 1,
+    "pasal_baru": 1
+   },
+   "sisipan_baru": 1,
+   "sim_positif": [
+    0.45210033439571506
+   ],
+   "sim_negatif": [
+    0.30194665592087067
+   ],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.4521
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.3019
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.026,
+   "relevan": [
+    [
+     0.4521,
+     true
+    ],
+    [
+     0.3019,
+     false
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|7|2022",
+   "induk": "3a7ebccff749438e803a639e1fb86ad8",
+   "diubah": 1,
+   "disisipkan": 1,
+   "peringkat_induk": 1,
+   "padanan_benar": 1,
+   "terdeteksi": 1,
+   "label": {
+    "pasal_baru": 1,
+    "menggantikan": 1
+   },
+   "sisipan_baru": 1,
+   "sim_positif": [
+    0.9793405425878317
+   ],
+   "sim_negatif": [
+    0.12357867030324537
+   ],
+   "catatan": [],
+   "butir": [
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1236
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9793
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.043,
+   "relevan": [
+    [
+     0.1236,
+     false
+    ],
+    [
+     0.9793,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|14|2021",
+   "induk": "58c5a5a377c64b59a6730c04219127c1",
+   "diubah": 6,
+   "disisipkan": 1,
+   "peringkat_induk": 1,
+   "padanan_benar": 6,
+   "terdeteksi": 6,
+   "label": {
+    "memperjelas": 5,
+    "pasal_baru": 1,
+    "duplikasi": 1
+   },
+   "sisipan_baru": 1,
+   "sim_positif": [
+    0.9471479068541331,
+    0.8829041521819363,
+    0.9999999999999984,
+    0.938466304888903,
+    0.8853966052400677,
+    0.9306043023445757
+   ],
+   "sim_negatif": [
+    0.2501686550696486
+   ],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.9471
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9385
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8854
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9306
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2502
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8829
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     1.0
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.04,
+   "relevan": [
+    [
+     0.9471,
+     true
+    ],
+    [
+     0.9385,
+     true
+    ],
+    [
+     0.8854,
+     true
+    ],
+    [
+     0.9306,
+     true
+    ],
+    [
+     0.2502,
+     false
+    ],
+    [
+     0.8829,
+     true
+    ],
+    [
+     1.0,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|16|2021",
+   "induk": "f3d3aa5ef33049d1ba0a0878fa56915a",
+   "diubah": 2,
    "disisipkan": 1,
    "peringkat_induk": 1,
    "padanan_benar": 2,
    "terdeteksi": 2,
    "label": {
-    "menggantikan": 3,
-    "memperjelas": 1
+    "menggantikan": 2,
+    "pasal_baru": 1
    },
    "sisipan_baru": 1,
    "sim_positif": [
-    0.9215487842540754,
-    0.40703539954601486,
-    0.7734695227465059
+    0.987397045698229,
+    0.990577888437099
    ],
    "sim_negatif": [
-    0.44151673092787125
+    0.44977794998570264
    ],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.9874
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.4498
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9906
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.046,
+   "relevan": [
+    [
+     0.9874,
+     true
+    ],
+    [
+     0.4498,
+     false
+    ],
+    [
+     0.9906,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|17|2021",
+   "induk": "616eb57695824795ae02f4633df7e7cd",
+   "diubah": 2,
+   "disisipkan": 0,
+   "peringkat_induk": 1,
+   "padanan_benar": 1,
+   "terdeteksi": 1,
+   "label": {
+    "pasal_baru": 1,
+    "memperjelas": 1
+   },
+   "sisipan_baru": 0,
+   "sim_positif": [
+    0.7110517789419637
+   ],
+   "sim_negatif": [],
+   "catatan": [
+    "Pasal 7B tidak terbaca di induk"
+   ],
+   "butir": [
+    [
+     "diubah",
+     false,
+     true,
+     0.1348
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7111
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.027,
+   "relevan": [
+    [
+     0.1348,
+     false
+    ],
+    [
+     0.7111,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|18|2021",
+   "induk": "750b9a6271954cbabeda7a666c8f5d5e",
+   "diubah": 2,
+   "disisipkan": 0,
+   "peringkat_induk": 1,
+   "padanan_benar": 1,
+   "terdeteksi": 1,
+   "label": {
+    "menggantikan": 1
+   },
+   "sisipan_baru": 0,
+   "sim_positif": [
+    0.7334614637857194
+   ],
+   "sim_negatif": [],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.7335
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.027,
+   "relevan": [
+    [
+     0.7335,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|2|2021",
+   "induk": "750b9a6271954cbabeda7a666c8f5d5e",
+   "diubah": 3,
+   "disisipkan": 0,
+   "peringkat_induk": 1,
+   "padanan_benar": 2,
+   "terdeteksi": 2,
+   "label": {
+    "menggantikan": 2,
+    "pasal_baru": 2
+   },
+   "sisipan_baru": 0,
+   "sim_positif": [
+    0.7371652014400113,
+    0.9789936538850454
+   ],
+   "sim_negatif": [],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.9816
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7392
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.029,
+   "relevan": [
+    [
+     0.9816,
+     true
+    ],
+    [
+     0.7392,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|27|2021",
+   "induk": "d965926475a34d668b68017b303a5390",
+   "diubah": 10,
+   "disisipkan": 11,
+   "peringkat_induk": 1,
+   "padanan_benar": 8,
+   "terdeteksi": 8,
+   "label": {
+    "memperjelas": 5,
+    "pasal_baru": 10,
+    "menggantikan": 5
+   },
+   "sisipan_baru": 9,
+   "sim_positif": [
+    0.9255519449930992,
+    0.7264308637423647,
+    0.7359021062530671,
+    0.8587923246189366,
+    0.9805365091798012,
+    0.8957404525190044,
+    0.15398753127544382,
+    0.9388888601606437,
+    0.9014789016298533
+   ],
+   "sim_negatif": [
+    0.699753567686351,
+    0.15437703967974173,
+    0.16321650697578538,
+    0.20695126011571663,
+    0.16664071557870241,
+    0.12684835491933097,
+    0.10791835327403454,
+    0.13091089741918313,
+    0.17019923663266678,
+    0.8121781795241252,
+    0.20788594152354542
+   ],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.9256
+    ],
+    [
+     "diubah",
+     false,
+     true,
+     0.1593
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.8122
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2079
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7264
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7359
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8588
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9805
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8957
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.6998
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1544
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1632
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.207
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1666
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1268
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1079
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1309
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9389
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1702
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9015
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.041,
+   "relevan": [
+    [
+     0.9256,
+     true
+    ],
+    [
+     0.1593,
+     false
+    ],
+    [
+     0.8122,
+     true
+    ],
+    [
+     0.2079,
+     false
+    ],
+    [
+     0.7264,
+     true
+    ],
+    [
+     0.7359,
+     true
+    ],
+    [
+     0.8588,
+     true
+    ],
+    [
+     0.9805,
+     true
+    ],
+    [
+     0.8957,
+     true
+    ],
+    [
+     0.6998,
+     false
+    ],
+    [
+     0.1544,
+     false
+    ],
+    [
+     0.1632,
+     false
+    ],
+    [
+     0.207,
+     false
+    ],
+    [
+     0.1666,
+     false
+    ],
+    [
+     0.1268,
+     false
+    ],
+    [
+     0.1079,
+     false
+    ],
+    [
+     0.1309,
+     false
+    ],
+    [
+     0.9389,
+     true
+    ],
+    [
+     0.1702,
+     false
+    ],
+    [
+     0.9015,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|30|2021",
+   "induk": "a3f2470b752d4069b2c755599aee89d1",
+   "diubah": 8,
+   "disisipkan": 0,
+   "peringkat_induk": 1,
+   "padanan_benar": 4,
+   "terdeteksi": 4,
+   "label": {
+    "memperjelas": 2,
+    "menggantikan": 2,
+    "pasal_baru": 4
+   },
+   "sisipan_baru": 0,
+   "sim_positif": [
+    0.917245901031089,
+    0.8618635317016302,
+    0.6704679387018637,
+    0.6368920432418654
+   ],
+   "sim_negatif": [],
+   "catatan": [
+    "Pasal 20D tidak terbaca di induk",
+    "Pasal 20G tidak terbaca di induk",
+    "Pasal 20H tidak terbaca di induk",
+    "Pasal 20I tidak terbaca di induk"
+   ],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.8619
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6705
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6369
+    ],
+    [
+     "diubah",
+     false,
+     true,
+     0.1887
+    ],
+    [
+     "diubah",
+     false,
+     true,
+     0.2062
+    ],
+    [
+     "diubah",
+     false,
+     true,
+     0.4295
+    ],
+    [
+     "diubah",
+     false,
+     true,
+     0.2742
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9172
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.058,
+   "relevan": [
+    [
+     0.8619,
+     true
+    ],
+    [
+     0.6705,
+     true
+    ],
+    [
+     0.6369,
+     true
+    ],
+    [
+     0.1887,
+     false
+    ],
+    [
+     0.2062,
+     false
+    ],
+    [
+     0.4295,
+     false
+    ],
+    [
+     0.2742,
+     false
+    ],
+    [
+     0.9172,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|29|2020",
+   "induk": "4cffdc2d18794122bef186172027f1d1",
+   "diubah": 9,
+   "disisipkan": 7,
+   "peringkat_induk": 1,
+   "padanan_benar": 8,
+   "terdeteksi": 7,
+   "label": {
+    "memperjelas": 3,
+    "menggantikan": 6,
+    "pasal_baru": 8
+   },
+   "sisipan_baru": 7,
+   "sim_positif": [
+    0.8707352012718176,
+    0.5928582698936653,
+    0.8790212898263375,
+    0.5462253386095051,
+    0.7551235746529362,
+    0.811688533237516,
+    0.839013816287737,
+    0.27727106357687414,
+    0.15033973854388044
+   ],
+   "sim_negatif": [
+    0.2769337411236329,
+    0.16704368333681255,
+    0.13152984201860954,
+    0.2316841267801508,
+    0.08822430062122798,
+    0.09507924889457753,
+    0.1807064486193825
+   ],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.87
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5921
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.232
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8792
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5401
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2774
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1676
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1314
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7552
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.811
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.839
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.0886
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.0948
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.2774
+    ],
+    [
+     "diubah",
+     false,
+     true,
+     0.5895
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1812
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.042,
+   "relevan": [
+    [
+     0.87,
+     true
+    ],
+    [
+     0.5921,
+     true
+    ],
+    [
+     0.232,
+     false
+    ],
+    [
+     0.8792,
+     true
+    ],
+    [
+     0.5401,
+     true
+    ],
+    [
+     0.2774,
+     false
+    ],
+    [
+     0.1676,
+     false
+    ],
+    [
+     0.1314,
+     false
+    ],
+    [
+     0.7552,
+     true
+    ],
+    [
+     0.811,
+     true
+    ],
+    [
+     0.839,
+     true
+    ],
+    [
+     0.0886,
+     false
+    ],
+    [
+     0.0948,
+     false
+    ],
+    [
+     0.2774,
+     true
+    ],
+    [
+     0.5895,
+     false
+    ],
+    [
+     0.1812,
+     false
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|30|2020",
+   "induk": "1fdf2a068bc646668de875e689cee90f",
+   "diubah": 6,
+   "disisipkan": 0,
+   "peringkat_induk": 1,
+   "padanan_benar": 6,
+   "terdeteksi": 3,
+   "label": {
+    "menggantikan": 3,
+    "pasal_baru": 3
+   },
+   "sisipan_baru": 0,
+   "sim_positif": [
+    0.5942069504744678,
+    0.3072118735277928,
+    0.6889029403562972,
+    0.6937022683746944,
+    0.43669783270343404,
+    0.18658339245931013
+   ],
+   "sim_negatif": [],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.5942
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6889
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6937
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.4367
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.1866
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.3072
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.04,
+   "relevan": [
+    [
+     0.5942,
+     true
+    ],
+    [
+     0.6889,
+     true
+    ],
+    [
+     0.6937,
+     true
+    ],
+    [
+     0.4367,
+     true
+    ],
+    [
+     0.1866,
+     true
+    ],
+    [
+     0.3072,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|13|2020",
+   "induk": "c24034826bf94bb282c5b8578c7eb603",
+   "diubah": 4,
+   "disisipkan": 1,
+   "peringkat_induk": 1,
+   "padanan_benar": 1,
+   "terdeteksi": 1,
+   "label": {
+    "memperjelas": 1,
+    "pasal_baru": 2
+   },
+   "sisipan_baru": 1,
+   "sim_positif": [
+    0.7267754197046004
+   ],
+   "sim_negatif": [
+    0.1769015983387664
+   ],
+   "catatan": [
+    "Pasal 43A tidak terbaca di induk"
+   ],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.7268
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1769
+    ],
+    [
+     "diubah",
+     false,
+     true,
+     0.4257
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.037,
+   "relevan": [
+    [
+     0.7268,
+     true
+    ],
+    [
+     0.1769,
+     false
+    ],
+    [
+     0.4257,
+     false
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|2|2020",
+   "induk": "8d82ad759fe0456c957e042c63f75a2d",
+   "diubah": 2,
+   "disisipkan": 0,
+   "peringkat_induk": 1,
+   "padanan_benar": 2,
+   "terdeteksi": 2,
+   "label": {
+    "memperjelas": 1,
+    "menggantikan": 1
+   },
+   "sisipan_baru": 0,
+   "sim_positif": [
+    0.921519769632696,
+    0.9868494581360917
+   ],
+   "sim_negatif": [],
    "catatan": [],
    "butir": [
     [
@@ -1511,360 +6430,137 @@
      "diubah",
      true,
      true,
-     0.7735
+     0.9868
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.041,
+   "relevan": [
+    [
+     0.9215,
+     true
     ],
     [
-     "disisipkan",
-     false,
-     false,
-     0.5392
-    ],
-    [
-     "diubah",
-     false,
-     false,
-     0.9152
+     0.9868,
+     true
     ]
    ]
   },
   {
-   "perubahan": "POJK|36|2024",
+   "perubahan": "POJK|36|2020",
+   "induk": "0204b88fe0fb41f399e5011cb01971f4",
+   "diubah": 1,
+   "disisipkan": 0,
+   "peringkat_induk": 1,
+   "padanan_benar": 1,
+   "terdeteksi": 1,
+   "label": {
+    "memperjelas": 1
+   },
+   "sisipan_baru": 0,
+   "sim_positif": [
+    0.7168453336155455
+   ],
+   "sim_negatif": [],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.7168
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.029,
+   "relevan": [
+    [
+     0.7168,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|38|2020",
    "induk": "8a1246bc33d643a1aeff3ab9c2cad86b",
-   "diubah": 20,
-   "disisipkan": 17,
+   "diubah": 1,
+   "disisipkan": 1,
    "peringkat_induk": 1,
-   "padanan_benar": 20,
-   "terdeteksi": 19,
+   "padanan_benar": 1,
+   "terdeteksi": 1,
    "label": {
-    "memperjelas": 15,
-    "pasal_baru": 14,
-    "menggantikan": 8
+    "pasal_baru": 1,
+    "memperjelas": 1
    },
-   "sisipan_baru": 16,
+   "sisipan_baru": 1,
    "sim_positif": [
-    0.8284578662722719,
-    0.7534148612214583,
-    0.7346725671395535,
-    0.7270554616730761,
-    0.8441481584526429,
-    0.963062418620218,
-    0.9423371105845222,
-    0.9109664464141981,
-    0.8394070724388403,
-    0.9186859927781736,
-    0.9216999276223936,
-    0.7556656049575068,
-    0.9563329432662356,
-    0.6447629795689847,
-    0.4251878506467443,
-    0.8051569270864825,
-    0.2923789192695683,
-    0.7045612748752711,
-    0.5670131051394193,
-    0.9399429484457892
+    0.9238552589927905
    ],
    "sim_negatif": [
-    0.089186957966082,
-    0.3369125947752972,
-    0.31266855387583964,
-    0.7175861863047562,
-    0.23627740494267427,
-    0.2949316201423802,
-    0.28576913607340165,
-    0.311244063487003,
-    0.212689667301175,
-    0.257776616156907,
-    0.3632159986458461,
-    0.32584088847794684,
-    0.29038940416407116,
-    0.32581650392646955,
-    0.21005908401975285,
-    0.06801643095893692,
-    0.1354291305406042
+    0.40009510937412124
    ],
    "catatan": [],
    "butir": [
     [
-     "diubah",
-     true,
-     true,
-     0.8285
-    ],
-    [
      "disisipkan",
      false,
      true,
-     0.3369
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.3127
+     0.4001
     ],
     [
      "diubah",
      true,
      true,
-     0.8394
+     0.9239
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.041,
+   "relevan": [
+    [
+     0.4001,
+     false
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.7557
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.4252
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.3258
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.9399
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.7534
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.7347
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.7271
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.8441
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.9631
-    ],
-    [
-     "disisipkan",
-     false,
-     false,
-     0.1505
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.9423
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.911
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.9187
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.7176
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.9217
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.2363
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.2949
-    ],
-    [
-     "disisipkan",
-     false,
-     false,
-     0.3748
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.3112
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.2127
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.2578
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.3632
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.9563
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.6448
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.3258
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.2904
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.8052
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.2924
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.7046
-    ],
-    [
-     "disisipkan",
-     false,
-     false,
-     0.7843
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.567
-    ],
-    [
-     "disisipkan",
-     false,
-     false,
-     0.6493
-    ],
-    [
-     "disisipkan",
-     false,
-     false,
-     0.8919
+     0.9239,
+     true
     ]
    ]
   },
   {
-   "perubahan": "POJK|38|2024",
-   "induk": "583793dbd9ac4e24a95b586923e88fc7",
-   "diubah": 26,
-   "disisipkan": 14,
+   "perubahan": "POJK|39|2020",
+   "induk": "beff5689fa5c45fe94b24636a5dae773",
+   "diubah": 13,
+   "disisipkan": 1,
    "peringkat_induk": 1,
-   "padanan_benar": 22,
-   "terdeteksi": 21,
+   "padanan_benar": 13,
+   "terdeteksi": 13,
    "label": {
-    "memperjelas": 16,
-    "menggantikan": 18,
-    "pasal_baru": 4,
-    "duplikasi": 1
+    "memperjelas": 3,
+    "menggantikan": 10,
+    "pasal_baru": 1
    },
-   "sisipan_baru": 7,
+   "sisipan_baru": 1,
    "sim_positif": [
-    0.8186818976263053,
-    0.9430152552271237,
-    0.5227188532153623,
-    0.8178445787256309,
-    0.8814217853836882,
-    0.9544591289140312,
-    0.9363203551438402,
-    0.6787940002684195,
-    0.9500409323214122,
-    0.8702963204405781,
-    0.8789002846345494,
-    0.7311741631560943,
-    0.8837369620918788,
-    1.0000000000000002,
-    0.37706346550627895,
-    0.9465013467396874,
-    0.9507582298642234,
-    0.8490327315915186,
-    0.8857490447247769,
-    0.8545688686430217,
-    0.9365161466536492,
-    0.9646244715275362,
-    0.8955742041777637,
-    0.5780823565980755,
-    0.759524403865492
+    0.771038756782979,
+    0.8566341944064337,
+    0.791346759995062,
+    0.847769736299781,
+    0.7781654602247803,
+    0.8263562014226751,
+    0.8622754300490244,
+    0.8047817143408378,
+    0.846998242407581,
+    0.8299332551446914,
+    0.9677952764492074,
+    0.6740961347037198,
+    0.8921414417847526
    ],
    "sim_negatif": [
-    0.5530344493340437,
-    0.34865810110074413,
-    0.42853909469383306,
-    0.4272433374281037,
-    0.11330970875054898,
-    0.7693725414151985,
-    0.8346599713668674,
-    0.6266311877155185,
-    0.731396944363495,
-    0.04086217822382091,
-    0.07918124685670985,
-    0.10953404811120489,
-    0.0982001770628654,
-    0.1437868052228137
+    0.4184739274876035
    ],
    "catatan": [],
    "butir": [
@@ -1872,103 +6568,343 @@
      "diubah",
      true,
      true,
-     0.8187
+     0.6741
     ],
     [
      "diubah",
      true,
      true,
-     0.8789
+     0.8921
     ],
     [
      "diubah",
      true,
      true,
-     0.8956
-    ],
-    [
-     "diubah",
-     false,
-     false,
-     0.8918
+     0.771
     ],
     [
      "diubah",
      true,
      true,
-     0.943
-    ],
-    [
-     "diubah",
-     false,
-     false,
-     0.8809
+     0.8566
     ],
     [
      "diubah",
      true,
      true,
-     0.8178
+     0.7913
     ],
     [
      "diubah",
      true,
      true,
-     0.8814
+     0.8478
     ],
     [
      "diubah",
      true,
      true,
-     0.9545
+     0.7782
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8264
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8623
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8048
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.847
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8299
     ],
     [
      "disisipkan",
      false,
      true,
-     0.553
+     0.4185
     ],
     [
      "diubah",
      true,
      true,
-     0.9363
+     0.9678
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.035,
+   "relevan": [
+    [
+     0.6741,
+     true
+    ],
+    [
+     0.8921,
+     true
+    ],
+    [
+     0.771,
+     true
+    ],
+    [
+     0.8566,
+     true
+    ],
+    [
+     0.7913,
+     true
+    ],
+    [
+     0.8478,
+     true
+    ],
+    [
+     0.7782,
+     true
+    ],
+    [
+     0.8264,
+     true
+    ],
+    [
+     0.8623,
+     true
+    ],
+    [
+     0.8048,
+     true
+    ],
+    [
+     0.847,
+     true
+    ],
+    [
+     0.8299,
+     true
+    ],
+    [
+     0.4185,
+     false
+    ],
+    [
+     0.9678,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|58|2020",
+   "induk": "a3f2470b752d4069b2c755599aee89d1",
+   "diubah": 11,
+   "disisipkan": 1,
+   "peringkat_induk": 1,
+   "padanan_benar": 8,
+   "terdeteksi": 8,
+   "label": {
+    "memperjelas": 5,
+    "menggantikan": 3,
+    "pasal_baru": 7
+   },
+   "sisipan_baru": 1,
+   "sim_positif": [
+    0.81979992824805,
+    0.7635248392457711,
+    0.9502274542324608,
+    0.9041930996199931,
+    0.8772997542083706,
+    0.9152739375622885,
+    0.8907332938123739,
+    0.6409166372266413
+   ],
+   "sim_negatif": [
+    0.3036220119017463
+   ],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.9043
     ],
     [
      "diubah",
-     false,
-     false,
-     0.6788
+     true,
+     true,
+     0.9042
     ],
     [
      "diubah",
      true,
      true,
-     0.95
+     0.6446
     ],
     [
      "diubah",
      true,
      true,
-     0.8703
+     0.8214
     ],
     [
      "diubah",
      true,
      true,
-     0.7312
+     0.7621
     ],
     [
      "diubah",
      true,
      true,
-     0.8837
+     0.9499
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8762
     ],
     [
      "disisipkan",
      false,
      true,
-     0.3487
+     0.3161
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9159
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.064,
+   "relevan": [
+    [
+     0.9043,
+     true
+    ],
+    [
+     0.9042,
+     true
+    ],
+    [
+     0.6446,
+     true
+    ],
+    [
+     0.8214,
+     true
+    ],
+    [
+     0.7621,
+     true
+    ],
+    [
+     0.9499,
+     true
+    ],
+    [
+     0.8762,
+     true
+    ],
+    [
+     0.3161,
+     false
+    ],
+    [
+     0.9159,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|60|2020",
+   "induk": "0cfd701c04ff497aa2779c574d5353b9",
+   "diubah": 31,
+   "disisipkan": 5,
+   "peringkat_induk": 1,
+   "padanan_benar": 31,
+   "terdeteksi": 28,
+   "label": {
+    "menggantikan": 13,
+    "memperjelas": 15,
+    "duplikasi": 1,
+    "pasal_baru": 7
+   },
+   "sisipan_baru": 4,
+   "sim_positif": [
+    0.9945632161775887,
+    0.9133293764394962,
+    0.9999999999999998,
+    0.7026686430568436,
+    0.4679597021540024,
+    0.8691194467161214,
+    0.9216221516362991,
+    0.8316916371267481,
+    0.8045581381766943,
+    0.6994371556949801,
+    0.5012685311979675,
+    0.7977650504171264,
+    0.9302652696651453,
+    0.9071593858567518,
+    0.8190523988563567,
+    0.326325151995178,
+    0.6921513322803562,
+    0.504291876989463,
+    0.7198545794117331,
+    0.8711879000978897,
+    0.8679977530902528,
+    0.7484664532573506,
+    0.922532941465729,
+    0.6307954801862611,
+    0.8111121159602255,
+    0.8877991554780256,
+    0.9445128472752814,
+    0.409296016198133,
+    0.9534509458311562,
+    0.9031631406777206,
+    0.2222636144780941
+   ],
+   "sim_negatif": [
+    0.17299459429094483,
+    0.6033600063280107,
+    0.16282975019675777,
+    0.1695522268354796,
+    0.44977082893668
+   ],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.9946
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9133
     ],
     [
      "diubah",
@@ -1977,219 +6913,136 @@
      1.0
     ],
     [
-     "disisipkan",
-     false,
+     "diubah",
      true,
-     0.4285
+     true,
+     0.7027
     ],
     [
      "diubah",
      true,
      true,
-     0.3771
+     0.468
     ],
     [
      "diubah",
      true,
      true,
-     0.9465
+     0.8691
     ],
     [
      "diubah",
      true,
      true,
-     0.9508
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.849
+     0.9216
     ],
     [
      "disisipkan",
      false,
      true,
-     0.4272
-    ],
-    [
-     "disisipkan",
-     false,
-     false,
-     0.4227
+     0.173
     ],
     [
      "diubah",
      true,
      true,
-     0.8857
+     0.8317
     ],
     [
      "diubah",
      true,
      true,
-     0.8546
+     0.8046
     ],
     [
      "diubah",
      true,
      true,
-     0.9365
+     0.6994
     ],
     [
      "diubah",
      true,
      true,
-     0.9646
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.7694
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.8347
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.6266
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.7314
+     0.5013
     ],
     [
      "diubah",
      true,
      true,
-     0.5781
-    ],
-    [
-     "disisipkan",
-     false,
-     false,
-     0.6493
-    ],
-    [
-     "disisipkan",
-     false,
-     false,
-     0.1067
-    ],
-    [
-     "disisipkan",
-     false,
-     false,
-     0.246
-    ],
-    [
-     "disisipkan",
-     false,
-     false,
-     0.8177
-    ],
-    [
-     "disisipkan",
-     false,
-     false,
-     0.9459
-    ]
-   ]
-  },
-  {
-   "perubahan": "POJK|1|2023",
-   "induk": "8d0dbca8a6e74c02b27a9a4237bd0ac6",
-   "diubah": 10,
-   "disisipkan": 2,
-   "peringkat_induk": 1,
-   "padanan_benar": 8,
-   "terdeteksi": 8,
-   "label": {
-    "memperjelas": 2,
-    "menggantikan": 7,
-    "pasal_baru": 2,
-    "konflik": 1
-   },
-   "sisipan_baru": 2,
-   "sim_positif": [
-    0.859675248488882,
-    0.6635904240936478,
-    0.3048674173948468,
-    0.5033597172084877,
-    0.821258604969085,
-    0.9224676260560886,
-    0.7286568419200554,
-    0.826988020851989,
-    0.5874347764165656,
-    0.6111894109552812
-   ],
-   "sim_negatif": [
-    0.09934210428370471,
-    0.1507805327496559
-   ],
-   "catatan": [],
-   "butir": [
-    [
-     "diubah",
-     true,
-     true,
-     0.8597
+     0.7978
     ],
     [
      "diubah",
      true,
      true,
-     0.5874
+     0.9303
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9072
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8191
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.3263
     ],
     [
      "disisipkan",
      false,
      true,
-     0.0993
+     0.6034
     ],
     [
      "diubah",
      true,
      true,
-     0.6112
+     0.6922
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5043
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7199
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8712
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.868
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7485
     ],
     [
      "disisipkan",
      false,
      true,
-     0.1508
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.6636
-    ],
-    [
-     "diubah",
-     false,
-     false,
-     0.6338
-    ],
-    [
-     "diubah",
-     false,
-     false,
-     0.5227
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.8213
+     0.1628
     ],
     [
      "diubah",
@@ -2201,46 +7054,254 @@
      "diubah",
      true,
      true,
-     0.7287
+     0.6308
     ],
     [
      "diubah",
      true,
      true,
-     0.827
+     0.8111
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8878
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9445
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.4093
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9535
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9032
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1696
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.2223
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.4498
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.052,
+   "relevan": [
+    [
+     0.9946,
+     true
+    ],
+    [
+     0.9133,
+     true
+    ],
+    [
+     1.0,
+     true
+    ],
+    [
+     0.7027,
+     true
+    ],
+    [
+     0.468,
+     true
+    ],
+    [
+     0.8691,
+     true
+    ],
+    [
+     0.9216,
+     true
+    ],
+    [
+     0.173,
+     false
+    ],
+    [
+     0.8317,
+     true
+    ],
+    [
+     0.8046,
+     true
+    ],
+    [
+     0.6994,
+     true
+    ],
+    [
+     0.5013,
+     true
+    ],
+    [
+     0.7978,
+     true
+    ],
+    [
+     0.9303,
+     true
+    ],
+    [
+     0.9072,
+     true
+    ],
+    [
+     0.8191,
+     true
+    ],
+    [
+     0.3263,
+     true
+    ],
+    [
+     0.6034,
+     false
+    ],
+    [
+     0.6922,
+     true
+    ],
+    [
+     0.5043,
+     true
+    ],
+    [
+     0.7199,
+     true
+    ],
+    [
+     0.8712,
+     true
+    ],
+    [
+     0.868,
+     true
+    ],
+    [
+     0.7485,
+     true
+    ],
+    [
+     0.1628,
+     false
+    ],
+    [
+     0.9225,
+     true
+    ],
+    [
+     0.6308,
+     true
+    ],
+    [
+     0.8111,
+     true
+    ],
+    [
+     0.8878,
+     true
+    ],
+    [
+     0.9445,
+     true
+    ],
+    [
+     0.4093,
+     true
+    ],
+    [
+     0.9535,
+     true
+    ],
+    [
+     0.9032,
+     true
+    ],
+    [
+     0.1696,
+     false
+    ],
+    [
+     0.2223,
+     true
+    ],
+    [
+     0.4498,
+     false
     ]
    ]
   },
   {
-   "perubahan": "POJK|2|2023",
-   "induk": "eef27c8ce5304d129f68f87bf1fd1bd6",
-   "diubah": 11,
-   "disisipkan": 2,
+   "perubahan": "POJK|64|2020",
+   "induk": "70ec2bf179ca4a92b8a27cba00210503",
+   "diubah": 18,
+   "disisipkan": 6,
    "peringkat_induk": 1,
-   "padanan_benar": 9,
-   "terdeteksi": 8,
+   "padanan_benar": 18,
+   "terdeteksi": 17,
    "label": {
-    "memperjelas": 3,
-    "pasal_baru": 3,
-    "menggantikan": 4,
-    "duplikasi": 2
+    "menggantikan": 8,
+    "memperjelas": 9,
+    "pasal_baru": 7
    },
-   "sisipan_baru": 2,
+   "sisipan_baru": 6,
    "sim_positif": [
-    0.9389430355927144,
-    0.345707630325055,
-    0.5478382103700662,
-    0.9370136108894364,
-    0.980327647501151,
-    0.9312896904868484,
-    0.959115282568745,
-    0.4988109527820682,
-    0.9999999999999998,
-    1.0000000000000002
+    0.6493822730273586,
+    0.8529740969235718,
+    0.7797231757363513,
+    0.8067461010220242,
+    0.4035503777002634,
+    0.4609322233520036,
+    0.7467269660104725,
+    0.6359329287173859,
+    0.9357914943293782,
+    0.6806861639709171,
+    0.8336739660070319,
+    0.6774822899263021,
+    0.6557046459115738,
+    0.5881829622874075,
+    0.45030904427542756,
+    0.812875259724599,
+    0.8803159169663951,
+    0.9372470858410104
    ],
    "sim_negatif": [
-    0.33014449025529946,
-    0.3867874704306968
+    0.17618575520988725,
+    0.16301852874408218,
+    0.11051870132305086,
+    0.23592605461385752,
+    0.25314728167332523,
+    0.15865913856821928
    ],
    "catatan": [],
    "butir": [
@@ -2248,242 +7309,1169 @@
      "diubah",
      true,
      true,
-     0.9389
+     0.6494
     ],
     [
      "diubah",
      true,
      true,
-     0.3457
+     0.4609
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6359
     ],
     [
      "disisipkan",
      false,
      true,
-     0.3301
+     0.1587
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8803
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9372
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.853
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7797
     ],
     [
      "disisipkan",
      false,
      true,
-     0.3868
+     0.1762
     ],
     [
-     "diubah",
-     true,
-     true,
-     0.5478
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.937
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.9803
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.9313
-    ],
-    [
-     "diubah",
-     true,
-     true,
-     0.9591
-    ],
-    [
-     "diubah",
+     "disisipkan",
      false,
+     true,
+     0.163
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8067
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.4036
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7467
+    ],
+    [
+     "disisipkan",
      false,
-     0.6593
+     true,
+     0.1105
     ],
     [
      "diubah",
      true,
      true,
-     1.0
+     0.9358
     ],
     [
      "diubah",
      true,
      true,
-     1.0
+     0.6807
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8337
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6775
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6557
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2359
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5882
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.4503
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8129
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2531
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.042,
+   "relevan": [
+    [
+     0.6494,
+     true
+    ],
+    [
+     0.4609,
+     true
+    ],
+    [
+     0.6359,
+     true
+    ],
+    [
+     0.1587,
+     false
+    ],
+    [
+     0.8803,
+     true
+    ],
+    [
+     0.9372,
+     true
+    ],
+    [
+     0.853,
+     true
+    ],
+    [
+     0.7797,
+     true
+    ],
+    [
+     0.1762,
+     false
+    ],
+    [
+     0.163,
+     false
+    ],
+    [
+     0.8067,
+     true
+    ],
+    [
+     0.4036,
+     true
+    ],
+    [
+     0.7467,
+     true
+    ],
+    [
+     0.1105,
+     false
+    ],
+    [
+     0.9358,
+     true
+    ],
+    [
+     0.6807,
+     true
+    ],
+    [
+     0.8337,
+     true
+    ],
+    [
+     0.6775,
+     true
+    ],
+    [
+     0.6557,
+     true
+    ],
+    [
+     0.2359,
+     false
+    ],
+    [
+     0.5882,
+     true
+    ],
+    [
+     0.4503,
+     true
+    ],
+    [
+     0.8129,
+     true
+    ],
+    [
+     0.2531,
+     false
     ]
    ]
   },
   {
-   "perubahan": "POJK|4|2023",
-   "induk": "8d82ad759fe0456c957e042c63f75a2d",
-   "diubah": 10,
+   "perubahan": "POJK|48|2020",
+   "induk": "616eb57695824795ae02f4633df7e7cd",
+   "diubah": 6,
+   "disisipkan": 5,
+   "peringkat_induk": 1,
+   "padanan_benar": 6,
+   "terdeteksi": 6,
+   "label": {
+    "memperjelas": 4,
+    "menggantikan": 2,
+    "pasal_baru": 5
+   },
+   "sisipan_baru": 5,
+   "sim_positif": [
+    0.6303878119020185,
+    0.7794259936197427,
+    0.6146240141546511,
+    0.6980269414545217,
+    0.8658515209721461,
+    0.7142697571130512
+   ],
+   "sim_negatif": [
+    0.3238077006360043,
+    0.104820595195533,
+    0.10247421277024156,
+    0.1716756635135262,
+    0.14618871476453105
+   ],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.6146
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.698
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.3238
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1048
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1025
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1717
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1462
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8659
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7143
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6304
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7794
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.035,
+   "relevan": [
+    [
+     0.6146,
+     true
+    ],
+    [
+     0.698,
+     true
+    ],
+    [
+     0.3238,
+     false
+    ],
+    [
+     0.1048,
+     false
+    ],
+    [
+     0.1025,
+     false
+    ],
+    [
+     0.1717,
+     false
+    ],
+    [
+     0.1462,
+     false
+    ],
+    [
+     0.8659,
+     true
+    ],
+    [
+     0.7143,
+     true
+    ],
+    [
+     0.6304,
+     true
+    ],
+    [
+     0.7794,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|14|2019",
+   "induk": "fce1c6f670084ec787d93170d9d24637",
+   "diubah": 5,
    "disisipkan": 11,
    "peringkat_induk": 1,
-   "padanan_benar": 9,
-   "terdeteksi": 7,
+   "padanan_benar": 5,
+   "terdeteksi": 5,
    "label": {
-    "menggantikan": 3,
-    "pasal_baru": 13,
-    "memperjelas": 6
+    "memperjelas": 5,
+    "pasal_baru": 6,
+    "menggantikan": 5
    },
-   "sisipan_baru": 11,
+   "sisipan_baru": 6,
    "sim_positif": [
-    0.6436979912656182,
-    0.7163675056655072,
-    0.3819803772105209,
-    0.3037804587159134,
-    0.9254193078067449,
-    0.9244594249305991,
-    0.7521306980467442,
-    0.8851550680523369,
-    0.948033832000172,
-    0.4742131341152267
+    0.713278133664614,
+    0.9656073232694496,
+    0.48974510155455675,
+    0.757295712112788,
+    0.9559639157599888
    ],
    "sim_negatif": [
-    0.37243039922572946,
-    0.31644041443161236,
-    0.28026435571097874,
-    0.26818203388702794,
-    0.14350451436364695,
-    0.28359172058308646,
-    0.27681999190132933,
-    0.37014656581519634,
-    0.16892230001500855,
-    0.2661135910131774,
-    0.20005122202591719
+    0.24328120286234248,
+    0.19693486683388936,
+    0.546849105354323,
+    0.5531667052602363,
+    0.5082502081230467,
+    0.3742848680402392,
+    0.588480832531153,
+    0.7098128626785642,
+    0.2320568508001327,
+    0.07148034564993493,
+    0.15094247324944765
    ],
    "catatan": [],
    "butir": [
     [
-     "disisipkan",
-     false,
+     "diubah",
      true,
-     0.3724
+     true,
+     0.7133
     ],
     [
      "diubah",
      true,
      true,
-     0.6435
+     0.7573
     ],
     [
      "disisipkan",
      false,
      true,
-     0.3163
+     0.2321
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.0715
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1509
     ],
     [
      "diubah",
      true,
      true,
-     0.7162
+     0.956
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2433
     ],
     [
      "diubah",
      true,
      true,
-     0.3817
+     0.9656
     ],
     [
      "diubah",
      true,
      true,
-     0.3037
+     0.4897
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1969
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.5468
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.5532
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.5083
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.3743
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.5885
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.7098
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.039,
+   "relevan": [
+    [
+     0.7133,
+     true
+    ],
+    [
+     0.7573,
+     true
+    ],
+    [
+     0.2321,
+     false
+    ],
+    [
+     0.0715,
+     false
+    ],
+    [
+     0.1509,
+     false
+    ],
+    [
+     0.956,
+     true
+    ],
+    [
+     0.2433,
+     false
+    ],
+    [
+     0.9656,
+     true
+    ],
+    [
+     0.4897,
+     true
+    ],
+    [
+     0.1969,
+     false
+    ],
+    [
+     0.5468,
+     false
+    ],
+    [
+     0.5532,
+     false
+    ],
+    [
+     0.5083,
+     false
+    ],
+    [
+     0.3743,
+     false
+    ],
+    [
+     0.5885,
+     false
+    ],
+    [
+     0.7098,
+     false
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|19|2019",
+   "induk": "beff5689fa5c45fe94b24636a5dae773",
+   "diubah": 1,
+   "disisipkan": 0,
+   "peringkat_induk": 1,
+   "padanan_benar": 1,
+   "terdeteksi": 0,
+   "label": {
+    "pasal_baru": 1
+   },
+   "sisipan_baru": 0,
+   "sim_positif": [
+    0.22572520651996533
+   ],
+   "sim_negatif": [],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.2257
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.029,
+   "relevan": [
+    [
+     0.2257,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|23|2019",
+   "induk": "28b5f5d717d5461db8652c3ba13cb3b8",
+   "diubah": 18,
+   "disisipkan": 0,
+   "peringkat_induk": 1,
+   "padanan_benar": 16,
+   "terdeteksi": 16,
+   "label": {
+    "menggantikan": 6,
+    "memperjelas": 10,
+    "duplikasi": 1
+   },
+   "sisipan_baru": 0,
+   "sim_positif": [
+    0.9504224419714774,
+    0.8704984192967214,
+    0.8264195004099034,
+    0.9246115122725896,
+    0.7747294618657038,
+    1.0000000000000002,
+    0.9701513491547833,
+    0.8202841149862653,
+    0.9074967352563255,
+    0.7581900901532955,
+    0.8908097304388064,
+    0.8050423045381775,
+    0.9336371695994471,
+    0.947882263583328,
+    0.9588719802144069,
+    0.7855417081703909
+   ],
+   "sim_negatif": [],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.9503
     ],
     [
      "diubah",
      true,
      true,
-     0.9254
+     0.8264
     ],
     [
      "diubah",
      true,
      true,
-     0.9244
+     0.8709
     ],
     [
      "diubah",
      true,
      true,
-     0.7521
+     0.9248
     ],
     [
      "diubah",
      true,
      true,
-     0.8851
+     0.7749
     ],
     [
      "diubah",
      true,
      true,
-     0.948
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.2802
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.2681
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.1433
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.2833
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.2763
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.3696
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.1688
-    ],
-    [
-     "disisipkan",
-     false,
-     true,
-     0.2659
-    ],
-    [
-     "disisipkan",
-     false,
-     false,
-     0.21
+     1.0
     ],
     [
      "diubah",
+     true,
+     true,
+     0.9701
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8199
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9075
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7584
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8909
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8052
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9336
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9476
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9587
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7835
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.059,
+   "relevan": [
+    [
+     0.9503,
+     true
+    ],
+    [
+     0.8264,
+     true
+    ],
+    [
+     0.8709,
+     true
+    ],
+    [
+     0.9248,
+     true
+    ],
+    [
+     0.7749,
+     true
+    ],
+    [
+     1.0,
+     true
+    ],
+    [
+     0.9701,
+     true
+    ],
+    [
+     0.8199,
+     true
+    ],
+    [
+     0.9075,
+     true
+    ],
+    [
+     0.7584,
+     true
+    ],
+    [
+     0.8909,
+     true
+    ],
+    [
+     0.8052,
+     true
+    ],
+    [
+     0.9336,
+     true
+    ],
+    [
+     0.9476,
+     true
+    ],
+    [
+     0.9587,
+     true
+    ],
+    [
+     0.7835,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|32|2019",
+   "induk": "3f561e58fb6548ef9de2b3c44939d316",
+   "diubah": 4,
+   "disisipkan": 0,
+   "peringkat_induk": 1,
+   "padanan_benar": 4,
+   "terdeteksi": 4,
+   "label": {
+    "memperjelas": 2,
+    "menggantikan": 2
+   },
+   "sisipan_baru": 0,
+   "sim_positif": [
+    0.9008709529455668,
+    0.717223156692519,
+    0.546206331929228,
+    0.9460097045798488
+   ],
+   "sim_negatif": [],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.946
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9009
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.7172
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.5462
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.043,
+   "relevan": [
+    [
+     0.946,
+     true
+    ],
+    [
+     0.9009,
+     true
+    ],
+    [
+     0.7172,
+     true
+    ],
+    [
+     0.5462,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|38|2019",
+   "induk": "e545f148ca134831b32eaa1cc54fb5f3",
+   "diubah": 5,
+   "disisipkan": 5,
+   "peringkat_induk": 1,
+   "padanan_benar": 5,
+   "terdeteksi": 5,
+   "label": {
+    "memperjelas": 1,
+    "menggantikan": 5,
+    "pasal_baru": 5
+   },
+   "sisipan_baru": 5,
+   "sim_positif": [
+    0.8267681670004138,
+    0.9667252368126976,
+    0.937184400101563,
+    0.8931933829261967,
+    0.9235700343112774
+   ],
+   "sim_negatif": [
+    0.10550529790580417,
+    0.3981327062011867,
+    0.12686680363508449,
+    0.15262082863811716,
+    0.2719474262212435
+   ],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.8269
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9667
+    ],
+    [
+     "disisipkan",
      false,
+     true,
+     0.106
+    ],
+    [
+     "disisipkan",
      false,
-     0.6437
+     true,
+     0.3995
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1264
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.1514
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9372
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.8933
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9236
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2725
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.048,
+   "relevan": [
+    [
+     0.8269,
+     true
+    ],
+    [
+     0.9667,
+     true
+    ],
+    [
+     0.106,
+     false
+    ],
+    [
+     0.3995,
+     false
+    ],
+    [
+     0.1264,
+     false
+    ],
+    [
+     0.1514,
+     false
+    ],
+    [
+     0.9372,
+     true
+    ],
+    [
+     0.8933,
+     true
+    ],
+    [
+     0.9236,
+     true
+    ],
+    [
+     0.2725,
+     false
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|43|2019",
+   "induk": "f0ac9b9a5d4b44dfb50c1d0e7c1024e2",
+   "diubah": 2,
+   "disisipkan": 0,
+   "peringkat_induk": 1,
+   "padanan_benar": 1,
+   "terdeteksi": 1,
+   "label": {
+    "pasal_baru": 1,
+    "menggantikan": 1
+   },
+   "sisipan_baru": 0,
+   "sim_positif": [
+    0.10400166881399268,
+    0.6956351662177509
+   ],
+   "sim_negatif": [],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     false,
+     true,
+     0.3829
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.6956
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.038,
+   "relevan": [
+    [
+     0.3829,
+     false
+    ],
+    [
+     0.6956,
+     true
+    ]
+   ]
+  },
+  {
+   "perubahan": "POJK|44|2019",
+   "induk": "63dc251c858c4c018f94264759ff96cd",
+   "diubah": 4,
+   "disisipkan": 1,
+   "peringkat_induk": 1,
+   "padanan_benar": 4,
+   "terdeteksi": 4,
+   "label": {
+    "memperjelas": 3,
+    "menggantikan": 1,
+    "pasal_baru": 1
+   },
+   "sisipan_baru": 1,
+   "sim_positif": [
+    0.7663288909064968,
+    0.9234909997221192,
+    0.9724531699060879,
+    0.9681161961855885
+   ],
+   "sim_negatif": [
+    0.20755843695566764
+   ],
+   "catatan": [],
+   "butir": [
+    [
+     "diubah",
+     true,
+     true,
+     0.7663
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9725
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9681
+    ],
+    [
+     "disisipkan",
+     false,
+     true,
+     0.2076
+    ],
+    [
+     "diubah",
+     true,
+     true,
+     0.9235
+    ]
+   ],
+   "mode": "terarah",
+   "induk_dari_kata_kunci": true,
+   "waktu_detik": 0.032,
+   "relevan": [
+    [
+     0.7663,
+     true
+    ],
+    [
+     0.9725,
+     true
+    ],
+    [
+     0.9681,
+     true
+    ],
+    [
+     0.2076,
+     false
+    ],
+    [
+     0.9235,
+     true
     ]
    ]
   }

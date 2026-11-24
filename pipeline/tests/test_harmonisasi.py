@@ -184,3 +184,136 @@ def test_status_pasal_memakai_kosakata_pak_faris():
     assert set(STATUS_KB) == set(LABELS), "setiap label harus punya padanan kosakata mitra"
     assert {STATUS_KB[k] for k in ("pasal_baru", "duplikasi", "menggantikan", "memperjelas")} == \
         {"baru", "sama", "menggantikan", "melengkapi"}
+
+
+# --- Weekly #10: kata kunci relasi dulu, lalu bandingkan dengan peraturan yang dirujuk saja ---
+
+def test_kata_kunci_relasi_dibaca_dari_badan_dan_penutup(tmp_path):
+    from hero.harmonisasi.refs import explicit_references
+
+    cat = Catalog(tmp_path / "c.db")
+    teks = ("Mengingat: Peraturan Otoritas Jasa Keuangan Nomor 3 Tahun 2019 sebagaimana telah diubah "
+            "dengan Peraturan Otoritas Jasa Keuangan Nomor 5 Tahun 2021. "
+            "Pasal I Beberapa ketentuan dalam Peraturan Otoritas Jasa Keuangan Nomor 14 Tahun 2023 "
+            "tentang Perdagangan Karbon (Lembaran Negara Republik Indonesia Tahun 2023 Nomor 7/OJK) "
+            "diubah sebagai berikut: 1. Ketentuan Pasal 3 diubah. "
+            "Pada saat Peraturan OJK ini mulai berlaku: a. Peraturan Otoritas Jasa Keuangan Nomor 8 "
+            "Tahun 2015 tentang Bursa dicabut dan dinyatakan tidak berlaku; dan b. Ketentuan Pasal 10 "
+            "dan Pasal 11 Peraturan Otoritas Jasa Keuangan Nomor 2 Tahun 2020 tentang Pelaporan "
+            "dicabut dan dinyatakan tidak berlaku.")
+    by = {r.key: r for r in explicit_references(cat.conn, teks, "Rancangan POJK", [])}
+    assert by["POJK|14|2023"].relasi == "diubah" and "diubah sebagai berikut" in by["POJK|14|2023"].kata_kunci
+    assert by["POJK|8|2015"].relasi == "dicabut"
+    assert by["POJK|2|2020"].relasi == "dicabut_sebagian"
+    assert by["POJK|2|2020"].pasal_dicabut == ["10", "11"]
+    assert by["POJK|3|2019"].relasi == "dirujuk"          # dasar hukum di Mengingat, bukan relasi
+
+
+def _korpus_relasi(tmp_path):
+    cat = Catalog(tmp_path / "c.db")
+    _seed(cat, "induk", "14 Tahun 2023", 2023, "Perdagangan Karbon", {
+        "3": "Unit Karbon yang diperdagangkan wajib dicatatkan pada Sistem Registri Nasional "
+             "paling lambat 5 (lima) hari kerja sebelum perdagangan.",
+        "4": "Penyelenggara Bursa Karbon wajib memiliki modal disetor paling sedikit Rp100.000.000.000,00.",
+        "5": "Penyelenggara Bursa Karbon wajib menyampaikan laporan bulanan kepada Otoritas Jasa Keuangan."})
+    # Pasal kembar di peraturan lain — lebih mirip dengan draft daripada induknya sendiri.
+    _seed(cat, "saudara", "9 Tahun 2024", 2024, "Registri Karbon", {
+        "7": "Unit Karbon yang diperdagangkan wajib dicatatkan pada Sistem Registri Nasional "
+             "paling lambat 10 (sepuluh) hari kerja sebelum perdagangan dilakukan."})
+    _seed(cat, "lama", "8 Tahun 2015", 2015, "Bursa Lama", {
+        "2": "Penyelenggara Bursa wajib memiliki modal disetor paling sedikit Rp50.000.000.000,00."},
+        reg_status="dicabut")
+    cat.conn.commit()
+    return cat
+
+
+PASAL_3_BARU = {"number": "3", "page": 2, "text": "Unit Karbon yang diperdagangkan wajib dicatatkan "
+                "pada Sistem Registri Nasional paling lambat 10 (sepuluh) hari kerja sebelum perdagangan."}
+
+
+def test_perubahan_hanya_dibandingkan_dengan_induk_dan_dampaknya_per_pasal(tmp_path):
+    cat = _korpus_relasi(tmp_path)
+    draft = DraftDoc("POJK tentang Perubahan atas Peraturan Otoritas Jasa Keuangan Nomor 14 Tahun 2023 "
+                     "tentang Perdagangan Karbon", "POJK|10|2026",
+                     "Ketentuan Pasal 3 diubah sehingga berbunyi sebagai berikut: Pasal 3 ... "
+                     "Pasal 5 dihapus.", [PASAL_3_BARU])
+    rep = harmonise(cat.conn, draft, CFG)
+    assert rep.relasi["mode"] == "terarah" and rep.relasi["sasaran"] == ["POJK|14|2023"]
+    assert "judul" in rep.relasi["kata_kunci"][0]["bukti"]
+    assert {k["doc_id"] for k in rep.kandidat} == {"induk"}       # saudara tak ikut dibandingkan
+    f = rep.temuan[0]
+    assert f.pembanding["doc_id"] == "induk" and f.jenis == "menggantikan"
+    assert f.pembanding["status_setelah_draft"] == "tidak_berlaku"
+    (d,) = rep.dampak_status
+    assert d["status_setelah"] == "diubah"
+    assert d["pasal_tidak_berlaku"] == ["3", "5"] and d["pasal_tetap_berlaku"] == ["4"]
+    assert any("Pasal 3, 5 versi lama tidak berlaku" in r for r in rep.rekomendasi)
+
+
+def test_tanpa_kata_kunci_relasi_dianggap_peraturan_baru(tmp_path):
+    cat = _korpus_relasi(tmp_path)
+    draft = DraftDoc("Rancangan POJK tentang Registri Karbon", None, "Pasal 1 ...", [PASAL_3_BARU])
+    rep = harmonise(cat.conn, draft, CFG)
+    assert rep.relasi["mode"] == "seluruh_kb" and "peraturan baru" in rep.relasi["alasan"]
+    assert rep.dampak_status == []
+    assert rep.temuan[0].pembanding["doc_id"] == "saudara"
+    assert rep.temuan[0].kecocokan in {"tampil", "pertimbangkan", "tidak_dikutip"}
+
+
+def test_pencabutan_dibandingkan_dengan_yang_dicabut_walau_statusnya_sudah_dicabut(tmp_path):
+    cat = _korpus_relasi(tmp_path)
+    draft = DraftDoc("Rancangan POJK tentang Bursa Karbon", None,
+                     "Pada saat Peraturan OJK ini mulai berlaku, Peraturan Otoritas Jasa Keuangan "
+                     "Nomor 8 Tahun 2015 tentang Bursa Lama dicabut dan dinyatakan tidak berlaku.",
+                     [{"number": "2", "page": 1, "text": "Penyelenggara Bursa wajib memiliki modal "
+                       "disetor paling sedikit Rp75.000.000.000,00."}])
+    rep = harmonise(cat.conn, draft, CFG)
+    assert rep.relasi["mode"] == "terarah" and rep.relasi["sasaran"] == ["POJK|8|2015"]
+    (d,) = rep.dampak_status
+    assert d["status_setelah"] == "dicabut" and d["pasal_tidak_berlaku"] == ["2"]
+    assert rep.temuan[0].pembanding["status_setelah_draft"] == "tidak_berlaku"
+
+
+def test_induk_belum_di_kb_kembali_ke_seluruh_kb_dengan_catatan(tmp_path):
+    cat = _korpus_relasi(tmp_path)
+    draft = DraftDoc("POJK tentang Perubahan atas Peraturan Otoritas Jasa Keuangan Nomor 77 Tahun 2022 "
+                     "tentang Hal Lain", None, "Ketentuan Pasal 3 diubah.", [PASAL_3_BARU])
+    rep = harmonise(cat.conn, draft, CFG)
+    assert rep.relasi["mode"] == "seluruh_kb" and rep.relasi["belum_di_kb"] == ["POJK|77|2022"]
+    assert any("belum ada di Knowledge Base" in r for r in rep.rekomendasi)
+
+
+def test_tingkat_kecocokan_mengikuti_mode():
+    from hero.harmonisasi.engine import tingkat_kecocokan
+
+    assert tingkat_kecocokan(0.6, "terarah", CFG) == "tampil"
+    assert tingkat_kecocokan(0.6, "seluruh_kb", CFG) == "pertimbangkan"
+    assert tingkat_kecocokan(0.5, "seluruh_kb", CFG) == "tidak_dikutip"
+
+
+def test_pencabutan_sebagian_hanya_menggugurkan_pasal_yang_disebut(tmp_path):
+    cat = _korpus_relasi(tmp_path)
+    draft = DraftDoc("Rancangan POJK tentang Laporan Bursa Karbon", None,
+                     "Pada saat Peraturan OJK ini mulai berlaku, Ketentuan Pasal 5 Peraturan Otoritas "
+                     "Jasa Keuangan Nomor 14 Tahun 2023 tentang Perdagangan Karbon dicabut dan "
+                     "dinyatakan tidak berlaku.",
+                     [{"number": "2", "page": 1, "text": "Penyelenggara Bursa Karbon wajib menyampaikan "
+                       "laporan mingguan kepada Otoritas Jasa Keuangan."}])
+    rep = harmonise(cat.conn, draft, CFG)
+    assert rep.relasi["mode"] == "terarah"
+    assert "sebagian" in rep.kandidat[0]["alasan"][0]
+    (d,) = rep.dampak_status
+    assert d["status_setelah"] == "dicabut sebagian"
+    assert d["pasal_tidak_berlaku"] == ["5"] and d["pasal_tetap_berlaku"] == ["3", "4"]
+
+
+def test_nomor_berjenis_di_dalamnya_tidak_memotong_konteks_pencabutan_sebagian(tmp_path):
+    from hero.harmonisasi.refs import explicit_references
+
+    cat = Catalog(tmp_path / "c.db")
+    teks = ("Pada saat POJK ini mulai berlaku: a) POJK Nomor 4/POJK.03/2015 tentang Tata Kelola BPR; "
+            "dan b) Pasal 12 POJK Nomor 3/POJK.03/2022 tentang Penilaian Tingkat Kesehatan BPR, "
+            "dicabut dan dinyatakan tidak berlaku.")
+    by = {r.key: r for r in explicit_references(cat.conn, teks, "", [])}
+    assert by["POJK|3|2022"].relasi == "dicabut_sebagian" and by["POJK|3|2022"].pasal_dicabut == ["12"]
+    assert by["POJK|4|2015"].relasi == "dicabut"
