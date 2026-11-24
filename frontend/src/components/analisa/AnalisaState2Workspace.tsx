@@ -6,7 +6,6 @@ import {
   Loader2,
   Clock,
   Info,
-  Sparkles,
   Lock,
   Check,
   RefreshCw,
@@ -435,8 +434,19 @@ export default function AnalisaState2Workspace({
               <h2 className="text-base font-semibold text-gray-900 truncate max-w-[500px]">
                 {displayJudulRegulasi !== '-' ? displayJudulRegulasi : (loading ? 'Memuat identitas draft...' : `Draft Peraturan #${documentId}`)}
               </h2>
-              {/* Badge Status Keberlakuan */}
-              {effectiveStatusKeberlakuan && (
+              {/* Badge Jenis Regulasi */}
+              {data?.identitas?.jenis || docStatus?.regulation_type ? (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 bg-blue-50 text-blue-700 border-blue-200" title={`Jenis regulasi: ${data?.identitas?.jenis || docStatus?.regulation_type}`}>
+                  {data?.identitas?.jenis || docStatus?.regulation_type}
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 bg-gray-100 text-gray-600 border-gray-200" title="Jenis regulasi belum dapat diidentifikasi dari naskah dokumen">
+                  Jenis regulasi tidak teridentifikasi
+                </span>
+              )}
+
+              {/* Badge Status Keberlakuan (hanya jika telah ditetapkan secara spesifik) */}
+              {effectiveStatusKeberlakuan && effectiveStatusKeberlakuan !== 'tidak_diketahui' && (
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 ${kelasBadgeStatusKeberlakuan(effectiveStatusKeberlakuan)}`}>
                   {labelStatusKeberlakuan(effectiveStatusKeberlakuan)}
                 </span>
@@ -452,11 +462,11 @@ export default function AnalisaState2Workspace({
                   }`}
                   title={docStatus.is_active ? 'Dokumen terdaftar aktif di Knowledge Base' : 'Dokumen dinonaktifkan di Knowledge Base'}
                 >
-                  {docStatus.is_active ? 'Aktif di KB' : 'Tidak Aktif di KB'}
+                  {docStatus.is_active ? 'Status KB: Aktif' : 'Status KB: Tidak Aktif'}
                 </span>
               ) : (
                 <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-semibold border border-slate-200 shrink-0">
-                  Aktif di KB
+                  Status KB: Aktif
                 </span>
               )}
             </div>
@@ -482,17 +492,9 @@ export default function AnalisaState2Workspace({
           {/* Kontrol Mode Ringkas */}
           <div 
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 text-xs font-medium"
-            title={`Mode aktif: ${actualMode === 'ai' ? 'AI' : 'Deterministik'}. Analisa berbantuan AI akan segera hadir.`}
+            title={`Mode aktif: ${actualMode === 'ai' ? 'AI' : 'Deterministik'}.`}
           >
             <span className="font-semibold text-gray-900">Mode: {actualMode === 'ai' ? 'AI' : 'Deterministik'}</span>
-            <span className="text-gray-300">|</span>
-            <span className="text-[11px] text-gray-500 flex items-center gap-1">
-              <Sparkles size={11} className="text-gray-400" />
-              <span>AI</span>
-              <span className="px-1 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-800 uppercase">
-                Segera
-              </span>
-            </span>
           </div>
 
           {/* Status Analisis Badge */}

@@ -543,11 +543,9 @@ export default function HarmonisasiPanel({
           <h4 className="text-lg font-semibold text-gray-900 tracking-tight">
             Analisa Pembandingan Pasal
           </h4>
-          {ringkasan && (typeof ringkasan.pasal_draft === 'number' || typeof ringkasan.dokumen_korpus === 'number') && (
+          {ringkasan && (
             <p className="text-xs text-gray-500 mt-0.5">
-              <span className="font-semibold text-gray-800">{ringkasan.pasal_draft ?? '-'} pasal draf</span> dibandingkan dengan{' '}
-              <span className="font-semibold text-gray-800">{ringkasan.pasal_korpus ?? '-'} pasal</span> dari{' '}
-              <span className="font-semibold text-gray-800">{ringkasan.dokumen_korpus ?? '-'} dokumen korpus</span>.
+              <span className="font-semibold text-gray-800">{ringkasan.pasal_draft ?? '-'} pasal dalam draf</span> dibandingkan dengan Knowledge Base untuk menemukan kesamaan, perubahan, pelengkapan, dan potensi konflik regulasi.
             </p>
           )}
         </div>
@@ -558,19 +556,18 @@ export default function HarmonisasiPanel({
               type="button"
               onClick={() => setExportOpen(!exportOpen)}
               disabled={loading || exportingFormat !== null || !isHarmonisasiReady}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-semibold transition cursor-pointer ${
-                !isHarmonisasiReady
-                  ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed opacity-60'
-                  : exportOpen
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-semibold transition cursor-pointer ${!isHarmonisasiReady
+                ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed opacity-60'
+                : exportOpen
                   ? 'border-red-300 bg-red-50 text-red-700'
                   : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-              }`}
+                }`}
               title={
                 !isDraft
                   ? 'Ekspor laporan hanya tersedia untuk dokumen draft kajian'
                   : !data
-                  ? 'Jalankan harmonisasi terlebih dahulu untuk mengekspor'
-                  : 'Ekspor laporan hasil analisa pembandingan (Catatan Dinas, DOCX, XLSX, CSV, JSON)'
+                    ? 'Jalankan harmonisasi terlebih dahulu untuk mengekspor'
+                    : 'Ekspor laporan hasil analisa pembandingan (Catatan Dinas, DOCX, XLSX, CSV, JSON)'
               }
             >
               {exportingFormat !== null ? (
@@ -583,7 +580,7 @@ export default function HarmonisasiPanel({
             </button>
 
             {exportOpen && isDraft && (
-              <div className="absolute left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-xl z-30 py-1 text-xs animate-in fade-in zoom-in-95 duration-150">
+              <div className="absolute right-0 mt-1 w-72 sm:w-80 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-lg shadow-xl z-30 py-1 text-xs animate-in fade-in zoom-in-95 duration-150">
                 <div className="px-3 py-1.5 border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
                   Pilih Format Laporan
                 </div>
@@ -609,8 +606,8 @@ export default function HarmonisasiPanel({
                         Resmi
                       </span>
                     </div>
-                    <span className="text-[10px] text-gray-500 block truncate">
-                      Format resmi OJK, tanggapan ND &amp; temuan
+                    <span className="text-[10px] text-gray-500 block">
+                      Dokumen tanggapan berdasarkan hasil harmonisasi.
                     </span>
                   </div>
                 </button>
@@ -718,11 +715,10 @@ export default function HarmonisasiPanel({
       {cdToast && (
         <div
           role="status"
-          className={`p-3 rounded-lg border text-xs flex items-center justify-between gap-2 shadow-2xs transition-all duration-200 ${
-            cdToast.tipe === 'sukses'
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-              : 'bg-blue-50 border-blue-200 text-blue-900'
-          }`}
+          className={`p-3 rounded-lg border text-xs flex items-center justify-between gap-2 shadow-2xs transition-all duration-200 ${cdToast.tipe === 'sukses'
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+            : 'bg-blue-50 border-blue-200 text-blue-900'
+            }`}
         >
           <div className="flex items-center gap-2">
             <CheckCircle2 size={15} className={cdToast.tipe === 'sukses' ? 'text-emerald-600 shrink-0' : 'text-blue-600 shrink-0'} />
@@ -807,11 +803,10 @@ export default function HarmonisasiPanel({
                         setFilterJenis(filterJenis === item.key ? null : item.key);
                       }
                     }}
-                    className={`h-8 px-2.5 rounded-md text-xs font-medium transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-                      isAktif
-                        ? 'bg-white text-gray-900 font-semibold border border-gray-200/90'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/50'
-                    }`}
+                    className={`h-8 px-2.5 rounded-md text-xs font-medium transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${isAktif
+                      ? 'bg-white text-gray-900 font-semibold border border-gray-200/90'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/50'
+                      }`}
                     title={`Filter kategori ${item.label}`}
                   >
                     <span>{item.label}</span>
@@ -837,11 +832,10 @@ export default function HarmonisasiPanel({
                     onClick={() => {
                       setFilterPenilaian(isAktif ? 'semua' : item.key);
                     }}
-                    className={`h-8 px-2.5 rounded-md text-xs font-medium transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-                      isAktif
-                        ? 'bg-white text-gray-900 font-semibold border border-gray-200/90'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/50'
-                    }`}
+                    className={`h-8 px-2.5 rounded-md text-xs font-medium transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${isAktif
+                      ? 'bg-white text-gray-900 font-semibold border border-gray-200/90'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/50'
+                      }`}
                     title={`Filter status ${item.label}`}
                   >
                     <span>{item.label}</span>
@@ -1074,11 +1068,10 @@ export default function HarmonisasiPanel({
                                     </span>
                                   )}
                                   {teksAda(t.pembanding.status) && (
-                                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${
-                                      t.pembanding.status.toLowerCase().includes('cabut')
-                                        ? 'bg-red-50 text-red-700 border-red-200'
-                                        : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                    }`}>
+                                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${t.pembanding.status.toLowerCase().includes('cabut')
+                                      ? 'bg-red-50 text-red-700 border-red-200'
+                                      : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                      }`}>
                                       {t.pembanding.status}
                                     </span>
                                   )}
@@ -1242,11 +1235,10 @@ export default function HarmonisasiPanel({
                                   type="button"
                                   onClick={(e) => void handleNilai(e, t, 'valid', cardKey)}
                                   disabled={isSaving}
-                                  className={`h-8 px-3 rounded-md text-xs font-semibold transition cursor-pointer disabled:opacity-50 shrink-0 inline-flex items-center gap-1.5 ${
-                                    penilaianAktif === 'valid'
-                                      ? 'bg-emerald-600 text-white shadow-2xs font-bold'
-                                      : 'bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50'
-                                  }`}
+                                  className={`h-8 px-3 rounded-md text-xs font-semibold transition cursor-pointer disabled:opacity-50 shrink-0 inline-flex items-center gap-1.5 ${penilaianAktif === 'valid'
+                                    ? 'bg-emerald-600 text-white shadow-2xs font-bold'
+                                    : 'bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50'
+                                    }`}
                                   title="Tandai temuan ini sebagai Valid"
                                 >
                                   <CheckCircle2 size={13} />
@@ -1258,11 +1250,10 @@ export default function HarmonisasiPanel({
                                   type="button"
                                   onClick={(e) => void handleNilai(e, t, 'tidak_relevan', cardKey)}
                                   disabled={isSaving}
-                                  className={`h-8 px-3 rounded-md text-xs font-semibold transition cursor-pointer disabled:opacity-50 shrink-0 inline-flex items-center gap-1.5 ${
-                                    penilaianAktif === 'tidak_relevan'
-                                      ? 'bg-slate-700 text-white shadow-2xs font-bold'
-                                      : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'
-                                  }`}
+                                  className={`h-8 px-3 rounded-md text-xs font-semibold transition cursor-pointer disabled:opacity-50 shrink-0 inline-flex items-center gap-1.5 ${penilaianAktif === 'tidak_relevan'
+                                    ? 'bg-slate-700 text-white shadow-2xs font-bold'
+                                    : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'
+                                    }`}
                                   title="Tandai temuan ini sebagai Tidak Relevan"
                                 >
                                   <XCircle size={13} />
@@ -1278,11 +1269,10 @@ export default function HarmonisasiPanel({
                                       [cardKey]: !prev[cardKey],
                                     }))
                                   }
-                                  className={`h-8 px-2.5 rounded-md text-xs border transition cursor-pointer shrink-0 inline-flex items-center gap-1.5 ${
-                                    t.tanggapan?.catatan || editorCatatanTerbuka
-                                      ? 'border-gray-300 bg-gray-100 text-gray-800'
-                                      : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                                  }`}
+                                  className={`h-8 px-2.5 rounded-md text-xs border transition cursor-pointer shrink-0 inline-flex items-center gap-1.5 ${t.tanggapan?.catatan || editorCatatanTerbuka
+                                    ? 'border-gray-300 bg-gray-100 text-gray-800'
+                                    : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                                    }`}
                                   title={t.tanggapan?.catatan ? 'Edit catatan analis' : 'Tambah catatan analis'}
                                 >
                                   <MessageSquare size={13} />
@@ -1422,9 +1412,8 @@ export default function HarmonisasiPanel({
                         <span className="font-semibold text-gray-900">{r.teks || r.key}</span>
                         {r.relasi && <span className="text-[10px] text-gray-500 ml-2 italic">({r.relasi})</span>}
                       </div>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border shrink-0 ${
-                        isDicabut ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                      }`}>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border shrink-0 ${isDicabut ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        }`}>
                         {r.status || 'Berlaku'}
                       </span>
                     </div>

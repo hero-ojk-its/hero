@@ -4,7 +4,6 @@ import {
   X,
   ScrollText,
   FileText,
-  Sparkles,
   AlertCircle,
   Loader2,
   Info,
@@ -173,20 +172,17 @@ export default function CatatanDinasModal({
         className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] border border-gray-200"
       >
         {/* Header Modal */}
-        <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-3 bg-gray-50/70">
+        <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-3 bg-gray-50/70 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-red-100 flex items-center justify-center text-red-700 shrink-0">
               <ScrollText size={20} />
             </div>
             <div>
-              <h2 id="modal-cd-title" className="text-base font-bold text-gray-900 flex items-center gap-2">
+              <h2 id="modal-cd-title" className="text-base font-bold text-gray-900">
                 Ekspor Catatan Dinas
-                <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">
-                  Resmi OJK
-                </span>
               </h2>
               <p className="text-xs text-gray-500 mt-0.5">
-                Buat naskah tanggapan resmi berdasarkan hasil harmonisasi draf regulasi.
+                Buat dokumen tanggapan berdasarkan hasil analisis harmonisasi regulasi.
               </p>
             </div>
           </div>
@@ -228,13 +224,13 @@ export default function CatatanDinasModal({
             </div>
           )}
 
-          {/* Bagian 1: Format & Pengaturan AI */}
+          {/* Bagian 1: Format Dokumen & Narasi Latar Belakang */}
           <div className="bg-gray-50/80 border border-gray-200 rounded-lg p-3.5 space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <label className="font-bold text-gray-800 uppercase tracking-wider text-[11px] block">
-                Format Berkas Luaran
-              </label>
-              <div className="flex items-center gap-2">
+              <span className="font-bold text-gray-800 uppercase tracking-wider text-[11px] block">
+                Format Dokumen
+              </span>
+              <div className="flex items-center gap-4">
                 <label className="inline-flex items-center gap-1.5 cursor-pointer">
                   <input
                     type="radio"
@@ -249,7 +245,7 @@ export default function CatatanDinasModal({
                     Rekomendasi
                   </span>
                 </label>
-                <label className="inline-flex items-center gap-1.5 cursor-pointer ml-3">
+                <label className="inline-flex items-center gap-1.5 cursor-pointer">
                   <input
                     type="radio"
                     name="cd-format"
@@ -263,7 +259,10 @@ export default function CatatanDinasModal({
               </div>
             </div>
 
-            <div className="pt-2 border-t border-gray-200/60">
+            <div className="pt-2.5 border-t border-gray-200/60">
+              <span className="font-bold text-gray-800 uppercase tracking-wider text-[11px] block mb-1.5">
+                Narasi Latar Belakang
+              </span>
               <label className="inline-flex items-start gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -272,19 +271,18 @@ export default function CatatanDinasModal({
                   className="rounded text-red-700 focus:ring-red-600 mt-0.5"
                 />
                 <div className="space-y-0.5">
-                  <span className="font-semibold text-gray-900 flex items-center gap-1">
-                    <Sparkles size={12} className="text-amber-500" />
-                    Gunakan Narasi Analisa AI untuk Butir 1 (Latar Belakang)
+                  <span className="font-semibold text-gray-900 block">
+                    Gunakan hasil analisis AI untuk menyusun latar belakang
                   </span>
                   <p className="text-[11px] text-gray-500 leading-normal">
-                    Narasi AI digunakan jika hasil analisa AI terverifikasi tersedia di sistem. Bila belum tersedia, sistem otomatis menggunakan template struktur regulasi.
+                    Jika diaktifkan dan hasil analisis AI tersedia, sistem akan menggunakan narasi AI untuk menjelaskan latar belakang regulasi. Jika tidak tersedia, sistem tetap membuat dokumen menggunakan ringkasan struktur regulasi secara otomatis.
                   </p>
                 </div>
               </label>
             </div>
           </div>
 
-          {/* Bagian 2: Kop Catatan Dinas */}
+          {/* Kelompok 1: Kop Naskah Catatan Dinas */}
           <div className="space-y-3">
             <div className="flex items-center justify-between border-b border-gray-100 pb-1.5">
               <span className="font-bold text-gray-800 uppercase tracking-wider text-[11px]">
@@ -352,6 +350,7 @@ export default function CatatanDinasModal({
                 >
                   <option value="Biasa">Biasa (Bawaan)</option>
                   <option value="Segera">Segera</option>
+                  <option value="Sangat Segera">Sangat Segera</option>
                   <option value="Rahasia">Rahasia</option>
                 </select>
               </div>
@@ -382,13 +381,13 @@ export default function CatatanDinasModal({
             </div>
           </div>
 
-          {/* Bagian 3: Rujukan Nota Dinas Pengaju */}
+          {/* Kelompok 2: Referensi Permintaan Tanggapan */}
           <div className="space-y-3 pt-1">
             <div className="flex items-center justify-between border-b border-gray-100 pb-1.5">
               <span className="font-bold text-gray-800 uppercase tracking-wider text-[11px]">
-                Rujukan Nota Dinas Permintaan
+                Referensi Permintaan Tanggapan
               </span>
-              <span className="text-[10px] text-gray-400 italic">Untuk Butir 2 (Riwayat Permintaan)</span>
+              <span className="text-[10px] text-gray-400 italic">Untuk Butir 2 (Riwayat Permintaan Tanggapan)</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -440,7 +439,7 @@ export default function CatatanDinasModal({
             </div>
           </div>
 
-          {/* Bagian 4: Catatan Tambahan Analis (Butir 4 Opsional) */}
+          {/* Kelompok 3: Catatan Tambahan Analis */}
           <div className="space-y-2 pt-1">
             <div className="flex items-center justify-between border-b border-gray-100 pb-1.5">
               <span className="font-bold text-gray-800 uppercase tracking-wider text-[11px]">
@@ -463,7 +462,7 @@ export default function CatatanDinasModal({
             </span>
           </div>
 
-          {/* Bagian 5: Blok Penandatangan */}
+          {/* Kelompok 4: Penandatangan Naskah Dinas */}
           <div className="space-y-3 pt-1">
             <div className="flex items-center justify-between border-b border-gray-100 pb-1.5">
               <span className="font-bold text-gray-800 uppercase tracking-wider text-[11px]">
@@ -513,7 +512,7 @@ export default function CatatanDinasModal({
         </form>
 
         {/* Modal Footer */}
-        <div className="px-6 py-3.5 border-t border-gray-200 bg-gray-50/80 flex items-center justify-between gap-3">
+        <div className="px-6 py-3.5 border-t border-gray-200 bg-gray-50/80 flex items-center justify-between gap-3 shrink-0">
           <span className="text-[11px] text-gray-500">
             Naskah dapat disunting lebih lanjut menggunakan Microsoft Word.
           </span>
