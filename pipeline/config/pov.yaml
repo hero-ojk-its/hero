@@ -1,0 +1,101 @@
+# Profil PoV (Point of View) unit fungsi untuk Draft Tanggapan (URD 3.5, FR-POV-01..05).
+#
+# Aturan sebagai konfigurasi (ADR-07, BRD BRule-07): MVP mengaktifkan 1 profil (Unit Bisnis IT),
+# tetapi bentuknya daftar — menambah profil kedua cukup menambah entri di `profil`, tanpa ubah kode
+# (FR-POV-07).
+#
+# Setiap `topik` adalah satu bidang tugas/fungsi/keilmuan unit. Sebuah pasal BERDAMPAK pada unit bila
+# memuat kata kunci topik; `bobot` menyatakan seberapa langsung topik itu menyentuh tugas unit, dan
+# `dampak` adalah kalimat alasan yang ditampilkan ke analis (FR-POV-05: "beserta alasan relevansinya").
+#
+# Daftar ini DRAF dari tim Data/ML berdasarkan POJK 11/POJK.03/2022 (Penyelenggaraan TI oleh Bank
+# Umum), POJK 4/POJK.05/2021 (Manajemen Risiko TI LJKNB), dan POJK 3/2024 (ITSK). Wajib divalidasi
+# pilot user Unit Bisnis IT (#29) sebelum dipakai sebagai acuan resmi.
+
+profil:
+  - id: unit_bisnis_it
+    nama: Unit Bisnis IT
+    unit: Departemen Pengembangan dan Pengaturan Teknologi Informasi (pilot)
+    tugas: >-
+      Menyusun kebijakan, mengawasi, dan menilai penerapan teknologi informasi, keamanan siber,
+      pelindungan data, serta layanan keuangan digital di sektor jasa keuangan.
+    fungsi:
+      - pengaturan dan pengawasan penyelenggaraan teknologi informasi
+      - ketahanan dan keamanan siber
+      - pelindungan data dan informasi konsumen
+      - inovasi dan layanan keuangan digital
+      - kelangsungan layanan dan pemulihan bencana
+    keilmuan: >-
+      Arsitektur sistem informasi, keamanan informasi, manajemen risiko TI, tata kelola data,
+      komputasi awan, interoperabilitas dan API, audit TI.
+    topik:
+      - id: keamanan_siber
+        nama: Ketahanan dan keamanan siber
+        bobot: 3
+        kata_kunci: [keamanan siber, ketahanan siber, serangan siber, insiden siber, insiden keamanan,
+                     keamanan informasi, keamanan sistem, enkripsi, kriptografi, autentikasi,
+                     otentikasi, kata sandi, malware, peretasan, intrusi, uji penetrasi, siber]
+        dampak: menyentuh fungsi ketahanan dan keamanan siber yang diawasi unit
+      - id: pelindungan_data
+        nama: Pelindungan data dan kerahasiaan
+        bobot: 3
+        kata_kunci: [data pribadi, pelindungan data, perlindungan data, kerahasiaan data,
+                     kebocoran data, data nasabah, data konsumen, tata kelola data, klasifikasi data,
+                     pemrosesan data, penempatan data, lokalisasi data]
+        dampak: berkaitan dengan pelindungan dan tata kelola data yang menjadi lingkup unit
+      - id: penyelenggaraan_ti
+        nama: Penyelenggaraan dan manajemen risiko TI
+        bobot: 3
+        kata_kunci: [teknologi informasi, sistem informasi, sistem elektronik, manajemen risiko ti,
+                     manajemen risiko teknologi, tata kelola ti, rencana strategis ti, arsitektur ti,
+                     infrastruktur ti, pengembangan sistem, perangkat lunak, perangkat keras,
+                     basis data, aplikasi inti, core banking, komite pengarah ti]
+        dampak: mengatur penyelenggaraan atau manajemen risiko teknologi informasi
+      - id: pusat_data_cloud
+        nama: Pusat data, komputasi awan, dan alih daya TI
+        bobot: 2
+        kata_kunci: [pusat data, pusat pemulihan bencana, data center, komputasi awan, cloud,
+                     alih daya, outsourcing, penyedia jasa teknologi, pihak penyedia jasa ti,
+                     server, jaringan komunikasi, jaringan]
+        dampak: berdampak pada penempatan sistem, pusat data, atau penggunaan pihak penyedia jasa TI
+      - id: kelangsungan_layanan
+        nama: Kelangsungan layanan dan pemulihan bencana
+        bobot: 2
+        kata_kunci: [rencana pemulihan bencana, disaster recovery, rencana kelangsungan usaha,
+                     business continuity, kelangsungan layanan, gangguan layanan, pemulihan sistem,
+                     ketersediaan sistem, uji coba pemulihan]
+        dampak: menyangkut ketersediaan layanan dan kesiapan pemulihan sistem
+      - id: layanan_digital
+        nama: Inovasi dan layanan keuangan digital
+        bobot: 2
+        kata_kunci: [layanan digital, layanan keuangan digital, perbankan digital, transformasi
+                     digital, inovasi teknologi, aset kripto, aset keuangan digital, tanda tangan
+                     elektronik, identitas digital, biometrik, e-kyc, pembukaan rekening secara
+                     elektronik, aplikasi, platform, kecerdasan artifisial, open api,
+                     interoperabilitas, application programming interface]
+        dampak: mengatur layanan atau inovasi keuangan digital yang menjadi perhatian unit
+      - id: pelaporan_elektronik
+        nama: Pelaporan dan sistem elektronik pengawasan
+        bobot: 1
+        kata_kunci: [sistem pelaporan, pelaporan elektronik, secara elektronik, secara daring,
+                     melalui sistem, portal, aplikasi pelaporan, format elektronik, tanda terima
+                     elektronik]
+        dampak: memerlukan sistem pelaporan atau pertukaran data elektronik
+      - id: audit_ti
+        nama: Audit dan pengujian TI
+        bobot: 1
+        kata_kunci: [audit ti, audit teknologi informasi, audit intern ti, audit sistem, pengujian
+                     sistem, penilaian sendiri, self assessment, sertifikasi keamanan, iso 27001]
+        dampak: menuntut audit atau pengujian sistem TI
+
+    # Checklist pasal yang WAJIB ditanggapi unit (FR-POV-03). Pasal wajib bila memenuhi salah satu:
+    wajib_tanggap:
+      # skor relevansi unit ≥ ambang (jumlah bobot topik yang tersentuh)
+      skor_minimal: 3
+      # pasal relevan yang memuat norma berikut selalu wajib (kewajiban baru/berubah bagi pelaku)
+      norma: [Kewajiban, Larangan, Pelaporan, Perizinan, Sanksi]
+      skor_minimal_norma: 1
+      # temuan harmonisasi yang selalu wajib dijawab bila pasalnya relevan bagi unit
+      temuan: [konflik, menggantikan, duplikasi]
+      # ketentuan peralihan / mulai berlaku yang menyentuh topik unit (kesiapan implementasi)
+      peralihan: true
