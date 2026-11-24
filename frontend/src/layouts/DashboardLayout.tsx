@@ -5,7 +5,6 @@ import {
   BookOpen,
   FilePlus,
   Search,
-  Scale,
   Settings,
   LogOut,
   UserRound,
@@ -103,7 +102,6 @@ export default function DashboardLayout() {
     { name: 'Knowledge Base', path: '/knowledge', icon: <BookOpen size={18} aria-hidden="true" /> },
     { name: 'Ingest Dokumen', path: '/ingest', icon: <FilePlus size={18} aria-hidden="true" /> },
     { name: 'Analisa Regulasi', path: '/analisa', icon: <Search size={18} aria-hidden="true" /> },
-    { name: 'Harmonisasi', path: '/harmonisasi', icon: <Scale size={18} aria-hidden="true" /> },
     { name: 'Audit Log', path: '/audit-logs', icon: <History size={18} aria-hidden="true" /> },
     { name: 'Kelola Pengguna', path: '/users', icon: <Users size={18} aria-hidden="true" /> },
   ];
