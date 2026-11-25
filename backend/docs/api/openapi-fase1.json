@@ -5279,6 +5279,157 @@
         }
       }
     },
+    "/api/v1/ml/tanggapan/profil": {
+      "get": {
+        "tags": [
+          "Analisa (ML)",
+          "Analisa (ML)"
+        ],
+        "summary": "Daftar Profil PoV Tanggapan",
+        "description": "Profil sudut pandang (PoV) unit yang tersedia untuk menyusun draft tanggapan. Diteruskan apa adanya dari layanan analisa.",
+        "operationId": "get_ml_tanggapan_profil_api_v1_ml_tanggapan_profil_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Autentikasi diperlukan"
+          },
+          "403": {
+            "description": "Izin tidak memadai / akses dokumen ditolak"
+          },
+          "502": {
+            "description": "Jawaban layanan analisa bukan JSON valid"
+          },
+          "503": {
+            "description": "Layanan analisa belum dikonfigurasi atau tidak dapat dihubungi"
+          },
+          "504": {
+            "description": "Permintaan ke layanan analisa melebihi batas waktu"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ml/tanggapan/{document_id}": {
+      "post": {
+        "tags": [
+          "Analisa (ML)",
+          "Analisa (ML)"
+        ],
+        "summary": "Draft Tanggapan Berbasis PoV Unit",
+        "description": "Draft tanggapan atas draft regulasi dari sudut pandang unit (PoV): pasal berdampak beserta alasannya,\nchecklist kelengkapan, dan susunan catatan dinas. Hasil berstatus Draft, tidak disimpan, dan tidak di-cache.\n\nBila temuan harmonisasi menyebut dokumen di luar hak akses pengguna, draft disusun ulang tanpa\nharmonisasi (`harmonisasi_disaring: true`) karena nama dokumen pembanding ikut tertulis di teks narasi.",
+        "operationId": "post_ml_tanggapan_api_v1_ml_tanggapan__document_id__post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "profil",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ID profil PoV; kosong = profil bawaan layanan analisa",
+              "title": "Profil"
+            },
+            "description": "ID profil PoV; kosong = profil bawaan layanan analisa"
+          },
+          {
+            "name": "dengan_harmonisasi",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Sertakan temuan harmonisasi dalam draft tanggapan",
+              "default": true,
+              "title": "Dengan Harmonisasi"
+            },
+            "description": "Sertakan temuan harmonisasi dalam draft tanggapan"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Tanggapan yang sudah ditulis analis per pasal, mis. {\"Pasal 5\": \"...\"} (maks 300 pasal, kunci maks 40 karakter, teks maks 4000 karakter).",
+                "title": "Sudah"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Autentikasi diperlukan"
+          },
+          "403": {
+            "description": "Izin tidak memadai / akses dokumen ditolak"
+          },
+          "502": {
+            "description": "Jawaban layanan analisa bukan JSON valid"
+          },
+          "503": {
+            "description": "Layanan analisa belum dikonfigurasi atau tidak dapat dihubungi"
+          },
+          "504": {
+            "description": "Permintaan ke layanan analisa melebihi batas waktu"
+          },
+          "404": {
+            "description": "Dokumen tidak ditemukan / nonaktif, profil PoV tidak dikenal, atau dokumen belum tersedia di layanan analisa"
+          },
+          "422": {
+            "description": "Bukan dokumen draft kajian (`bukan_draft`) atau body `sudah` melebihi batas (`sudah_tidak_valid`)"
+          }
+        }
+      }
+    },
     "/api/v1/ml/cari": {
       "get": {
         "tags": [

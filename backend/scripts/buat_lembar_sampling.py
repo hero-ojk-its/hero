@@ -328,7 +328,7 @@ def jalankan_buat_lembar_sampling(
         "2. Cocokkan bunyi pasal peraturan pembanding dengan kutipan pembanding, serta bandingkan dengan ketentuan pasal draf regulasi.",
         "3. Isi evaluasi validator pada kolom yang tersedia di lembar 'Sampel':",
         "   a. 'Bunyi pasal sesuai? (Ya/Tidak)': Isi 'Ya' bila bunyi dan nomor pasal pembanding akurat sesuai dokumen resmi, atau 'Tidak' bila tidak sesuai.",
-        "   b. 'Jenis temuan sesuai? (Ya/Tidak)': Isi 'Ya' bila relasi regulasi (Sama / Menggantikan / Melengkapi / Konflik) tepat, atau 'Tidak' bila keliru.",
+        "   b. 'Jenis temuan sesuai? (Ya/Tidak)': Isi 'Ya' bila relasi regulasi (Tumpang Tindih, Menggantikan, Selaras / Melengkapi, Kontradiktif) tepat, atau 'Tidak' bila keliru.",
         "   c. 'Catatan validator': Berikan catatan koreksi atau penjelasan temuan bila terdapat ketidaksesuaian.",
     ]
 

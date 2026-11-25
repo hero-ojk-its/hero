@@ -3,7 +3,7 @@ backend/tests/test_label_jenis_ekspor.py
 Pengujian label jenis temuan pada peta dan ekspor:
 1. Peta: setiap nilai pasal_baru, baru, duplikasi, sama, memperjelas, melengkapi, menggantikan, konflik menghasilkan label UI yang benar.
 2. Ekspor xlsx, Word, dan Catatan Dinas dari hasil tersimpan berisi temuan duplikasi dan memperjelas:
-   teks yang tampil "Sama" dan "Melengkapi", dan TIDAK memuat "Duplikasi" atau "Memperjelas" sebagai label jenis.
+   teks yang tampil "Tumpang Tindih" dan "Selaras / Melengkapi", dan TIDAK memuat "Duplikasi" atau "Memperjelas" sebagai label jenis.
 3. Nilai tak dikenal (mis. jenis_aneh) tetap tidak galat dan memakai fallback lama di tiap format.
 """
 from datetime import datetime, timezone
@@ -72,14 +72,14 @@ def _seed_result(db: Session, doc: Document, payload: dict) -> AnalysisResult:
 def test_c01_peta_label_jenis():
     """1. Peta: setiap nilai kunci internal menghasilkan label tampilan UI yang benar."""
     expected_map = {
-        "pasal_baru": "Baru",
-        "baru": "Baru",
-        "duplikasi": "Sama",
-        "sama": "Sama",
-        "memperjelas": "Melengkapi",
-        "melengkapi": "Melengkapi",
+        "pasal_baru": "Pasal Baru",
+        "baru": "Pasal Baru",
+        "duplikasi": "Tumpang Tindih",
+        "sama": "Tumpang Tindih",
+        "memperjelas": "Selaras / Melengkapi",
+        "melengkapi": "Selaras / Melengkapi",
         "menggantikan": "Menggantikan",
-        "konflik": "Konflik",
+        "konflik": "Kontradiktif",
     }
     for internal_key, expected_label in expected_map.items():
         assert JENIS_LABEL_MAP.get(internal_key) == expected_label, (
@@ -88,7 +88,7 @@ def test_c01_peta_label_jenis():
 
 
 def test_c02_ekspor_xlsx_word_catatan_dinas_duplikasi_memperjelas(client: TestClient, db_session: Session):
-    """2. Ekspor xlsx, Word, dan Catatan Dinas menampilkan 'Sama' dan 'Melengkapi', bukan 'Duplikasi' atau 'Memperjelas'."""
+    """2. Ekspor xlsx, Word, dan Catatan Dinas menampilkan 'Tumpang Tindih' dan 'Selaras / Melengkapi', bukan 'Duplikasi' atau 'Memperjelas'."""
     draft = _create_doc(db_session, "Draft Kajian Uji Label C02", PeranDokumen.draft_kajian)
     comp = _create_doc(db_session, "POJK Pembanding C02")
 
@@ -127,16 +127,16 @@ def test_c02_ekspor_xlsx_word_catatan_dinas_duplikasi_memperjelas(client: TestCl
     # Sheet Temuan (Kolom 4 adalah 'Jenis')
     ws_temuan = wb["Temuan"]
     temuan_labels = [row[0] for row in ws_temuan.iter_rows(min_row=2, min_col=4, max_col=4, values_only=True)]
-    assert "Sama" in temuan_labels
-    assert "Melengkapi" in temuan_labels
+    assert "Tumpang Tindih" in temuan_labels
+    assert "Selaras / Melengkapi" in temuan_labels
     assert "Duplikasi" not in temuan_labels
     assert "Memperjelas" not in temuan_labels
 
-    # Sheet Ringkasan: verifikasi hitungan masuk ke "Sama" dan "Melengkapi"
+    # Sheet Ringkasan: verifikasi hitungan masuk ke "Tumpang Tindih" dan "Selaras / Melengkapi"
     ws_ringkasan = wb["Ringkasan"]
     ringkasan_text = "\n".join([str(cell) for row in ws_ringkasan.iter_rows(values_only=True) for cell in row if cell])
-    assert "Sama" in ringkasan_text
-    assert "Melengkapi" in ringkasan_text
+    assert "Tumpang Tindih" in ringkasan_text
+    assert "Selaras / Melengkapi" in ringkasan_text
 
     # --- B. Ekspor Word (DOCX) ---
     res_docx = client.get(f"/api/v1/documents/{draft.id}/harmonisasi/ekspor?format=docx")
@@ -145,16 +145,16 @@ def test_c02_ekspor_xlsx_word_catatan_dinas_duplikasi_memperjelas(client: TestCl
 
     # Periksa tabel temuan
     tbl_cells = [cell.text for row in doc_word.tables[0].rows for cell in row.cells]
-    assert "Sama" in tbl_cells
-    assert "Melengkapi" in tbl_cells
+    assert "Tumpang Tindih" in tbl_cells
+    assert "Selaras / Melengkapi" in tbl_cells
     assert "Duplikasi" not in tbl_cells
     assert "Memperjelas" not in tbl_cells
 
     # Periksa ringkasan per jenis
     p_texts = [p.text for p in doc_word.paragraphs]
     ringkasan_word = "\n".join(p_texts)
-    assert "• Sama: 1" in ringkasan_word
-    assert "• Melengkapi: 1" in ringkasan_word
+    assert "• Tumpang Tindih: 1" in ringkasan_word
+    assert "• Selaras / Melengkapi: 1" in ringkasan_word
     assert "• Duplikasi" not in ringkasan_word
     assert "• Memperjelas" not in ringkasan_word
 
@@ -163,8 +163,8 @@ def test_c02_ekspor_xlsx_word_catatan_dinas_duplikasi_memperjelas(client: TestCl
     assert res_cd.status_code == 200
     doc_cd = docx.Document(io.BytesIO(res_cd.content))
     cd_text = "\n".join([p.text for p in doc_cd.paragraphs])
-    assert "Temuan Sama" in cd_text
-    assert "Temuan Melengkapi" in cd_text
+    assert "Temuan Tumpang Tindih" in cd_text
+    assert "Temuan Selaras / Melengkapi" in cd_text
     assert "Temuan Duplikasi" not in cd_text
     assert "Temuan Memperjelas" not in cd_text
 

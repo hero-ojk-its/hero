@@ -6,7 +6,8 @@ Tanggung jawab gerbang:
 1. Memvalidasi hak akses dokumen sebelum meneruskan ke ML (proteksi dokumen nonaktif & dokumen non-publik).
 2. Menyaring secara rekursif hasil analisa, temuan, referensi, dan korpus harmonisasi agar data dokumen yang tidak diizinkan tidak bocor.
 3. Menyeragamkan kode dan format galat (503 bila belum dikonfigurasi / tidak tersedia, 504 saat timeout, 422 bila pembanding kosong).
-4. Mencatat jejak audit ringkas RUN_HARMONIZATION saat harmonisasi dijalankan.
+4. Mencatat jejak audit ringkas RUN_HARMONIZATION saat harmonisasi dijalankan
+   dan RUN_TANGGAPAN_POV saat draft tanggapan PoV disusun.
 """
 import asyncio
 import logging
@@ -24,7 +25,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.document import Document
-from app.models.enums import JenisAnalisa, KlasifikasiAkses, ModeAnalisa, StatusPemrosesan
+from app.models.enums import JenisAnalisa, KlasifikasiAkses, ModeAnalisa, PeranDokumen, StatusPemrosesan
 from app.core.permissions import perlu_izin, Izin
 from app.services.analysis_result_service import (
     compute_params_hash,
@@ -32,7 +33,7 @@ from app.services.analysis_result_service import (
     get_document_fingerprint,
     save_analysis_result,
 )
-from app.services.audit_service import RUN_ANALYSIS, RUN_HARMONIZATION, record_audit
+from app.services.audit_service import RUN_ANALYSIS, RUN_HARMONIZATION, RUN_TANGGAPAN_POV, record_audit
 from app.services.analysis_run_service import record_run
 from app.services.tanggapan_service import (
     gabungkan_tanggapan_ke_harmonisasi,
@@ -1344,6 +1345,231 @@ async def post_ml_harmonisasi(
     except Exception as exc:
         logger.warning("Gagal mencatat audit RUN_HARMONIZATION: %s", exc)
 
+    return filtered_data
+
+
+# ---------------------------------------------------------------------------
+# Draft tanggapan berbasis PoV unit (URD 3.5, Fase 4)
+# ---------------------------------------------------------------------------
+
+TANGGAPAN_SUDAH_MAKS_KUNCI = 300
+TANGGAPAN_SUDAH_MAKS_PANJANG_KUNCI = 40
+TANGGAPAN_SUDAH_MAKS_PANJANG_NILAI = 4000
+CATATAN_AKSES_TANGGAPAN = "Temuan harmonisasi tidak disertakan karena memuat dokumen di luar hak akses Anda."
+
+_RESPONSES_GERBANG_ML = {
+    401: {"description": "Autentikasi diperlukan"},
+    403: {"description": "Izin tidak memadai / akses dokumen ditolak"},
+    502: {"description": "Jawaban layanan analisa bukan JSON valid"},
+    503: {"description": "Layanan analisa belum dikonfigurasi atau tidak dapat dihubungi"},
+    504: {"description": "Permintaan ke layanan analisa melebihi batas waktu"},
+}
+
+
+def _validasi_sudah_tanggapan(sudah: Optional[dict[str, str]]) -> None:
+    """Batas ukuran body `sudah` (tanggapan analis per pasal) sebelum diteruskan ke ML."""
+    if sudah is None:
+        return
+    if len(sudah) > TANGGAPAN_SUDAH_MAKS_KUNCI:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "sudah_tidak_valid",
+                "message": f"Jumlah pasal pada tanggapan yang sudah ditulis melebihi batas {TANGGAPAN_SUDAH_MAKS_KUNCI}.",
+            },
+        )
+    for kunci, nilai in sudah.items():
+        if len(kunci) > TANGGAPAN_SUDAH_MAKS_PANJANG_KUNCI:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "sudah_tidak_valid",
+                    "message": f"Nama pasal melebihi {TANGGAPAN_SUDAH_MAKS_PANJANG_KUNCI} karakter.",
+                },
+            )
+        if len(nilai) > TANGGAPAN_SUDAH_MAKS_PANJANG_NILAI:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "sudah_tidak_valid",
+                    "message": f"Teks tanggapan untuk satu pasal melebihi {TANGGAPAN_SUDAH_MAKS_PANJANG_NILAI} karakter.",
+                },
+            )
+
+
+def _id_pembanding_tanggapan(data: Any) -> list[Any]:
+    """
+    Kumpulkan document_id pembanding pada laporan tanggapan ML:
+    - pasal_berdampak[].harmonisasi.pembanding.document_id
+    - surat.butir[].pasal[] (document_id langsung atau pembanding.document_id, bila ada).
+    Nilai bukan int (null / tidak ada) ikut dikembalikan agar pemeriksaan bersifat fail-closed.
+    """
+    hasil: list[Any] = []
+    if not isinstance(data, dict):
+        return hasil
+
+    def _dari_pembanding(pb: Any) -> None:
+        if isinstance(pb, dict):
+            hasil.append(pb.get("document_id"))
+
+    for p in data.get("pasal_berdampak") or []:
+        if isinstance(p, dict) and isinstance(p.get("harmonisasi"), dict):
+            _dari_pembanding(p["harmonisasi"].get("pembanding"))
+
+    surat = data.get("surat")
+    if isinstance(surat, dict):
+        for butir in surat.get("butir") or []:
+            if not isinstance(butir, dict):
+                continue
+            for ps in butir.get("pasal") or []:
+                if not isinstance(ps, dict):
+                    continue
+                if "document_id" in ps:
+                    hasil.append(ps.get("document_id"))
+                _dari_pembanding(ps.get("pembanding"))
+    return hasil
+
+
+def _semua_pembanding_diizinkan(data: Any, allowed_ids: set[int]) -> bool:
+    return all(isinstance(d, int) and d in allowed_ids for d in _id_pembanding_tanggapan(data))
+
+
+async def _minta_tanggapan_ml(
+    client: httpx.AsyncClient,
+    document_id: int,
+    profil: Optional[str],
+    dengan_harmonisasi: bool,
+    sudah: Optional[dict[str, str]],
+) -> tuple[int, Any]:
+    params: dict[str, Any] = {"dengan_harmonisasi": "true" if dengan_harmonisasi else "false"}
+    if profil:
+        params["profil"] = profil
+    return await forward_ml_request(
+        client, "POST", f"/tanggapan/{document_id}", params=params, json_data=sudah
+    )
+
+
+def _galat_tanggapan_ml(status_code: int, data: Any, profil: Optional[str]) -> JSONResponse:
+    """404 dari ML disamarkan (pesan ML memuat daftar profil / penyebab internal); galat lain diteruskan."""
+    if status_code == status.HTTP_404_NOT_FOUND:
+        detail_ml = data.get("detail") if isinstance(data, dict) else None
+        if profil and isinstance(detail_ml, str) and "profil" in detail_ml.lower():
+            konten = {"code": "profil_tidak_dikenal", "message": "Profil PoV tidak dikenal."}
+        else:
+            konten = {
+                "code": "dokumen_belum_siap_analisa",
+                "message": "Dokumen belum tersedia di layanan analisa.",
+            }
+        return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": konten})
+    return JSONResponse(status_code=status_code, content=data)
+
+
+@router.get(
+    "/tanggapan/profil",
+    summary="Daftar Profil PoV Tanggapan",
+    responses=_RESPONSES_GERBANG_ML,
+)
+async def get_ml_tanggapan_profil(
+    client: httpx.AsyncClient = Depends(get_ml_client),
+    current_user=Depends(perlu_izin(Izin.ANALISA_JALANKAN)),
+):
+    """Profil sudut pandang (PoV) unit yang tersedia untuk menyusun draft tanggapan. Diteruskan apa adanya dari layanan analisa."""
+    status_code, data = await forward_ml_request(client, "GET", "/tanggapan/profil")
+    if status_code >= 400:
+        return JSONResponse(status_code=status_code, content=data)
+    return data
+
+
+@router.post(
+    "/tanggapan/{document_id}",
+    summary="Draft Tanggapan Berbasis PoV Unit",
+    responses={
+        **_RESPONSES_GERBANG_ML,
+        404: {"description": "Dokumen tidak ditemukan / nonaktif, profil PoV tidak dikenal, atau dokumen belum tersedia di layanan analisa"},
+        422: {"description": "Bukan dokumen draft kajian (`bukan_draft`) atau body `sudah` melebihi batas (`sudah_tidak_valid`)"},
+    },
+)
+async def post_ml_tanggapan(
+    document_id: int,
+    request: Request,
+    profil: Optional[str] = Query(None, max_length=64, description="ID profil PoV; kosong = profil bawaan layanan analisa"),
+    dengan_harmonisasi: bool = Query(True, description="Sertakan temuan harmonisasi dalam draft tanggapan"),
+    sudah: Optional[dict[str, str]] = Body(
+        None,
+        description='Tanggapan yang sudah ditulis analis per pasal, mis. {"Pasal 5": "..."} (maks 300 pasal, kunci maks 40 karakter, teks maks 4000 karakter).',
+    ),
+    db: Session = Depends(get_db),
+    client: httpx.AsyncClient = Depends(get_ml_client),
+    current_user=Depends(perlu_izin(Izin.ANALISA_JALANKAN)),
+):
+    """
+    Draft tanggapan atas draft regulasi dari sudut pandang unit (PoV): pasal berdampak beserta alasannya,
+    checklist kelengkapan, dan susunan catatan dinas. Hasil berstatus Draft, tidak disimpan, dan tidak di-cache.
+
+    Bila temuan harmonisasi menyebut dokumen di luar hak akses pengguna, draft disusun ulang tanpa
+    harmonisasi (`harmonisasi_disaring: true`) karena nama dokumen pembanding ikut tertulis di teks narasi.
+    """
+    doc = check_document_access(db, document_id, user=current_user)
+    if doc.document_role != PeranDokumen.draft_kajian:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "bukan_draft", "message": "Hanya dokumen draft kajian yang dapat disusun draft tanggapannya."},
+        )
+    _validasi_sudah_tanggapan(sudah)
+    profil_bersih = (profil or "").strip() or None
+
+    allowed_ids = allowed_document_ids(db, user=current_user)
+    actor_user_id = getattr(current_user, "id", None) if current_user else None
+    client_ip = request.client.host if request and request.client else None
+    harmonisasi_disaring = False
+
+    def _audit(http_status: int, sumber: str, data: Any = None) -> None:
+        pasal_berdampak = data.get("pasal_berdampak") if isinstance(data, dict) else None
+        try:
+            record_audit(
+                db,
+                action=RUN_TANGGAPAN_POV,
+                user_id=actor_user_id,
+                target_resource=f"document:{document_id}",
+                detail={
+                    "document_id": document_id,
+                    "profil": profil_bersih,
+                    "dengan_harmonisasi": dengan_harmonisasi,
+                    "harmonisasi_disaring": harmonisasi_disaring,
+                    "jumlah_pasal_berdampak": len(pasal_berdampak) if isinstance(pasal_berdampak, list) else 0,
+                    "sumber": sumber,
+                    "http_status": http_status,
+                },
+                ip_address=client_ip,
+                commit=True,
+            )
+        except Exception as exc:
+            logger.warning("Gagal mencatat audit RUN_TANGGAPAN_POV: %s", exc)
+
+    try:
+        status_code, data = await _minta_tanggapan_ml(client, document_id, profil_bersih, dengan_harmonisasi, sudah)
+        if status_code < 400 and dengan_harmonisasi and not _semua_pembanding_diizinkan(data, allowed_ids):
+            # Teks bebas (narasi/usulan/surat) memuat nama pembanding: tidak dapat disensor per kunci,
+            # maka draft disusun ulang tanpa harmonisasi.
+            harmonisasi_disaring = True
+            status_code, data = await _minta_tanggapan_ml(client, document_id, profil_bersih, False, sudah)
+    except HTTPException as exc:
+        _audit(exc.status_code, "gagal")
+        raise
+
+    if status_code >= 400:
+        _audit(status_code, "gagal")
+        return _galat_tanggapan_ml(status_code, data, profil_bersih)
+
+    # Lapisan kedua: penyaringan berbasis kunci (sama dengan harmonisasi).
+    filtered_data, discarded, _rincian = saring_rujukan_lengkap(data, allowed_ids)
+    if isinstance(filtered_data, dict):
+        filtered_data["disaring_backend"] = discarded
+        filtered_data["harmonisasi_disaring"] = harmonisasi_disaring
+        if harmonisasi_disaring:
+            filtered_data["catatan_akses"] = CATATAN_AKSES_TANGGAPAN
+
+    _audit(200, "ml", filtered_data)
     return filtered_data
 
 

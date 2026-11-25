@@ -1,19 +1,24 @@
 # Pemetaan Label Jenis Temuan Harmonisasi
 
-Dokumen ini mendokumentasikan pemetaan nilai jenis temuan internal engine harmonisasi ke label tampilan pada Antarmuka Pengguna (UI) dan berkas ekspor (XLSX, Word/DOCX, Catatan Dinas).
+Dokumen ini mendokumentasikan pemetaan nilai jenis temuan internal engine harmonisasi ke label tampilan pada Antarmuka Pengguna (UI) dan berkas ekspor (XLSX, Word/DOCX, Catatan Dinas, Lembar Sampling).
 
 > [!NOTE]
-> Kosakata akhir (istilah UI vs istilah DPEA/SRS) masih menunggu konfirmasi lebih lanjut dari tim. Perubahan saat ini menyelaraskan seluruh format ekspor dengan tampilan UI saat ini.
+> Label ekspor kini mengikuti istilah mitra, yaitu `LABEL_TEXT` di `pipeline/hero/harmonisasi/engine.py` (definisi mitra, PR #233). Kunci internal tidak berubah.
+
+> [!IMPORTANT]
+> UI frontend (`HarmonisasiPanel.tsx`, `harmonisasiApi.ts`) masih memakai label lama Baru/Sama/Melengkapi/Konflik dan perlu disesuaikan agar tampilan sama dengan berkas ekspor.
 
 ## Tabel Pemetaan
 
-| Nilai Internal (Engine/Pipeline) | Istilah SRS / DPEA | Label di UI | Label di Ekspor (XLSX, DOCX, Catatan Dinas) |
+| Nilai Internal (Engine/Pipeline) | Istilah SRS / DPEA | Label di UI (saat ini, perlu disesuaikan) | Label di Ekspor (XLSX, DOCX, Catatan Dinas, Lembar Sampling) — istilah mitra |
 |---|---|---|---|
-| `pasal_baru` / `baru` | pasal baru | Baru | Baru |
-| `duplikasi` / `sama` | duplikasi | Sama | Sama |
-| `memperjelas` / `melengkapi` | memperjelas | Melengkapi | Melengkapi |
+| `pasal_baru` / `baru` | pasal baru | Baru | Pasal Baru |
+| `duplikasi` / `sama` | duplikasi | Sama | Tumpang Tindih |
+| `memperjelas` / `melengkapi` | memperjelas | Melengkapi | Selaras / Melengkapi |
 | `menggantikan` | menggantikan | Menggantikan | Menggantikan |
-| `konflik` | konflik | Konflik | Konflik |
+| `konflik` | konflik | Konflik | Kontradiktif |
+
+Nilai `jenis` yang tidak dikenal tetap memakai fallback lama (nilai mentah / kapitalisasi) di tiap format.
 
 *Catatan untuk format CSV:*
 Ekspor CSV harmonisasi tetap mempertahankan nilai mentah (`t.get("jenis")`) yang dinetralkan dari injeksi formula untuk keperluan interoperabilitas data dan integrasi hilir.
