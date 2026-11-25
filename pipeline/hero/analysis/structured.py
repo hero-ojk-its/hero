@@ -33,7 +33,7 @@ from typing import Any
 
 from hero.extract.structure import DIKTUM_ORDINAL
 
-VERSION = "v2.6"
+VERSION = "v2.7"
 
 # Lower-case only, matched case-sensitively: Indonesian legislative drafting
 # writes obligations in lower case ("wajib menyampaikan") and defined terms in
@@ -357,6 +357,29 @@ def section_units(sections: list[dict[str, Any]], full_text: str | None) -> list
 
 
 NO_PASAL = "Teks dokumen (pasal tidak terbaca)"
+
+# Berkas pendamping yang ikut terunduh sebagai "peraturan": abstrak JDIH ("1 of 1 … POJK NO. 24,
+# LN 2025 … 10 HLM"), ringkasan materi, dan tanya-jawab/FAQ. Tanpa pasal bukan karena parser
+# gagal, melainkan karena naskah resminya memang tidak ada di berkas ini.
+_PENDAMPING = (
+    ("Tanya Jawab (FAQ)", re.compile(r"\b(?:DAFTAR\s+)?TANYA\s+JAWAB\b|FREQUENTLY\s+ASKED\s+QUESTIONS|\bFAQ\b")),
+    ("Ringkasan Materi", re.compile(r"\bRINGKASAN\s+MATERI\b")),
+    ("Abstrak", re.compile(r"^\s*ABSTRAK\b|\n\s*ABSTRAK\s*\n")),
+    ("Abstrak JDIH", re.compile(r"\b(?:POJK|SEOJK|PADK)\s+NO\.?\s*\d+[^\n]{0,60}\b(?:LN|TLN)\b[^\n]{0,80}\d+\s+HLM\b",
+                                re.IGNORECASE)),
+)
+
+
+def dokumen_pendamping(full_text: str | None, ada_pasal: bool) -> str | None:
+    """Jenis berkas pendamping, atau None. Hanya bila TIDAK ada pasal terbaca dan penandanya muncul
+    di halaman pertama — naskah peraturan yang menyebut "FAQ" di batang tubuhnya tidak terkena."""
+    if ada_pasal or not full_text:
+        return None
+    awal = full_text[:1500]
+    for jenis, rx in _PENDAMPING:
+        if rx.search(awal):
+            return jenis
+    return None
 
 
 def text_units(full_text: str | None) -> list[dict[str, Any]]:
@@ -790,6 +813,13 @@ def analyse(doc: sqlite3.Row, text: sqlite3.Row | None, articles: list[dict[str,
     sank = sanctions(points)
     lamp = lampiran_profile(text["full_text"] if text else None, articles)
     ringkasan = compose_summary(ident, kerangka, subjects, points, sank, lamp)
+    pendamping = dokumen_pendamping(text["full_text"] if text else None,
+                                    any(str(a["number"]) != NO_PASAL for a in articles))
+    if pendamping:
+        ringkasan.insert(0, {"kalimat": f"Berkas ini adalah {pendamping} peraturan, bukan naskah resminya, "
+                                         "sehingga pasal tidak dapat dibaca dan poin di bawah berasal dari "
+                                         "kalimat berkas itu; unggah naskah peraturan untuk analisa per pasal.",
+                             "rujukan": [], "fakta": []})
     a = AnalysisV2(doc_id=doc["doc_id"], versi=VERSION, identitas=ident, kerangka=kerangka,
                    subjek_diatur=subjects, poin=points, sanksi=sank,
                    dasar_hukum=md.get("legal_basis") or [], lampiran=lamp, ringkasan=ringkasan)
@@ -803,7 +833,9 @@ def analyse(doc: sqlite3.Row, text: sqlite3.Row | None, articles: list[dict[str,
                 "jumlah_bab": sum(1 for k in kerangka if k.get("bab")),
                 "jumlah_halaman": int(jumlah_halaman) if jumlah_halaman else None,
                 "jumlah_kewajiban": sum(1 for p in points if p.kategori == "Kewajiban"),
-                "jumlah_larangan": sum(1 for p in points if p.kategori == "Larangan")}
+                "jumlah_larangan": sum(1 for p in points if p.kategori == "Larangan"),
+                # Abstrak/FAQ/ringkasan materi yang tersimpan sebagai peraturan: perlu naskah resmi.
+                "dokumen_pendamping": pendamping}
     return a
 
 

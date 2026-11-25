@@ -451,3 +451,18 @@ def test_klien_ai_tanpa_batas_baca_bawaan_tapi_menyambung_dibatasi():
     assert isinstance(t, httpx.Timeout)
     assert t.read is None and t.connect == 15.0
     assert AiNarrator(AnalysisSettings(ai_timeout=45))._timeout() == 45.0
+
+
+@pytest.mark.parametrize("awal,jenis", [
+    ("1 of 2\n\nDAFTAR TANYA JAWAB LAZIM/FREQUENTLY ASKED QUESTIONS (FAQ)\nPERATURAN ANGGOTA DEWAN", "Tanya Jawab (FAQ)"),
+    ("RINGKASAN MATERI\nPERATURAN OTORITAS JASA KEUANGAN\nREPUBLIK INDONESIA", "Ringkasan Materi"),
+    ("1 of 1\n\nABSTRAK\nPERATURAN ANGGOTA DEWAN KOMISIONER INTERNAL", "Abstrak"),
+    ("1 of 1\n\nPERBANKAN - PENGELOLAAN REKENING - BANK UMUM\nPOJK NO. 24, LN 2025/NO. 34/OJK, TLN NO.163/OJK, 10 HLM\n",
+     "Abstrak JDIH"),
+])
+def test_dokumen_pendamping_dikenali_bukan_disebut_pasal_tidak_terbaca(awal, jenis):
+    from hero.analysis.structured import dokumen_pendamping
+    assert dokumen_pendamping(awal + " Isi singkat peraturan.", ada_pasal=False) == jenis
+    # naskah yang punya pasal tidak pernah disebut pendamping, walau menyebut FAQ
+    assert dokumen_pendamping(awal, ada_pasal=True) is None
+    assert dokumen_pendamping("PERATURAN OTORITAS JASA KEUANGAN NOMOR 3 TAHUN 2024 TENTANG ...", False) is None
