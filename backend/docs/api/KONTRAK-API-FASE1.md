@@ -2037,6 +2037,22 @@ Frontend cukup memanggil satu asal (`API_BASE_URL` backend) tanpa perlu menghubu
 - **Kode Galat:** 404 `harmonisasi_belum_ada`, 422 `bukan_draft`, 422 jika batas panjang field terlampaui.
 - **Audit:** Mencatat jejak audit `EXPORT_HARMONIZATION`.
 
+### 11.10 Draft Tanggapan Berbasis PoV Unit (Fase 4)
+- **Daftar profil:** `GET /api/v1/ml/tanggapan/profil` → `{"profil": [{"id", "nama", ...}]}` (diteruskan apa adanya dari layanan analisa).
+- **Susun draft tanggapan:** `POST /api/v1/ml/tanggapan/{document_id}`
+- **Izin:** `ANALISA_JALANKAN` (kedua endpoint).
+- **Parameter Query:**
+  - `profil` (opsional, maks 64 karakter): ID profil PoV; kosong = profil bawaan.
+  - `dengan_harmonisasi` (opsional, boolean, bawaan `true`): sertakan temuan harmonisasi.
+- **Body (opsional):** tanggapan yang sudah ditulis analis per pasal, mis. `{"Pasal 5": "..."}` — maks 300 kunci, kunci maks 40 karakter, nilai maks 4000 karakter.
+- **Respons:** laporan layanan analisa (`versi`, `profil`, `draft`, `surat`, `pasal_berdampak[]`, `kelengkapan`, `ringkasan`, `catatan`) ditambah:
+  - `harmonisasi_disaring` (boolean): `true` bila temuan harmonisasi memuat dokumen pembanding di luar hak akses pengguna. Draft lalu disusun ulang **tanpa** harmonisasi karena nama pembanding ikut tertulis di teks narasi/usulan.
+  - `catatan_akses` (string, hanya bila `harmonisasi_disaring: true`): pesan untuk ditampilkan ke pengguna.
+  - `disaring_backend` (integer): jumlah rujukan yang dinetralkan oleh penyaringan lapis kedua.
+- **Perilaku:** Hanya untuk dokumen `draft_kajian`. Hasil tidak disimpan dan tidak di-cache.
+- **Kode Galat:** 404 (dokumen tidak ditemukan / `dokumen_nonaktif` / `profil_tidak_dikenal` / `dokumen_belum_siap_analisa`), 422 `bukan_draft`, 422 `sudah_tidak_valid`, 502/503/504 seperti harmonisasi.
+- **Audit:** Mencatat jejak audit `RUN_TANGGAPAN_POV` (satu entri per permintaan).
+
 ---
 
 ## 12. TABEL REFERENSI ENUM & LABEL BAHASA INDONESIA

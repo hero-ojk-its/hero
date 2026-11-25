@@ -302,26 +302,26 @@ def test_x02_sheet_temuan_semua_temuan_urut_pasal_termasuk_pasal_baru(client: Te
     assert rows_data[0]["catatan"] == "Disetujui"
 
     assert rows_data[1]["pasal"] == "Pasal 2"
-    assert rows_data[1]["jenis"] == "Baru"
+    assert rows_data[1]["jenis"] == "Pasal Baru"
     assert rows_data[1]["pembanding"] == "-"  # pasal_baru pembanding null tidak error
     assert rows_data[1]["penilaian"] == "Tidak relevan"
 
     assert rows_data[2]["pasal"] == "Pasal 5"
-    assert rows_data[2]["jenis"] == "Melengkapi"
+    assert rows_data[2]["jenis"] == "Selaras / Melengkapi"
     assert rows_data[2]["penilaian"] == "Belum dinilai"
 
     assert rows_data[3]["pasal"] == "Pasal 10"
-    assert rows_data[3]["jenis"] == "Sama"
+    assert rows_data[3]["jenis"] == "Tumpang Tindih"
     assert rows_data[3]["penilaian"] == "Belum dinilai"
 
     # Periksa Ringkasan jumlah
     ws_r = wb["Ringkasan"]
     r_map = {ws_r.cell(row=r, column=1).value: ws_r.cell(row=r, column=2).value for r in range(2, 20)}
     assert r_map.get("Total Temuan") == 4
-    assert r_map.get("Temuan - Baru") == 1
-    assert r_map.get("Temuan - Sama") == 1
+    assert r_map.get("Temuan - Pasal Baru") == 1
+    assert r_map.get("Temuan - Tumpang Tindih") == 1
     assert r_map.get("Temuan - Menggantikan") == 1
-    assert r_map.get("Temuan - Melengkapi") == 1
+    assert r_map.get("Temuan - Selaras / Melengkapi") == 1
     assert r_map.get("Penilaian - Valid") == 1
     assert r_map.get("Penilaian - Tidak Relevan") == 1
     assert r_map.get("Penilaian - Belum dinilai") == 2

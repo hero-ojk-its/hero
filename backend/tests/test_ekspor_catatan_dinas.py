@@ -396,12 +396,12 @@ def test_cd03_butir3_memuat_semua_temuan_urut_pasal_termasuk_pasal_baru(client: 
     assert idx_p2 < idx_p5 < idx_p14, "Temuan harus terurut secara alami berdasarkan nomor pasal"
 
     # Verifikasi temuan pasal_baru (pembanding null) tidak error dan tampil benar
-    assert "Temuan Baru" in full_text
+    assert "Temuan Pasal Baru" in full_text
     assert "Pengaturan pasal baru definisi aset kripto" in full_text
     assert "Penilaian analis: Belum dinilai" in full_text
 
     # Verifikasi temuan konflik dengan penilaian tidak relevan
-    assert "Temuan Konflik" in full_text
+    assert "Temuan Kontradiktif" in full_text
     assert "Penilaian analis: Tidak Relevan. Catatan analis: Konteks pasal berbeda" in full_text
 
     # Verifikasi temuan menggantikan dengan penilaian valid

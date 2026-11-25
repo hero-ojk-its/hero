@@ -35,16 +35,17 @@ logger = logging.getLogger("hero")
 FOOTER_URD = "Keputusan final tetap kewenangan Pengawas / unit terkait."
 
 JENIS_LABEL_MAP = {
-    # Pemetaan jenis temuan internal/engine ke label tampilan UI (Baru, Sama, Menggantikan, Melengkapi, Konflik).
-    # Catatan: Kosakata akhir (UI atau istilah DPEA) menunggu konfirmasi tim.
-    "pasal_baru": "Baru",
-    "baru": "Baru",
-    "duplikasi": "Sama",
-    "sama": "Sama",
+    # Pemetaan jenis temuan internal/engine ke label ekspor (XLSX, DOCX, Catatan Dinas, Lembar Sampling).
+    # Istilah mengikuti LABEL_TEXT pipeline (definisi mitra, PR #233). Kunci internal tidak berubah;
+    # CSV tetap memakai nilai mentah `jenis`.
+    "pasal_baru": "Pasal Baru",
+    "baru": "Pasal Baru",
+    "duplikasi": "Tumpang Tindih",
+    "sama": "Tumpang Tindih",
     "menggantikan": "Menggantikan",
-    "memperjelas": "Melengkapi",
-    "melengkapi": "Melengkapi",
-    "konflik": "Konflik",
+    "memperjelas": "Selaras / Melengkapi",
+    "melengkapi": "Selaras / Melengkapi",
+    "konflik": "Kontradiktif",
 }
 
 
@@ -447,13 +448,10 @@ def export_harmonisasi_to_xlsx(
     temuan_raw = data.get("temuan") if isinstance(data.get("temuan"), list) else []
     temuan_list = [t for t in temuan_raw if isinstance(t, dict)]
 
-    # Hitung jumlah per label tampilan
+    # Hitung jumlah per label tampilan (diturunkan dari JENIS_LABEL_MAP agar selalu sinkron)
     counts_label = {
-        "Baru": 0,
-        "Sama": 0,
-        "Menggantikan": 0,
-        "Melengkapi": 0,
-        "Konflik": 0,
+        JENIS_LABEL_MAP[k]: 0
+        for k in ("pasal_baru", "duplikasi", "menggantikan", "memperjelas", "konflik")
     }
     for t in temuan_list:
         raw_j = str(t.get("jenis") or "").strip().lower()
@@ -499,11 +497,7 @@ def export_harmonisasi_to_xlsx(
         ("Waktu Harmonisasi", waktu_harmonisasi_str),
         ("Waktu Ekspor", waktu_ekspor_str),
         ("Total Temuan", len(temuan_list)),
-        ("Temuan - Baru", counts_label["Baru"]),
-        ("Temuan - Sama", counts_label["Sama"]),
-        ("Temuan - Menggantikan", counts_label["Menggantikan"]),
-        ("Temuan - Melengkapi", counts_label["Melengkapi"]),
-        ("Temuan - Konflik", counts_label["Konflik"]),
+        *((f"Temuan - {lbl}", jumlah) for lbl, jumlah in counts_label.items()),
         ("Penilaian - Valid", counts_penilaian["Valid"]),
         ("Penilaian - Tidak Relevan", counts_penilaian["Tidak Relevan"]),
         ("Penilaian - Belum dinilai", counts_penilaian["Belum dinilai"]),
