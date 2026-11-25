@@ -6,6 +6,13 @@ Sources of edges, all already in the catalog:
 * JDIH "Riwayat Peraturan"   → MENCABUT / MENGUBAH (with "Sebagian" = partial)
 * JDIH "Landasan Hukum"      → BERDASAR
 * a document's "Mengingat"   → BERDASAR (``metadata_json.legal_basis``)
+* a document's own text      → MENCABUT / MENGUBAH, read with the same rules as harmonisasi
+  (:func:`hero.harmonisasi.refs.relasi_teks`): title "PERUBAHAN … ATAS …" → MENGUBAH; closing
+  "… dicabut dan dinyatakan tidak berlaku" → MENCABUT, partial when it names Pasal X, butir,
+  Lampiran, "ketentuan mengenai …", or says "kecuali …".
+
+Status is then DERIVED from those edges (a regulation revoked by an enacted one is
+``dicabut``), not only copied from a register — most ojk.go.id listings carry no status.
 
 Edges are stored in active voice. "A: Dicabut : 1. B" means B revoked A, so
 it is stored as B -[MENCABUT]-> A; every edge then reads the same way
@@ -40,7 +47,10 @@ CREATE TABLE graph_node (
     status TEXT,
     doc_id TEXT,                -- set when the PDF is in the knowledge base
     record_key TEXT,            -- inventory row that described it, if any
-    asal TEXT NOT NULL          -- 'register' (listed by a source) | 'rujukan' (only cited)
+    asal TEXT NOT NULL,         -- 'register' (listed by a source) | 'rujukan' (only cited)
+    status_register TEXT,       -- status as listed by the register, before derivation
+    status_asal TEXT,           -- 'register' | 'turunan' (derived from MENCABUT/MENGUBAH edges)
+    status_bukti TEXT           -- for 'turunan': which regulation, and the text that says so
 );
 CREATE INDEX ix_gn_doc ON graph_node(doc_id);
 CREATE INDEX ix_gn_record ON graph_node(record_key);
@@ -50,7 +60,7 @@ CREATE TABLE graph_edge (
     rel TEXT NOT NULL,          -- MENCABUT | MENGUBAH | BERDASAR
     sebagian INTEGER DEFAULT 0, -- partial revocation/amendment
     pasal_terkait TEXT,
-    asal TEXT NOT NULL,         -- jdih-riwayat | jdih-landasan | dokumen-mengingat
+    asal TEXT NOT NULL,         -- jdih-riwayat | jdih-landasan | dokumen-mengingat | dokumen-teks
     bukti TEXT,                 -- the source text the edge was read from
     PRIMARY KEY (src, dst, rel)
 );
@@ -156,6 +166,8 @@ class GraphReport:
     unresolved_examples: list[str] = field(default_factory=list)
     identity_conflicts: int = 0
     self_loops_dropped: int = 0
+    edges_from_text: int = 0
+    status_derived: dict[str, int] = field(default_factory=dict)
 
     @property
     def resolution_rate(self) -> float:
@@ -287,13 +299,87 @@ class _Builder:
                 self.edge(me, self.cite(ref_text), "BERDASAR", asal="dokumen-mengingat",
                           bukti=ref_text)
 
+    def load_document_relations(self, index: dict[str, str]) -> None:
+        """MENCABUT / MENGUBAH yang dinyatakan teks peraturan itu sendiri (judul & pasal penutup).
+
+        Draft (``rancangan``) dilewati: rancangan belum berlaku, jadi belum mencabut apa pun (ADR-03).
+        """
+        from hero.harmonisasi.refs import relasi_teks
+
+        rows = self.conn.execute(
+            "SELECT d.doc_id, d.doc_type, d.number, d.year, d.title, d.subject, d.reg_status, "
+            "t.full_text FROM documents d JOIN document_text t ON t.doc_id = d.doc_id "
+            "WHERE d.status = 'ingested' AND COALESCE(d.reg_status, '') <> 'rancangan'").fetchall()
+        for d in rows:
+            me = index.get(d["doc_id"])
+            if not me or me.startswith("DOC|"):
+                continue
+            judul = " ".join(x for x in (d["title"], d["subject"]) if x)
+            for r in relasi_teks(d["full_text"] or "", judul, own_key=me):
+                if r.relasi == "dirujuk":
+                    continue
+                other = self.cite(r.teks)
+                if other != r.key:          # rujukan yang tak terpetakan ke identitas kanonik
+                    continue
+                rel = "MENGUBAH" if r.relasi == "diubah" else "MENCABUT"
+                terkait = ", ".join([f"Pasal {p}" for p in r.pasal_dicabut] + r.bagian_dicabut
+                                    + ([f"kecuali {r.pengecualian_teks}"] if r.pengecualian_teks else []))
+                before = len(self.edges)
+                self.edge(me, other, rel, partial=r.relasi == "dicabut_sebagian", pasal=terkait or None,
+                          asal="dokumen-teks", bukti=f"[{r.dasar}] {r.kata_kunci or r.teks}")
+                self.rep.edges_from_text += len(self.edges) - before
+
+    # Urutan kekuatan status: status turunan hanya MENAIKKAN, tidak pernah menurunkan.
+    _RANK = {None: 0, "": 0, "unknown": 0, "tidak_diketahui": 0, "berlaku": 1, "belum_berlaku": 1,
+             "diubah": 2, "dicabut_sebagian": 3, "dicabut": 4}
+
+    def derive_status(self) -> None:
+        """Status peraturan lama diturunkan dari relasi dokumen-ke-dokumen.
+
+        MENCABUT penuh → ``dicabut``; MENCABUT sebagian → ``dicabut_sebagian``; MENGUBAH →
+        ``diubah``. Sumbernya harus peraturan yang berlaku (bukan rancangan). Status register
+        yang lebih kuat (mis. JDIH "Dicabut") tidak pernah diturunkan.
+        """
+        for n in self.nodes.values():
+            n["status_register"] = n["status"]
+            n["status_asal"] = "register" if n["status"] not in (None, "", "unknown") else None
+            n["status_bukti"] = None
+        # Peraturan yang masih DIUBAH oleh peraturan lebih baru belum dicabut penuh pada saat itu:
+        # riwayat JDIH kadang menulis "Dicabut" tanpa "Sebagian" untuk pencabutan beberapa pasal.
+        diubah_tahun: dict[str, int] = {}
+        for e in self.edges.values():
+            src = self.nodes.get(e["src"])
+            if e["rel"] == "MENGUBAH" and src and src.get("tahun"):
+                diubah_tahun[e["dst"]] = max(diubah_tahun.get(e["dst"], 0), int(src["tahun"]))
+        for e in sorted(self.edges.values(), key=lambda e: (e["rel"] != "MENCABUT", e["sebagian"])):
+            if e["rel"] not in ("MENCABUT", "MENGUBAH"):
+                continue
+            src, dst = self.nodes.get(e["src"]), self.nodes.get(e["dst"])
+            if not src or not dst or (src.get("status") or "") == "rancangan":
+                continue
+            turunan = ("diubah" if e["rel"] == "MENGUBAH"
+                       else "dicabut_sebagian" if e["sebagian"] else "dicabut")
+            catatan = ""
+            if turunan == "dicabut" and src.get("tahun") and diubah_tahun.get(e["dst"], 0) > int(src["tahun"]):
+                turunan = "dicabut_sebagian"
+                catatan = (f" [dibaca sebagian: masih diubah peraturan tahun {diubah_tahun[e['dst']]}, "
+                           f"setelah pencabutan tahun {src['tahun']}]")
+            if self._RANK.get(turunan, 0) > self._RANK.get(dst["status"], 0):
+                dst["status"], dst["status_asal"] = turunan, "turunan"
+                dst["status_bukti"] = f"{e['src']} {e['rel']} ({e['asal']}): {e['bukti']}{catatan}"[-400:] \
+                    if catatan else f"{e['src']} {e['rel']} ({e['asal']}): {e['bukti']}"[:400]
+                self.rep.status_derived[turunan] = self.rep.status_derived.get(turunan, 0) + 1
+
     def write(self) -> GraphReport:
         self.conn.executescript(SCHEMA)
         with self.conn:
             self.conn.executemany(
                 "INSERT INTO graph_node (key, jenis, nomor, tahun, judul, status, doc_id, "
-                "record_key, asal) VALUES (:key, :jenis, :nomor, :tahun, :judul, :status, "
-                ":doc_id, :record_key, :asal)", list(self.nodes.values()))
+                "record_key, asal, status_register, status_asal, status_bukti) VALUES (:key, :jenis, "
+                ":nomor, :tahun, :judul, :status, :doc_id, :record_key, :asal, :status_register, "
+                ":status_asal, :status_bukti)",
+                [{"status_register": n.get("status"), "status_asal": None, "status_bukti": None, **n}
+                 for n in self.nodes.values()])
             self.conn.executemany(
                 "INSERT INTO graph_edge (src, dst, rel, sebagian, pasal_terkait, asal, bukti) "
                 "VALUES (:src, :dst, :rel, :sebagian, :pasal_terkait, :asal, :bukti)",
@@ -318,4 +404,6 @@ def build_graph(conn: sqlite3.Connection) -> GraphReport:
     index = b.load_register()
     b.load_jdih_relations(index)
     b.load_document_basis(index)
+    b.load_document_relations(index)
+    b.derive_status()
     return b.write()

@@ -186,6 +186,45 @@ def harmonisasi_jalankan(
         console.print(f"[green]✓[/] {out}")
 
 
+@harmonisasi_app.command("siapkan-semantik")
+def harmonisasi_siapkan_semantik(
+    unduh: bool = typer.Option(False, "--unduh", help="Unduh model bila belum ada (±0,22 GB)"),
+    aturan: Path = typer.Option("config/harmonisasi.yaml", "--aturan"),
+    config: Path = CONFIG_OPT,
+) -> None:
+    """Siapkan kemiripan makna (#67): model lokal + cache embedding seluruh pasal korpus.
+
+    Dijalankan sekali di server (dan setelah korpus bertambah banyak); tanpa ini harmonisasi tetap
+    jalan secara leksikal. Tidak ada teks yang dikirim ke luar server."""
+    import sqlite3
+    import time
+
+    from hero.harmonisasi import semantik
+    from hero.harmonisasi.engine import _lengkapi_semantik, load_config, load_corpus
+    from hero.vector.embedders import SEMANTIC_MODELS
+
+    settings = load_settings(config)
+    cfg = load_config(aturan)
+    with sqlite3.connect(settings.catalog_db, timeout=60) as conn:
+        conn.row_factory = sqlite3.Row
+        _lengkapi_semantik(conn, cfg)
+        sc = cfg["semantik"]
+        hf = (SEMANTIC_MODELS.get(sc["model"]) or {"hf": sc["model"]})["hf"]
+        if not semantik.model_lokal_ada(Path(sc["models_dir"]), hf):
+            if not unduh:
+                console.print(f"[red]Model {hf} belum ada di {sc['models_dir']}[/] — ulangi dengan --unduh")
+                raise typer.Exit(1)
+            console.print(f"Mengunduh {hf} ke {sc['models_dir']} …")
+            semantik.unduh(sc["model"], Path(sc["models_dir"]))
+        teks = [c.teks for c in load_corpus(conn, cfg, None, None)]
+    t0 = time.perf_counter()
+    for i in range(0, len(teks), 500):
+        semantik.vektor(teks[i:i + 500], cfg)
+        console.print(f"  {min(i + 500, len(teks))}/{len(teks)} pasal", end="\r")
+    console.print(f"\n[green]✓[/] cache makna siap: {len(teks)} pasal · {time.perf_counter() - t0:.0f} s · "
+                  f"{sc['cache']}")
+
+
 @harmonisasi_app.command("siapkan-uji")
 def harmonisasi_siapkan(
     pasangan: int = typer.Option(12, "--pasangan", "-n"),

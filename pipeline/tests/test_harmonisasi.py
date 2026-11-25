@@ -317,3 +317,171 @@ def test_nomor_berjenis_di_dalamnya_tidak_memotong_konteks_pencabutan_sebagian(t
     by = {r.key: r for r in explicit_references(cat.conn, teks, "", [])}
     assert by["POJK|3|2022"].relasi == "dicabut_sebagian" and by["POJK|3|2022"].pasal_dicabut == ["12"]
     assert by["POJK|4|2015"].relasi == "dicabut"
+
+
+# --- Asumsi status & definisi label yang disepakati (contoh dari mitra) -----------------------
+
+def _relasi(teks, judul=""):
+    from hero.harmonisasi.refs import relasi_teks
+    return {r.key: r for r in relasi_teks(teks, judul)}
+
+
+def test_mengubah_dibaca_dari_judul():
+    by = _relasi("Pasal I ...", "POJK Nomor 5 Tahun 2025 tentang Perubahan atas Peraturan Otoritas Jasa "
+                 "Keuangan Nomor 12 Tahun 2021 tentang Pelaporan")
+    assert by["POJK|12|2021"].relasi == "diubah" and by["POJK|12|2021"].dasar == "judul"
+
+
+def test_mencabut_dibaca_dari_pasal_penutup():
+    by = _relasi("Pada saat Peraturan Otoritas Jasa Keuangan ini mulai berlaku, Peraturan Otoritas Jasa "
+                 "Keuangan Nomor 12 Tahun 2021 tentang Pelaporan dicabut dan dinyatakan tidak berlaku.")
+    assert by["POJK|12|2021"].relasi == "dicabut" and by["POJK|12|2021"].dasar == "pasal penutup"
+
+
+def test_mencabut_sebagian_menyebut_pasal():
+    by = _relasi("Pada saat Surat Edaran ini mulai berlaku, Pasal 15 dan Pasal 16 Surat Edaran Otoritas "
+                 "Jasa Keuangan Nomor 3/SEOJK.03/2020 dicabut dan dinyatakan tidak berlaku.")
+    (r,) = by.values()
+    assert r.relasi == "dicabut_sebagian" and r.pasal_dicabut == ["15", "16"]
+
+
+def test_mencabut_sebagian_menyebut_butir_dan_lampiran():
+    by = _relasi("Pada saat Surat Edaran ini mulai berlaku, angka 1 sampai dengan angka 5 dan Lampiran V "
+                 "Surat Edaran Otoritas Jasa Keuangan Nomor 20/SEOJK.07/2024 tentang Perdagangan Aset "
+                 "dicabut dan dinyatakan tidak berlaku.")
+    (r,) = by.values()
+    assert r.relasi == "dicabut_sebagian" and "Lampiran V" in r.bagian_dicabut and r.pasal_dicabut == []
+
+
+def test_mencabut_dengan_kecuali_adalah_sebagian_dan_yang_dikecualikan_tetap_berlaku(tmp_path):
+    teks = ("Pada saat Peraturan Otoritas Jasa Keuangan ini mulai berlaku, Peraturan Otoritas Jasa "
+            "Keuangan Nomor 14 Tahun 2023 tentang Perdagangan Karbon dicabut dan dinyatakan tidak "
+            "berlaku, kecuali Pasal 4.")
+    (r,) = _relasi(teks).values()
+    assert r.relasi == "dicabut_sebagian" and r.pengecualian == ["4"]
+    cat = _korpus_relasi(tmp_path)
+    rep = harmonise(cat.conn, DraftDoc("Rancangan POJK tentang Bursa Karbon", None, teks, [PASAL_3_BARU]), CFG)
+    (d,) = rep.dampak_status
+    assert d["pasal_tetap_berlaku"] == ["4"] and d["pasal_tidak_berlaku"] == ["3", "5"]
+    assert "dikecualikan" in d["penjelasan"]
+
+
+def test_rujukan_diri_tidak_mengacaukan_jenis_peraturan_yang_dicabut():
+    by = _relasi("Pada saat Peraturan Otoritas Jasa Keuangan ini mulai berlaku, Surat Edaran Bank "
+                 "Indonesia Nomor 9/30/DPNP tanggal 12 Desember 2007 dicabut dan dinyatakan tidak berlaku.")
+    assert all(not k.startswith("POJK|") for k in by), by.keys()
+
+
+def test_menggantikan_bila_draft_mencabut_pembandingnya_bukan_konflik():
+    lama = "Bank wajib menyampaikan laporan kepada Otoritas Jasa Keuangan paling lambat 30 (tiga puluh) hari."
+    baru = "Bank wajib menyampaikan laporan kepada Otoritas Jasa Keuangan paling lambat 15 (lima belas) hari."
+    label, _, why, diffs = classify(baru, _art(lama), 0.9, True, CFG)
+    assert label == "menggantikan" and "bukan konflik" in why and diffs
+
+
+def test_kontradiktif_dibandingkan_ayat_lawan_ayat():
+    lama = ("(1) Bank wajib menyusun laporan pelaksanaan tata kelola setiap tahun. "
+            "(2) Laporan sebagaimana dimaksud pada ayat (1) wajib disampaikan kepada Otoritas Jasa "
+            "Keuangan paling lambat 30 (tiga puluh) hari setelah tahun buku berakhir.")
+    draft = ("(1) Bank wajib menyusun laporan pelaksanaan tata kelola setiap tahun paling lambat 7 (tujuh) "
+             "hari setelah rapat direksi. (2) Laporan sebagaimana dimaksud pada ayat (1) wajib disampaikan "
+             "kepada Otoritas Jasa Keuangan paling lambat 15 (lima belas) hari setelah tahun buku berakhir.")
+    label, _, why, diffs = classify(draft, _art(lama), 0.8, False, CFG)
+    assert label == "konflik" and "kontradiktif" in why
+    assert "ayat (2) ↔ ayat (2) — hari: 30 → 15" in diffs
+    assert not any("7" in d for d in diffs), "angka ayat lain tidak boleh dibandingkan silang"
+
+
+def test_tumpang_tindih_beda_redaksi_substansi_sama():
+    lama = ("Direksi wajib menyusun kebijakan manajemen risiko teknologi informasi yang memuat identifikasi, "
+            "pengukuran, pengendalian, dan pemantauan risiko.")
+    draft = ("Kebijakan pengelolaan risiko atas penggunaan teknologi informasi yang mencakup proses "
+             "mengenali, mengukur, mengendalikan, serta memantau risiko wajib disusun oleh Direksi.")
+    label, _, why, _ = classify(draft, _art(lama), 0.6, False, CFG, semantik=0.93)
+    assert label == "duplikasi" and "tumpang tindih" in why and "makna" in why
+    # tanpa sinyal makna yang kuat, redaksi berbeda ini dibaca melengkapi, bukan tumpang tindih
+    assert classify(draft, _art(lama), 0.6, False, CFG, semantik=0.5)[0] == "memperjelas"
+
+
+def test_selaras_melengkapi_topik_sama_tidak_bertentangan_tidak_mengulang():
+    lama = "Bank wajib melaporkan insiden siber kepada Otoritas Jasa Keuangan."
+    draft = ("Laporan insiden siber kepada Otoritas Jasa Keuangan disampaikan melalui aplikasi pelaporan "
+             "daring dengan format sebagaimana tercantum dalam Lampiran.")
+    label, _, why, _ = classify(draft, _art(lama), 0.55, False, CFG, semantik=0.7)
+    assert label == "memperjelas" and "selaras/melengkapi" in why
+
+
+def test_pencabutan_sebagian_hanya_pasal_yang_dicabut_menjadi_penggantian(tmp_path):
+    cat = _korpus_relasi(tmp_path)
+    teks = ("Pada saat Peraturan OJK ini mulai berlaku, Ketentuan Pasal 4 Peraturan Otoritas Jasa "
+            "Keuangan Nomor 14 Tahun 2023 tentang Perdagangan Karbon dicabut dan dinyatakan tidak berlaku.")
+    rep = harmonise(cat.conn, DraftDoc("Rancangan POJK tentang Registri", None, teks, [PASAL_3_BARU]), CFG)
+    (f,) = rep.temuan
+    # Pasal 3 induk TIDAK ikut dicabut → tetap berlaku → beda batas waktu = kontradiktif
+    assert f.pembanding["pasal"] == "3" and f.jenis == "konflik"
+
+
+def test_label_tampilan_memakai_istilah_mitra():
+    from hero.harmonisasi.engine import LABEL_TEXT
+    assert LABEL_TEXT["konflik"] == "Kontradiktif" and LABEL_TEXT["duplikasi"] == "Tumpang Tindih"
+    assert LABEL_TEXT["memperjelas"] == "Selaras / Melengkapi"
+
+
+def test_pihak_dibaca_dari_perihal_dengan_akronim_dan_payung():
+    from hero.harmonisasi.engine import pihak_diatur, pihak_sama
+    assert pihak_diatur("POJK tentang Perubahan atas POJK Nomor 4 Tahun 2014 tentang Perusahaan "
+                        "Pembiayaan Sekunder Perumahan") == {"PPSP"}
+    assert pihak_sama({"GADAI"}, {"PEMBIAYAAN"}) is False
+    assert pihak_sama({"LJK"}, {"GADAI"}) is True                  # payung berlaku bagi semua
+    assert pihak_sama({"LJKNB"}, {"ASURANSI"}) is True
+    assert pihak_sama(set(), {"BANK"}) is None                     # tak terbaca → tidak menghukum
+
+
+def test_ketentuan_templat_untuk_pihak_lain_bukan_konflik():
+    pergadaian = CorpusArticle("g", "POJK|39|2024", "Pergadaian", "39 Tahun 2024", "berlaku", "17", 5,
+                               "Perusahaan Pergadaian yang telah memperoleh izin konversi wajib "
+                               "melaksanakan RUPS paling lambat 60 (enam puluh) hari kerja.")
+    draft = ("Perusahaan Pembiayaan yang telah memperoleh izin konversi wajib melaksanakan RUPS paling "
+             "lambat 30 (tiga puluh) hari kerja.")
+    tanpa_gerbang = classify(draft, pergadaian, 0.8, False, CFG)[0]
+    label, _, why, _ = classify(draft, pergadaian, 0.8, False, CFG, pihak_draft={"PEMBIAYAAN"})
+    assert tanpa_gerbang == "konflik" and label == "pasal_baru" and "pihak lain" in why
+
+
+def test_persentase_dengan_tanda_persen_terbaca():
+    a = "Perusahaan wajib memiliki rasio Ekuitas terhadap Modal Disetor paling rendah 50% (lima puluh persen)."
+    assert provision_diff(a, a.replace("50% (lima puluh", "40% (empat puluh")) == ["persen: 50 → 40"]
+
+
+def test_tidak_wajib_adalah_kebolehan():
+    assert provision_diff("Bank wajib memperoleh persetujuan.", "Bank tidak wajib memperoleh persetujuan.") \
+        == ["kewajiban menjadi kebolehan"]
+
+
+def test_satu_angka_berubah_adalah_kontradiksi_bukan_tumpang_tindih():
+    a = "Perusahaan wajib memenuhi Ekuitas paling sedikit Rp1.000.000.000,00 untuk lingkup kabupaten/kota."
+    label = classify(a.replace("Rp1.000.000.000,00", "Rp2.000.000.000,00"), _art(a), 0.97, False, CFG)[0]
+    assert label == "konflik"
+
+
+def test_uji_makna_sintetis_terbaca_dan_tidak_berubah_diam_diam():
+    """Set parafrase (#67) ikut repo; nilai ketepatannya diukur di docs/HARMONISASI_SEMANTIK.md."""
+    from pathlib import Path
+
+    import yaml
+    data = yaml.safe_load((Path(__file__).parent / "fixtures" / "uji_makna.yaml").read_text())["butir"]
+    assert len(data) == 15 and all({"asli", "parafrase", "melengkapi", "kontradiktif"} <= set(b) for b in data)
+    # kontradiktif sintetis harus punya perbedaan yang dapat dikutip (angka atau modalitas)
+    from hero.harmonisasi.engine import provision_diff_ayat
+    tanpa_beda = [b["id"] for b in data if not provision_diff_ayat(b["asli"], b["kontradiktif"])]
+    assert len(tanpa_beda) <= 1, tanpa_beda
+
+
+def test_klausul_templat_tidak_disebut_tumpang_tindih_karena_makna_saja():
+    from hero.harmonisasi.engine import klausul_templat
+    lama = ("(1) Bank yang dinyatakan terlambat menyampaikan laporan KPMM dikenai sanksi administratif "
+            "berupa denda Rp1.000.000,00 per hari.")
+    draft = ("(1) Bank yang tidak memenuhi ketentuan pelaporan teknologi informasi dikenai sanksi "
+             "administratif berupa teguran tertulis.")
+    assert klausul_templat(draft)
+    assert classify(draft, _art(lama), 0.7, False, CFG, semantik=0.95)[0] != "duplikasi"

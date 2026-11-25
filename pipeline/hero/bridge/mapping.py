@@ -31,6 +31,9 @@ BACKEND_STATUS = {
     "berlaku": "berlaku",
     "diubah": "diubah",
     "dicabut": "dicabut",
+    # Backend belum punya status "dicabut sebagian"; peraturannya masih berlaku untuk pasal yang
+    # tidak dicabut, jadi padanan terdekatnya "diubah" (bukan "dicabut", bukan "tidak diketahui").
+    "dicabut_sebagian": "diubah",
     "rancangan": "tidak_diketahui",
     "unknown": "tidak_diketahui",
     None: "tidak_diketahui",
