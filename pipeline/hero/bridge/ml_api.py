@@ -50,6 +50,7 @@ class MlState:
         self._narrator = None
         self._embedder = None
         self._hcfg: dict[str, Any] | None = None
+        self._pov: dict[str, Any] | None = None
         self._sync_guard = threading.Lock()
         self._sync_locks: dict[int, threading.Lock] = {}
 
@@ -96,6 +97,13 @@ class MlState:
             from hero.bridge.embed import ArticleEmbedder
             self._embedder = ArticleEmbedder(self.settings, self.bridge)
         return self._embedder
+
+    def pov(self) -> dict[str, Any]:
+        """Profil PoV unit (config/pov.yaml; bila belum disalin ke workspace, bawaan repo)."""
+        if self._pov is None:
+            from hero.tanggapan.pov import load_profiles
+            self._pov = load_profiles(self.harmonisasi_config.parent / "pov.yaml")
+        return self._pov
 
     def hcfg(self) -> dict[str, Any]:
         if self._hcfg is None:
@@ -366,6 +374,44 @@ def create_app(settings: Settings | None = None, bridge: BridgeSettings | None =
                              if not t.get("pembanding")
                              or t["pembanding"].get("document_id") in allowed]
         return out
+
+    # -- draft tanggapan berbasis PoV (URD 3.5) ---------------------------
+    @app.get("/tanggapan/profil", tags=["tanggapan"])
+    def tanggapan_profil() -> dict[str, Any]:
+        """Profil PoV unit fungsi yang tersedia (FR-POV-01/07)."""
+        return {"profil": [p.ringkas() for p in st.pov().values()]}
+
+    @app.post("/tanggapan/{document_id}", tags=["tanggapan"])
+    def tanggapan(document_id: int,
+                  profil: Optional[str] = Query(None, description="id profil PoV; kosong = profil pertama"),
+                  dengan_harmonisasi: bool = Query(True, description="sertakan temuan harmonisasi"),
+                  sudah: Optional[dict[str, str]] = Body(
+                      None, description="Tanggapan yang sudah ditulis analis per pasal, mis. "
+                                        "{\"Pasal 5\": \"…\"} — untuk pemeriksaan kelengkapan.")
+                  ) -> dict[str, Any]:
+        """Draft tanggapan dari sudut pandang unit: pasal berdampak beserta alasannya (FR-POV-05),
+        checklist pasal wajib ditanggapi (FR-POV-03), dan narasi berformat catatan dinas (FR-POV-04).
+        Deterministik; keluaran berstatus Draft dan disunting analis sebelum diekspor."""
+        from hero.harmonisasi.engine import draft_from_catalog, harmonise
+        from hero.tanggapan.pov import pilih_profil, susun_tanggapan
+
+        try:
+            prof = pilih_profil(st.pov(), profil)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        doc_id = _require_mapped(st, document_id)
+        conn = st.catalog()
+        try:
+            try:
+                draft = draft_from_catalog(conn, doc_id)
+            except KeyError as exc:
+                raise HTTPException(404, str(exc)) from exc
+            h = harmonise(conn, draft, st.hcfg()).to_dict() if dengan_harmonisasi else None
+        finally:
+            conn.close()
+        out = susun_tanggapan(draft.judul, draft.articles, prof, h, sudah).to_dict()
+        out["draft"]["document_id"] = document_id
+        return _rewrite_refs(out, st)
 
     # -- pencarian -------------------------------------------------------
     @app.get("/cari", tags=["pencarian"])

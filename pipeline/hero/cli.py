@@ -1905,12 +1905,13 @@ def spike_jalankan(
 from hero.cli_bridge import bridge_app  # noqa: E402 - jembatan ke backend tim
 from hero.cli_data import (  # noqa: E402 - data workstream commands
     akses_app, ekstrak_ulang_cmd, harmonisasi_app, register_penamaan, scan_app, snapshot_cmd,
-    uat_app,
+    tanggapan_app, uat_app,
 )
 
 app.command("snapshot")(snapshot_cmd)
 app.command("ekstrak-ulang")(ekstrak_ulang_cmd)
 app.add_typer(harmonisasi_app, name="harmonisasi")
+app.add_typer(tanggapan_app, name="tanggapan")
 app.add_typer(scan_app, name="scan")
 app.add_typer(akses_app, name="akses")
 app.add_typer(uat_app, name="uat")

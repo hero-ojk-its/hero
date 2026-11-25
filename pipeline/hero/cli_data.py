@@ -24,6 +24,7 @@ akses_app = typer.Typer(help="Klasifikasi akses dokumen: publik harus terbukti, 
 harmonisasi_app = typer.Typer(help="Harmonisasi draft vs Knowledge Base, per pasal (URD 3.4).")
 scan_app = typer.Typer(help="Indeks hasil scan tanpa unduh: ukuran berkas & kriteria penerimaan (MoM #4).")
 uat_app = typer.Typer(help="Set uji UAT Fase 2: skenario 1.480 + 20 dokumen (MoM #7).")
+tanggapan_app = typer.Typer(help="Draft tanggapan berbasis PoV unit fungsi (URD 3.5).")
 
 
 @scan_app.command("ukur")
@@ -362,3 +363,47 @@ def uat_siapkan(
         console.print(f"[green]✓[/] manifes ditulis: {out}")
     else:
         console.print("[dim]Tambahkan --out data/export/uat-fase2.json untuk menyimpan manifes.[/]")
+
+
+@tanggapan_app.command("susun")
+def tanggapan_susun(
+    draft: str = typer.Argument(..., help="doc_id di katalog, atau path PDF draft"),
+    profil: Optional[str] = typer.Option(None, "--profil", "-p", help="id profil PoV (bawaan: pertama)"),
+    tanpa_harmonisasi: bool = typer.Option(False, "--tanpa-harmonisasi"),
+    out: Path = typer.Option(None, "--out", "-o", help="Simpan laporan JSON"),
+    md: Path = typer.Option(None, "--md", help="Simpan draft berformat catatan dinas (Markdown)"),
+    aturan: Path = typer.Option("config/harmonisasi.yaml", "--aturan"),
+    pov: Path = typer.Option("config/pov.yaml", "--pov"),
+    config: Path = CONFIG_OPT,
+) -> None:
+    """Pasal berdampak + alasan, checklist pasal wajib, dan narasi draft tanggapan per pasal."""
+    import sqlite3
+
+    from hero.harmonisasi.engine import draft_from_catalog, draft_from_pdf, harmonise, load_config
+    from hero.tanggapan.pov import load_profiles, pilih_profil, render_markdown, susun_tanggapan
+
+    settings = load_settings(config)
+    prof = pilih_profil(load_profiles(pov), profil)
+    with sqlite3.connect(settings.catalog_db, timeout=60) as conn:
+        conn.row_factory = sqlite3.Row
+        d = draft_from_pdf(Path(draft), settings) if Path(draft).is_file() \
+            else draft_from_catalog(conn, draft)
+        h = None if tanpa_harmonisasi else harmonise(conn, d, load_config(aturan)).to_dict()
+    rep = susun_tanggapan(d.judul, d.articles, prof, h)
+    console.print(f"[bold]{rep.surat['hal'][:120]}[/] · PoV {prof.nama}")
+    console.print(f"{rep.ringkasan['pasal_berdampak']} dari {rep.ringkasan['pasal_draft']} pasal berdampak · "
+                  f"{rep.kelengkapan['wajib']} wajib ditanggapi")
+    t = Table(title="Pasal berdampak — DRAFT", header_style="bold cyan")
+    for col in ("Pasal", "Tingkat", "Wajib", "Alasan", "Usulan"):
+        t.add_column(col, overflow="fold")
+    for p in rep.pasal_berdampak:
+        t.add_row(p.pasal, p.tingkat, "ya" if p.wajib else "-", p.alasan[:160], p.usulan[:160])
+    console.print(t)
+    if out:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(rep.to_dict(), ensure_ascii=False, indent=1), encoding="utf-8")
+        console.print(f"[green]✓[/] {out}")
+    if md:
+        md.parent.mkdir(parents=True, exist_ok=True)
+        md.write_text(render_markdown(rep), encoding="utf-8")
+        console.print(f"[green]✓[/] {md}")
